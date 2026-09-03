@@ -1,0 +1,191 @@
+{
+  "kind": "TABLE",
+  "citation": "SRD 5.2.1, Equipment chapter - Coins, Selling Equipment, Lifestyle Expenses, Food/Drink/Lodging, Hirelings, Stabling",
+  "verify": "Entered from the 2024 rules; check every price against the SRD 5.2.1 PDF. Spellcasting Services and Crafting tables are not yet imported.",
+  "entries": [
+    {
+      "id": "srd5e:table/coins",
+      "name": "Coin Values",
+      "payload": {
+        "canonical_unit": "cp",
+        "coins": [
+          {
+            "code": "CP",
+            "name": "Copper",
+            "value_cp": 1
+          },
+          {
+            "code": "SP",
+            "name": "Silver",
+            "value_cp": 10
+          },
+          {
+            "code": "EP",
+            "name": "Electrum",
+            "value_cp": 50
+          },
+          {
+            "code": "GP",
+            "name": "Gold",
+            "value_cp": 100
+          },
+          {
+            "code": "PP",
+            "name": "Platinum",
+            "value_cp": 1000
+          }
+        ],
+        "coins_per_pound": 50,
+        "selling": {
+          "rule": "Equipment sells for half its listed cost; valuables (gems, art objects) retain full value.",
+          "sell_ratio": 0.5
+        }
+      }
+    },
+    {
+      "id": "srd5e:table/lifestyle-expenses",
+      "name": "Lifestyle Expenses",
+      "payload": {
+        "per_day": [
+          {
+            "lifestyle": "Wretched",
+            "cost_cp": 0
+          },
+          {
+            "lifestyle": "Squalid",
+            "cost_cp": 10
+          },
+          {
+            "lifestyle": "Poor",
+            "cost_cp": 20
+          },
+          {
+            "lifestyle": "Modest",
+            "cost_cp": 100
+          },
+          {
+            "lifestyle": "Comfortable",
+            "cost_cp": 200
+          },
+          {
+            "lifestyle": "Wealthy",
+            "cost_cp": 400
+          },
+          {
+            "lifestyle": "Aristocratic",
+            "cost_cp": 1000,
+            "note": "minimum"
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:table/food-drink-lodging",
+      "name": "Food, Drink, and Lodging",
+      "payload": {
+        "items": [
+          {
+            "name": "Ale (mug)",
+            "cost_cp": 4
+          },
+          {
+            "name": "Bread (loaf)",
+            "cost_cp": 2
+          },
+          {
+            "name": "Cheese (wedge)",
+            "cost_cp": 10
+          },
+          {
+            "name": "Wine, Common (bottle)",
+            "cost_cp": 20
+          },
+          {
+            "name": "Wine, Fine (bottle)",
+            "cost_cp": 1000
+          }
+        ],
+        "inn_stay_per_day": [
+          {
+            "quality": "Squalid",
+            "cost_cp": 7
+          },
+          {
+            "quality": "Poor",
+            "cost_cp": 10
+          },
+          {
+            "quality": "Modest",
+            "cost_cp": 50
+          },
+          {
+            "quality": "Comfortable",
+            "cost_cp": 80
+          },
+          {
+            "quality": "Wealthy",
+            "cost_cp": 200
+          },
+          {
+            "quality": "Aristocratic",
+            "cost_cp": 400
+          }
+        ],
+        "meal": [
+          {
+            "quality": "Squalid",
+            "cost_cp": 1
+          },
+          {
+            "quality": "Poor",
+            "cost_cp": 2
+          },
+          {
+            "quality": "Modest",
+            "cost_cp": 10
+          },
+          {
+            "quality": "Comfortable",
+            "cost_cp": 20
+          },
+          {
+            "quality": "Wealthy",
+            "cost_cp": 30
+          },
+          {
+            "quality": "Aristocratic",
+            "cost_cp": 60
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:table/hirelings",
+      "name": "Hirelings",
+      "payload": {
+        "rates": [
+          {
+            "service": "Skilled hireling",
+            "cost_cp": 200,
+            "per": "day"
+          },
+          {
+            "service": "Untrained hireling",
+            "cost_cp": 20,
+            "per": "day"
+          },
+          {
+            "service": "Messenger",
+            "cost_cp": 2,
+            "per": "mile"
+          },
+          {
+            "service": "Stabling",
+            "cost_cp": 50,
+            "per": "day"
+          }
+        ]
+      }
+    }
+  ]
+}

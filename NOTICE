@@ -1,0 +1,11 @@
+rpg-mcp-server
+Copyright (C) 2026 Marcus Hirt
+
+This product includes game rules content derived from the
+System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC,
+available at https://www.dndbeyond.com/srd, and licensed for use under the
+Creative Commons Attribution 4.0 International License,
+available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
+The SRD-derived data ships as JSON seed files under src/main/resources/seed/srd5e
+and is embedded in the distributed executable.

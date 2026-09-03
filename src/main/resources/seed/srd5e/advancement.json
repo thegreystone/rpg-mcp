@@ -1,0 +1,360 @@
+{
+  "kind": "TABLE",
+  "citation": "SRD 5.2.1, Character Creation - Character Advancement table; Ability Scores (standard array, point cost); Gameplay Toolbox - Experience Points by Challenge Rating",
+  "entries": [
+    {
+      "id": "srd5e:table/character-advancement",
+      "name": "Character Advancement",
+      "payload": {
+        "levels": [
+          {
+            "level": 1,
+            "xp": 0,
+            "proficiency_bonus": 2
+          },
+          {
+            "level": 2,
+            "xp": 300,
+            "proficiency_bonus": 2
+          },
+          {
+            "level": 3,
+            "xp": 900,
+            "proficiency_bonus": 2
+          },
+          {
+            "level": 4,
+            "xp": 2700,
+            "proficiency_bonus": 2
+          },
+          {
+            "level": 5,
+            "xp": 6500,
+            "proficiency_bonus": 3
+          },
+          {
+            "level": 6,
+            "xp": 14000,
+            "proficiency_bonus": 3
+          },
+          {
+            "level": 7,
+            "xp": 23000,
+            "proficiency_bonus": 3
+          },
+          {
+            "level": 8,
+            "xp": 34000,
+            "proficiency_bonus": 3
+          },
+          {
+            "level": 9,
+            "xp": 48000,
+            "proficiency_bonus": 4
+          },
+          {
+            "level": 10,
+            "xp": 64000,
+            "proficiency_bonus": 4
+          },
+          {
+            "level": 11,
+            "xp": 85000,
+            "proficiency_bonus": 4
+          },
+          {
+            "level": 12,
+            "xp": 100000,
+            "proficiency_bonus": 4
+          },
+          {
+            "level": 13,
+            "xp": 120000,
+            "proficiency_bonus": 5
+          },
+          {
+            "level": 14,
+            "xp": 140000,
+            "proficiency_bonus": 5
+          },
+          {
+            "level": 15,
+            "xp": 165000,
+            "proficiency_bonus": 5
+          },
+          {
+            "level": 16,
+            "xp": 195000,
+            "proficiency_bonus": 5
+          },
+          {
+            "level": 17,
+            "xp": 225000,
+            "proficiency_bonus": 6
+          },
+          {
+            "level": 18,
+            "xp": 265000,
+            "proficiency_bonus": 6
+          },
+          {
+            "level": 19,
+            "xp": 305000,
+            "proficiency_bonus": 6
+          },
+          {
+            "level": 20,
+            "xp": 355000,
+            "proficiency_bonus": 6
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:table/ability-generation",
+      "name": "Ability Score Generation",
+      "payload": {
+        "standard_array": [
+          15,
+          14,
+          13,
+          12,
+          10,
+          8
+        ],
+        "point_buy": {
+          "budget": 27,
+          "min": 8,
+          "max": 15,
+          "cost": {
+            "8": 0,
+            "9": 1,
+            "10": 2,
+            "11": 3,
+            "12": 4,
+            "13": 5,
+            "14": 7,
+            "15": 9
+          }
+        },
+        "roll": {
+          "expression": "4d6dl1",
+          "count": 6
+        }
+      }
+    },
+    {
+      "id": "srd5e:table/xp-by-cr",
+      "name": "Experience Points by Challenge Rating",
+      "payload": {
+        "rows": [
+          {
+            "cr": "0",
+            "cr_times_8": 0,
+            "xp": 10,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "1/8",
+            "cr_times_8": 1,
+            "xp": 25,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "1/4",
+            "cr_times_8": 2,
+            "xp": 50,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "1/2",
+            "cr_times_8": 4,
+            "xp": 100,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "1",
+            "cr_times_8": 8,
+            "xp": 200,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "2",
+            "cr_times_8": 16,
+            "xp": 450,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "3",
+            "cr_times_8": 24,
+            "xp": 700,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "4",
+            "cr_times_8": 32,
+            "xp": 1100,
+            "proficiency_bonus": 2
+          },
+          {
+            "cr": "5",
+            "cr_times_8": 40,
+            "xp": 1800,
+            "proficiency_bonus": 3
+          },
+          {
+            "cr": "6",
+            "cr_times_8": 48,
+            "xp": 2300,
+            "proficiency_bonus": 3
+          },
+          {
+            "cr": "7",
+            "cr_times_8": 56,
+            "xp": 2900,
+            "proficiency_bonus": 3
+          },
+          {
+            "cr": "8",
+            "cr_times_8": 64,
+            "xp": 3900,
+            "proficiency_bonus": 3
+          },
+          {
+            "cr": "9",
+            "cr_times_8": 72,
+            "xp": 5000,
+            "proficiency_bonus": 4
+          },
+          {
+            "cr": "10",
+            "cr_times_8": 80,
+            "xp": 5900,
+            "proficiency_bonus": 4
+          },
+          {
+            "cr": "11",
+            "cr_times_8": 88,
+            "xp": 7200,
+            "proficiency_bonus": 4
+          },
+          {
+            "cr": "12",
+            "cr_times_8": 96,
+            "xp": 8400,
+            "proficiency_bonus": 4
+          },
+          {
+            "cr": "13",
+            "cr_times_8": 104,
+            "xp": 10000,
+            "proficiency_bonus": 5
+          },
+          {
+            "cr": "14",
+            "cr_times_8": 112,
+            "xp": 11500,
+            "proficiency_bonus": 5
+          },
+          {
+            "cr": "15",
+            "cr_times_8": 120,
+            "xp": 13000,
+            "proficiency_bonus": 5
+          },
+          {
+            "cr": "16",
+            "cr_times_8": 128,
+            "xp": 15000,
+            "proficiency_bonus": 5
+          },
+          {
+            "cr": "17",
+            "cr_times_8": 136,
+            "xp": 18000,
+            "proficiency_bonus": 6
+          },
+          {
+            "cr": "18",
+            "cr_times_8": 144,
+            "xp": 20000,
+            "proficiency_bonus": 6
+          },
+          {
+            "cr": "19",
+            "cr_times_8": 152,
+            "xp": 22000,
+            "proficiency_bonus": 6
+          },
+          {
+            "cr": "20",
+            "cr_times_8": 160,
+            "xp": 25000,
+            "proficiency_bonus": 6
+          },
+          {
+            "cr": "21",
+            "cr_times_8": 168,
+            "xp": 33000,
+            "proficiency_bonus": 7
+          },
+          {
+            "cr": "22",
+            "cr_times_8": 176,
+            "xp": 41000,
+            "proficiency_bonus": 7
+          },
+          {
+            "cr": "23",
+            "cr_times_8": 184,
+            "xp": 50000,
+            "proficiency_bonus": 7
+          },
+          {
+            "cr": "24",
+            "cr_times_8": 192,
+            "xp": 62000,
+            "proficiency_bonus": 7
+          },
+          {
+            "cr": "25",
+            "cr_times_8": 200,
+            "xp": 75000,
+            "proficiency_bonus": 8
+          },
+          {
+            "cr": "26",
+            "cr_times_8": 208,
+            "xp": 90000,
+            "proficiency_bonus": 8
+          },
+          {
+            "cr": "27",
+            "cr_times_8": 216,
+            "xp": 105000,
+            "proficiency_bonus": 8
+          },
+          {
+            "cr": "28",
+            "cr_times_8": 224,
+            "xp": 120000,
+            "proficiency_bonus": 8
+          },
+          {
+            "cr": "29",
+            "cr_times_8": 232,
+            "xp": 135000,
+            "proficiency_bonus": 9
+          },
+          {
+            "cr": "30",
+            "cr_times_8": 240,
+            "xp": 155000,
+            "proficiency_bonus": 9
+          }
+        ],
+        "note": "CR 0 creatures are worth 10 XP if they have attacks, otherwise 0 (SRD 5.2.1)."
+      }
+    }
+  ]
+}

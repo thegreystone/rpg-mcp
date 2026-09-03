@@ -1,0 +1,2859 @@
+{
+  "kind": "ITEM",
+  "citation": "SRD 5.2.1, Equipment chapter - Weapons, Armor, Tools, Adventuring Gear, Ammunition, Focuses, Equipment Packs, Mounts and Other Animals, Tack and Drawn Vehicles",
+  "verify": "Checked against the SRD 5.2.1 PDF text (CC-BY-4.0) by scripted diff on 2026-09-01: all 38 weapons, 13 armors/shield, adventuring gear, tools and instruments, ammunition, foci, packs and their contents, mounts (cost, carrying capacity), tack and drawn vehicles (cost, weight). Still unverified: airborne/waterborne vehicles, poisons, crafting tables, trinkets, magic items are not imported.",
+  "units": {
+    "cost": "cost_cp (canonical copper: 1 GP = 100 CP, 1 SP = 10 CP)",
+    "weight": "weight_lb (importer derives weight_g)"
+  },
+  "entries": [
+    {
+      "id": "srd5e:item/club",
+      "name": "Club",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d4",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "light"
+        ],
+        "mastery": "slow",
+        "slot": "ONE_HAND",
+        "cost_cp": 10,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/dagger",
+      "name": "Dagger",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d4",
+          "type": "piercing"
+        },
+        "properties": [
+          "finesse",
+          "light",
+          "thrown"
+        ],
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "nick",
+        "slot": "ONE_HAND",
+        "cost_cp": 200,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/greatclub",
+      "name": "Greatclub",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "two-handed"
+        ],
+        "mastery": "push",
+        "slot": "TWO_HANDS",
+        "cost_cp": 20,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/handaxe",
+      "name": "Handaxe",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "slashing"
+        },
+        "properties": [
+          "light",
+          "thrown"
+        ],
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/javelin",
+      "name": "Javelin",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "piercing"
+        },
+        "properties": [
+          "thrown"
+        ],
+        "range": {
+          "normal": 30,
+          "long": 120
+        },
+        "mastery": "slow",
+        "slot": "ONE_HAND",
+        "cost_cp": 50,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/light-hammer",
+      "name": "Light Hammer",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d4",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "light",
+          "thrown"
+        ],
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "nick",
+        "slot": "ONE_HAND",
+        "cost_cp": 200,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/mace",
+      "name": "Mace",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "bludgeoning"
+        },
+        "properties": [],
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 500,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/quarterstaff",
+      "name": "Quarterstaff",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "versatile"
+        ],
+        "versatile": "1d8",
+        "mastery": "topple",
+        "slot": "ONE_HAND",
+        "cost_cp": 20,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/sickle",
+      "name": "Sickle",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d4",
+          "type": "slashing"
+        },
+        "properties": [
+          "light"
+        ],
+        "mastery": "nick",
+        "slot": "ONE_HAND",
+        "cost_cp": 100,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/spear",
+      "name": "Spear",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "piercing"
+        },
+        "properties": [
+          "thrown",
+          "versatile"
+        ],
+        "versatile": "1d8",
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 100,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/dart",
+      "name": "Dart",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_RANGED",
+        "damage": {
+          "dice": "1d4",
+          "type": "piercing"
+        },
+        "properties": [
+          "finesse",
+          "thrown"
+        ],
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 5,
+        "weight_lb": 0.25
+      }
+    },
+    {
+      "id": "srd5e:item/light-crossbow",
+      "name": "Light Crossbow",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_RANGED",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "loading",
+          "two-handed"
+        ],
+        "range": {
+          "normal": 80,
+          "long": 320
+        },
+        "ammunition": "srd5e:item/bolts",
+        "mastery": "slow",
+        "slot": "TWO_HANDS",
+        "cost_cp": 2500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/shortbow",
+      "name": "Shortbow",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_RANGED",
+        "damage": {
+          "dice": "1d6",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "two-handed"
+        ],
+        "range": {
+          "normal": 80,
+          "long": 320
+        },
+        "ammunition": "srd5e:item/arrows",
+        "mastery": "vex",
+        "slot": "TWO_HANDS",
+        "cost_cp": 2500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/sling",
+      "name": "Sling",
+      "payload": {
+        "type": "WEAPON",
+        "category": "SIMPLE_RANGED",
+        "damage": {
+          "dice": "1d4",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "ammunition"
+        ],
+        "range": {
+          "normal": 30,
+          "long": 120
+        },
+        "ammunition": "srd5e:item/bullets-sling",
+        "mastery": "slow",
+        "slot": "ONE_HAND",
+        "cost_cp": 10,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/battleaxe",
+      "name": "Battleaxe",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "slashing"
+        },
+        "properties": [
+          "versatile"
+        ],
+        "versatile": "1d10",
+        "mastery": "topple",
+        "slot": "ONE_HAND",
+        "cost_cp": 1000,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/flail",
+      "name": "Flail",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "bludgeoning"
+        },
+        "properties": [],
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 1000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/glaive",
+      "name": "Glaive",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d10",
+          "type": "slashing"
+        },
+        "properties": [
+          "heavy",
+          "reach",
+          "two-handed"
+        ],
+        "mastery": "graze",
+        "slot": "TWO_HANDS",
+        "cost_cp": 2000,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/greataxe",
+      "name": "Greataxe",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d12",
+          "type": "slashing"
+        },
+        "properties": [
+          "heavy",
+          "two-handed"
+        ],
+        "mastery": "cleave",
+        "slot": "TWO_HANDS",
+        "cost_cp": 3000,
+        "weight_lb": 7
+      }
+    },
+    {
+      "id": "srd5e:item/greatsword",
+      "name": "Greatsword",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "2d6",
+          "type": "slashing"
+        },
+        "properties": [
+          "heavy",
+          "two-handed"
+        ],
+        "mastery": "graze",
+        "slot": "TWO_HANDS",
+        "cost_cp": 5000,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/halberd",
+      "name": "Halberd",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d10",
+          "type": "slashing"
+        },
+        "properties": [
+          "heavy",
+          "reach",
+          "two-handed"
+        ],
+        "mastery": "cleave",
+        "slot": "TWO_HANDS",
+        "cost_cp": 2000,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/lance",
+      "name": "Lance",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d10",
+          "type": "piercing"
+        },
+        "properties": [
+          "heavy",
+          "reach",
+          "two-handed"
+        ],
+        "mastery": "topple",
+        "slot": "TWO_HANDS",
+        "cost_cp": 1000,
+        "weight_lb": 6,
+        "text": "Two-Handed unless you are mounted."
+      }
+    },
+    {
+      "id": "srd5e:item/longsword",
+      "name": "Longsword",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "slashing"
+        },
+        "properties": [
+          "versatile"
+        ],
+        "versatile": "1d10",
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 1500,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/maul",
+      "name": "Maul",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "2d6",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "heavy",
+          "two-handed"
+        ],
+        "mastery": "topple",
+        "slot": "TWO_HANDS",
+        "cost_cp": 1000,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/morningstar",
+      "name": "Morningstar",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [],
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 1500,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/pike",
+      "name": "Pike",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d10",
+          "type": "piercing"
+        },
+        "properties": [
+          "heavy",
+          "reach",
+          "two-handed"
+        ],
+        "mastery": "push",
+        "slot": "TWO_HANDS",
+        "cost_cp": 500,
+        "weight_lb": 18
+      }
+    },
+    {
+      "id": "srd5e:item/rapier",
+      "name": "Rapier",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [
+          "finesse"
+        ],
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 2500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/scimitar",
+      "name": "Scimitar",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "slashing"
+        },
+        "properties": [
+          "finesse",
+          "light"
+        ],
+        "mastery": "nick",
+        "slot": "ONE_HAND",
+        "cost_cp": 2500,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/shortsword",
+      "name": "Shortsword",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d6",
+          "type": "piercing"
+        },
+        "properties": [
+          "finesse",
+          "light"
+        ],
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 1000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/trident",
+      "name": "Trident",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [
+          "thrown",
+          "versatile"
+        ],
+        "versatile": "1d10",
+        "range": {
+          "normal": 20,
+          "long": 60
+        },
+        "mastery": "topple",
+        "slot": "ONE_HAND",
+        "cost_cp": 500,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/warhammer",
+      "name": "Warhammer",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "bludgeoning"
+        },
+        "properties": [
+          "versatile"
+        ],
+        "versatile": "1d10",
+        "mastery": "push",
+        "slot": "ONE_HAND",
+        "cost_cp": 1500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/war-pick",
+      "name": "War Pick",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [
+          "versatile"
+        ],
+        "versatile": "1d10",
+        "mastery": "sap",
+        "slot": "ONE_HAND",
+        "cost_cp": 500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/whip",
+      "name": "Whip",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_MELEE",
+        "damage": {
+          "dice": "1d4",
+          "type": "slashing"
+        },
+        "properties": [
+          "finesse",
+          "reach"
+        ],
+        "mastery": "slow",
+        "slot": "ONE_HAND",
+        "cost_cp": 200,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/blowgun",
+      "name": "Blowgun",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "loading"
+        ],
+        "range": {
+          "normal": 25,
+          "long": 100
+        },
+        "ammunition": "srd5e:item/needles",
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 1000,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/hand-crossbow",
+      "name": "Hand Crossbow",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1d6",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "light",
+          "loading"
+        ],
+        "range": {
+          "normal": 30,
+          "long": 120
+        },
+        "ammunition": "srd5e:item/bolts",
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 7500,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/heavy-crossbow",
+      "name": "Heavy Crossbow",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1d10",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "heavy",
+          "loading",
+          "two-handed"
+        ],
+        "range": {
+          "normal": 100,
+          "long": 400
+        },
+        "ammunition": "srd5e:item/bolts",
+        "mastery": "push",
+        "slot": "TWO_HANDS",
+        "cost_cp": 5000,
+        "weight_lb": 18
+      }
+    },
+    {
+      "id": "srd5e:item/longbow",
+      "name": "Longbow",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1d8",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "heavy",
+          "two-handed"
+        ],
+        "range": {
+          "normal": 150,
+          "long": 600
+        },
+        "ammunition": "srd5e:item/arrows",
+        "mastery": "slow",
+        "slot": "TWO_HANDS",
+        "cost_cp": 5000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/musket",
+      "name": "Musket",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1d12",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "loading",
+          "two-handed"
+        ],
+        "range": {
+          "normal": 40,
+          "long": 120
+        },
+        "ammunition": "srd5e:item/bullets-firearm",
+        "mastery": "slow",
+        "slot": "TWO_HANDS",
+        "cost_cp": 50000,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/pistol",
+      "name": "Pistol",
+      "payload": {
+        "type": "WEAPON",
+        "category": "MARTIAL_RANGED",
+        "damage": {
+          "dice": "1d10",
+          "type": "piercing"
+        },
+        "properties": [
+          "ammunition",
+          "loading"
+        ],
+        "range": {
+          "normal": 30,
+          "long": 90
+        },
+        "ammunition": "srd5e:item/bullets-firearm",
+        "mastery": "vex",
+        "slot": "ONE_HAND",
+        "cost_cp": 25000,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/arrows",
+      "name": "Arrow",
+      "payload": {
+        "type": "AMMUNITION",
+        "bundle_size": 20,
+        "container": "srd5e:item/quiver",
+        "cost_cp": 100,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/bolts",
+      "name": "Bolt",
+      "payload": {
+        "type": "AMMUNITION",
+        "bundle_size": 20,
+        "container": "srd5e:item/case-crossbow-bolt",
+        "cost_cp": 100,
+        "weight_lb": 1.5
+      }
+    },
+    {
+      "id": "srd5e:item/bullets-firearm",
+      "name": "Bullet, Firearm",
+      "payload": {
+        "type": "AMMUNITION",
+        "bundle_size": 10,
+        "container": "srd5e:item/pouch",
+        "cost_cp": 300,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/bullets-sling",
+      "name": "Bullet, Sling",
+      "payload": {
+        "type": "AMMUNITION",
+        "bundle_size": 20,
+        "container": "srd5e:item/pouch",
+        "cost_cp": 4,
+        "weight_lb": 1.5
+      }
+    },
+    {
+      "id": "srd5e:item/needles",
+      "name": "Needle",
+      "payload": {
+        "type": "AMMUNITION",
+        "bundle_size": 50,
+        "container": "srd5e:item/pouch",
+        "cost_cp": 100,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/padded-armor",
+      "name": "Padded Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "LIGHT",
+          "base_ac": 11,
+          "dex_bonus": "FULL",
+          "stealth_disadvantage": true,
+          "don_minutes": 1,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 500,
+        "weight_lb": 8
+      }
+    },
+    {
+      "id": "srd5e:item/leather-armor",
+      "name": "Leather Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "LIGHT",
+          "base_ac": 11,
+          "dex_bonus": "FULL",
+          "stealth_disadvantage": false,
+          "don_minutes": 1,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 1000,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/studded-leather-armor",
+      "name": "Studded Leather Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "LIGHT",
+          "base_ac": 12,
+          "dex_bonus": "FULL",
+          "stealth_disadvantage": false,
+          "don_minutes": 1,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 4500,
+        "weight_lb": 13
+      }
+    },
+    {
+      "id": "srd5e:item/hide-armor",
+      "name": "Hide Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "MEDIUM",
+          "base_ac": 12,
+          "dex_bonus": "MAX_2",
+          "stealth_disadvantage": false,
+          "don_minutes": 5,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 1000,
+        "weight_lb": 12
+      }
+    },
+    {
+      "id": "srd5e:item/chain-shirt",
+      "name": "Chain Shirt",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "MEDIUM",
+          "base_ac": 13,
+          "dex_bonus": "MAX_2",
+          "stealth_disadvantage": false,
+          "don_minutes": 5,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 5000,
+        "weight_lb": 20
+      }
+    },
+    {
+      "id": "srd5e:item/scale-mail",
+      "name": "Scale Mail",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "MEDIUM",
+          "base_ac": 14,
+          "dex_bonus": "MAX_2",
+          "stealth_disadvantage": true,
+          "don_minutes": 5,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 5000,
+        "weight_lb": 45
+      }
+    },
+    {
+      "id": "srd5e:item/breastplate",
+      "name": "Breastplate",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "MEDIUM",
+          "base_ac": 14,
+          "dex_bonus": "MAX_2",
+          "stealth_disadvantage": false,
+          "don_minutes": 5,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 40000,
+        "weight_lb": 20
+      }
+    },
+    {
+      "id": "srd5e:item/half-plate-armor",
+      "name": "Half Plate Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "MEDIUM",
+          "base_ac": 15,
+          "dex_bonus": "MAX_2",
+          "stealth_disadvantage": true,
+          "don_minutes": 5,
+          "doff_minutes": 1
+        },
+        "slot": "BODY",
+        "cost_cp": 75000,
+        "weight_lb": 40
+      }
+    },
+    {
+      "id": "srd5e:item/ring-mail",
+      "name": "Ring Mail",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "HEAVY",
+          "base_ac": 14,
+          "dex_bonus": "NONE",
+          "stealth_disadvantage": true,
+          "don_minutes": 10,
+          "doff_minutes": 5
+        },
+        "slot": "BODY",
+        "cost_cp": 3000,
+        "weight_lb": 40
+      }
+    },
+    {
+      "id": "srd5e:item/chain-mail",
+      "name": "Chain Mail",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "HEAVY",
+          "base_ac": 16,
+          "dex_bonus": "NONE",
+          "strength_requirement": 13,
+          "stealth_disadvantage": true,
+          "don_minutes": 10,
+          "doff_minutes": 5
+        },
+        "slot": "BODY",
+        "cost_cp": 7500,
+        "weight_lb": 55
+      }
+    },
+    {
+      "id": "srd5e:item/splint-armor",
+      "name": "Splint Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "HEAVY",
+          "base_ac": 17,
+          "dex_bonus": "NONE",
+          "strength_requirement": 15,
+          "stealth_disadvantage": true,
+          "don_minutes": 10,
+          "doff_minutes": 5
+        },
+        "slot": "BODY",
+        "cost_cp": 20000,
+        "weight_lb": 60
+      }
+    },
+    {
+      "id": "srd5e:item/plate-armor",
+      "name": "Plate Armor",
+      "payload": {
+        "type": "ARMOR",
+        "armor": {
+          "category": "HEAVY",
+          "base_ac": 18,
+          "dex_bonus": "NONE",
+          "strength_requirement": 15,
+          "stealth_disadvantage": true,
+          "don_minutes": 10,
+          "doff_minutes": 5
+        },
+        "slot": "BODY",
+        "cost_cp": 150000,
+        "weight_lb": 65
+      }
+    },
+    {
+      "id": "srd5e:item/shield",
+      "name": "Shield",
+      "payload": {
+        "type": "SHIELD",
+        "armor": {
+          "category": "SHIELD",
+          "ac_bonus": 2,
+          "don_action": true,
+          "doff_action": true
+        },
+        "slot": "SHIELD",
+        "cost_cp": 1000,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/acid",
+      "name": "Acid",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2500,
+        "weight_lb": 1,
+        "text": "Thrown improvised weapon: 2d6 Acid damage on a hit (range 20 ft)."
+      }
+    },
+    {
+      "id": "srd5e:item/alchemists-fire",
+      "name": "Alchemist's Fire",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5000,
+        "weight_lb": 1,
+        "text": "Thrown improvised weapon: 1d4 Fire damage at the start of each of the target's turns until extinguished (DC 10 Dexterity check as an action)."
+      }
+    },
+    {
+      "id": "srd5e:item/antitoxin",
+      "name": "Antitoxin",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5000,
+        "weight_lb": 0,
+        "text": "Drink as a Bonus Action: Advantage on saving throws against poison for 1 hour."
+      }
+    },
+    {
+      "id": "srd5e:item/arcane-focus-crystal",
+      "name": "Arcane Focus (Crystal)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "ARCANE",
+        "cost_cp": 1000,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/arcane-focus-orb",
+      "name": "Arcane Focus (Orb)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "ARCANE",
+        "cost_cp": 2000,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/arcane-focus-rod",
+      "name": "Arcane Focus (Rod)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "ARCANE",
+        "cost_cp": 1000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/arcane-focus-staff",
+      "name": "Arcane Focus (Staff)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "ARCANE",
+        "cost_cp": 500,
+        "weight_lb": 4,
+        "text": "Also usable as a Quarterstaff."
+      }
+    },
+    {
+      "id": "srd5e:item/arcane-focus-wand",
+      "name": "Arcane Focus (Wand)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "ARCANE",
+        "cost_cp": 1000,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/backpack",
+      "name": "Backpack",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 30,
+        "cost_cp": 200,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/ball-bearings",
+      "name": "Ball Bearings",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 2,
+        "text": "Pour to cover a 10-foot square; creatures moving through must succeed on a DC 10 Dexterity saving throw or fall Prone."
+      }
+    },
+    {
+      "id": "srd5e:item/barrel",
+      "name": "Barrel",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 40,
+        "capacity_text": "40 gallons of liquid or 4 cubic feet of dry goods",
+        "cost_cp": 200,
+        "weight_lb": 70
+      }
+    },
+    {
+      "id": "srd5e:item/basket",
+      "name": "Basket",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 40,
+        "cost_cp": 40,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/bedroll",
+      "name": "Bedroll",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 7
+      }
+    },
+    {
+      "id": "srd5e:item/bell",
+      "name": "Bell",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/blanket",
+      "name": "Blanket",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 50,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/block-and-tackle",
+      "name": "Block and Tackle",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 5,
+        "text": "Hoist up to four times the weight you can normally lift."
+      }
+    },
+    {
+      "id": "srd5e:item/book",
+      "name": "Book",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/bottle-glass",
+      "name": "Bottle, Glass",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "1.5 pints of liquid",
+        "cost_cp": 200,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/bucket",
+      "name": "Bucket",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "3 gallons of liquid or half a cubic foot of dry goods",
+        "cost_cp": 5,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/caltrops",
+      "name": "Caltrops",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 2,
+        "text": "Cover a 5-foot square; a creature entering must succeed on a DC 15 Dexterity saving throw or take 1 Piercing damage and have Speed 0 until the end of its next turn."
+      }
+    },
+    {
+      "id": "srd5e:item/candle",
+      "name": "Candle",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1,
+        "weight_lb": 0,
+        "text": "Bright light in a 5-foot radius and dim light for an additional 5 feet for 1 hour."
+      }
+    },
+    {
+      "id": "srd5e:item/case-crossbow-bolt",
+      "name": "Case, Crossbow Bolt",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "20 Bolts",
+        "cost_cp": 100,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/case-map-or-scroll",
+      "name": "Case, Map or Scroll",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "10 sheets of paper or 5 sheets of parchment",
+        "cost_cp": 100,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/chain",
+      "name": "Chain",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 10,
+        "text": "10 feet long; AC 20, 10 HP, immune to Poison and Psychic damage."
+      }
+    },
+    {
+      "id": "srd5e:item/chest",
+      "name": "Chest",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 300,
+        "capacity_text": "12 cubic feet or 300 pounds",
+        "cost_cp": 500,
+        "weight_lb": 25
+      }
+    },
+    {
+      "id": "srd5e:item/climbers-kit",
+      "name": "Climber's Kit",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2500,
+        "weight_lb": 12,
+        "text": "Anchor to a surface as a Utilize action; you can't fall more than 25 feet from that point."
+      }
+    },
+    {
+      "id": "srd5e:item/clothes-fine",
+      "name": "Clothes, Fine",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1500,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/clothes-travelers",
+      "name": "Clothes, Traveler's",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/component-pouch",
+      "name": "Component Pouch",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2500,
+        "weight_lb": 2,
+        "text": "Watertight pouch holding material components with no cost."
+      }
+    },
+    {
+      "id": "srd5e:item/costume",
+      "name": "Costume",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/crowbar",
+      "name": "Crowbar",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 5,
+        "text": "Utilize action: Advantage on Strength checks where leverage applies."
+      }
+    },
+    {
+      "id": "srd5e:item/druidic-focus-sprig-of-mistletoe",
+      "name": "Druidic Focus (Sprig of Mistletoe)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "DRUIDIC",
+        "cost_cp": 100,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/druidic-focus-wooden-staff",
+      "name": "Druidic Focus (Wooden Staff)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "DRUIDIC",
+        "cost_cp": 500,
+        "weight_lb": 4,
+        "text": "Also usable as a Quarterstaff."
+      }
+    },
+    {
+      "id": "srd5e:item/druidic-focus-yew-wand",
+      "name": "Druidic Focus (Yew Wand)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "DRUIDIC",
+        "cost_cp": 1000,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/flask",
+      "name": "Flask",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "1 pint of liquid",
+        "cost_cp": 2,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/grappling-hook",
+      "name": "Grappling Hook",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/healers-kit",
+      "name": "Healer's Kit",
+      "payload": {
+        "type": "GEAR",
+        "charges": 10,
+        "cost_cp": 500,
+        "weight_lb": 3,
+        "text": "10 uses. Utilize action: stabilize a creature that has 0 Hit Points without a Wisdom (Medicine) check."
+      }
+    },
+    {
+      "id": "srd5e:item/holy-symbol-amulet",
+      "name": "Holy Symbol (Amulet)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "HOLY_SYMBOL",
+        "cost_cp": 500,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/holy-symbol-emblem",
+      "name": "Holy Symbol (Emblem)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "HOLY_SYMBOL",
+        "cost_cp": 500,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/holy-symbol-reliquary",
+      "name": "Holy Symbol (Reliquary)",
+      "payload": {
+        "type": "FOCUS",
+        "focus_kind": "HOLY_SYMBOL",
+        "cost_cp": 500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/holy-water",
+      "name": "Holy Water",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2500,
+        "weight_lb": 1,
+        "text": "Thrown improvised weapon: 2d8 Radiant damage to a Fiend or Undead."
+      }
+    },
+    {
+      "id": "srd5e:item/hunting-trap",
+      "name": "Hunting Trap",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 25,
+        "text": "DC 13 Dexterity saving throw or 1d4 Piercing damage and Speed 0; DC 13 Strength (Athletics) check to escape."
+      }
+    },
+    {
+      "id": "srd5e:item/ink",
+      "name": "Ink",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1000,
+        "weight_lb": 0,
+        "text": "1-ounce bottle, enough for about 500 pages."
+      }
+    },
+    {
+      "id": "srd5e:item/ink-pen",
+      "name": "Ink Pen",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 2,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/jug",
+      "name": "Jug",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "1 gallon of liquid",
+        "cost_cp": 2,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/ladder",
+      "name": "Ladder",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10,
+        "weight_lb": 25,
+        "text": "10 feet tall."
+      }
+    },
+    {
+      "id": "srd5e:item/lamp",
+      "name": "Lamp",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 50,
+        "weight_lb": 1,
+        "text": "Bright light in a 15-foot radius and dim light for an additional 30 feet; burns 6 hours on a flask of Oil."
+      }
+    },
+    {
+      "id": "srd5e:item/lantern-bullseye",
+      "name": "Lantern, Bullseye",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1000,
+        "weight_lb": 2,
+        "text": "Bright light in a 60-foot cone and dim light for an additional 60 feet; 6 hours on a flask of Oil."
+      }
+    },
+    {
+      "id": "srd5e:item/lantern-hooded",
+      "name": "Lantern, Hooded",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 2,
+        "text": "Bright light in a 30-foot radius and dim light for an additional 30 feet; 6 hours on a flask of Oil; can be lowered to dim light in a 5-foot radius."
+      }
+    },
+    {
+      "id": "srd5e:item/lock",
+      "name": "Lock",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1000,
+        "weight_lb": 1,
+        "text": "Comes with a key; DC 15 Dexterity (Sleight of Hand) check with Thieves' Tools to pick."
+      }
+    },
+    {
+      "id": "srd5e:item/magnifying-glass",
+      "name": "Magnifying Glass",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10000,
+        "weight_lb": 0,
+        "text": "Advantage on ability checks to appraise or inspect a highly detailed item; can light a fire in bright sunlight."
+      }
+    },
+    {
+      "id": "srd5e:item/manacles",
+      "name": "Manacles",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 6,
+        "text": "Restrain a Small or Medium creature; DC 20 Dexterity (Sleight of Hand) or DC 25 Strength (Athletics) to escape; AC 19, 15 HP."
+      }
+    },
+    {
+      "id": "srd5e:item/map",
+      "name": "Map",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 0,
+        "text": "Advantage on Wisdom (Survival) checks to find your way in the depicted area."
+      }
+    },
+    {
+      "id": "srd5e:item/mirror",
+      "name": "Mirror",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 0.5
+      }
+    },
+    {
+      "id": "srd5e:item/net",
+      "name": "Net",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 3,
+        "text": "Thrown (range 15 ft): a Large or smaller creature is Restrained until freed (DC 10 Strength (Athletics) check or 5 Slashing damage to the net)."
+      }
+    },
+    {
+      "id": "srd5e:item/oil",
+      "name": "Oil",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10,
+        "weight_lb": 1,
+        "text": "Flask. Fuel for a lamp or lantern (6 hours), or thrown/poured to deal 5 Fire damage when ignited."
+      }
+    },
+    {
+      "id": "srd5e:item/paper",
+      "name": "Paper",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 20,
+        "weight_lb": 0,
+        "text": "One sheet."
+      }
+    },
+    {
+      "id": "srd5e:item/parchment",
+      "name": "Parchment",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10,
+        "weight_lb": 0,
+        "text": "One sheet."
+      }
+    },
+    {
+      "id": "srd5e:item/perfume",
+      "name": "Perfume",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 500,
+        "weight_lb": 0,
+        "text": "Vial. Advantage on Charisma (Persuasion) checks for 1 hour when applied."
+      }
+    },
+    {
+      "id": "srd5e:item/poison-basic",
+      "name": "Poison, Basic",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10000,
+        "weight_lb": 0,
+        "text": "Vial. Coat one weapon or three pieces of ammunition; on a hit within 1 minute the target makes a DC 10 Constitution saving throw or takes 1d4 Poison damage."
+      }
+    },
+    {
+      "id": "srd5e:item/pole",
+      "name": "Pole",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5,
+        "weight_lb": 7,
+        "text": "10 feet long."
+      }
+    },
+    {
+      "id": "srd5e:item/pot-iron",
+      "name": "Pot, Iron",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "1 gallon of liquid",
+        "cost_cp": 200,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/potion-of-healing",
+      "name": "Potion of Healing",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5000,
+        "weight_lb": 0.5,
+        "text": "Drink as a Bonus Action: regain 2d4 + 2 Hit Points."
+      }
+    },
+    {
+      "id": "srd5e:item/pouch",
+      "name": "Pouch",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 6,
+        "cost_cp": 50,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/quiver",
+      "name": "Quiver",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "20 Arrows",
+        "cost_cp": 100,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/ram-portable",
+      "name": "Ram, Portable",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 400,
+        "weight_lb": 35,
+        "text": "+4 bonus on Strength checks to break down doors; a helper grants Advantage."
+      }
+    },
+    {
+      "id": "srd5e:item/rations",
+      "name": "Rations",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 50,
+        "weight_lb": 2,
+        "text": "One day of food."
+      }
+    },
+    {
+      "id": "srd5e:item/robe",
+      "name": "Robe",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 4
+      }
+    },
+    {
+      "id": "srd5e:item/rope",
+      "name": "Rope",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 5,
+        "text": "50 feet; AC 11, 2 HP; DC 15 Dexterity (Sleight of Hand) check to tie a knot, DC 20 Strength (Athletics) to escape one."
+      }
+    },
+    {
+      "id": "srd5e:item/sack",
+      "name": "Sack",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_lb": 30,
+        "cost_cp": 1,
+        "weight_lb": 0.5
+      }
+    },
+    {
+      "id": "srd5e:item/shovel",
+      "name": "Shovel",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/signal-whistle",
+      "name": "Signal Whistle",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/spell-scroll-cantrip",
+      "name": "Spell Scroll (Cantrip)",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 3000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/spell-scroll-level-1",
+      "name": "Spell Scroll (Level 1)",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/spellbook",
+      "name": "Spellbook",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 5000,
+        "weight_lb": 3,
+        "text": "100 pages of parchment for recording Wizard spells."
+      }
+    },
+    {
+      "id": "srd5e:item/spikes-iron",
+      "name": "Spikes, Iron",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100,
+        "weight_lb": 5,
+        "text": "Ten spikes."
+      }
+    },
+    {
+      "id": "srd5e:item/spyglass",
+      "name": "Spyglass",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 100000,
+        "weight_lb": 1,
+        "text": "Objects viewed are magnified to twice their size."
+      }
+    },
+    {
+      "id": "srd5e:item/string",
+      "name": "String",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 10,
+        "weight_lb": 0,
+        "text": "10 feet."
+      }
+    },
+    {
+      "id": "srd5e:item/tent",
+      "name": "Tent",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 200,
+        "weight_lb": 20,
+        "text": "Sleeps two."
+      }
+    },
+    {
+      "id": "srd5e:item/tinderbox",
+      "name": "Tinderbox",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 50,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/torch",
+      "name": "Torch",
+      "payload": {
+        "type": "GEAR",
+        "cost_cp": 1,
+        "weight_lb": 1,
+        "text": "Bright light in a 20-foot radius and dim light for an additional 20 feet for 1 hour; improvised weapon dealing 1 Fire damage."
+      }
+    },
+    {
+      "id": "srd5e:item/vial",
+      "name": "Vial",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "4 ounces of liquid",
+        "cost_cp": 100,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/waterskin",
+      "name": "Waterskin",
+      "payload": {
+        "type": "CONTAINER",
+        "capacity_text": "4 pints of liquid",
+        "cost_cp": 20,
+        "weight_lb": 5,
+        "text": "Weight is when full."
+      }
+    },
+    {
+      "id": "srd5e:item/alchemists-supplies",
+      "name": "Alchemist's Supplies",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "INT",
+        "cost_cp": 5000,
+        "weight_lb": 8
+      }
+    },
+    {
+      "id": "srd5e:item/brewers-supplies",
+      "name": "Brewer's Supplies",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "INT",
+        "cost_cp": 2000,
+        "weight_lb": 9
+      }
+    },
+    {
+      "id": "srd5e:item/calligraphers-supplies",
+      "name": "Calligrapher's Supplies",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 1000,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/carpenters-tools",
+      "name": "Carpenter's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "STR",
+        "cost_cp": 800,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/cartographers-tools",
+      "name": "Cartographer's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "WIS",
+        "cost_cp": 1500,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/cobblers-tools",
+      "name": "Cobbler's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/cooks-utensils",
+      "name": "Cook's Utensils",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "WIS",
+        "cost_cp": 100,
+        "weight_lb": 8
+      }
+    },
+    {
+      "id": "srd5e:item/glassblowers-tools",
+      "name": "Glassblower's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "INT",
+        "cost_cp": 3000,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/jewelers-tools",
+      "name": "Jeweler's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "INT",
+        "cost_cp": 2500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/leatherworkers-tools",
+      "name": "Leatherworker's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/masons-tools",
+      "name": "Mason's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "STR",
+        "cost_cp": 1000,
+        "weight_lb": 8
+      }
+    },
+    {
+      "id": "srd5e:item/painters-supplies",
+      "name": "Painter's Supplies",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "WIS",
+        "cost_cp": 1000,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/potters-tools",
+      "name": "Potter's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "INT",
+        "cost_cp": 1000,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/smiths-tools",
+      "name": "Smith's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "STR",
+        "cost_cp": 2000,
+        "weight_lb": 8
+      }
+    },
+    {
+      "id": "srd5e:item/tinkers-tools",
+      "name": "Tinker's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 5000,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/weavers-tools",
+      "name": "Weaver's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 100,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/woodcarvers-tools",
+      "name": "Woodcarver's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "ARTISAN",
+        "ability": "DEX",
+        "cost_cp": 100,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/disguise-kit",
+      "name": "Disguise Kit",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "CHA",
+        "cost_cp": 2500,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/forgery-kit",
+      "name": "Forgery Kit",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "DEX",
+        "cost_cp": 1500,
+        "weight_lb": 5
+      }
+    },
+    {
+      "id": "srd5e:item/gaming-set-dice",
+      "name": "Gaming Set (Dice)",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "GAMING_SET",
+        "ability": "WIS",
+        "cost_cp": 10,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/gaming-set-dragonchess",
+      "name": "Gaming Set (Dragonchess)",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "GAMING_SET",
+        "ability": "WIS",
+        "cost_cp": 100,
+        "weight_lb": 0.5
+      }
+    },
+    {
+      "id": "srd5e:item/gaming-set-playing-cards",
+      "name": "Gaming Set (Playing Cards)",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "GAMING_SET",
+        "ability": "WIS",
+        "cost_cp": 50,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/gaming-set-three-dragon-ante",
+      "name": "Gaming Set (Three-Dragon Ante)",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "GAMING_SET",
+        "ability": "WIS",
+        "cost_cp": 100,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/herbalism-kit",
+      "name": "Herbalism Kit",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "INT",
+        "cost_cp": 500,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/bagpipes",
+      "name": "Bagpipes",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 3000,
+        "weight_lb": 6
+      }
+    },
+    {
+      "id": "srd5e:item/drum",
+      "name": "Drum",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 600,
+        "weight_lb": 3
+      }
+    },
+    {
+      "id": "srd5e:item/dulcimer",
+      "name": "Dulcimer",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 2500,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/flute",
+      "name": "Flute",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 200,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/horn",
+      "name": "Horn",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 300,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/lute",
+      "name": "Lute",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 3500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/lyre",
+      "name": "Lyre",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 3000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/pan-flute",
+      "name": "Pan Flute",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 1200,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/shawm",
+      "name": "Shawm",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 200,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/viol",
+      "name": "Viol",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "MUSICAL_INSTRUMENT",
+        "ability": "CHA",
+        "cost_cp": 3000,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/navigators-tools",
+      "name": "Navigator's Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "WIS",
+        "cost_cp": 2500,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/poisoners-kit",
+      "name": "Poisoner's Kit",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "INT",
+        "cost_cp": 5000,
+        "weight_lb": 2
+      }
+    },
+    {
+      "id": "srd5e:item/thieves-tools",
+      "name": "Thieves' Tools",
+      "payload": {
+        "type": "TOOL",
+        "tool_kind": "OTHER",
+        "ability": "DEX",
+        "cost_cp": 2500,
+        "weight_lb": 1
+      }
+    },
+    {
+      "id": "srd5e:item/burglars-pack",
+      "name": "Burglar's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 1600,
+        "weight_lb": 42,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/ball-bearings",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/bell",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/candle",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/crowbar",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/lantern-hooded",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 7
+          },
+          {
+            "item": "srd5e:item/rations",
+            "quantity": 5
+          },
+          {
+            "item": "srd5e:item/rope",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/waterskin",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/diplomats-pack",
+      "name": "Diplomat's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 3900,
+        "weight_lb": 39,
+        "contents": [
+          {
+            "item": "srd5e:item/chest",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/clothes-fine",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/ink",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/ink-pen",
+            "quantity": 5
+          },
+          {
+            "item": "srd5e:item/lamp",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/case-map-or-scroll",
+            "quantity": 2
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 4
+          },
+          {
+            "item": "srd5e:item/paper",
+            "quantity": 5
+          },
+          {
+            "item": "srd5e:item/parchment",
+            "quantity": 5
+          },
+          {
+            "item": "srd5e:item/perfume",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/dungeoneers-pack",
+      "name": "Dungeoneer's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 1200,
+        "weight_lb": 55,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/caltrops",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/crowbar",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 2
+          },
+          {
+            "item": "srd5e:item/rations",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/rope",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/torch",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/waterskin",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/entertainers-pack",
+      "name": "Entertainer's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 4000,
+        "weight_lb": 0,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/bedroll",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/bell",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/lantern-bullseye",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/costume",
+            "quantity": 3
+          },
+          {
+            "item": "srd5e:item/mirror",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 8
+          },
+          {
+            "item": "srd5e:item/rations",
+            "quantity": 9
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/waterskin",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/explorers-pack",
+      "name": "Explorer's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 1000,
+        "weight_lb": 55,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/bedroll",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 2
+          },
+          {
+            "item": "srd5e:item/rations",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/rope",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/torch",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/waterskin",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/priests-pack",
+      "name": "Priest's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 3300,
+        "weight_lb": 29,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/blanket",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/holy-water",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/lamp",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/rations",
+            "quantity": 7
+          },
+          {
+            "item": "srd5e:item/robe",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/scholars-pack",
+      "name": "Scholar's Pack",
+      "payload": {
+        "type": "PACK",
+        "cost_cp": 4000,
+        "weight_lb": 22,
+        "contents": [
+          {
+            "item": "srd5e:item/backpack",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/book",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/ink",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/ink-pen",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/lamp",
+            "quantity": 1
+          },
+          {
+            "item": "srd5e:item/oil",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/parchment",
+            "quantity": 10
+          },
+          {
+            "item": "srd5e:item/tinderbox",
+            "quantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:item/camel",
+      "name": "Camel",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 450,
+        "cost_cp": 5000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/elephant",
+      "name": "Elephant",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 1320,
+        "cost_cp": 20000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/horse-draft",
+      "name": "Horse, Draft",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 540,
+        "cost_cp": 5000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/horse-riding",
+      "name": "Horse, Riding",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 480,
+        "cost_cp": 7500,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/mastiff",
+      "name": "Mastiff",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 195,
+        "cost_cp": 2500,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/mule",
+      "name": "Mule",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 420,
+        "cost_cp": 800,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/pony",
+      "name": "Pony",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 225,
+        "cost_cp": 3000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/warhorse",
+      "name": "Warhorse",
+      "payload": {
+        "type": "MOUNT",
+        "carrying_capacity_lb": 540,
+        "cost_cp": 40000,
+        "weight_lb": 0
+      }
+    },
+    {
+      "id": "srd5e:item/carriage",
+      "name": "Carriage",
+      "payload": {
+        "type": "VEHICLE",
+        "vehicle_kind": "DRAWN",
+        "cost_cp": 10000,
+        "weight_lb": 600
+      }
+    },
+    {
+      "id": "srd5e:item/cart",
+      "name": "Cart",
+      "payload": {
+        "type": "VEHICLE",
+        "vehicle_kind": "DRAWN",
+        "cost_cp": 1500,
+        "weight_lb": 200
+      }
+    },
+    {
+      "id": "srd5e:item/chariot",
+      "name": "Chariot",
+      "payload": {
+        "type": "VEHICLE",
+        "vehicle_kind": "DRAWN",
+        "cost_cp": 25000,
+        "weight_lb": 100
+      }
+    },
+    {
+      "id": "srd5e:item/feed",
+      "name": "Feed (per day)",
+      "payload": {
+        "type": "TACK",
+        "cost_cp": 5,
+        "weight_lb": 10
+      }
+    },
+    {
+      "id": "srd5e:item/saddle-exotic",
+      "name": "Saddle, Exotic",
+      "payload": {
+        "type": "TACK",
+        "cost_cp": 6000,
+        "weight_lb": 40
+      }
+    },
+    {
+      "id": "srd5e:item/saddle-military",
+      "name": "Saddle, Military",
+      "payload": {
+        "type": "TACK",
+        "cost_cp": 2000,
+        "weight_lb": 30
+      }
+    },
+    {
+      "id": "srd5e:item/saddle-riding",
+      "name": "Saddle, Riding",
+      "payload": {
+        "type": "TACK",
+        "cost_cp": 1000,
+        "weight_lb": 25
+      }
+    },
+    {
+      "id": "srd5e:item/sled",
+      "name": "Sled",
+      "payload": {
+        "type": "VEHICLE",
+        "vehicle_kind": "DRAWN",
+        "cost_cp": 2000,
+        "weight_lb": 300
+      }
+    },
+    {
+      "id": "srd5e:item/wagon",
+      "name": "Wagon",
+      "payload": {
+        "type": "VEHICLE",
+        "vehicle_kind": "DRAWN",
+        "cost_cp": 3500,
+        "weight_lb": 400
+      }
+    }
+  ]
+}

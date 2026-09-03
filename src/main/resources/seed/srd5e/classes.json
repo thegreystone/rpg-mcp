@@ -1,0 +1,1248 @@
+{
+  "kind": "CLASS",
+  "citation": "SRD 5.2.1, Classes - Core Class Traits tables; Character Creation - Starting Equipment (Option B gold)",
+  "verify": "Checked against the SRD 5.2.1 PDF text (CC-BY-4.0) by scripted diff on 2026-09-01: hit die, saving throws, skill choices, starting equipment and gold, ASI levels, proficiency column, cantrips known, prepared spells and spell slots per level for all 12 classes. Still unverified: class features beyond the tables (subclasses, feature text).",
+  "entries": [
+    {
+      "id": "srd5e:class/barbarian",
+      "name": "Barbarian",
+      "payload": {
+        "summary": "A primal warrior who rages for strength and toughness; d12 hit die, the most hit points of any class.",
+        "hit_die": 12,
+        "primary_abilities": [
+          "STR"
+        ],
+        "saving_throws": [
+          "STR",
+          "CON"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/animal-handling",
+            "srd5e:skill/athletics",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/nature",
+            "srd5e:skill/perception",
+            "srd5e:skill/survival"
+          ]
+        },
+        "starting_gold_gp": 75,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/greataxe",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/handaxe",
+                "quantity": 4
+              },
+              {
+                "item": "srd5e:item/explorers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 15
+          },
+          "B": {
+            "gold_gp": 75
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ]
+      }
+    },
+    {
+      "id": "srd5e:class/bard",
+      "name": "Bard",
+      "payload": {
+        "summary": "A charismatic performer whose music inspires allies and weaves magic; jack of all trades, any skills.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "CHA"
+        ],
+        "saving_throws": [
+          "DEX",
+          "CHA"
+        ],
+        "skill_choices": {
+          "count": 3,
+          "options": "ANY"
+        },
+        "spellcasting_ability": "CHA",
+        "starting_gold_gp": 90,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "choice": "MUSICAL_INSTRUMENT",
+                "default": "srd5e:item/lute",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/entertainers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 19
+          },
+          "B": {
+            "gold_gp": 90
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "CHA",
+          "progression": "FULL",
+          "cantrips_known": [
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "prepared": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "ritual": true
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/cleric",
+      "name": "Cleric",
+      "payload": {
+        "summary": "A servant of a deity channelling divine magic: healing, protection and holy power, in armour.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "WIS"
+        ],
+        "saving_throws": [
+          "WIS",
+          "CHA"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/history",
+            "srd5e:skill/insight",
+            "srd5e:skill/medicine",
+            "srd5e:skill/persuasion",
+            "srd5e:skill/religion"
+          ]
+        },
+        "spellcasting_ability": "WIS",
+        "starting_gold_gp": 110,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/chain-shirt",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shield",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/mace",
+                "quantity": 1
+              },
+              {
+                "choice": "HOLY_SYMBOL",
+                "default": "srd5e:item/holy-symbol-amulet",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/priests-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 7
+          },
+          "B": {
+            "gold_gp": 110
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "WIS",
+          "progression": "FULL",
+          "cantrips_known": [
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "prepared": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "ritual": true
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/druid",
+      "name": "Druid",
+      "payload": {
+        "summary": "A keeper of nature's balance who shapes wild magic and, in time, takes animal form.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "WIS"
+        ],
+        "saving_throws": [
+          "INT",
+          "WIS"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/arcana",
+            "srd5e:skill/animal-handling",
+            "srd5e:skill/insight",
+            "srd5e:skill/medicine",
+            "srd5e:skill/nature",
+            "srd5e:skill/perception",
+            "srd5e:skill/religion",
+            "srd5e:skill/survival"
+          ]
+        },
+        "spellcasting_ability": "WIS",
+        "starting_gold_gp": 50,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shield",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/sickle",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/druidic-focus-wooden-staff",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/explorers-pack",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/herbalism-kit",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 9
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "WIS",
+          "progression": "FULL",
+          "cantrips_known": [
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "prepared": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "ritual": true
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/fighter",
+      "name": "Fighter",
+      "payload": {
+        "summary": "A master of weapons and armour: the most attacks, the widest gear, straightforward and durable.",
+        "hit_die": 10,
+        "primary_abilities": [
+          "STR",
+          "DEX"
+        ],
+        "saving_throws": [
+          "STR",
+          "CON"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/acrobatics",
+            "srd5e:skill/animal-handling",
+            "srd5e:skill/athletics",
+            "srd5e:skill/history",
+            "srd5e:skill/insight",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/persuasion",
+            "srd5e:skill/perception",
+            "srd5e:skill/survival"
+          ]
+        },
+        "starting_gold_gp": 155,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/chain-mail",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/greatsword",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/flail",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/javelin",
+                "quantity": 8
+              },
+              {
+                "item": "srd5e:item/dungeoneers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 4
+          },
+          "B": {
+            "items": [
+              {
+                "item": "srd5e:item/studded-leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/scimitar",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shortsword",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/longbow",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/arrows",
+                "quantity": 20
+              },
+              {
+                "item": "srd5e:item/quiver",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dungeoneers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 11
+          },
+          "C": {
+            "gold_gp": 155
+          }
+        },
+        "asi_levels": [
+          4,
+          6,
+          8,
+          12,
+          14,
+          16
+        ]
+      }
+    },
+    {
+      "id": "srd5e:class/monk",
+      "name": "Monk",
+      "payload": {
+        "summary": "A disciplined martial artist: unarmed strikes, extraordinary speed and mobility, no armour needed.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "DEX",
+          "WIS"
+        ],
+        "saving_throws": [
+          "STR",
+          "DEX"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/acrobatics",
+            "srd5e:skill/athletics",
+            "srd5e:skill/history",
+            "srd5e:skill/insight",
+            "srd5e:skill/religion",
+            "srd5e:skill/stealth"
+          ]
+        },
+        "starting_gold_gp": 50,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/spear",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 5
+              },
+              {
+                "choice": "ARTISANS_TOOLS_OR_MUSICAL_INSTRUMENT",
+                "default": "srd5e:item/woodcarvers-tools",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/explorers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 11
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ]
+      }
+    },
+    {
+      "id": "srd5e:class/paladin",
+      "name": "Paladin",
+      "payload": {
+        "summary": "A holy warrior bound by an oath: smites, a healing touch, auras and heavy armour.",
+        "hit_die": 10,
+        "primary_abilities": [
+          "STR",
+          "CHA"
+        ],
+        "saving_throws": [
+          "WIS",
+          "CHA"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/athletics",
+            "srd5e:skill/insight",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/medicine",
+            "srd5e:skill/persuasion",
+            "srd5e:skill/religion"
+          ]
+        },
+        "spellcasting_ability": "CHA",
+        "starting_gold_gp": 150,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/chain-mail",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shield",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/longsword",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/javelin",
+                "quantity": 6
+              },
+              {
+                "choice": "HOLY_SYMBOL",
+                "default": "srd5e:item/holy-symbol-amulet",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/priests-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 9
+          },
+          "B": {
+            "gold_gp": 150
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "CHA",
+          "progression": "HALF",
+          "cantrips_known": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "prepared": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            6,
+            7,
+            7,
+            9,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            14,
+            14,
+            15,
+            15
+          ],
+          "ritual": false
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/ranger",
+      "name": "Ranger",
+      "payload": {
+        "summary": "A wilderness hunter and tracker: bow or blades, nature magic, at home in hostile terrain.",
+        "hit_die": 10,
+        "primary_abilities": [
+          "DEX",
+          "WIS"
+        ],
+        "saving_throws": [
+          "STR",
+          "DEX"
+        ],
+        "skill_choices": {
+          "count": 3,
+          "options": [
+            "srd5e:skill/animal-handling",
+            "srd5e:skill/athletics",
+            "srd5e:skill/insight",
+            "srd5e:skill/investigation",
+            "srd5e:skill/nature",
+            "srd5e:skill/perception",
+            "srd5e:skill/stealth",
+            "srd5e:skill/survival"
+          ]
+        },
+        "spellcasting_ability": "WIS",
+        "starting_gold_gp": 150,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/studded-leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/scimitar",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shortsword",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/longbow",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/arrows",
+                "quantity": 20
+              },
+              {
+                "item": "srd5e:item/quiver",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/druidic-focus-sprig-of-mistletoe",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/explorers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 7
+          },
+          "B": {
+            "gold_gp": 150
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "WIS",
+          "progression": "HALF",
+          "cantrips_known": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "prepared": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            6,
+            7,
+            7,
+            9,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            14,
+            14,
+            15,
+            15
+          ],
+          "ritual": false
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/rogue",
+      "name": "Rogue",
+      "payload": {
+        "summary": "A cunning skill specialist: stealth, traps, locks and devastating sneak attacks.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "DEX"
+        ],
+        "saving_throws": [
+          "DEX",
+          "INT"
+        ],
+        "skill_choices": {
+          "count": 4,
+          "options": [
+            "srd5e:skill/acrobatics",
+            "srd5e:skill/athletics",
+            "srd5e:skill/deception",
+            "srd5e:skill/insight",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/investigation",
+            "srd5e:skill/perception",
+            "srd5e:skill/persuasion",
+            "srd5e:skill/sleight-of-hand",
+            "srd5e:skill/stealth"
+          ]
+        },
+        "starting_gold_gp": 100,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/shortsword",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shortbow",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/arrows",
+                "quantity": 20
+              },
+              {
+                "item": "srd5e:item/quiver",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/thieves-tools",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/burglars-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 8
+          },
+          "B": {
+            "gold_gp": 100
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          10,
+          12,
+          16
+        ],
+        "features": [
+          {
+            "name": "Sneak Attack",
+            "level": 1,
+            "enforcement": "ENGINE",
+            "summary": "Once per turn, deal extra damage to one creature you hit with an attack roll if you have Advantage, or if an ally is within 5 feet of the target and you don't have Disadvantage. The attack must use a Finesse or Ranged weapon.",
+            "text": "Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll and the attack uses a Finesse or a Ranged weapon. You don't need Advantage if another of your allies is within 5 feet of the target, the ally doesn't have the Incapacitated condition, and you don't have Disadvantage on the attack roll. The extra damage increases as you gain Rogue levels.",
+            "text_is_paraphrase": true,
+            "mechanic": {
+              "kind": "SNEAK_ATTACK",
+              "die": "d6",
+              "dice_per_levels": 2,
+              "requires_weapon": [
+                "finesse",
+                "ranged"
+              ],
+              "once_per_turn": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:class/sorcerer",
+      "name": "Sorcerer",
+      "payload": {
+        "summary": "Innate magic from your bloodline, powered by Charisma; flexible casting and raw power, fragile up close.",
+        "hit_die": 6,
+        "primary_abilities": [
+          "CHA"
+        ],
+        "saving_throws": [
+          "CON",
+          "CHA"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/arcana",
+            "srd5e:skill/deception",
+            "srd5e:skill/insight",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/persuasion",
+            "srd5e:skill/religion"
+          ]
+        },
+        "spellcasting_ability": "CHA",
+        "starting_gold_gp": 50,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/spear",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/arcane-focus-crystal",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dungeoneers-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 28
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "CHA",
+          "progression": "FULL",
+          "cantrips_known": [
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ],
+          "prepared": [
+            2,
+            4,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "ritual": false
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/warlock",
+      "name": "Warlock",
+      "payload": {
+        "summary": "Magic granted by a pact with an otherworldly patron: eldritch blasts, invocations, few but recharging slots.",
+        "hit_die": 8,
+        "primary_abilities": [
+          "CHA"
+        ],
+        "saving_throws": [
+          "WIS",
+          "CHA"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/arcana",
+            "srd5e:skill/deception",
+            "srd5e:skill/history",
+            "srd5e:skill/intimidation",
+            "srd5e:skill/investigation",
+            "srd5e:skill/nature",
+            "srd5e:skill/religion"
+          ]
+        },
+        "spellcasting_ability": "CHA",
+        "starting_gold_gp": 100,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/leather-armor",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/sickle",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/arcane-focus-orb",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/book",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/scholars-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 15
+          },
+          "B": {
+            "gold_gp": 100
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "CHA",
+          "progression": "PACT",
+          "cantrips_known": [
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "prepared": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            13,
+            13,
+            14,
+            14,
+            15,
+            15
+          ],
+          "ritual": false
+        }
+      }
+    },
+    {
+      "id": "srd5e:class/wizard",
+      "name": "Wizard",
+      "payload": {
+        "summary": "A scholar of arcane magic with the largest spell list in the game; fragile but endlessly versatile.",
+        "hit_die": 6,
+        "primary_abilities": [
+          "INT"
+        ],
+        "saving_throws": [
+          "INT",
+          "WIS"
+        ],
+        "skill_choices": {
+          "count": 2,
+          "options": [
+            "srd5e:skill/arcana",
+            "srd5e:skill/history",
+            "srd5e:skill/insight",
+            "srd5e:skill/investigation",
+            "srd5e:skill/medicine",
+            "srd5e:skill/nature",
+            "srd5e:skill/religion"
+          ]
+        },
+        "spellcasting_ability": "INT",
+        "starting_gold_gp": 55,
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/arcane-focus-staff",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/robe",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/spellbook",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/scholars-pack",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 5
+          },
+          "B": {
+            "gold_gp": 55
+          }
+        },
+        "asi_levels": [
+          4,
+          8,
+          12,
+          16
+        ],
+        "spellcasting": {
+          "ability": "INT",
+          "progression": "FULL",
+          "cantrips_known": [
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "prepared": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            18,
+            19,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "ritual": true
+        }
+      }
+    }
+  ]
+}

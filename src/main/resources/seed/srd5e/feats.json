@@ -1,0 +1,245 @@
+{
+  "kind": "FEAT",
+  "citation": "SRD 5.2.1, Feats (pp. 87-88)",
+  "verify": "All SRD 5.2.1 feats read from the PDF text on 2026-09-01: category, prerequisites, benefits, repeatability. Trait text is paraphrased (text_is_paraphrase). `enforcement` records what the engine does: ENGINE (fully mechanical), MIXED (state tracked, trigger adjudicated by the GM) or GM (rules text only). Origin feats are selectable at character creation; General/Fighting Style/Epic Boon feats become selectable at the level-up milestones that grant feats.",
+  "text_is_paraphrase": true,
+  "entries": [
+    {
+      "id": "srd5e:feat/alert",
+      "name": "Alert",
+      "payload": {
+        "category": "ORIGIN",
+        "summary": "Add your proficiency bonus to Initiative rolls, and you may swap Initiative with a willing ally when combat begins.",
+        "text": "Initiative Proficiency: When you roll Initiative, you can add your Proficiency Bonus to the roll. Initiative Swap: Immediately after you roll Initiative, you can swap your Initiative with the Initiative of one willing ally in the same combat. You can't make this swap if you or the ally has the Incapacitated condition.",
+        "enforcement": "MIXED",
+        "engine_note": "The proficiency bonus is added to initiative automatically; the swap is adjudicated by the GM at encounter start.",
+        "initiative_proficiency": true
+      }
+    },
+    {
+      "id": "srd5e:feat/magic-initiate",
+      "name": "Magic Initiate",
+      "payload": {
+        "category": "ORIGIN",
+        "summary": "Two cantrips and one level 1 spell (always prepared, one free cast per Long Rest) from the Cleric, Druid or Wizard list; INT, WIS or CHA is the ability for these spells.",
+        "text": "Two Cantrips: You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat). Level 1 Spell: Choose a level 1 spell from the same list. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have. Spell Change: Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the chosen spell list. Repeatable: You can take this feat more than once, but you must choose a different spell list each time.",
+        "enforcement": "ENGINE",
+        "engine_note": "The cantrips and spell are granted as known/prepared with the chosen ability; the free cast is tracked as a Long Rest resource. Spell Change at level-up is recorded by the GM via the feat's choices.",
+        "repeatable": "DIFFERENT_SPELL_LIST",
+        "choices": {
+          "spell_list": [
+            "cleric",
+            "druid",
+            "wizard"
+          ],
+          "ability": [
+            "INT",
+            "WIS",
+            "CHA"
+          ],
+          "cantrips": 2,
+          "spells": 1
+        }
+      }
+    },
+    {
+      "id": "srd5e:feat/savage-attacker",
+      "name": "Savage Attacker",
+      "payload": {
+        "category": "ORIGIN",
+        "summary": "Once per turn when you hit with a weapon, roll the weapon's damage dice twice and use either roll.",
+        "text": "You've trained to deal particularly damaging strikes. Once per turn when you hit a target with a weapon, you can roll the weapon's damage dice twice and use either roll against the target.",
+        "enforcement": "ENGINE",
+        "engine_note": "Applied automatically to the first weapon hit each turn: the damage dice are rolled twice and the higher result is used; both rolls are reported.",
+        "damage_reroll": "WEAPON_ONCE_PER_TURN"
+      }
+    },
+    {
+      "id": "srd5e:feat/skilled",
+      "name": "Skilled",
+      "payload": {
+        "category": "ORIGIN",
+        "summary": "Proficiency in any combination of three skills or tools of your choice.",
+        "text": "You gain proficiency in any combination of three skills or tools of your choice. Repeatable: You can take this feat more than once.",
+        "enforcement": "ENGINE",
+        "repeatable": "YES",
+        "choices": {
+          "proficiencies": 3,
+          "from": "SKILL_OR_TOOL"
+        }
+      }
+    },
+    {
+      "id": "srd5e:feat/ability-score-improvement",
+      "name": "Ability Score Improvement",
+      "payload": {
+        "category": "GENERAL",
+        "prerequisite": "Level 4+",
+        "prerequisite_level": 4,
+        "summary": "Increase one ability score by 2 or two ability scores by 1 (never above 20). Repeatable.",
+        "text": "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can't increase an ability score above 20. Repeatable: You can take this feat more than once.",
+        "enforcement": "ENGINE",
+        "engine_note": "Taken through the level-up ability_score_improvement choice.",
+        "repeatable": "YES"
+      }
+    },
+    {
+      "id": "srd5e:feat/grappler",
+      "name": "Grappler",
+      "payload": {
+        "category": "GENERAL",
+        "prerequisite": "Level 4+, Strength or Dexterity 13+",
+        "prerequisite_level": 4,
+        "prerequisite_abilities": {
+          "any_of": {
+            "STR": 13,
+            "DEX": 13
+          }
+        },
+        "summary": "+1 STR or DEX; punch-and-grab once per turn, Advantage against creatures you grapple, drag grappled creatures of your size without extra movement cost.",
+        "text": "Ability Score Increase: Increase your Strength or Dexterity score by 1, to a maximum of 20. Punch and Grab: When you hit a creature with an Unarmed Strike as part of the Attack action on your turn, you can use both the Damage and the Grapple option. You can use this benefit only once per turn. Attack Advantage: You have Advantage on attack rolls against a creature Grappled by you. Fast Wrestler: You don't have to spend extra movement to move a creature Grappled by you if the creature is your size or smaller.",
+        "enforcement": "MIXED",
+        "engine_note": "The ability increase is applied when the feat is taken; the grappling benefits are adjudicated by the GM.",
+        "asi": {
+          "choose_one": [
+            "STR",
+            "DEX"
+          ],
+          "amount": 1
+        }
+      }
+    },
+    {
+      "id": "srd5e:feat/archery",
+      "name": "Archery",
+      "payload": {
+        "category": "FIGHTING_STYLE",
+        "prerequisite": "Fighting Style Feature",
+        "summary": "+2 to attack rolls with Ranged weapons.",
+        "text": "You gain a +2 bonus to attack rolls you make with Ranged weapons.",
+        "enforcement": "GM",
+        "gm_note": "Fighting Style features are not yet wired into the attack pipeline; the GM applies the bonus via apply_gm_override until that milestone."
+      }
+    },
+    {
+      "id": "srd5e:feat/defense",
+      "name": "Defense",
+      "payload": {
+        "category": "FIGHTING_STYLE",
+        "prerequisite": "Fighting Style Feature",
+        "summary": "+1 AC while wearing Light, Medium or Heavy armor.",
+        "text": "While you're wearing Light, Medium, or Heavy armor, you gain a +1 bonus to Armor Class.",
+        "enforcement": "GM",
+        "gm_note": "Fighting Style features are not yet wired into the AC computation; the GM applies the bonus via apply_gm_override until that milestone."
+      }
+    },
+    {
+      "id": "srd5e:feat/great-weapon-fighting",
+      "name": "Great Weapon Fighting",
+      "payload": {
+        "category": "FIGHTING_STYLE",
+        "prerequisite": "Fighting Style Feature",
+        "summary": "Treat 1s and 2s on damage dice as 3s with two-handed melee weapons.",
+        "text": "When you roll damage for an attack you make with a Melee weapon that you are holding with two hands, you can treat any 1 or 2 on a damage die as a 3. The weapon must have the Two-Handed or Versatile property to gain this benefit.",
+        "enforcement": "GM",
+        "gm_note": "Fighting Style features are not yet wired into the damage pipeline; the GM adjusts via apply_gm_override until that milestone."
+      }
+    },
+    {
+      "id": "srd5e:feat/two-weapon-fighting",
+      "name": "Two-Weapon Fighting",
+      "payload": {
+        "category": "FIGHTING_STYLE",
+        "prerequisite": "Fighting Style Feature",
+        "summary": "Add your ability modifier to the damage of the extra Light-weapon attack.",
+        "text": "When you make an extra attack as a result of using a weapon that has the Light property, you can add your ability modifier to the damage of that attack if you aren't already adding it to the damage.",
+        "enforcement": "GM",
+        "gm_note": "Fighting Style features are not yet wired into the damage pipeline; the GM adjusts via apply_gm_override until that milestone."
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-combat-prowess",
+      "name": "Boon of Combat Prowess",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 to an ability score (max 30); once per turn, turn a missed attack roll into a hit.",
+        "text": "Ability Score Increase: Increase one ability score of your choice by 1, to a maximum of 30. Peerless Aim: When you miss with an attack roll, you can hit instead. Once you use this benefit, you can't use it again until the start of your next turn.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-dimensional-travel",
+      "name": "Boon of Dimensional Travel",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 to an ability score (max 30); teleport 30 feet after taking the Attack or Magic action.",
+        "text": "Ability Score Increase: Increase one ability score of your choice by 1, to a maximum of 30. Blink Steps: Immediately after you take the Attack action or the Magic action, you can teleport up to 30 feet to an unoccupied space you can see.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-fate",
+      "name": "Boon of Fate",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 to an ability score (max 30); add or subtract 2d4 from a nearby creature's D20 Test once per initiative/rest.",
+        "text": "Ability Score Increase: Increase one ability score of your choice by 1, to a maximum of 30. Improve Fate: When you or another creature within 60 feet of you succeeds on or fails a D20 Test, you can roll 2d4 and apply the total rolled as a bonus or penalty to the d20 roll. Once you use this benefit, you can't use it again until you roll Initiative or finish a Short or Long Rest.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-irresistible-offense",
+      "name": "Boon of Irresistible Offense",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 STR or DEX (max 30); your bludgeoning/piercing/slashing damage ignores Resistance; extra damage on natural 20s.",
+        "text": "Ability Score Increase: Increase your Strength or Dexterity score by 1, to a maximum of 30. Overcome Defenses: The Bludgeoning, Piercing, and Slashing damage you deal always ignores Resistance. Overwhelming Strike: When you roll a 20 on the d20 for an attack roll, you can deal extra damage to the target equal to the ability score increased by this feat. The extra damage's type is the same as the attack's type.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-spell-recall",
+      "name": "Boon of Spell Recall",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+, Spellcasting Feature",
+        "prerequisite_level": 19,
+        "summary": "+1 INT, WIS or CHA (max 30); level 1-4 slots have a 1-in-4 chance not to be expended.",
+        "text": "Ability Score Increase: Increase your Intelligence, Wisdom, or Charisma score by 1, to a maximum of 30. Free Casting: Whenever you cast a spell with a level 1-4 spell slot, roll 1d4. If the number you roll is the same as the slot's level, the slot isn't expended.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-the-night-spirit",
+      "name": "Boon of the Night Spirit",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 to an ability score (max 30); in Dim Light or Darkness, become Invisible as a Bonus Action and resist nearly all damage.",
+        "text": "Ability Score Increase: Increase one ability score of your choice by 1, to a maximum of 30. Merge with Shadows: While within Dim Light or Darkness, you can give yourself the Invisible condition as a Bonus Action. The condition ends on you immediately after you take an action, a Bonus Action, or a Reaction. Shadowy Form: While within Dim Light or Darkness, you have Resistance to all damage except Psychic and Radiant.",
+        "enforcement": "GM"
+      }
+    },
+    {
+      "id": "srd5e:feat/boon-of-truesight",
+      "name": "Boon of Truesight",
+      "payload": {
+        "category": "EPIC_BOON",
+        "prerequisite": "Level 19+",
+        "prerequisite_level": 19,
+        "summary": "+1 to an ability score (max 30); Truesight 60 feet.",
+        "text": "Ability Score Increase: Increase one ability score of your choice by 1, to a maximum of 30. Truesight: You have Truesight with a range of 60 feet.",
+        "enforcement": "GM"
+      }
+    }
+  ]
+}

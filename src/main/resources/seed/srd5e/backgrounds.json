@@ -1,0 +1,224 @@
+{
+  "kind": "BACKGROUND",
+  "citation": "SRD 5.2.1, Character Origins - Character Backgrounds (p. 83)",
+  "verify": "Backgrounds read from the SRD 5.2.1 PDF text on 2026-09-01: ability scores, feat, skill proficiencies, tool proficiency and equipment for all four backgrounds. A background grants: +2/+1 or +1/+1/+1 among its three ability scores (never above 20), the listed Origin feat, the two listed skills, the listed tool proficiency, and equipment option A or B (50 GP).",
+  "text_is_paraphrase": true,
+  "entries": [
+    {
+      "id": "srd5e:background/acolyte",
+      "name": "Acolyte",
+      "payload": {
+        "summary": "Raised in a temple's service: divine lore, ritual and the first stirrings of clerical magic (Magic Initiate: Cleric).",
+        "ability_scores": [
+          "INT",
+          "WIS",
+          "CHA"
+        ],
+        "feat": "srd5e:feat/magic-initiate",
+        "feat_choices": {
+          "spell_list": "cleric"
+        },
+        "skills": [
+          "srd5e:skill/insight",
+          "srd5e:skill/religion"
+        ],
+        "tool": {
+          "item": "srd5e:item/calligraphers-supplies"
+        },
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/calligraphers-supplies",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/book",
+                "quantity": 1
+              },
+              {
+                "choice": "HOLY_SYMBOL",
+                "default": "srd5e:item/holy-symbol-amulet",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/parchment",
+                "quantity": 10
+              },
+              {
+                "item": "srd5e:item/robe",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 8
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        }
+      }
+    },
+    {
+      "id": "srd5e:background/criminal",
+      "name": "Criminal",
+      "payload": {
+        "summary": "A past on the wrong side of the law: stealth, sleight of hand, thieves' tools and sharp reflexes (Alert).",
+        "ability_scores": [
+          "DEX",
+          "CON",
+          "INT"
+        ],
+        "feat": "srd5e:feat/alert",
+        "skills": [
+          "srd5e:skill/sleight-of-hand",
+          "srd5e:skill/stealth"
+        ],
+        "tool": {
+          "item": "srd5e:item/thieves-tools"
+        },
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/dagger",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/thieves-tools",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/crowbar",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/pouch",
+                "quantity": 2
+              },
+              {
+                "item": "srd5e:item/clothes-travelers",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 16
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        }
+      }
+    },
+    {
+      "id": "srd5e:background/sage",
+      "name": "Sage",
+      "payload": {
+        "summary": "Years among books and scrolls: arcana, history and a first taste of wizardry (Magic Initiate: Wizard).",
+        "ability_scores": [
+          "CON",
+          "INT",
+          "WIS"
+        ],
+        "feat": "srd5e:feat/magic-initiate",
+        "feat_choices": {
+          "spell_list": "wizard"
+        },
+        "skills": [
+          "srd5e:skill/arcana",
+          "srd5e:skill/history"
+        ],
+        "tool": {
+          "item": "srd5e:item/calligraphers-supplies"
+        },
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/quarterstaff",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/calligraphers-supplies",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/book",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/parchment",
+                "quantity": 8
+              },
+              {
+                "item": "srd5e:item/robe",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 8
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        }
+      }
+    },
+    {
+      "id": "srd5e:background/soldier",
+      "name": "Soldier",
+      "payload": {
+        "summary": "Drilled and battle-tested: athletics, intimidation, a soldier's kit and devastating strikes (Savage Attacker).",
+        "ability_scores": [
+          "STR",
+          "DEX",
+          "CON"
+        ],
+        "feat": "srd5e:feat/savage-attacker",
+        "skills": [
+          "srd5e:skill/athletics",
+          "srd5e:skill/intimidation"
+        ],
+        "tool": {
+          "choice": "GAMING_SET"
+        },
+        "starting_equipment": {
+          "A": {
+            "items": [
+              {
+                "item": "srd5e:item/spear",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/shortbow",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/arrows",
+                "quantity": 20
+              },
+              {
+                "choice": "GAMING_SET",
+                "default": "srd5e:item/gaming-set-dice",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/healers-kit",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/quiver",
+                "quantity": 1
+              },
+              {
+                "item": "srd5e:item/clothes-travelers",
+                "quantity": 1
+              }
+            ],
+            "gold_gp": 14
+          },
+          "B": {
+            "gold_gp": 50
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,671 @@
+{
+  "kind": "SPECIES",
+  "citation": "SRD 5.2.1, Character Origins - Character Species (pp. 83-86)",
+  "verify": "Species traits read from the SRD 5.2.1 PDF text on 2026-09-01 (size, speed, creature type, every special trait and its lineage/ancestry tables). Trait text is paraphrased (text_is_paraphrase). `enforcement` records what the engine does with a trait: ENGINE (fully mechanical), MIXED (state tracked, trigger adjudicated by the GM) or GM (rules text only; the sheet lists it with adjudication GM).",
+  "text_is_paraphrase": true,
+  "entries": [
+    {
+      "id": "srd5e:species/dragonborn",
+      "name": "Dragonborn",
+      "payload": {
+        "summary": "Draconic ancestry: a breath weapon and resistance to the damage type of your lineage.",
+        "size": "Medium",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Draconic Ancestry",
+            "summary": "Choose a dragon progenitor; it sets your breath weapon's damage type and your resistance.",
+            "text": "Your lineage stems from a dragon progenitor. Choose the kind of dragon from the Draconic Ancestors table. Your choice affects your Breath Weapon and Damage Resistance traits as well as your appearance.",
+            "enforcement": "ENGINE",
+            "choice": {
+              "id": "draconic_ancestry",
+              "question": "Which dragon is your progenitor (Draconic Ancestry)?",
+              "options": [
+                {
+                  "value": "black",
+                  "label": "Black dragon",
+                  "description": "Acid breath and Resistance to Acid damage.",
+                  "damage_resistances": [
+                    "acid"
+                  ],
+                  "breath_damage_type": "acid"
+                },
+                {
+                  "value": "blue",
+                  "label": "Blue dragon",
+                  "description": "Lightning breath and Resistance to Lightning damage.",
+                  "damage_resistances": [
+                    "lightning"
+                  ],
+                  "breath_damage_type": "lightning"
+                },
+                {
+                  "value": "brass",
+                  "label": "Brass dragon",
+                  "description": "Fire breath and Resistance to Fire damage.",
+                  "damage_resistances": [
+                    "fire"
+                  ],
+                  "breath_damage_type": "fire"
+                },
+                {
+                  "value": "bronze",
+                  "label": "Bronze dragon",
+                  "description": "Lightning breath and Resistance to Lightning damage.",
+                  "damage_resistances": [
+                    "lightning"
+                  ],
+                  "breath_damage_type": "lightning"
+                },
+                {
+                  "value": "copper",
+                  "label": "Copper dragon",
+                  "description": "Acid breath and Resistance to Acid damage.",
+                  "damage_resistances": [
+                    "acid"
+                  ],
+                  "breath_damage_type": "acid"
+                },
+                {
+                  "value": "gold",
+                  "label": "Gold dragon",
+                  "description": "Fire breath and Resistance to Fire damage.",
+                  "damage_resistances": [
+                    "fire"
+                  ],
+                  "breath_damage_type": "fire"
+                },
+                {
+                  "value": "green",
+                  "label": "Green dragon",
+                  "description": "Poison breath and Resistance to Poison damage.",
+                  "damage_resistances": [
+                    "poison"
+                  ],
+                  "breath_damage_type": "poison"
+                },
+                {
+                  "value": "red",
+                  "label": "Red dragon",
+                  "description": "Fire breath and Resistance to Fire damage.",
+                  "damage_resistances": [
+                    "fire"
+                  ],
+                  "breath_damage_type": "fire"
+                },
+                {
+                  "value": "silver",
+                  "label": "Silver dragon",
+                  "description": "Cold breath and Resistance to Cold damage.",
+                  "damage_resistances": [
+                    "cold"
+                  ],
+                  "breath_damage_type": "cold"
+                },
+                {
+                  "value": "white",
+                  "label": "White dragon",
+                  "description": "Cold breath and Resistance to Cold damage.",
+                  "damage_resistances": [
+                    "cold"
+                  ],
+                  "breath_damage_type": "cold"
+                }
+              ]
+            }
+          },
+          {
+            "name": "Breath Weapon",
+            "summary": "Replace one attack with a 15-foot cone or 30-foot line of your ancestry's damage: DEX save (DC 8 + CON modifier + proficiency bonus), 1d10 (2d10 at level 5, 3d10 at 11, 4d10 at 17), half on a success; uses equal to your proficiency bonus per Long Rest.",
+            "text": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10). You can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `breath_weapon` (spend with apply_runtime_change USE_RESOURCE); the GM resolves the area, the saves and the damage with resolve_check/apply_runtime_change.",
+            "resource": {
+              "ref": "breath_weapon",
+              "max": "PROFICIENCY_BONUS",
+              "recharge": "LONG_REST"
+            }
+          },
+          {
+            "name": "Damage Resistance",
+            "summary": "Resistance to your ancestry's damage type.",
+            "text": "You have Resistance to the damage type determined by your Draconic Ancestry trait.",
+            "enforcement": "ENGINE",
+            "engine_note": "Applied in the damage pipeline from the chosen ancestry."
+          },
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 60 feet.",
+            "text": "You have Darkvision with a range of 60 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 60
+          },
+          {
+            "name": "Draconic Flight",
+            "summary": "From character level 5: as a Bonus Action sprout spectral wings for 10 minutes (Fly Speed equal to your Speed); once per Long Rest.",
+            "text": "When you reach character level 5, you can channel draconic magic to give yourself temporary flight. As a Bonus Action, you sprout spectral wings on your back that last for 10 minutes or until you retract the wings (no action required) or have the Incapacitated condition. During that time, you have a Fly Speed equal to your Speed. Your wings appear to be made of the same energy as your Breath Weapon. Once you use this trait, you can't use it again until you finish a Long Rest.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `draconic_flight` from character level 5; the GM narrates the flight.",
+            "resource": {
+              "ref": "draconic_flight",
+              "max": 1,
+              "recharge": "LONG_REST",
+              "from_level": 5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/dwarf",
+      "name": "Dwarf",
+      "payload": {
+        "summary": "Stout and resilient: darkvision, poison resistance, extra hit points and a feel for stonework.",
+        "size": "Medium",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 120 feet.",
+            "text": "You have Darkvision with a range of 120 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 120
+          },
+          {
+            "name": "Dwarven Resilience",
+            "summary": "Resistance to Poison damage; Advantage on saving throws to avoid or end the Poisoned condition.",
+            "text": "You have Resistance to Poison damage. You also have Advantage on saving throws you make to avoid or end the Poisoned condition.",
+            "enforcement": "MIXED",
+            "engine_note": "The resistance is applied in the damage pipeline; the GM grants the Advantage on the relevant saves.",
+            "damage_resistances": [
+              "poison"
+            ]
+          },
+          {
+            "name": "Dwarven Toughness",
+            "summary": "+1 hit point maximum per character level.",
+            "text": "Your Hit Point maximum increases by 1, and it increases by 1 again whenever you gain a level.",
+            "enforcement": "ENGINE",
+            "hp_per_level": 1
+          },
+          {
+            "name": "Stonecunning",
+            "summary": "As a Bonus Action gain Tremorsense 60 feet for 10 minutes while on or touching stone; uses equal to your proficiency bonus per Long Rest.",
+            "text": "As a Bonus Action, you gain Tremorsense with a range of 60 feet for 10 minutes. You must be on a stone surface or touching a stone surface to use this Tremorsense. The stone can be natural or worked. You can use this Bonus Action a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `stonecunning`; the GM narrates what the tremorsense reveals.",
+            "resource": {
+              "ref": "stonecunning",
+              "max": "PROFICIENCY_BONUS",
+              "recharge": "LONG_REST"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/elf",
+      "name": "Elf",
+      "payload": {
+        "summary": "Keen senses and grace: darkvision, trance instead of sleep, a lineage cantrip and resistance to being charmed.",
+        "size": "Medium",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 60 feet.",
+            "text": "You have Darkvision with a range of 60 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 60
+          },
+          {
+            "name": "Elven Lineage",
+            "summary": "Choose a lineage: a level 1 benefit now, and a spell always prepared at character levels 3 and 5 (castable once per Long Rest without a slot). Choose INT, WIS or CHA as the spellcasting ability for these spells.",
+            "text": "You are part of a lineage that grants you supernatural abilities. Choose a lineage from the Elven Lineages table. You gain the level 1 benefit of that lineage. When you reach character levels 3 and 5, you learn a higher-level spell, as shown on the table. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have of the appropriate level. Intelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the lineage).",
+            "enforcement": "ENGINE",
+            "engine_note": "The lineage cantrip is known from level 1; the level 3 and 5 spells are granted at level-up with one free cast per Long Rest.",
+            "choice": {
+              "id": "elven_lineage",
+              "question": "Which Elven Lineage?",
+              "spellcasting_ability": true,
+              "options": [
+                {
+                  "value": "drow",
+                  "label": "Drow",
+                  "description": "Darkvision 120 feet and the Dancing Lights cantrip; Faerie Fire at level 3, Darkness at level 5.",
+                  "darkvision_ft": 120,
+                  "cantrips": [
+                    "srd5e:spell/dancing-lights"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/faerie-fire",
+                    "5": "srd5e:spell/darkness"
+                  }
+                },
+                {
+                  "value": "high-elf",
+                  "label": "High Elf",
+                  "description": "The Prestidigitation cantrip (swappable for another Wizard cantrip after a Long Rest); Detect Magic at level 3, Misty Step at level 5.",
+                  "cantrips": [
+                    "srd5e:spell/prestidigitation"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/detect-magic",
+                    "5": "srd5e:spell/misty-step"
+                  },
+                  "gm_note": "Swapping the cantrip after a Long Rest is adjudicated by the GM (prepare_spells cannot change species cantrips)."
+                },
+                {
+                  "value": "wood-elf",
+                  "label": "Wood Elf",
+                  "description": "Speed 35 feet and the Druidcraft cantrip; Longstrider at level 3, Pass without Trace at level 5.",
+                  "speed": 35,
+                  "cantrips": [
+                    "srd5e:spell/druidcraft"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/longstrider",
+                    "5": "srd5e:spell/pass-without-trace"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Fey Ancestry",
+            "summary": "Advantage on saving throws to avoid or end the Charmed condition.",
+            "text": "You have Advantage on saving throws you make to avoid or end the Charmed condition.",
+            "enforcement": "GM"
+          },
+          {
+            "name": "Keen Senses",
+            "summary": "Proficiency in Insight, Perception or Survival (your choice).",
+            "text": "You have proficiency in the Insight, Perception, or Survival skill.",
+            "enforcement": "ENGINE",
+            "skill_grant": {
+              "count": 1,
+              "options": [
+                "srd5e:skill/insight",
+                "srd5e:skill/perception",
+                "srd5e:skill/survival"
+              ]
+            }
+          },
+          {
+            "name": "Trance",
+            "summary": "You don't need to sleep and magic can't put you to sleep; a Long Rest takes 4 hours of trance.",
+            "text": "You don't need to sleep, and magic can't put you to sleep. You can finish a Long Rest in 4 hours if you spend those hours in a trancelike meditation, during which you retain consciousness.",
+            "enforcement": "GM",
+            "gm_note": "perform_rest still records a full Long Rest; advance the clock by 4 hours instead of 8 for a trancing elf."
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/gnome",
+      "name": "Gnome",
+      "payload": {
+        "summary": "Small and clever: darkvision, advantage on mental saves against magic, tinkering or illusion tricks.",
+        "size": "Small",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 60 feet.",
+            "text": "You have Darkvision with a range of 60 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 60
+          },
+          {
+            "name": "Gnomish Cunning",
+            "summary": "Advantage on Intelligence, Wisdom and Charisma saving throws.",
+            "text": "You have Advantage on Intelligence, Wisdom, and Charisma saving throws.",
+            "enforcement": "GM",
+            "gm_note": "Pass advantage: true to resolve_check for INT/WIS/CHA saving throws."
+          },
+          {
+            "name": "Gnomish Lineage",
+            "summary": "Choose Forest Gnome (Minor Illusion; Speak with Animals castable proficiency-bonus times per Long Rest) or Rock Gnome (Mending and Prestidigitation; clockwork devices). Choose INT, WIS or CHA as the spellcasting ability.",
+            "text": "You are part of a lineage that grants you supernatural abilities. Choose one of the following options; whichever one you choose, Intelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the lineage). Forest Gnome: You know the Minor Illusion cantrip. You also always have the Speak with Animals spell prepared. You can cast it without a spell slot a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest. You can also use any spell slots you have to cast the spell. Rock Gnome: You know the Mending and Prestidigitation cantrips. In addition, you can spend 10 minutes casting Prestidigitation to create a Tiny clockwork device (AC 5, 1 HP), such as a toy, fire starter, or music box, that produces one chosen Prestidigitation effect when activated with a touch as a Bonus Action. You can have three such devices at a time; each falls apart 8 hours after its creation or when you dismantle it.",
+            "enforcement": "ENGINE",
+            "engine_note": "Cantrips are known from level 1; Forest Gnome's Speak with Animals is always prepared with proficiency-bonus free casts per Long Rest. Rock Gnome clockwork devices are narrated by the GM.",
+            "choice": {
+              "id": "gnomish_lineage",
+              "question": "Which Gnomish Lineage?",
+              "spellcasting_ability": true,
+              "options": [
+                {
+                  "value": "forest-gnome",
+                  "label": "Forest Gnome",
+                  "description": "Minor Illusion cantrip; Speak with Animals always prepared, castable proficiency-bonus times per Long Rest without a slot.",
+                  "cantrips": [
+                    "srd5e:spell/minor-illusion"
+                  ],
+                  "spells_by_level": {
+                    "1": "srd5e:spell/speak-with-animals"
+                  },
+                  "free_casts": "PROFICIENCY_BONUS"
+                },
+                {
+                  "value": "rock-gnome",
+                  "label": "Rock Gnome",
+                  "description": "Mending and Prestidigitation cantrips; build up to three Tiny clockwork devices (GM-narrated).",
+                  "cantrips": [
+                    "srd5e:spell/mending",
+                    "srd5e:spell/prestidigitation"
+                  ],
+                  "gm_note": "Clockwork devices are adjudicated by the GM."
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/goliath",
+      "name": "Goliath",
+      "payload": {
+        "summary": "Giant blood: big and strong with a giant-ancestry gift such as stone endurance; speed 35.",
+        "size": "Medium",
+        "speed": 35,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Giant Ancestry",
+            "summary": "Choose one supernatural boon from your giant ancestry; uses equal to your proficiency bonus per Long Rest.",
+            "text": "You are descended from Giants. Choose one of the following benefits - a supernatural boon from your ancestry; you can use the chosen benefit a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest. Cloud's Jaunt (Cloud Giant): As a Bonus Action, you magically teleport up to 30 feet to an unoccupied space you can see. Fire's Burn (Fire Giant): When you hit a target with an attack roll and deal damage to it, you can also deal 1d10 Fire damage to that target. Frost's Chill (Frost Giant): When you hit a target with an attack roll and deal damage to it, you can also deal 1d6 Cold damage to that target and reduce its Speed by 10 feet until the start of your next turn. Hill's Tumble (Hill Giant): When you hit a Large or smaller creature with an attack roll and deal damage to it, you can give that target the Prone condition. Stone's Endurance (Stone Giant): When you take damage, you can take a Reaction to roll 1d12. Add your Constitution modifier to the number rolled and reduce the damage by that total. Storm's Thunder (Storm Giant): When you take damage from a creature within 60 feet of you, you can take a Reaction to deal 1d8 Thunder damage to that creature.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `giant_ancestry`; the GM applies the chosen boon's effect with apply_runtime_change.",
+            "resource": {
+              "ref": "giant_ancestry",
+              "max": "PROFICIENCY_BONUS",
+              "recharge": "LONG_REST"
+            },
+            "choice": {
+              "id": "giant_ancestry",
+              "question": "Which giant boon (Giant Ancestry)?",
+              "options": [
+                {
+                  "value": "clouds-jaunt",
+                  "label": "Cloud's Jaunt (Cloud Giant)",
+                  "description": "As a Bonus Action, teleport up to 30 feet to an unoccupied space you can see."
+                },
+                {
+                  "value": "fires-burn",
+                  "label": "Fire's Burn (Fire Giant)",
+                  "description": "When you hit with an attack roll and deal damage, also deal 1d10 Fire damage."
+                },
+                {
+                  "value": "frosts-chill",
+                  "label": "Frost's Chill (Frost Giant)",
+                  "description": "When you hit with an attack roll and deal damage, also deal 1d6 Cold damage and reduce the target's Speed by 10 feet until the start of your next turn."
+                },
+                {
+                  "value": "hills-tumble",
+                  "label": "Hill's Tumble (Hill Giant)",
+                  "description": "When you hit a Large or smaller creature with an attack roll and deal damage, you can knock it Prone."
+                },
+                {
+                  "value": "stones-endurance",
+                  "label": "Stone's Endurance (Stone Giant)",
+                  "description": "When you take damage, as a Reaction roll 1d12 + CON modifier and reduce the damage by that total."
+                },
+                {
+                  "value": "storms-thunder",
+                  "label": "Storm's Thunder (Storm Giant)",
+                  "description": "When you take damage from a creature within 60 feet, as a Reaction deal 1d8 Thunder damage to it."
+                }
+              ]
+            }
+          },
+          {
+            "name": "Large Form",
+            "summary": "From character level 5: as a Bonus Action become Large for 10 minutes (Advantage on Strength checks, +10 feet Speed); once per Long Rest.",
+            "text": "Starting at character level 5, you can change your size to Large as a Bonus Action if you're in a big enough space. This transformation lasts for 10 minutes or until you end it (no action required). For that duration, you have Advantage on Strength checks, and your Speed increases by 10 feet. Once you use this trait, you can't use it again until you finish a Long Rest.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `large_form` from character level 5.",
+            "resource": {
+              "ref": "large_form",
+              "max": 1,
+              "recharge": "LONG_REST",
+              "from_level": 5
+            }
+          },
+          {
+            "name": "Powerful Build",
+            "summary": "Advantage on checks to end the Grappled condition; carrying capacity as one size larger.",
+            "text": "You have Advantage on any ability check you make to end the Grappled condition. You also count as one size larger when determining your carrying capacity.",
+            "enforcement": "MIXED",
+            "engine_note": "Carrying capacity is doubled (Large); the GM grants the Advantage on grapple-escape checks.",
+            "carry_capacity_multiplier": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/halfling",
+      "name": "Halfling",
+      "payload": {
+        "summary": "Small, lucky and brave: reroll natural 1s, advantage against fright, slip through larger creatures' spaces.",
+        "size": "Small",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Brave",
+            "summary": "Advantage on saving throws to avoid or end the Frightened condition.",
+            "text": "You have Advantage on saving throws you make to avoid or end the Frightened condition.",
+            "enforcement": "GM"
+          },
+          {
+            "name": "Halfling Nimbleness",
+            "summary": "Move through the space of any creature at least one size larger than you (but don't stop there).",
+            "text": "You can move through the space of any creature that is a size larger than you, but you can't stop in the same space.",
+            "enforcement": "GM"
+          },
+          {
+            "name": "Luck",
+            "summary": "When you roll a 1 on the d20 of a D20 Test, reroll it and use the new roll.",
+            "text": "When you roll a 1 on the d20 of a D20 Test, you can reroll the die, and you must use the new roll.",
+            "enforcement": "GM",
+            "gm_note": "The engine reports natural 1s; the GM re-resolves the test."
+          },
+          {
+            "name": "Naturally Stealthy",
+            "summary": "You can take the Hide action even when obscured only by a creature at least one size larger.",
+            "text": "You can take the Hide action even when you are obscured only by a creature that is at least one size larger than you.",
+            "enforcement": "GM"
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/human",
+      "name": "Human",
+      "payload": {
+        "summary": "Adaptable and resourceful: an extra skill and an origin feat; the most versatile start.",
+        "size": "Medium",
+        "size_options": [
+          "Medium",
+          "Small"
+        ],
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Resourceful",
+            "summary": "You gain Heroic Inspiration whenever you finish a Long Rest.",
+            "text": "You gain Heroic Inspiration whenever you finish a Long Rest. (Heroic Inspiration: expend it to reroll any die immediately after rolling it; you must use the new roll. If you gain it while you already have it, it is lost unless you give it to a player character who lacks it.)",
+            "enforcement": "MIXED",
+            "engine_note": "Tracked as the resource `heroic_inspiration` (1, refilled by a Long Rest); spend it with apply_runtime_change USE_RESOURCE and re-resolve the roll.",
+            "resource": {
+              "ref": "heroic_inspiration",
+              "max": 1,
+              "recharge": "LONG_REST"
+            }
+          },
+          {
+            "name": "Skillful",
+            "summary": "Proficiency in one skill of your choice.",
+            "text": "You gain proficiency in one skill of your choice.",
+            "enforcement": "ENGINE",
+            "skill_grant": {
+              "count": 1,
+              "options": "ANY"
+            }
+          },
+          {
+            "name": "Versatile",
+            "summary": "An Origin feat of your choice (Skilled is recommended).",
+            "text": "You gain an Origin feat of your choice (see \"Feats\"). Skilled is recommended.",
+            "enforcement": "ENGINE",
+            "feat_grant": {
+              "category": "ORIGIN",
+              "recommended": "srd5e:feat/skilled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/orc",
+      "name": "Orc",
+      "payload": {
+        "summary": "Strong and relentless: darkvision, a burst of speed, and the grit to stay standing when you should drop.",
+        "size": "Medium",
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Adrenaline Rush",
+            "summary": "Dash as a Bonus Action and gain Temporary Hit Points equal to your proficiency bonus; uses equal to your proficiency bonus per Short or Long Rest.",
+            "text": "You can take the Dash action as a Bonus Action. When you do so, you gain a number of Temporary Hit Points equal to your Proficiency Bonus. You can use this trait a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Short or Long Rest.",
+            "enforcement": "MIXED",
+            "engine_note": "Uses are tracked as the resource `adrenaline_rush`; the GM applies the Dash and the temp HP (apply_runtime_change SET_TEMP_HP).",
+            "resource": {
+              "ref": "adrenaline_rush",
+              "max": "PROFICIENCY_BONUS",
+              "recharge": "SHORT_REST"
+            }
+          },
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 120 feet.",
+            "text": "You have Darkvision with a range of 120 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 120
+          },
+          {
+            "name": "Relentless Endurance",
+            "summary": "When reduced to 0 Hit Points but not killed outright, drop to 1 Hit Point instead; once per Long Rest.",
+            "text": "When you are reduced to 0 Hit Points but not killed outright, you can drop to 1 Hit Point instead. Once you use this trait, you can't do so again until you finish a Long Rest.",
+            "enforcement": "ENGINE",
+            "engine_note": "Applied automatically in the damage pipeline while the resource `relentless_endurance` has a use left.",
+            "resource": {
+              "ref": "relentless_endurance",
+              "max": 1,
+              "recharge": "LONG_REST"
+            },
+            "relentless_endurance": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:species/tiefling",
+      "name": "Tiefling",
+      "payload": {
+        "summary": "Infernal heritage: darkvision, a fiendish legacy with a damage resistance and innate spells.",
+        "size": "Medium",
+        "size_options": [
+          "Medium",
+          "Small"
+        ],
+        "speed": 30,
+        "creature_type": "Humanoid",
+        "traits": [
+          {
+            "name": "Darkvision",
+            "summary": "Darkvision 60 feet.",
+            "text": "You have Darkvision with a range of 60 feet.",
+            "enforcement": "ENGINE",
+            "darkvision_ft": 60
+          },
+          {
+            "name": "Fiendish Legacy",
+            "summary": "Choose a legacy: a damage resistance and a cantrip now, and a spell always prepared at character levels 3 and 5 (castable once per Long Rest without a slot). Choose INT, WIS or CHA as the spellcasting ability for these spells.",
+            "text": "You are the recipient of a legacy that grants you supernatural abilities. Choose a legacy from the Fiendish Legacies table. You gain the level 1 benefit of the chosen legacy. When you reach character levels 3 and 5, you learn a higher-level spell, as shown on the table. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have of the appropriate level. Intelligence, Wisdom, or Charisma is your spellcasting ability for the spells you cast with this trait (choose the ability when you select the legacy).",
+            "enforcement": "ENGINE",
+            "engine_note": "The resistance and cantrip apply from level 1; the level 3 and 5 spells are granted at level-up with one free cast per Long Rest.",
+            "choice": {
+              "id": "fiendish_legacy",
+              "question": "Which Fiendish Legacy?",
+              "spellcasting_ability": true,
+              "options": [
+                {
+                  "value": "abyssal",
+                  "label": "Abyssal",
+                  "description": "Resistance to Poison damage and the Poison Spray cantrip; Ray of Sickness at level 3, Hold Person at level 5.",
+                  "damage_resistances": [
+                    "poison"
+                  ],
+                  "cantrips": [
+                    "srd5e:spell/poison-spray"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/ray-of-sickness",
+                    "5": "srd5e:spell/hold-person"
+                  }
+                },
+                {
+                  "value": "chthonic",
+                  "label": "Chthonic",
+                  "description": "Resistance to Necrotic damage and the Chill Touch cantrip; False Life at level 3, Ray of Enfeeblement at level 5.",
+                  "damage_resistances": [
+                    "necrotic"
+                  ],
+                  "cantrips": [
+                    "srd5e:spell/chill-touch"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/false-life",
+                    "5": "srd5e:spell/ray-of-enfeeblement"
+                  }
+                },
+                {
+                  "value": "infernal",
+                  "label": "Infernal",
+                  "description": "Resistance to Fire damage and the Fire Bolt cantrip; Hellish Rebuke at level 3, Darkness at level 5.",
+                  "damage_resistances": [
+                    "fire"
+                  ],
+                  "cantrips": [
+                    "srd5e:spell/fire-bolt"
+                  ],
+                  "spells_by_level": {
+                    "3": "srd5e:spell/hellish-rebuke",
+                    "5": "srd5e:spell/darkness"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Otherworldly Presence",
+            "summary": "You know the Thaumaturgy cantrip (cast with your Fiendish Legacy ability).",
+            "text": "You know the Thaumaturgy cantrip. When you cast it with this trait, the spell uses the same spellcasting ability you use for your Fiendish Legacy trait.",
+            "enforcement": "ENGINE",
+            "cantrips": [
+              "srd5e:spell/thaumaturgy"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

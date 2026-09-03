@@ -1,0 +1,150 @@
+{
+  "kind": "SKILL",
+  "citation": "SRD 5.2.1, Playing the Game - Skills table",
+  "entries": [
+    {
+      "id": "srd5e:skill/acrobatics",
+      "name": "Acrobatics",
+      "payload": {
+        "summary": "Staying on your feet: balancing, tumbling, landing falls, slipping out of grapples.",
+        "ability": "DEX"
+      }
+    },
+    {
+      "id": "srd5e:skill/animal-handling",
+      "name": "Animal Handling",
+      "payload": {
+        "summary": "Calming, controlling and reading animals; riding under pressure.",
+        "ability": "WIS"
+      }
+    },
+    {
+      "id": "srd5e:skill/arcana",
+      "name": "Arcana",
+      "payload": {
+        "summary": "Recognising spells, magical effects, planes and arcane lore.",
+        "ability": "INT"
+      }
+    },
+    {
+      "id": "srd5e:skill/athletics",
+      "name": "Athletics",
+      "payload": {
+        "summary": "Climbing, jumping, swimming, grappling and other feats of strength.",
+        "ability": "STR"
+      }
+    },
+    {
+      "id": "srd5e:skill/deception",
+      "name": "Deception",
+      "payload": {
+        "summary": "Lying convincingly, bluffing and misleading.",
+        "ability": "CHA"
+      }
+    },
+    {
+      "id": "srd5e:skill/history",
+      "name": "History",
+      "payload": {
+        "summary": "Recalling lore about past events, people, kingdoms and wars.",
+        "ability": "INT"
+      }
+    },
+    {
+      "id": "srd5e:skill/insight",
+      "name": "Insight",
+      "payload": {
+        "summary": "Reading a person's true intentions and mood.",
+        "ability": "WIS"
+      }
+    },
+    {
+      "id": "srd5e:skill/intimidation",
+      "name": "Intimidation",
+      "payload": {
+        "summary": "Influencing others through threats, menace and displays of power.",
+        "ability": "CHA"
+      }
+    },
+    {
+      "id": "srd5e:skill/investigation",
+      "name": "Investigation",
+      "payload": {
+        "summary": "Finding clues, deducing how things work, searching methodically.",
+        "ability": "INT"
+      }
+    },
+    {
+      "id": "srd5e:skill/medicine",
+      "name": "Medicine",
+      "payload": {
+        "summary": "Stabilising the dying, diagnosing illness, treating wounds.",
+        "ability": "WIS"
+      }
+    },
+    {
+      "id": "srd5e:skill/nature",
+      "name": "Nature",
+      "payload": {
+        "summary": "Knowing terrain, plants, animals, weather and natural cycles.",
+        "ability": "INT"
+      }
+    },
+    {
+      "id": "srd5e:skill/perception",
+      "name": "Perception",
+      "payload": {
+        "summary": "Noticing what is there: spotting, hearing, sensing danger.",
+        "ability": "WIS"
+      }
+    },
+    {
+      "id": "srd5e:skill/performance",
+      "name": "Performance",
+      "payload": {
+        "summary": "Entertaining an audience with music, dance, acting or storytelling.",
+        "ability": "CHA"
+      }
+    },
+    {
+      "id": "srd5e:skill/persuasion",
+      "name": "Persuasion",
+      "payload": {
+        "summary": "Influencing others with tact, charm, honesty and good faith.",
+        "ability": "CHA"
+      }
+    },
+    {
+      "id": "srd5e:skill/religion",
+      "name": "Religion",
+      "payload": {
+        "summary": "Knowing deities, rites, holy symbols, cults and the divine powers of the planes.",
+        "ability": "INT"
+      }
+    },
+    {
+      "id": "srd5e:skill/sleight-of-hand",
+      "name": "Sleight of Hand",
+      "payload": {
+        "summary": "Manual trickery: picking pockets, palming objects, planting items.",
+        "ability": "DEX"
+      }
+    },
+    {
+      "id": "srd5e:skill/stealth",
+      "name": "Stealth",
+      "payload": {
+        "summary": "Moving unseen and unheard, hiding.",
+        "ability": "DEX"
+      }
+    },
+    {
+      "id": "srd5e:skill/survival",
+      "name": "Survival",
+      "payload": {
+        "summary": "Tracking, foraging, navigating the wild, predicting weather, avoiding hazards.",
+        "ability": "WIS"
+      }
+    }
+  ]
+}

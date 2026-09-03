@@ -1,0 +1,809 @@
+{
+  "kind": "CREATURE",
+  "citation": "SRD 5.2.1, Monsters A-Z and Animals; Gameplay Toolbox - Experience Points by Challenge Rating",
+  "verify": "Checked against the SRD 5.2.1 PDF text (CC-BY-4.0) by scripted diff on 2026-09-01: AC, HP, speed, ability scores and saves, skills, senses, damage resistances/immunities/vulnerabilities, condition immunities, CR/XP/PB, attack names, bonuses, reach/range and damage for all 12 stat blocks. Still unverified: trait and non-attack action text is paraphrased.",
+  "schema": {
+    "hp": "{average, dice}",
+    "abilities": "{STR..CHA}",
+    "cr": "string, cr_times_8 integer, xp_value integer",
+    "actions": "[{name, kind: MELEE_ATTACK|RANGED_ATTACK|OTHER, attack_bonus, reach|range, damage: [{dice, type}], text}]",
+    "multiattack": "{count, text} when the creature attacks more than once per Attack action"
+  },
+  "entries": [
+    {
+      "id": "srd5e:creature/bandit",
+      "name": "Bandit",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 12,
+        "hp": {
+          "average": 11,
+          "dice": "2d8+2"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 11,
+          "DEX": 12,
+          "CON": 12,
+          "INT": 10,
+          "WIS": 10,
+          "CHA": 10
+        },
+        "senses": [
+          "Passive Perception 10"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "1/8",
+        "cr_times_8": 1,
+        "xp_value": 25,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Scimitar",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 3,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+1",
+                "type": "slashing"
+              }
+            ]
+          },
+          {
+            "name": "Light Crossbow",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 3,
+            "range": {
+              "normal": 80,
+              "long": 320
+            },
+            "damage": [
+              {
+                "dice": "1d8+1",
+                "type": "piercing"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/bandit-captain",
+      "name": "Bandit Captain",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 15,
+        "hp": {
+          "average": 52,
+          "dice": "8d8+16"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 15,
+          "DEX": 16,
+          "CON": 14,
+          "INT": 14,
+          "WIS": 11,
+          "CHA": 14
+        },
+        "saves": {
+          "STR": 4,
+          "DEX": 5,
+          "WIS": 2
+        },
+        "skills": {
+          "Athletics": 4,
+          "Deception": 4
+        },
+        "senses": [
+          "Passive Perception 10"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "2",
+        "cr_times_8": 16,
+        "xp_value": 450,
+        "proficiency_bonus": 2,
+        "multiattack": {
+          "count": 2,
+          "text": "The captain makes two attacks, using Scimitar or Pistol in any combination."
+        },
+        "actions": [
+          {
+            "name": "Scimitar",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 5,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+3",
+                "type": "slashing"
+              }
+            ]
+          },
+          {
+            "name": "Pistol",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 5,
+            "range": {
+              "normal": 30,
+              "long": 90
+            },
+            "damage": [
+              {
+                "dice": "1d10+3",
+                "type": "piercing"
+              }
+            ]
+          }
+        ],
+        "reactions": [
+          {
+            "name": "Parry",
+            "text": "Trigger: The captain is hit by a melee attack roll while holding a weapon. Response: The captain adds 2 to its AC against that attack, possibly causing it to miss."
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/commoner",
+      "name": "Commoner",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 10,
+        "hp": {
+          "average": 4,
+          "dice": "1d8"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 10,
+          "DEX": 10,
+          "CON": 10,
+          "INT": 10,
+          "WIS": 10,
+          "CHA": 10
+        },
+        "senses": [
+          "Passive Perception 10"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "0",
+        "cr_times_8": 0,
+        "xp_value": 10,
+        "proficiency_bonus": 2,
+        "traits": [
+          {
+            "name": "Training",
+            "text": "The commoner has proficiency in one skill of the GM's choice and has Advantage whenever it makes an ability check using that skill."
+          }
+        ],
+        "actions": [
+          {
+            "name": "Club",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 2,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d4",
+                "type": "bludgeoning"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/cultist",
+      "name": "Cultist",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 12,
+        "hp": {
+          "average": 9,
+          "dice": "2d8"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 11,
+          "DEX": 12,
+          "CON": 10,
+          "INT": 10,
+          "WIS": 11,
+          "CHA": 10
+        },
+        "saves": {
+          "WIS": 2
+        },
+        "skills": {
+          "Deception": 2,
+          "Religion": 2
+        },
+        "senses": [
+          "Passive Perception 10"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "1/8",
+        "cr_times_8": 1,
+        "xp_value": 25,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Ritual Sickle",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 3,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d4+1",
+                "type": "slashing"
+              },
+              {
+                "dice": "1",
+                "type": "necrotic"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/giant-rat",
+      "name": "Giant Rat",
+      "payload": {
+        "size": "Small",
+        "creature_type": "Beast",
+        "alignment": "Unaligned",
+        "ac": 13,
+        "hp": {
+          "average": 7,
+          "dice": "2d6"
+        },
+        "speed": {
+          "walk": 30,
+          "climb": 30
+        },
+        "abilities": {
+          "STR": 7,
+          "DEX": 16,
+          "CON": 11,
+          "INT": 2,
+          "WIS": 10,
+          "CHA": 4
+        },
+        "skills": {
+          "Perception": 2
+        },
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 12"
+        ],
+        "cr": "1/8",
+        "cr_times_8": 1,
+        "xp_value": 25,
+        "proficiency_bonus": 2,
+        "traits": [
+          {
+            "name": "Pack Tactics",
+            "text": "The rat has Advantage on an attack roll against a creature if at least one of the rat's allies is within 5 feet of the creature and the ally doesn't have the Incapacitated condition."
+          }
+        ],
+        "actions": [
+          {
+            "name": "Bite",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 5,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d4+3",
+                "type": "piercing"
+              }
+            ]
+          }
+        ],
+        "saves": {
+          "DEX": 5
+        }
+      }
+    },
+    {
+      "id": "srd5e:creature/goblin-warrior",
+      "name": "Goblin Warrior",
+      "payload": {
+        "size": "Small",
+        "creature_type": "Fey",
+        "subtype": "Goblinoid",
+        "alignment": "Chaotic Neutral",
+        "ac": 15,
+        "hp": {
+          "average": 10,
+          "dice": "3d6"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 8,
+          "DEX": 15,
+          "CON": 10,
+          "INT": 10,
+          "WIS": 8,
+          "CHA": 8
+        },
+        "skills": {
+          "Stealth": 6
+        },
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 9"
+        ],
+        "languages": [
+          "Common",
+          "Goblin"
+        ],
+        "cr": "1/4",
+        "cr_times_8": 2,
+        "xp_value": 50,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Scimitar",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 4,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+2",
+                "type": "slashing"
+              }
+            ]
+          },
+          {
+            "name": "Shortbow",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 4,
+            "range": {
+              "normal": 80,
+              "long": 320
+            },
+            "damage": [
+              {
+                "dice": "1d6+2",
+                "type": "piercing"
+              }
+            ]
+          }
+        ],
+        "bonus_actions": [
+          {
+            "name": "Nimble Escape",
+            "text": "The goblin takes the Disengage or Hide action."
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/guard",
+      "name": "Guard",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 16,
+        "hp": {
+          "average": 11,
+          "dice": "2d8+2"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 13,
+          "DEX": 12,
+          "CON": 12,
+          "INT": 10,
+          "WIS": 11,
+          "CHA": 10
+        },
+        "skills": {
+          "Perception": 2
+        },
+        "senses": [
+          "Passive Perception 12"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "1/8",
+        "cr_times_8": 1,
+        "xp_value": 25,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Spear",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 3,
+            "reach": 5,
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "damage": [
+              {
+                "dice": "1d6+1",
+                "type": "piercing"
+              }
+            ],
+            "text": "Melee or Ranged Attack Roll; 1d8+1 Piercing if used with two hands to make a melee attack."
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/ogre",
+      "name": "Ogre",
+      "payload": {
+        "size": "Large",
+        "creature_type": "Giant",
+        "alignment": "Chaotic Evil",
+        "ac": 11,
+        "hp": {
+          "average": 68,
+          "dice": "8d10+24"
+        },
+        "speed": {
+          "walk": 40
+        },
+        "abilities": {
+          "STR": 19,
+          "DEX": 8,
+          "CON": 16,
+          "INT": 5,
+          "WIS": 7,
+          "CHA": 7
+        },
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 8"
+        ],
+        "languages": [
+          "Common",
+          "Giant"
+        ],
+        "cr": "2",
+        "cr_times_8": 16,
+        "xp_value": 450,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Greatclub",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 6,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "2d8+4",
+                "type": "bludgeoning"
+              }
+            ]
+          },
+          {
+            "name": "Javelin",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 6,
+            "range": {
+              "normal": 30,
+              "long": 120
+            },
+            "damage": [
+              {
+                "dice": "2d6+4",
+                "type": "piercing"
+              }
+            ],
+            "reach": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/scout",
+      "name": "Scout",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Humanoid",
+        "alignment": "Neutral",
+        "ac": 13,
+        "hp": {
+          "average": 16,
+          "dice": "3d8+3"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 11,
+          "DEX": 14,
+          "CON": 12,
+          "INT": 11,
+          "WIS": 13,
+          "CHA": 11
+        },
+        "skills": {
+          "Nature": 4,
+          "Perception": 5,
+          "Stealth": 6,
+          "Survival": 5
+        },
+        "senses": [
+          "Passive Perception 15"
+        ],
+        "languages": [
+          "Common"
+        ],
+        "cr": "1/2",
+        "cr_times_8": 4,
+        "xp_value": 100,
+        "proficiency_bonus": 2,
+        "multiattack": {
+          "count": 2,
+          "text": "The scout makes two attacks, using Shortsword and Longbow in any combination."
+        },
+        "actions": [
+          {
+            "name": "Shortsword",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 4,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+2",
+                "type": "piercing"
+              }
+            ]
+          },
+          {
+            "name": "Longbow",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 4,
+            "range": {
+              "normal": 150,
+              "long": 600
+            },
+            "damage": [
+              {
+                "dice": "1d8+2",
+                "type": "piercing"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/skeleton",
+      "name": "Skeleton",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Undead",
+        "alignment": "Lawful Evil",
+        "ac": 14,
+        "hp": {
+          "average": 13,
+          "dice": "2d8+4"
+        },
+        "speed": {
+          "walk": 30
+        },
+        "abilities": {
+          "STR": 10,
+          "DEX": 16,
+          "CON": 15,
+          "INT": 6,
+          "WIS": 8,
+          "CHA": 5
+        },
+        "damage_vulnerabilities": [
+          "bludgeoning"
+        ],
+        "damage_immunities": [
+          "poison"
+        ],
+        "condition_immunities": [
+          "Exhaustion",
+          "Poisoned"
+        ],
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 9"
+        ],
+        "languages": [
+          "Understands Common plus one other language but can't speak"
+        ],
+        "cr": "1/4",
+        "cr_times_8": 2,
+        "xp_value": 50,
+        "proficiency_bonus": 2,
+        "actions": [
+          {
+            "name": "Shortsword",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 5,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ]
+          },
+          {
+            "name": "Shortbow",
+            "kind": "RANGED_ATTACK",
+            "attack_bonus": 5,
+            "range": {
+              "normal": 80,
+              "long": 320
+            },
+            "damage": [
+              {
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/wolf",
+      "name": "Wolf",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Beast",
+        "alignment": "Unaligned",
+        "ac": 12,
+        "hp": {
+          "average": 11,
+          "dice": "2d8+2"
+        },
+        "speed": {
+          "walk": 40
+        },
+        "abilities": {
+          "STR": 14,
+          "DEX": 15,
+          "CON": 12,
+          "INT": 3,
+          "WIS": 12,
+          "CHA": 6
+        },
+        "skills": {
+          "Perception": 5,
+          "Stealth": 4
+        },
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 15"
+        ],
+        "cr": "1/4",
+        "cr_times_8": 2,
+        "xp_value": 50,
+        "proficiency_bonus": 2,
+        "traits": [
+          {
+            "name": "Pack Tactics",
+            "text": "The wolf has Advantage on an attack roll against a creature if at least one of the wolf's allies is within 5 feet of the creature and the ally doesn't have the Incapacitated condition."
+          }
+        ],
+        "actions": [
+          {
+            "name": "Bite",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 4,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d6+2",
+                "type": "piercing"
+              }
+            ],
+            "text": "If the target is a Medium or smaller creature, it has the Prone condition unless it succeeds on a DC 11 Strength saving throw."
+          }
+        ]
+      }
+    },
+    {
+      "id": "srd5e:creature/zombie",
+      "name": "Zombie",
+      "payload": {
+        "size": "Medium",
+        "creature_type": "Undead",
+        "alignment": "Neutral Evil",
+        "ac": 8,
+        "hp": {
+          "average": 15,
+          "dice": "2d8+6"
+        },
+        "speed": {
+          "walk": 20
+        },
+        "abilities": {
+          "STR": 13,
+          "DEX": 6,
+          "CON": 16,
+          "INT": 3,
+          "WIS": 6,
+          "CHA": 5
+        },
+        "saves": {
+          "WIS": 0
+        },
+        "damage_immunities": [
+          "poison"
+        ],
+        "condition_immunities": [
+          "Exhaustion",
+          "Poisoned"
+        ],
+        "senses": [
+          "Darkvision 60 ft.",
+          "Passive Perception 8"
+        ],
+        "languages": [
+          "Understands Common plus one other language but can't speak"
+        ],
+        "cr": "1/4",
+        "cr_times_8": 2,
+        "xp_value": 50,
+        "proficiency_bonus": 2,
+        "traits": [
+          {
+            "name": "Undead Fortitude",
+            "text": "If damage reduces the zombie to 0 Hit Points, it makes a Constitution saving throw (DC 5 plus the damage taken) unless the damage is Radiant or from a Critical Hit. On a successful save, the zombie drops to 1 Hit Point instead."
+          }
+        ],
+        "actions": [
+          {
+            "name": "Slam",
+            "kind": "MELEE_ATTACK",
+            "attack_bonus": 3,
+            "reach": 5,
+            "damage": [
+              {
+                "dice": "1d8+1",
+                "type": "bludgeoning"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

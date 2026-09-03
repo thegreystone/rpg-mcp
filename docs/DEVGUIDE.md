@@ -1,0 +1,100 @@
+# Developer Guide
+
+Everything beyond installing and playing: the implemented tool surface, the persistence architecture,
+how to build from source, and how a release is cut. For install and first-campaign instructions, see the
+[README](../README.md).
+
+## Status — vertical slice
+
+This is the first implementation milestone ([`MCP_PROTOCOL.md`](MCP_PROTOCOL.md) §28: *"a thin vertical
+slice: discovery, resumable campaign setup, commit, session bootstrap, one deterministic check,
+persistence, suspension, and fresh-context resumption"*), plus the change journal, checkpoints and the
+semantic ledger, because they define the persistence architecture and are cheapest to get right first.
+
+## Tool surface
+
+| Family                 | Tools                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Discovery              | `get_server_state`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Campaign setup         | `create_campaign`, `open_campaign`, `get_setup_state`, `update_campaign_setup`, `validate_campaign_setup`, `commit_campaign_setup`, `complete_campaign`                                                                                                                                                                                                                                                                                                                                                             |
+| Character design       | `create_character_draft`, `get_character_choices`, `generate_ability_scores`, `update_character_draft`, `validate_character_draft`, `commit_character_draft`, `update_party_design`                                                                                                                                                                                                                                                                                                                                  |
+| Session                | `bootstrap_session`, `suspend_session`, `get_character_sheet`, `get_party` (always available: full state of the player and every companion)                                                                                                                                                                                                                                                                                                                                                                         |
+| Rules                  | `resolve_check` (ability/skill checks, saving throws with advantage/disadvantage), `advance_time`                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| World                  | `materialize_location` (semantic map: containment tree, features/secrets with visibility, connections with travel time; dungeons as AREA graphs), `move_party` (route finding over known connections, clock advance, authorized routes)                                                                                                                                                                                                                                                                              |
+| Narrative & Director   | `upsert_narrative_state` (QUEST, STORY_BEAT, STORY_SEED, FACTION_STATE, WORLD_EVENT, LOCATION_DETAIL, NPC_AGENDA), `get_diegetic_information` (committed world events by channel and place), `get_director_context`, `commit_director_changes` (player-agency guard), `get_context` (SCENE/CHARACTER/RELATIONSHIP/LOCATION/QUEST/ENCOUNTER/DIRECTOR); setup-time `adventure.seeds/story_beats/factions/world_events/locations/quests` become canonical at commit                                                       |
+| Reactions              | Reactions per participant per round; Opportunity Attacks when leaving a zone with hostiles (Disengage prevents them), Shield as a reaction when hit; NPC reactions resolved automatically (or `ASK` per encounter), player-controlled reactions become typed pending choices (`resolve_pending_choice`) that hold the encounter (I-33) and resume the interrupted action and turn; knock-out-instead-of-kill via `nonlethal` melee attacks                                                                             |
+| Spellcasting           | 180-spell SRD 5.2.1 seed (all cantrips, most of levels 1–3, iconic 4–9) with structured mechanics; class casting tables (ability, cantrips/prepared limits, full/half/pact slot progressions); spell choice at creation, `prepare_spells`, `cast_spell` and encounter `CAST` (spell attacks, saves, healing, Magic Missile, temp HP, buffs, cures, resurrection); slots as resources restored by rests; concentration with CON saves on damage; timed and round-scoped effects feeding AC, attacks, saves and checks   |
+| Rest & overrides       | `perform_rest` (short rest Hit Point Dice, long rest recovery), `apply_gm_override` (policy-gated, audited, always labeled)                                                                                                                                                                                                                                                                                                                                                                                         |
+| Progression            | `begin_level_up`, `get_level_up_choices`, `update_level_up`, `validate_level_up`, `commit_level_up`, `abandon_transaction` — pending transaction, HP average/roll, Ability Score Improvements, atomic commit                                                                                                                                                                                                                                                                                                         |
+| Party & relationships  | `update_party_membership` (membership as history with ledger causes), `get_relationship`, `update_relationship` (dimensions −5..+5, summaries, linked significant events → episodic recall)                                                                                                                                                                                                                                                                                                                          |
+| Creatures & encounters | `materialize_character` (12 SRD stat blocks), `start_encounter`, `get_encounter_state`, `perform_encounter_action` (attacks with real weapons/ammunition, crits, resistances, temp HP, Dodge, items), `end_encounter` (XP split, level-up eligibility), `apply_runtime_change`, `award_xp`, `transfer_player_control`; death saves and massive damage; ENCOUNTER_RETRY checkpoints; post-death continuation states                                                                                                     |
+| Content & economy      | `get_content_definitions`, `define_content`, `trade`, `transfer_item`, `equip_item`, `grant_loot` — SRD 5.2.1 weapons/armor/gear/tools/packs/ammunition/mounts seed, class starting-equipment bundles, AC and carrying capacity                                                                                                                                                                                                                                                                                      |
+| Memory                 | `record_memory`, `query_memories`, `query_timeline`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Continuation           | `create_checkpoint`, `get_continuation_options`, `restore_checkpoint`                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Resources              | `rpg://protocol/guide`, `rpg://protocol/capabilities`, `rpg://rulesets`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+Not yet implemented (reported as `CAPABILITY_UNAVAILABLE` / `false` in `rpg://protocol/capabilities`):
+Counterspell/Ready/other reactions, travel/rest interruptions, feats/subclasses/class features, creature
+spellcasting, areas-of-effect geometry (you name the creatures in the area). See the design documents for
+the target surface.
+
+## Architecture in one paragraph
+
+Every tool invocation is one SQLite transaction. All writes to campaign-owned tables go through a
+journaling data-access layer (`persistence/Tx`) that records a full before-image of every mutated row
+into `journal_entry.undo_json`. A checkpoint is a marker in that journal; `restore_checkpoint` applies
+the inverse operations of every later entry in reverse order, in one transaction, leaving audit records
+that survive the rollback. Client-supplied `operation_id`s make every mutation idempotent. Rules content
+(SRD 5.2.1, CC-BY-4.0) ships as JSON seed files embedded in the executable and is imported on first run. The seed files
+were diffed against the SRD 5.2.1 PDF text with [`tools/verify_srd.py`](../tools/verify_srd.py) (weapons, armor, gear,
+packs, mounts, class tables, creature stat blocks, spell headers and stated mechanics); each file's `verify` field
+records what was checked and what remains paraphrased.
+
+## Design documents
+
+The design is documented in depth in this directory. Read them in this order:
+
+1. [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) — what this is and why it exists.
+2. [`DESIGN.md`](DESIGN.md) — the architecture in full.
+3. [`EXECUTION_MODEL.md`](EXECUTION_MODEL.md) — the harness, the roles, the lifecycle.
+4. [`EXECUTION_EXAMPLE.md`](EXECUTION_EXAMPLE.md) — a worked session, end to end.
+5. [`MCP_PROTOCOL.md`](MCP_PROTOCOL.md) — every tool, argument and error code.
+6. [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) — the entities and their relationships.
+7. [`DATABASE.md`](DATABASE.md) — the schema, the journal and the ledger.
+8. [`RULES_ENGINE.md`](RULES_ENGINE.md) — how rules content is modelled and resolved.
+
+## Building from source
+
+**Prerequisites:** JDK 21+ and Maven 3.9+. For the native image, [GraalVM 25](https://www.graalvm.org/downloads/)
+with `native-image`; on Windows also Visual Studio 2022 with the "Desktop development with C++" workload.
+
+```bash
+mvn package                      # uber-jar: target/rpg-mcp-server-<version>-runner.jar
+mvn package -Dnative -DskipTests # native executable: target/rpg-mcp-server-<version>-runner[.exe]
+mvn test-compile failsafe:integration-test -Dnative.image.path=target/rpg-mcp-server-<version>-runner.exe
+```
+
+The last command is `NativeImageSanityIT`: it launches the built binary over STDIO and drives a real MCP
+handshake against it, which is the only check that catches native-image reflection and resource
+regressions.
+
+To point an MCP client at a development build, use the same configuration as a release binary but with
+the path under `target/`, and set `RPG_DATA_DIR` to a scratch directory so you do not play against your
+real campaign database.
+
+## Cutting a release
+
+Push a `v`-prefixed tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) then sets the Maven version from the
+tag (`versions:set -DnewVersion=${TAG#v}`), builds the uber-jar plus native images for linux-x86_64,
+linux-aarch64, macos-aarch64 and windows-x86_64, runs the native sanity test on each, and publishes all
+artifacts to a GitHub release with generated notes. The version in `pom.xml` stays at `-SNAPSHOT` on the
+branch — the tag is the single source of truth for a release version.
+
+[`.github/workflows/build.yml`](../.github/workflows/build.yml) runs `mvn -B package` on every push and
+pull request to `main`/`master` and keeps the uber-jar as a 14-day artifact.

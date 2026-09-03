@@ -1,0 +1,6198 @@
+{
+  "kind": "SPELL",
+  "citation": "SRD 5.2.1, Spells chapter (spell descriptions) and Classes (spell lists)",
+  "verify": "Checked against the SRD 5.2.1 PDF text (CC-BY-4.0) by scripted diff on 2026-09-01: for all 180 spells: level, school, class lists, casting time, ritual, range, components, concentration, duration; damage dice, save ability, half-on-success, attack type, upcast and cantrip scaling where the SRD states them mechanically. Still unverified: spell texts are paraphrases (text_is_paraphrase); effects the engine does not model are left to the GM.",
+  "schema": {
+    "mechanics.kind": "ATTACK (spell attack roll) | SAVE (saving throw; damage and/or condition) | HEAL | AUTO (magic missile) | TEMP_HP | BUFF (effect with modifiers) | CURE | RESURRECT | UTILITY (GM adjudicates from text)",
+    "cantrip_scaling": "character level -> damage dice",
+    "upcast": "per_level_dice | per_level_flat | per_level_targets | per_level_darts | per_level_rays",
+    "modifiers (BUFF)": "ac_base, ac_bonus, ac_floor, attack_bonus_dice, save_bonus_dice, check_bonus_dice, damage_bonus_dice(+type, against_target), speed_bonus, disadvantage_on_attacks_against, immune_conditions"
+  },
+  "entries": [
+    {
+      "id": "srd5e:spell/acid-splash",
+      "name": "Acid Splash",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "1d6",
+              "type": "acid"
+            }
+          ],
+          "on_success": "NONE",
+          "area": "5-foot-radius sphere",
+          "cantrip_scaling": {
+            "5": "2d6",
+            "11": "3d6",
+            "17": "4d6"
+          }
+        },
+        "text": "A bubble of acid bursts at a point; each creature in a 5-foot-radius sphere makes a Dexterity save or takes 1d6 Acid damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/chill-touch",
+      "name": "Chill Touch",
+      "payload": {
+        "level": 0,
+        "school": "Necromancy",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "MELEE_SPELL",
+          "damage": [
+            {
+              "dice": "1d10",
+              "type": "necrotic"
+            }
+          ],
+          "cantrip_scaling": {
+            "5": "2d10",
+            "11": "3d10",
+            "17": "4d10"
+          }
+        },
+        "text": "Melee spell attack; on a hit 1d10 Necrotic damage and the target can't regain Hit Points until the start of your next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/dancing-lights",
+      "name": "Dancing Lights",
+      "payload": {
+        "level": 0,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of phosphorus",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Up to four torch-sized lights you can move; each sheds dim light in a 10-foot radius.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/druidcraft",
+      "name": "Druidcraft",
+      "payload": {
+        "level": 0,
+        "school": "Transmutation",
+        "classes": [
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Small nature effects: predict weather, bloom a flower, light or snuff a candle, create a sensory effect.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/eldritch-blast",
+      "name": "Eldritch Blast",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "1d10",
+              "type": "force"
+            }
+          ],
+          "beams_scaling": {
+            "5": 2,
+            "11": 3,
+            "17": 4
+          }
+        },
+        "text": "A beam of crackling energy; ranged spell attack for 1d10 Force damage. Extra beams at levels 5, 11 and 17, each a separate attack.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/fire-bolt",
+      "name": "Fire Bolt",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "1d10",
+              "type": "fire"
+            }
+          ],
+          "cantrip_scaling": {
+            "5": "2d10",
+            "11": "3d10",
+            "17": "4d10"
+          }
+        },
+        "text": "Ranged spell attack; 1d10 Fire damage and a flammable object not worn or carried ignites.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/guidance",
+      "name": "Guidance",
+      "payload": {
+        "level": 0,
+        "school": "Divination",
+        "classes": [
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "GUIDANCE",
+          "modifiers": {
+            "check_bonus_dice": "1d4"
+          },
+          "duration_minutes": 1,
+          "targets": "ONE"
+        },
+        "text": "The touched creature can add 1d4 to one ability check of its choice before the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/light",
+      "name": "Light",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "bard",
+          "cleric",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "M"
+        ],
+        "material": "a firefly or phosphorescent moss",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An object sheds bright light in a 20-foot radius and dim light 20 feet beyond.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mage-hand",
+      "name": "Mage Hand",
+      "payload": {
+        "level": 0,
+        "school": "Conjuration",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A spectral hand manipulates, opens, carries or retrieves objects up to 10 pounds within 30 feet.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mending",
+      "name": "Mending",
+      "payload": {
+        "level": 0,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 minute",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "two lodestones",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Repairs a single break or tear in an object.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/message",
+      "name": "Message",
+      "payload": {
+        "level": 0,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "S",
+          "M"
+        ],
+        "material": "a copper wire",
+        "duration": "1 round",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Whisper a message to a creature within range; it can reply in a whisper only you hear.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/minor-illusion",
+      "name": "Minor Illusion",
+      "payload": {
+        "level": 0,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "S",
+          "M"
+        ],
+        "material": "a bit of fleece",
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A sound or an image of an object no larger than a 5-foot cube; Investigation DC = spell save DC to see through it.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/poison-spray",
+      "name": "Poison Spray",
+      "payload": {
+        "level": 0,
+        "school": "Necromancy",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "1d12",
+              "type": "poison"
+            }
+          ],
+          "cantrip_scaling": {
+            "5": "2d12",
+            "11": "3d12",
+            "17": "4d12"
+          }
+        },
+        "text": "A puff of noxious gas; ranged spell attack for 1d12 Poison damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/prestidigitation",
+      "name": "Prestidigitation",
+      "payload": {
+        "level": 0,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Up to 1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Minor magical tricks: a harmless sensory effect, light or snuff a small flame, clean or soil, chill/warm/flavor, a small mark or trinket.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/produce-flame",
+      "name": "Produce Flame",
+      "payload": {
+        "level": 0,
+        "school": "Conjuration",
+        "classes": [
+          "druid"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "1d8",
+              "type": "fire"
+            }
+          ],
+          "range_when_thrown": "60 feet",
+          "cantrip_scaling": {
+            "5": "2d8",
+            "11": "3d8",
+            "17": "4d8"
+          }
+        },
+        "text": "A flickering flame in your hand sheds light; you can hurl it as a ranged spell attack for 1d8 Fire damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/ray-of-frost",
+      "name": "Ray of Frost",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "1d8",
+              "type": "cold"
+            }
+          ],
+          "on_hit_effect": {
+            "speed_penalty": 10,
+            "duration": "until the start of your next turn"
+          },
+          "cantrip_scaling": {
+            "5": "2d8",
+            "11": "3d8",
+            "17": "4d8"
+          }
+        },
+        "text": "Ranged spell attack; 1d8 Cold damage and the target's Speed is reduced by 10 feet until the start of your next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/resistance",
+      "name": "Resistance",
+      "payload": {
+        "level": 0,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a miniature cloak",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "RESISTANCE",
+          "modifiers": {
+            "save_bonus_dice": "1d4"
+          },
+          "duration_minutes": 1,
+          "targets": "ONE"
+        },
+        "text": "The touched creature can add 1d4 to one saving throw of its choice before the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sacred-flame",
+      "name": "Sacred Flame",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "1d8",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "NONE",
+          "cantrip_scaling": {
+            "5": "2d8",
+            "11": "3d8",
+            "17": "4d8"
+          },
+          "ignores_cover": true
+        },
+        "text": "Flame-like radiance descends on a creature; Dexterity save or 1d8 Radiant damage. The target gains no benefit from cover.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/shocking-grasp",
+      "name": "Shocking Grasp",
+      "payload": {
+        "level": 0,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "MELEE_SPELL",
+          "damage": [
+            {
+              "dice": "1d8",
+              "type": "lightning"
+            }
+          ],
+          "on_hit_effect": {
+            "no_opportunity_attacks": true
+          },
+          "cantrip_scaling": {
+            "5": "2d8",
+            "11": "3d8",
+            "17": "4d8"
+          }
+        },
+        "text": "Melee spell attack; 1d8 Lightning damage and the target can't take Opportunity Attacks until the start of its next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/spare-the-dying",
+      "name": "Spare the Dying",
+      "payload": {
+        "level": 0,
+        "school": "Necromancy",
+        "classes": [
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "15 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "stabilize": true,
+          "targets": "ONE"
+        },
+        "text": "Choose a creature within range that has 0 Hit Points and isn't dead; it becomes Stable.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/thaumaturgy",
+      "name": "Thaumaturgy",
+      "payload": {
+        "level": 0,
+        "school": "Transmutation",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Up to 1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Minor wonders: booming voice, flickering flames, tremors, eerie sounds, slamming doors, altered eyes.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/vicious-mockery",
+      "name": "Vicious Mockery",
+      "payload": {
+        "level": 0,
+        "school": "Enchantment",
+        "classes": [
+          "bard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": [
+            {
+              "dice": "1d6",
+              "type": "psychic"
+            }
+          ],
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "disadvantage_next_attack": true
+          },
+          "cantrip_scaling": {
+            "5": "2d6",
+            "11": "3d6",
+            "17": "4d6"
+          }
+        },
+        "text": "Insults laced with enchantment; Wisdom save or 1d6 Psychic damage and Disadvantage on the target's next attack roll before the end of its next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/bless",
+      "name": "Bless",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a sprinkling of holy water",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "BLESSED",
+          "modifiers": {
+            "attack_bonus_dice": "1d4",
+            "save_bonus_dice": "1d4"
+          },
+          "duration_minutes": 1,
+          "targets": "UP_TO_3",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "Up to three creatures add 1d4 to attack rolls and saving throws for the duration. One more target per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/burning-hands",
+      "name": "Burning Hands",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (15-foot cone)",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "3d6",
+              "type": "fire"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "15-foot cone",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A thin sheet of flames; each creature in a 15-foot cone makes a Dexterity save, taking 3d6 Fire damage or half on a success. +1d6 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/charm-person",
+      "name": "Charm Person",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "CHARMED",
+          "duration_minutes": 60,
+          "upcast": {
+            "per_level_targets": 1
+          },
+          "hostile_advantage": true
+        },
+        "text": "A Humanoid makes a Wisdom save (Advantage if you or your allies are fighting it) or is Charmed by you for 1 hour; it knows it was charmed afterwards.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/chromatic-orb",
+      "name": "Chromatic Orb",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a diamond worth 50+ GP",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "3d8",
+              "type": "acid"
+            }
+          ],
+          "choose_type": [
+            "acid",
+            "cold",
+            "fire",
+            "lightning",
+            "poison",
+            "thunder"
+          ],
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Hurl an orb of energy; ranged spell attack for 3d8 damage of a chosen type (Acid, Cold, Fire, Lightning, Poison or Thunder). +1d8 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/color-spray",
+      "name": "Color Spray",
+      "payload": {
+        "level": 1,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (15-foot cone)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of colorful sand",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "BLINDED",
+          "duration_rounds": 1,
+          "area": "15-foot cone"
+        },
+        "text": "A dazzling array of light; each creature in a 15-foot cone makes a Constitution save or is Blinded until the end of your next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/command",
+      "name": "Command",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "one_word_command": true
+          },
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "Speak a one-word command; the target makes a Wisdom save or follows it on its next turn (Approach, Drop, Flee, Grovel, Halt).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/comprehend-languages",
+      "name": "Comprehend Languages",
+      "payload": {
+        "level": 1,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of soot and salt",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Understand the literal meaning of any spoken language you hear and written language you touch.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/cure-wounds",
+      "name": "Cure Wounds",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "2d8",
+          "add_modifier": true,
+          "upcast": {
+            "per_level_dice": "2d8"
+          }
+        },
+        "text": "A touched creature regains 2d8 + your spellcasting ability modifier Hit Points. +2d8 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/detect-magic",
+      "name": "Detect Magic",
+      "payload": {
+        "level": 1,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger",
+          "sorcerer",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Sense magic within 30 feet and see a faint aura around visible magical creatures and objects; learn its school with an action.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/disguise-self",
+      "name": "Disguise Self",
+      "payload": {
+        "level": 1,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Change your appearance (not your body); Investigation DC = spell save DC to discern the illusion.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/divine-favor",
+      "name": "Divine Favor",
+      "payload": {
+        "level": 1,
+        "school": "Transmutation",
+        "classes": [
+          "paladin"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "DIVINE_FAVOR",
+          "modifiers": {
+            "damage_bonus_dice": "1d4",
+            "damage_bonus_type": "radiant"
+          },
+          "duration_minutes": 1,
+          "targets": "SELF"
+        },
+        "text": "Until the spell ends, your weapon attacks deal an extra 1d4 Radiant damage on a hit.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/entangle",
+      "name": "Entangle",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "STR",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "RESTRAINED",
+          "area": "20-foot square",
+          "duration_minutes": 1,
+          "escape": "Strength (Athletics) check vs. spell save DC"
+        },
+        "text": "Grasping plants sprout in a 20-foot square (Difficult Terrain); each creature there makes a Strength save or is Restrained until the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/faerie-fire",
+      "name": "Faerie Fire",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "bard",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "advantage_on_attacks_against": true,
+            "no_invisibility": true
+          },
+          "area": "20-foot cube",
+          "duration_minutes": 1
+        },
+        "text": "Objects and creatures in a 20-foot cube are outlined in light; creatures that fail a Dexterity save shed light, can't be Invisible, and attacks against them have Advantage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/false-life",
+      "name": "False Life",
+      "payload": {
+        "level": 1,
+        "school": "Necromancy",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a drop of alcohol or distilled spirits",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "TEMP_HP",
+          "amount": "2d4+4",
+          "upcast": {
+            "per_level_flat": 5
+          }
+        },
+        "text": "You gain 2d4 + 4 Temporary Hit Points. +5 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/feather-fall",
+      "name": "Feather Fall",
+      "payload": {
+        "level": 1,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 reaction",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "M"
+        ],
+        "material": "a small feather or piece of down",
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "reaction": true
+        },
+        "text": "Up to five falling creatures descend at 60 feet per round and take no falling damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/find-familiar",
+      "name": "Find Familiar",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "wizard"
+        ],
+        "casting_time": "1 hour",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "burning incense worth 10+ GP",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Gain a familiar (a spirit in animal form) that obeys you, shares senses with you at a distance, and can deliver touch spells.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/fog-cloud",
+      "name": "Fog Cloud",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "upcast": {
+            "per_level_radius_feet": 20
+          }
+        },
+        "text": "A 20-foot-radius sphere of fog heavily obscures its area; +20 feet radius per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/goodberry",
+      "name": "Goodberry",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a sprig of mistletoe",
+        "duration": "24 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Ten berries appear; eating one restores 1 Hit Point and nourishes for a day.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/grease",
+      "name": "Grease",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of pork rind or butter",
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "PRONE",
+          "area": "10-foot square",
+          "duration_minutes": 1
+        },
+        "text": "Slick grease covers a 10-foot square (Difficult Terrain); creatures there or entering it make a Dexterity save or fall Prone.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/guiding-bolt",
+      "name": "Guiding Bolt",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 round",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "4d6",
+              "type": "radiant"
+            }
+          ],
+          "on_hit_effect": {
+            "advantage_on_next_attack_against": true
+          },
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A flash of light; ranged spell attack for 4d6 Radiant damage, and the next attack roll against the target before the end of your next turn has Advantage. +1d6 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/healing-word",
+      "name": "Healing Word",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "2d4",
+          "add_modifier": true,
+          "upcast": {
+            "per_level_dice": "2d4"
+          }
+        },
+        "text": "A creature you can see regains 2d4 + your spellcasting ability modifier Hit Points. +2d4 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hellish-rebuke",
+      "name": "Hellish Rebuke",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "warlock"
+        ],
+        "casting_time": "Reaction, which you take in response to taking damage from a creature that you can see within 60 feet of yourself",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "2d10",
+              "type": "fire"
+            }
+          ],
+          "on_success": "HALF",
+          "upcast": {
+            "per_level_dice": "1d10"
+          }
+        },
+        "text": "Reaction when a creature you can see within 60 feet damages you: it makes a Dexterity save, taking 2d10 Fire damage or half on a success. +1d10 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/heroism",
+      "name": "Heroism",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "HEROISM",
+          "modifiers": {
+            "immune_conditions": [
+              "FRIGHTENED"
+            ],
+            "temp_hp_each_turn": "MODIFIER"
+          },
+          "duration_minutes": 1,
+          "targets": "ONE",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "The touched creature is immune to the Frightened condition and gains Temporary Hit Points equal to your spellcasting ability modifier at the start of each of its turns.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hex",
+      "name": "Hex",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "warlock"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "the petrified eye of a newt",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "HEXED",
+          "modifiers": {
+            "damage_bonus_dice": "1d6",
+            "damage_bonus_type": "necrotic",
+            "against_target": true,
+            "disadvantage_ability_checks": "CHOOSE_ONE"
+          },
+          "duration_minutes": 60,
+          "targets": "ONE_ENEMY",
+          "upcast": {
+            "3": "8 hours",
+            "5": "24 hours"
+          }
+        },
+        "text": "Curse a creature: your attacks deal an extra 1d6 Necrotic damage to it, and it has Disadvantage on checks with one ability you choose. Lasts 8 hours with a level 3–4 slot, 24 hours with level 5+.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hideous-laughter",
+      "name": "Hideous Laughter",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a tiny tart and a feather",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "PRONE",
+          "also_condition": "INCAPACITATED",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn and when damaged",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A creature perceives everything as hilarious; Wisdom save or it falls Prone and is Incapacitated, repeating the save at the end of each of its turns and whenever it takes damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hunters-mark",
+      "name": "Hunter's Mark",
+      "payload": {
+        "level": 1,
+        "school": "Divination",
+        "classes": [
+          "ranger"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "90 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "MARKED",
+          "modifiers": {
+            "damage_bonus_dice": "1d6",
+            "damage_bonus_type": "force",
+            "against_target": true,
+            "advantage_track": true
+          },
+          "duration_minutes": 60,
+          "targets": "ONE_ENEMY",
+          "upcast": {
+            "3": "8 hours",
+            "5": "24 hours"
+          }
+        },
+        "text": "Mark a creature: your attacks deal an extra 1d6 Force damage to it and you have Advantage on checks to find it. Longer with higher slots.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/identify",
+      "name": "Identify",
+      "payload": {
+        "level": 1,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "wizard"
+        ],
+        "casting_time": "1 minute",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pearl worth 100+ GP",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Learn an object's magical properties, how to use them, attunement requirements and charges; or which spells affect a creature.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/inflict-wounds",
+      "name": "Inflict Wounds",
+      "payload": {
+        "level": 1,
+        "school": "Necromancy",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "2d10",
+              "type": "necrotic"
+            }
+          ],
+          "on_success": "HALF",
+          "upcast": {
+            "per_level_dice": "1d10"
+          }
+        },
+        "text": "A creature you touch makes a Constitution saving throw, taking 2d10 Necrotic damage on a failed save or half as much on a success.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/jump",
+      "name": "Jump",
+      "payload": {
+        "level": 1,
+        "school": "Transmutation",
+        "classes": [
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a grasshopper's hind leg",
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The touched creature can jump up to 30 feet by spending 10 feet of movement, once per turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/longstrider",
+      "name": "Longstrider",
+      "payload": {
+        "level": 1,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid",
+          "ranger",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of dirt",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "LONGSTRIDER",
+          "modifiers": {
+            "speed_bonus": 10
+          },
+          "duration_minutes": 60,
+          "targets": "ONE",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "The touched creature's Speed increases by 10 feet.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mage-armor",
+      "name": "Mage Armor",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a piece of cured leather",
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "MAGE_ARMOR",
+          "modifiers": {
+            "ac_base": 13
+          },
+          "duration_minutes": 480,
+          "targets": "ONE",
+          "requires_no_armor": true
+        },
+        "text": "A willing creature not wearing armor gains a base AC of 13 + its Dexterity modifier for 8 hours; ends if it dons armor.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/magic-missile",
+      "name": "Magic Missile",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "AUTO",
+          "darts": 3,
+          "per_dart": [
+            {
+              "dice": "1d4+1",
+              "type": "force"
+            }
+          ],
+          "upcast": {
+            "per_level_darts": 1
+          }
+        },
+        "text": "Three darts of force each hit a creature of your choice for 1d4 + 1 Force damage; the darts hit automatically. +1 dart per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/protection-from-evil-and-good",
+      "name": "Protection from Evil and Good",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "druid",
+          "paladin",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a flask of Holy Water worth 25+ GP, consumed",
+        "duration": "Concentration, up to 10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "WARDED",
+          "modifiers": {
+            "disadvantage_attacks_from": [
+              "Aberration",
+              "Celestial",
+              "Elemental",
+              "Fey",
+              "Fiend",
+              "Undead"
+            ],
+            "immune_charm_fright_possess_from": true
+          },
+          "duration_minutes": 10,
+          "targets": "ONE"
+        },
+        "text": "The touched creature is protected against Aberrations, Celestials, Elementals, Fey, Fiends and Undead: they have Disadvantage to attack it and can't charm, frighten or possess it.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/purify-food-and-drink",
+      "name": "Purify Food and Drink",
+      "payload": {
+        "level": 1,
+        "school": "Transmutation",
+        "classes": [
+          "cleric",
+          "druid",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "All nonmagical food and drink in a 5-foot-radius sphere is purified and freed of poison and disease.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/ray-of-sickness",
+      "name": "Ray of Sickness",
+      "payload": {
+        "level": 1,
+        "school": "Necromancy",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "2d8",
+              "type": "poison"
+            }
+          ],
+          "on_hit_condition": "POISONED",
+          "on_hit_condition_duration_rounds": 1,
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Ranged spell attack; 2d8 Poison damage and the target has the Poisoned condition until the end of your next turn. +1d8 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sanctuary",
+      "name": "Sanctuary",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a shard of a mirror",
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A creature is warded: anyone trying to attack it or target it with a harmful spell must first succeed on a Wisdom save or choose a new target; ends if the warded creature attacks or casts a harmful spell.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/shield",
+      "name": "Shield",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 reaction",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 round",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "SHIELD",
+          "modifiers": {
+            "ac_bonus": 5,
+            "immune_magic_missile": true
+          },
+          "duration_rounds": 1,
+          "targets": "SELF",
+          "reaction": true
+        },
+        "text": "Reaction when hit by an attack or targeted by Magic Missile: +5 AC until the start of your next turn (including against the triggering attack) and no damage from Magic Missile.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/shield-of-faith",
+      "name": "Shield of Faith",
+      "payload": {
+        "level": 1,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a prayer scroll",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "SHIELD_OF_FAITH",
+          "modifiers": {
+            "ac_bonus": 2
+          },
+          "duration_minutes": 10,
+          "targets": "ONE"
+        },
+        "text": "A shimmering field grants a creature +2 AC for the duration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/silent-image",
+      "name": "Silent Image",
+      "payload": {
+        "level": 1,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of fleece",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An image of an object, creature or phenomenon no larger than a 15-foot cube; purely visual.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sleep",
+      "name": "Sleep",
+      "payload": {
+        "level": 1,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of sand or rose petals",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "INCAPACITATED",
+          "area": "5-foot-radius sphere",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn; on a second failure Unconscious"
+        },
+        "text": "Each creature in a 5-foot-radius sphere makes a Wisdom save or is Incapacitated until the end of its next turn, when it repeats the save; a second failure means it is Unconscious for the duration or until damaged or shaken awake.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/speak-with-animals",
+      "name": "Speak with Animals",
+      "payload": {
+        "level": 1,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "druid",
+          "ranger",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Comprehend and verbally communicate with Beasts.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/thunderwave",
+      "name": "Thunderwave",
+      "payload": {
+        "level": 1,
+        "school": "Evocation",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (15-foot cube)",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "2d8",
+              "type": "thunder"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "15-foot cube",
+          "on_fail_effect": {
+            "push_feet": 10
+          },
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A wave of thunderous force; each creature in a 15-foot cube makes a Constitution save, taking 2d8 Thunder damage and being pushed 10 feet on a failure, half damage on a success. +1d8 per slot level above 1.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/unseen-servant",
+      "name": "Unseen Servant",
+      "payload": {
+        "level": 1,
+        "school": "Conjuration",
+        "classes": [
+          "bard",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a piece of string and a bit of wood",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An invisible, mindless force performs simple tasks; AC 10, 1 HP, Strength 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/acid-arrow",
+      "name": "Acid Arrow",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "powdered rhubarb leaf",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "4d4",
+              "type": "acid"
+            }
+          ],
+          "delayed_damage": {
+            "dice": "2d4",
+            "type": "acid",
+            "when": "end of the target's next turn"
+          },
+          "miss_damage": "half of the initial damage",
+          "upcast": {
+            "per_level_dice": "1d4"
+          }
+        },
+        "text": "Ranged spell attack; 4d4 Acid damage now and 2d4 at the end of the target's next turn; on a miss, half the initial damage and no later damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/aid",
+      "name": "Aid",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a strip of white cloth",
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "hp_max_bonus": 5,
+          "targets": "UP_TO_3",
+          "upcast": {
+            "per_level_flat": 5
+          }
+        },
+        "text": "Up to three creatures' Hit Point maximum and current Hit Points increase by 5 for 8 hours (+5 per slot level above 2).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/alter-self",
+      "name": "Alter Self",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Aquatic adaptation, change your appearance, or grow natural weapons (1d6 + spellcasting modifier, magical).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/arcane-lock",
+      "name": "Arcane Lock",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "gold dust worth 25+ GP, consumed",
+        "duration": "Until dispelled",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A door, window, gate, chest or other entryway is magically locked; the DC to break or pick it increases by 10.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/barkskin",
+      "name": "Barkskin",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a handful of oak bark",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "BARKSKIN",
+          "modifiers": {
+            "ac_floor": 17
+          },
+          "duration_minutes": 60,
+          "targets": "ONE"
+        },
+        "text": "The touched creature's AC can't be less than 17 for the duration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/blindness-deafness",
+      "name": "Blindness/Deafness",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "cleric",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "BLINDED",
+          "choose_condition": [
+            "BLINDED",
+            "DEAFENED"
+          ],
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A creature makes a Constitution save or is Blinded or Deafened (your choice) for the duration, repeating the save at the end of each of its turns.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/blur",
+      "name": "Blur",
+      "payload": {
+        "level": 2,
+        "school": "Illusion",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "BLURRED",
+          "modifiers": {
+            "disadvantage_on_attacks_against": true
+          },
+          "duration_minutes": 1,
+          "targets": "SELF"
+        },
+        "text": "Your body becomes blurred; attack rolls against you have Disadvantage unless the attacker doesn't rely on sight.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/calm-emotions",
+      "name": "Calm Emotions",
+      "payload": {
+        "level": 2,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Humanoids in a 20-foot-radius sphere that fail a Charisma save are either freed from Charmed/Frightened or made indifferent to creatures of your choice.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/continual-flame",
+      "name": "Continual Flame",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "cleric",
+          "druid",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "ruby dust worth 50+ GP, consumed",
+        "duration": "Until dispelled",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A torch-like flame that neither consumes nor burns springs from an object.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/darkness",
+      "name": "Darkness",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "M"
+        ],
+        "material": "bat fur and a piece of coal",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Magical darkness fills a 15-foot-radius sphere; darkvision can't see through it and nonmagical light can't illuminate it.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/detect-thoughts",
+      "name": "Detect Thoughts",
+      "payload": {
+        "level": 2,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a copper piece",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Read the surface thoughts of a creature within 30 feet; probe deeper (Wisdom save) or detect thinking creatures.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/enhance-ability",
+      "name": "Enhance Ability",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "fur or a feather from a beast",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "ENHANCED",
+          "modifiers": {
+            "advantage_checks_with_ability": "CHOOSE_ONE"
+          },
+          "duration_minutes": 60,
+          "targets": "ONE",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "The touched creature has Advantage on ability checks with one ability you choose for the duration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/enlarge-reduce",
+      "name": "Enlarge/Reduce",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of powdered iron",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A creature or object grows one size (Advantage on Strength checks/saves, +1d4 weapon damage) or shrinks (Disadvantage, −1d4).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/flaming-sphere",
+      "name": "Flaming Sphere",
+      "payload": {
+        "level": 2,
+        "school": "Conjuration",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "tallow, brimstone and powdered iron",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "2d6",
+              "type": "fire"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "5-foot-diameter sphere, movable 30 feet as a bonus action",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A 5-foot-diameter sphere of fire you can ram into creatures (Dexterity save, 2d6 Fire, half on success) and move 30 feet as a Bonus Action. +1d6 per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/gust-of-wind",
+      "name": "Gust of Wind",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (60-foot line)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a legume seed",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A strong wind blasts a 60-foot line; creatures failing a Strength save are pushed 15 feet, the line is Difficult Terrain, and small flames are extinguished.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/heat-metal",
+      "name": "Heat Metal",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a piece of iron and a flame",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "2d8",
+              "type": "fire"
+            }
+          ],
+          "on_success": "NONE",
+          "automatic": true,
+          "on_fail_effect": {
+            "drops_object_or_disadvantage": true
+          },
+          "repeat": "1 bonus action on later turns",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A metal object glows red-hot; a creature touching it takes 2d8 Fire damage (repeatable with a Bonus Action) and must succeed on a Constitution save or drop it, otherwise it has Disadvantage until the start of your next turn. +1d8 per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hold-person",
+      "name": "Hold Person",
+      "payload": {
+        "level": 2,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a straight piece of iron",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "PARALYZED",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn",
+          "target_type": "Humanoid",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A Humanoid makes a Wisdom save or is Paralyzed for the duration, repeating the save at the end of each of its turns. One more target per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/invisibility",
+      "name": "Invisibility",
+      "payload": {
+        "level": 2,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "an eyelash in gum arabic",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "INVISIBLE",
+          "condition": "INVISIBLE",
+          "duration_minutes": 60,
+          "targets": "ONE",
+          "ends_if": "the target attacks or casts a spell",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "The touched creature has the Invisible condition until it attacks or casts a spell.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/knock",
+      "name": "Knock",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Unlock, unstick or unbar an object; a loud knock is audible up to 300 feet away.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/lesser-restoration",
+      "name": "Lesser Restoration",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "CURE",
+          "conditions": [
+            "BLINDED",
+            "DEAFENED",
+            "PARALYZED",
+            "POISONED"
+          ]
+        },
+        "text": "End one of the following conditions on the touched creature: Blinded, Deafened, Paralyzed or Poisoned.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/levitate",
+      "name": "Levitate",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a leather loop or golden wire bent into a cup",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A creature or object rises vertically up to 20 feet (Constitution save for unwilling targets).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/locate-object",
+      "name": "Locate Object",
+      "payload": {
+        "level": 2,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a forked twig",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Sense the direction of a familiar object within 1,000 feet, unless blocked by lead.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/magic-weapon",
+      "name": "Magic Weapon",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "paladin",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "MAGIC_WEAPON",
+          "modifiers": {
+            "attack_bonus": 1,
+            "damage_bonus": 1
+          },
+          "duration_minutes": 60,
+          "targets": "WEAPON",
+          "upcast": {
+            "3": "+2",
+            "5": "+3"
+          }
+        },
+        "text": "A nonmagical weapon becomes a +1 magic weapon for the duration (+2 with a level 3–4 slot, +3 with level 5+).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mirror-image",
+      "name": "Mirror Image",
+      "payload": {
+        "level": 2,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Three illusory duplicates of you; an attack that would hit you may hit a duplicate instead (roll a d6 per remaining duplicate).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/misty-step",
+      "name": "Misty Step",
+      "payload": {
+        "level": 2,
+        "school": "Conjuration",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "Self",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Teleport up to 30 feet to an unoccupied space you can see.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/moonbeam",
+      "name": "Moonbeam",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "several seeds of a moonseed plant",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "2d10",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "5-foot-radius, 40-foot-high cylinder, movable 60 feet as a bonus action",
+          "upcast": {
+            "per_level_dice": "1d10"
+          }
+        },
+        "text": "A beam of pale light; a creature that enters the cylinder or starts its turn there makes a Constitution save, taking 2d10 Radiant damage or half. +1d10 per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/pass-without-trace",
+      "name": "Pass without Trace",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "ashes from burned mistletoe",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "VEILED",
+          "modifiers": {
+            "stealth_bonus": 10
+          },
+          "duration_minutes": 60,
+          "targets": "PARTY_WITHIN_30"
+        },
+        "text": "You and creatures within 30 feet gain +10 to Dexterity (Stealth) checks and can't be tracked except by magic.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/prayer-of-healing",
+      "name": "Prayer of Healing",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "10 minutes",
+        "range": "30 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "2d8",
+          "add_modifier": true,
+          "targets": "UP_TO_5",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Up to five creatures who spend the casting time with you regain 2d8 + your spellcasting ability modifier Hit Points and gain the benefit of a Short Rest. +1d8 per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/protection-from-poison",
+      "name": "Protection from Poison",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Neutralize one poison affecting the touched creature; for 1 hour it has Advantage on saves against poison and Resistance to Poison damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/ray-of-enfeeblement",
+      "name": "Ray of Enfeeblement",
+      "payload": {
+        "level": 2,
+        "school": "Necromancy",
+        "classes": [
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "note": "Disadvantage on Strength-based D20 Tests and subtracts 1d8 from all damage rolls for the duration; repeats the save at the end of each of its turns"
+          },
+          "duration_rounds": 10,
+          "repeat_save": "Constitution save at the end of each turn"
+        },
+        "text": "The target makes a Constitution saving throw. Success: Disadvantage on its next attack roll until the start of your next turn. Failure: Disadvantage on Strength-based D20 Tests and −1d8 on all damage rolls for the duration; it repeats the save at the end of each of its turns.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/scorching-ray",
+      "name": "Scorching Ray",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "RANGED_SPELL",
+          "damage": [
+            {
+              "dice": "2d6",
+              "type": "fire"
+            }
+          ],
+          "rays": 3,
+          "upcast": {
+            "per_level_rays": 1
+          }
+        },
+        "text": "Three rays of fire, each a separate ranged spell attack for 2d6 Fire damage. +1 ray per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/see-invisibility",
+      "name": "See Invisibility",
+      "payload": {
+        "level": 2,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of talc and powdered silver",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "See Invisible creatures and objects, and into the Ethereal Plane.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/shatter",
+      "name": "Shatter",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a chip of mica",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "3d8",
+              "type": "thunder"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "10-foot-radius sphere",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A painful ringing noise; each creature in a 10-foot-radius sphere makes a Constitution save, taking 3d8 Thunder damage or half. +1d8 per slot level above 2.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/silence",
+      "name": "Silence",
+      "payload": {
+        "level": 2,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "cleric",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "No sound can be created within or pass through a 20-foot-radius sphere; creatures inside are Deafened and spells with Verbal components can't be cast there.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/spider-climb",
+      "name": "Spider Climb",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a drop of bitumen and a spider",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The touched creature can move along vertical surfaces and ceilings and gains a Climb Speed equal to its Speed.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/spike-growth",
+      "name": "Spike Growth",
+      "payload": {
+        "level": 2,
+        "school": "Transmutation",
+        "classes": [
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "seven sharp thorns or twigs",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "damage_per_5_feet": "2d4 piercing"
+        },
+        "text": "Hard spikes cover a 20-foot-radius area (Difficult Terrain, camouflaged; Perception DC = spell save DC); a creature takes 2d4 Piercing damage per 5 feet travelled through it.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/spiritual-weapon",
+      "name": "Spiritual Weapon",
+      "payload": {
+        "level": 2,
+        "school": "Evocation",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "MELEE_SPELL",
+          "damage": [
+            {
+              "dice": "1d8",
+              "type": "force"
+            }
+          ],
+          "add_modifier": true,
+          "summoned": true,
+          "bonus_action_repeat": true,
+          "upcast": {
+            "per_level_dice": "1d8",
+            "step": 1
+          }
+        },
+        "text": "A floating spectral weapon; as a Bonus Action on later turns move it 20 feet and make a melee spell attack for 1d8 + your spellcasting ability modifier Force damage. +1d8 for every slot level above 2 (every two levels).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/suggestion",
+      "name": "Suggestion",
+      "payload": {
+        "level": 2,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "M"
+        ],
+        "material": "a drop of honey",
+        "duration": "8 hours",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "follows_suggestion": true
+          },
+          "duration_minutes": 480
+        },
+        "text": "Suggest a reasonable course of activity in a sentence or two; a creature that fails a Wisdom save pursues it for the duration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/warding-bond",
+      "name": "Warding Bond",
+      "payload": {
+        "level": 2,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pair of platinum rings worth 50+ GP each",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "WARDING_BOND",
+          "modifiers": {
+            "ac_bonus": 1,
+            "save_bonus": 1,
+            "resistance_all": true
+          },
+          "duration_minutes": 60,
+          "targets": "ONE",
+          "shared_damage": true
+        },
+        "text": "The touched creature gains +1 AC, +1 to saving throws and Resistance to all damage while within 60 feet of you; you take the same damage it takes.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/web",
+      "name": "Web",
+      "payload": {
+        "level": 2,
+        "school": "Conjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of spiderweb",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "RESTRAINED",
+          "area": "20-foot cube",
+          "duration_minutes": 60,
+          "escape": "Strength (Athletics) check vs. spell save DC"
+        },
+        "text": "Thick webs fill a 20-foot cube (Difficult Terrain, Lightly Obscured); creatures that start their turn in or enter the webs make a Dexterity save or are Restrained.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/zone-of-truth",
+      "name": "Zone of Truth",
+      "payload": {
+        "level": 2,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Creatures in a 15-foot-radius sphere that fail a Charisma save can't deliberately lie while there; you know who failed.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/animate-dead",
+      "name": "Animate Dead",
+      "payload": {
+        "level": 3,
+        "school": "Necromancy",
+        "classes": [
+          "cleric",
+          "wizard"
+        ],
+        "casting_time": "1 minute",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a drop of blood, flesh and bone dust",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A Medium or Small corpse or skeleton becomes a Zombie or Skeleton under your command for 24 hours; reassert control by recasting.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/beacon-of-hope",
+      "name": "Beacon of Hope",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "HOPEFUL",
+          "modifiers": {
+            "advantage_wis_saves": true,
+            "advantage_death_saves": true,
+            "max_healing": true
+          },
+          "duration_minutes": 1,
+          "targets": "ANY_NUMBER_IN_RANGE"
+        },
+        "text": "Chosen creatures have Advantage on Wisdom and Death saves and regain the maximum possible Hit Points from healing.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/bestow-curse",
+      "name": "Bestow Curse",
+      "payload": {
+        "level": 3,
+        "school": "Necromancy",
+        "classes": [
+          "bard",
+          "cleric",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "curse": "choose: Disadvantage with one ability, Disadvantage on attacks against you, Wisdom save or lose the action each turn, or +1d8 Necrotic from your attacks"
+          },
+          "duration_minutes": 1
+        },
+        "text": "The touched creature makes a Wisdom save or is cursed with one effect of your choice for the duration; longer durations with higher slots.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/blink",
+      "name": "Blink",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "At the end of each of your turns, roll a d6: on 4+ you vanish to the Ethereal Plane until the start of your next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/call-lightning",
+      "name": "Call Lightning",
+      "payload": {
+        "level": 3,
+        "school": "Conjuration",
+        "classes": [
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "3d10",
+              "type": "lightning"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "5-foot-radius bolt from a storm cloud, repeatable each turn as an action",
+          "upcast": {
+            "per_level_dice": "1d10"
+          }
+        },
+        "text": "A storm cloud forms; each turn you can call a bolt onto a point beneath it — Dexterity save, 3d10 Lightning damage or half. +1d10 per slot level above 3 (more if outdoors in a storm).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/clairvoyance",
+      "name": "Clairvoyance",
+      "payload": {
+        "level": 3,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "10 minutes",
+        "range": "1 mile",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a focus worth 100+ GP",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An invisible sensor at a familiar or described location lets you see or hear as if you were there.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/counterspell",
+      "name": "Counterspell",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 reaction",
+        "range": "60 feet",
+        "components": [
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "reaction": true
+        },
+        "text": "Reaction when a creature within 60 feet casts a spell: it makes a Constitution save or the spell fails and has no effect.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/daylight",
+      "name": "Daylight",
+      "payload": {
+        "level": 3,
+        "school": "Evocation",
+        "classes": [
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger",
+          "sorcerer"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A 60-foot-radius sphere of bright light (dim light 60 feet beyond) that dispels magical darkness of level 3 or lower.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/dispel-magic",
+      "name": "Dispel Magic",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger",
+          "sorcerer",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "End spells of level 3 or lower on a creature, object or area; higher-level spells end on a spellcasting ability check (DC 10 + spell level).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/fear",
+      "name": "Fear",
+      "payload": {
+        "level": 3,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (30-foot cone)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a white feather or a hen's heart",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "FRIGHTENED",
+          "area": "30-foot cone",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn if no line of sight to you"
+        },
+        "text": "Each creature in a 30-foot cone makes a Wisdom save or drops what it holds and is Frightened for the duration, taking the Dash action away from you.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/fireball",
+      "name": "Fireball",
+      "payload": {
+        "level": 3,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a ball of bat guano and sulfur",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "8d6",
+              "type": "fire"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "20-foot-radius sphere",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A bright streak blossoms into an explosion; each creature in a 20-foot-radius sphere makes a Dexterity save, taking 8d6 Fire damage or half. +1d6 per slot level above 3.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/fly",
+      "name": "Fly",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a wing feather",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "FLYING",
+          "modifiers": {
+            "fly_speed": 60
+          },
+          "duration_minutes": 10,
+          "targets": "ONE",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "The touched creature gains a Fly Speed of 60 feet for the duration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/gaseous-form",
+      "name": "Gaseous Form",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of gauze and wisps of smoke",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The touched creature becomes a misty cloud: Fly Speed 10, Resistance to nonmagical damage, can pass through small openings, can't attack or cast.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/glyph-of-warding",
+      "name": "Glyph of Warding",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "wizard"
+        ],
+        "casting_time": "1 hour",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "powdered diamond worth 200+ GP, consumed",
+        "duration": "Until dispelled or triggered",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY",
+          "upcast": {
+            "per_level_dice": "1d8",
+            "note": "explosive rune damage, per slot level above 3"
+          }
+        },
+        "text": "Inscribe a glyph that explodes (5d8 damage of a chosen type, Dexterity save for half, 20-foot radius) or stores a spell that triggers on a condition you set.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/haste",
+      "name": "Haste",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a shaving of licorice root",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "HASTED",
+          "modifiers": {
+            "ac_bonus": 2,
+            "speed_multiplier": 2,
+            "advantage_dex_saves": true,
+            "extra_action": true
+          },
+          "duration_minutes": 1,
+          "targets": "ONE",
+          "lethargy_after": true
+        },
+        "text": "A willing creature's Speed doubles, it gains +2 AC, Advantage on Dexterity saves and one extra limited action each turn; when the spell ends it can't move or act until after its next turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hypnotic-pattern",
+      "name": "Hypnotic Pattern",
+      "payload": {
+        "level": 3,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "S",
+          "M"
+        ],
+        "material": "a glowing stick of incense or a crystal vial of phosphorescent material",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "CHARMED",
+          "also_condition": "INCAPACITATED",
+          "area": "30-foot cube",
+          "duration_minutes": 1,
+          "ends_when": "the target takes damage or someone uses an action to shake it"
+        },
+        "text": "A twisting pattern in a 30-foot cube; each creature there that fails a Wisdom save is Charmed and Incapacitated with Speed 0 until damaged or shaken.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/lightning-bolt",
+      "name": "Lightning Bolt",
+      "payload": {
+        "level": 3,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (100-foot line)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of fur and a crystal rod",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "8d6",
+              "type": "lightning"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "100-foot line, 5 feet wide",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A stroke of lightning in a 100-foot line; each creature in the line makes a Dexterity save, taking 8d6 Lightning damage or half. +1d6 per slot level above 3.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/magic-circle",
+      "name": "Magic Circle",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 minute",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "salt and powdered silver worth 100+ GP, consumed",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A 10-foot-radius cylinder wards against chosen creature types (Celestials, Elementals, Fey, Fiends, Undead): they can't willingly enter, have Disadvantage to attack creatures inside, and can't charm, frighten or possess them.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/major-image",
+      "name": "Major Image",
+      "payload": {
+        "level": 3,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of fleece",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An image of an object, creature or phenomenon up to a 20-foot cube with sound, smell and temperature; Investigation DC = spell save DC.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mass-healing-word",
+      "name": "Mass Healing Word",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric"
+        ],
+        "casting_time": "1 bonus action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "2d4",
+          "add_modifier": true,
+          "targets": "UP_TO_6",
+          "upcast": {
+            "per_level_dice": "1d4"
+          }
+        },
+        "text": "Up to six creatures you can see regain 2d4 + your spellcasting ability modifier Hit Points. +1d4 per slot level above 3.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/nondetection",
+      "name": "Nondetection",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "ranger",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "diamond dust worth 25+ GP, consumed",
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The target is hidden from Divination magic and magical scrying sensors.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/plant-growth",
+      "name": "Plant Growth",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action or 8 hours",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Plants in a 100-foot radius become overgrown (4× movement cost), or land within half a mile yields double food for a year.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/protection-from-energy",
+      "name": "Protection from Energy",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "PROTECTED",
+          "modifiers": {
+            "resistance": "CHOOSE_ONE of acid, cold, fire, lightning, thunder"
+          },
+          "duration_minutes": 60,
+          "targets": "ONE"
+        },
+        "text": "The touched creature has Resistance to one damage type of your choice: Acid, Cold, Fire, Lightning or Thunder.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/remove-curse",
+      "name": "Remove Curse",
+      "payload": {
+        "level": 3,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "All curses affecting the touched creature or object end; a cursed magic item's curse remains but attunement can be broken.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/revivify",
+      "name": "Revivify",
+      "payload": {
+        "level": 3,
+        "school": "Necromancy",
+        "classes": [
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "diamonds worth 300+ GP, consumed",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "RESURRECT",
+          "max_dead_minutes": 1,
+          "hp": 1
+        },
+        "text": "A creature that died within the last minute returns to life with 1 Hit Point; it can't restore a body missing vital parts or a creature dead of old age.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sending",
+      "name": "Sending",
+      "payload": {
+        "level": 3,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Unlimited",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a short piece of fine copper wire",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Send a message of 25 words or fewer to a creature you know anywhere on the same plane; it can reply likewise.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sleet-storm",
+      "name": "Sleet Storm",
+      "payload": {
+        "level": 3,
+        "school": "Conjuration",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of dust and a few drops of water",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Freezing rain fills a 40-foot-radius, 20-foot-high cylinder: Heavily Obscured, Difficult Terrain, flames extinguished, creatures may fall Prone and lose Concentration.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/slow",
+      "name": "Slow",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a drop of molasses",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "speed_halved": true,
+            "ac_penalty": 2,
+            "dex_save_penalty": 2,
+            "one_action_or_bonus": true
+          },
+          "area": "40-foot cube, up to 6 creatures",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn"
+        },
+        "text": "Up to six creatures in a 40-foot cube that fail a Wisdom save have half Speed, −2 AC and Dexterity saves, no Reactions, and only an action or a Bonus Action each turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/speak-with-dead",
+      "name": "Speak with Dead",
+      "payload": {
+        "level": 3,
+        "school": "Necromancy",
+        "classes": [
+          "bard",
+          "cleric",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "10 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "burning incense",
+        "duration": "10 minutes",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "A corpse answers up to five questions with what it knew in life; it need not be truthful.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/spirit-guardians",
+      "name": "Spirit Guardians",
+      "payload": {
+        "level": 3,
+        "school": "Conjuration",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (15-foot emanation)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a holy symbol",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": [
+            {
+              "dice": "3d8",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "15-foot emanation around you",
+          "note": "Necrotic instead of Radiant if you are evil; enemies in the area have half Speed",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Protective spirits flit around you; enemies in a 15-foot emanation have half Speed and, when they enter it or start their turn there, make a Wisdom save, taking 3d8 Radiant (or Necrotic) damage or half. +1d8 per slot level above 3.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/stinking-cloud",
+      "name": "Stinking Cloud",
+      "payload": {
+        "level": 3,
+        "school": "Conjuration",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a rotten egg or several skunk cabbage leaves",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "lose_action_retching": true
+          },
+          "area": "20-foot-radius sphere, Heavily Obscured",
+          "duration_minutes": 1
+        },
+        "text": "Nauseating gas fills a 20-foot-radius sphere; creatures that start their turn inside make a Constitution save or spend their action retching.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/tiny-hut",
+      "name": "Tiny Hut",
+      "payload": {
+        "level": 3,
+        "school": "Evocation",
+        "classes": [
+          "bard",
+          "wizard"
+        ],
+        "casting_time": "1 minute",
+        "range": "Self (10-foot-radius hemisphere)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a small crystal bead",
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An immobile dome of force shelters up to nine Medium creatures; comfortable inside, opaque from outside, spells can't pass through.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/tongues",
+      "name": "Tongues",
+      "payload": {
+        "level": 3,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "M"
+        ],
+        "material": "a small clay ziggurat",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The touched creature understands any spoken language and is understood by any creature that knows a language.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/vampiric-touch",
+      "name": "Vampiric Touch",
+      "payload": {
+        "level": 3,
+        "school": "Necromancy",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "ATTACK",
+          "attack": "MELEE_SPELL",
+          "damage": [
+            {
+              "dice": "3d6",
+              "type": "necrotic"
+            }
+          ],
+          "drain_heal_half": true,
+          "repeat": "melee spell attack each turn as an action",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "Your touch siphons life: melee spell attack for 3d6 Necrotic damage, and you regain half the damage dealt; repeatable each turn for the duration. +1d6 per slot level above 3.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/water-breathing",
+      "name": "Water Breathing",
+      "payload": {
+        "level": 3,
+        "school": "Transmutation",
+        "classes": [
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a short reed or piece of straw",
+        "duration": "24 hours",
+        "concentration": false,
+        "ritual": true,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Up to ten willing creatures can breathe underwater for 24 hours.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/banishment",
+      "name": "Banishment",
+      "payload": {
+        "level": 4,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pentacle",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CHA",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "banished": true
+          },
+          "duration_minutes": 1,
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A creature makes a Charisma save or is banished to a harmless demiplane (or its home plane if it is from elsewhere) until the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/blight",
+      "name": "Blight",
+      "payload": {
+        "level": 4,
+        "school": "Necromancy",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "8d8",
+              "type": "necrotic"
+            }
+          ],
+          "on_success": "HALF",
+          "note": "Plant creatures have Disadvantage and take maximum damage; no effect on Undead or Constructs",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Necromantic energy drains a creature: Constitution save, 8d8 Necrotic damage or half. +1d8 per slot level above 4.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/confusion",
+      "name": "Confusion",
+      "payload": {
+        "level": 4,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "three nut shells",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "confused": "roll d10 each turn: wander, do nothing, attack nearest, or act normally"
+          },
+          "area": "10-foot-radius sphere",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn"
+        },
+        "text": "Creatures in a 10-foot-radius sphere that fail a Wisdom save act randomly each turn until they save at the end of a turn.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/death-ward",
+      "name": "Death Ward",
+      "payload": {
+        "level": 4,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "DEATH_WARDED",
+          "modifiers": {
+            "death_ward": true
+          },
+          "duration_minutes": 480,
+          "targets": "ONE"
+        },
+        "text": "The first time the touched creature would drop to 0 Hit Points, it drops to 1 instead, and an instant-death effect is negated; then the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/dimension-door",
+      "name": "Dimension Door",
+      "payload": {
+        "level": 4,
+        "school": "Conjuration",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "500 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Teleport yourself and one willing creature up to 500 feet to a spot you can see, visualize or describe.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/freedom-of-movement",
+      "name": "Freedom of Movement",
+      "payload": {
+        "level": 4,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a leather strap",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "FREE",
+          "modifiers": {
+            "immune_conditions": [
+              "GRAPPLED",
+              "PARALYZED",
+              "RESTRAINED"
+            ],
+            "ignore_difficult_terrain": true
+          },
+          "duration_minutes": 60,
+          "targets": "ONE"
+        },
+        "text": "The touched creature ignores Difficult Terrain and magical impediments to movement and can't be Grappled, Paralyzed or Restrained.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/greater-invisibility",
+      "name": "Greater Invisibility",
+      "payload": {
+        "level": 4,
+        "school": "Illusion",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "INVISIBLE",
+          "condition": "INVISIBLE",
+          "duration_minutes": 1,
+          "targets": "ONE"
+        },
+        "text": "The touched creature has the Invisible condition for the duration, even while attacking or casting.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/guardian-of-faith",
+      "name": "Guardian of Faith",
+      "payload": {
+        "level": 4,
+        "school": "Conjuration",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "30 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "8 hours",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "20",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "10 feet around a spectral guardian; ends after 60 damage dealt"
+        },
+        "text": "A Large spectral guardian appears; hostile creatures that end their turn within 10 feet make a Dexterity save, taking 20 Radiant damage or half. It vanishes after dealing 60 damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/ice-storm",
+      "name": "Ice Storm",
+      "payload": {
+        "level": 4,
+        "school": "Evocation",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "300 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of dust and a few drops of water",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "2d10",
+              "type": "bludgeoning"
+            },
+            {
+              "dice": "4d6",
+              "type": "cold"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "20-foot-radius, 40-foot-high cylinder",
+          "upcast": {
+            "per_level_dice": "1d10"
+          }
+        },
+        "text": "Hail pounds a 20-foot-radius cylinder; each creature makes a Dexterity save, taking 2d8 Bludgeoning and 4d6 Cold damage or half; the area becomes Difficult Terrain until the end of your next turn. +1d8 Bludgeoning per slot level above 4.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/polymorph",
+      "name": "Polymorph",
+      "payload": {
+        "level": 4,
+        "school": "Transmutation",
+        "classes": [
+          "bard",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a caterpillar cocoon",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_effect": {
+            "transformed": "into a Beast of CR ≤ its level; new form's stat block and HP"
+          },
+          "duration_minutes": 60
+        },
+        "text": "A creature (Wisdom save if unwilling) becomes a Beast of your choice with CR no higher than its level, using the new form's statistics until it drops to 0 Hit Points or the spell ends.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/stoneskin",
+      "name": "Stoneskin",
+      "payload": {
+        "level": 4,
+        "school": "Transmutation",
+        "classes": [
+          "druid",
+          "ranger",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "diamond dust worth 100+ GP, consumed",
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "BUFF",
+          "effect": "STONESKIN",
+          "modifiers": {
+            "resistance": "nonmagical bludgeoning, piercing and slashing"
+          },
+          "duration_minutes": 60,
+          "targets": "ONE"
+        },
+        "text": "The touched creature has Resistance to Bludgeoning, Piercing and Slashing damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/wall-of-fire",
+      "name": "Wall of Fire",
+      "payload": {
+        "level": 4,
+        "school": "Evocation",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a piece of phosphorus",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "5d8",
+              "type": "fire"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "60 feet long, 20 feet high, 1 foot thick (or a 20-foot-diameter ring)",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A wall of fire; creatures in its space when it appears make a Dexterity save, taking 5d8 Fire damage or half; one side deals 5d8 to creatures ending their turn within 10 feet. +1d8 per slot level above 4.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/cone-of-cold",
+      "name": "Cone of Cold",
+      "payload": {
+        "level": 5,
+        "school": "Evocation",
+        "classes": [
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self (60-foot cone)",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a small crystal or glass cone",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "8d8",
+              "type": "cold"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "60-foot cone",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A blast of cold; each creature in a 60-foot cone makes a Constitution save, taking 8d8 Cold damage or half. +1d8 per slot level above 5.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/flame-strike",
+      "name": "Flame Strike",
+      "payload": {
+        "level": 5,
+        "school": "Evocation",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of sulfur",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "5d6",
+              "type": "fire"
+            },
+            {
+              "dice": "5d6",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "10-foot-radius, 40-foot-high cylinder",
+          "upcast": {
+            "per_level_dice": "1d6"
+          }
+        },
+        "text": "A column of divine fire; each creature in a 10-foot-radius cylinder makes a Dexterity save, taking 5d6 Fire and 5d6 Radiant damage or half. +1d6 (your choice) per slot level above 5.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/greater-restoration",
+      "name": "Greater Restoration",
+      "payload": {
+        "level": 5,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "paladin",
+          "ranger"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "diamond dust worth 100+ GP, consumed",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "CURE",
+          "conditions": [
+            "CHARMED",
+            "PETRIFIED",
+            "EXHAUSTION"
+          ],
+          "also": "one curse, one reduction to an ability score or Hit Point maximum, attunement to a cursed item"
+        },
+        "text": "End one debilitating effect on the touched creature: a level of Exhaustion, the Charmed or Petrified condition, a curse, an ability-score or HP-maximum reduction.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/hold-monster",
+      "name": "Hold Monster",
+      "payload": {
+        "level": 5,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "90 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a straight piece of iron",
+        "duration": "1 minute",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "PARALYZED",
+          "duration_minutes": 1,
+          "repeat_save": "end of each turn",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A creature makes a Wisdom save or is Paralyzed for the duration, repeating the save at the end of each of its turns.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mass-cure-wounds",
+      "name": "Mass Cure Wounds",
+      "payload": {
+        "level": 5,
+        "school": "Abjuration",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "5d8",
+          "add_modifier": true,
+          "targets": "UP_TO_6_IN_30_FOOT_SPHERE",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "Up to six creatures in a 30-foot-radius sphere regain 5d8 + your spellcasting ability modifier Hit Points. +1d8 per slot level above 5.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/raise-dead",
+      "name": "Raise Dead",
+      "payload": {
+        "level": 5,
+        "school": "Necromancy",
+        "classes": [
+          "bard",
+          "cleric",
+          "paladin"
+        ],
+        "casting_time": "1 hour",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a diamond worth 500+ GP, consumed",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "RESURRECT",
+          "max_dead_days": 10,
+          "hp": 1,
+          "penalty": "−4 to attack rolls, saves and checks, fading by 1 per Long Rest"
+        },
+        "text": "A creature dead no longer than 10 days returns to life with 1 Hit Point (not from old age; the body must be whole), with a fading −4 penalty.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/scrying",
+      "name": "Scrying",
+      "payload": {
+        "level": 5,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "druid",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "10 minutes",
+        "range": "Self",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a focus worth 1,000+ GP",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "See and hear a chosen creature on the same plane (Wisdom save, modified by familiarity and connection) through an invisible sensor.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/telekinesis",
+      "name": "Telekinesis",
+      "payload": {
+        "level": 5,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Move a creature (contested check vs. Strength) or an object up to 1,000 pounds 30 feet each turn with your mind.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/wall-of-force",
+      "name": "Wall of Force",
+      "payload": {
+        "level": 5,
+        "school": "Evocation",
+        "classes": [
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a pinch of powder from a clear gemstone",
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "An invisible, indestructible wall of force (up to ten 10-foot panels or a sphere/hemisphere) that nothing physical can pass; immune to damage, ended by Dispel Magic or Disintegrate.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/cloudkill",
+      "name": "Cloudkill",
+      "payload": {
+        "level": 5,
+        "school": "Conjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "120 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "10 minutes",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "5d8",
+              "type": "poison"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "20-foot-radius sphere, moving 10 feet away from you each round",
+          "upcast": {
+            "per_level_dice": "1d8"
+          }
+        },
+        "text": "A sphere of poisonous fog; creatures that start their turn inside make a Constitution save, taking 5d8 Poison damage or half. +1d8 per slot level above 5.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/chain-lightning",
+      "name": "Chain Lightning",
+      "payload": {
+        "level": 6,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a bit of fur, amber, glass and silver pins",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "10d8",
+              "type": "lightning"
+            }
+          ],
+          "on_success": "HALF",
+          "note": "the bolt leaps to up to three more targets within 30 feet",
+          "upcast": {
+            "per_level_targets": 1
+          }
+        },
+        "text": "A bolt of lightning strikes a target and leaps to up to three others within 30 feet; each makes a Dexterity save, taking 10d8 Lightning damage or half.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/disintegrate",
+      "name": "Disintegrate",
+      "payload": {
+        "level": 6,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a lodestone and dust",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "10d6+40",
+              "type": "force"
+            }
+          ],
+          "on_success": "NONE",
+          "note": "a creature reduced to 0 HP is disintegrated; objects and force effects are destroyed",
+          "upcast": {
+            "per_level_dice": "3d6"
+          }
+        },
+        "text": "A thin green ray; a creature makes a Dexterity save or takes 10d6 + 40 Force damage and, if reduced to 0 Hit Points, is turned to dust. +3d6 per slot level above 6.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/heal",
+      "name": "Heal",
+      "payload": {
+        "level": 6,
+        "school": "Abjuration",
+        "classes": [
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "70",
+          "add_modifier": false,
+          "cures": [
+            "BLINDED",
+            "DEAFENED"
+          ],
+          "also": "all diseases",
+          "upcast": {
+            "per_level_flat": 10
+          }
+        },
+        "text": "A creature regains 70 Hit Points and is no longer Blinded or Deafened, and any diseases end. +10 per slot level above 6.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/harm",
+      "name": "Harm",
+      "payload": {
+        "level": 6,
+        "school": "Necromancy",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "14d6",
+              "type": "necrotic"
+            }
+          ],
+          "on_success": "HALF",
+          "note": "a failed save also reduces the target's Hit Point maximum by the damage taken for 1 hour; can't reduce below 1 HP"
+        },
+        "text": "Virulent disease; a creature makes a Constitution save, taking 14d6 Necrotic damage (which can't reduce it below 1 Hit Point) or half; on a failure its Hit Point maximum is reduced by the damage for 1 hour.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/true-seeing",
+      "name": "True Seeing",
+      "payload": {
+        "level": 6,
+        "school": "Divination",
+        "classes": [
+          "bard",
+          "cleric",
+          "sorcerer",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "an ointment worth 25+ GP, consumed",
+        "duration": "1 hour",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The touched creature has Truesight to 120 feet for 1 hour.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/finger-of-death",
+      "name": "Finger of Death",
+      "payload": {
+        "level": 7,
+        "school": "Necromancy",
+        "classes": [
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "7d8+30",
+              "type": "necrotic"
+            }
+          ],
+          "on_success": "HALF",
+          "note": "a Humanoid killed by this spell rises as a Zombie under your command"
+        },
+        "text": "Negative energy; a creature makes a Constitution save, taking 7d8 + 30 Necrotic damage or half; a Humanoid killed this way rises as a Zombie you control.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/plane-shift",
+      "name": "Plane Shift",
+      "payload": {
+        "level": 7,
+        "school": "Conjuration",
+        "classes": [
+          "cleric",
+          "druid",
+          "sorcerer",
+          "warlock",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a forked metal rod worth 250+ GP attuned to the plane",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "You and up to eight linked creatures travel to another plane, or banish an unwilling creature (Charisma save) to a random location there.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/resurrection",
+      "name": "Resurrection",
+      "payload": {
+        "level": 7,
+        "school": "Necromancy",
+        "classes": [
+          "bard",
+          "cleric"
+        ],
+        "casting_time": "1 hour",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a diamond worth 1,000+ GP, consumed",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "RESURRECT",
+          "max_dead_years": 100,
+          "hp": "FULL",
+          "penalty": "−4 fading by 1 per Long Rest; the caster is exhausted for several days"
+        },
+        "text": "A creature dead no longer than a century (not of old age) returns to life with all its Hit Points; the body need not be whole.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/teleport",
+      "name": "Teleport",
+      "payload": {
+        "level": 7,
+        "school": "Conjuration",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "10 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Instantly transport yourself and up to eight willing creatures or an object to a destination you know; accuracy depends on familiarity (roll on the teleport table).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/dominate-monster",
+      "name": "Dominate Monster",
+      "payload": {
+        "level": 8,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "1 hour",
+        "concentration": true,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "WIS",
+          "damage": null,
+          "on_success": "NONE",
+          "on_fail_condition": "CHARMED",
+          "duration_minutes": 60,
+          "on_fail_effect": {
+            "telepathic_control": true
+          },
+          "repeat_save": "whenever it takes damage"
+        },
+        "text": "A creature makes a Wisdom save (Advantage if fighting you) or is Charmed and obeys your telepathic commands for the duration, repeating the save when it takes damage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/power-word-stun",
+      "name": "Power Word Stun",
+      "payload": {
+        "level": 8,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "on_success": "NONE",
+          "automatic_if_hp_at_most": 150,
+          "on_fail_condition": "STUNNED",
+          "repeat_save": "end of each turn"
+        },
+        "text": "A creature with 150 Hit Points or fewer is Stunned (a creature with more must succeed on a Constitution save), repeating the save at the end of each of its turns.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/sunburst",
+      "name": "Sunburst",
+      "payload": {
+        "level": 8,
+        "school": "Evocation",
+        "classes": [
+          "cleric",
+          "druid",
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "150 feet",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "a piece of sunstone and a naked flame",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "CON",
+          "damage": [
+            {
+              "dice": "12d6",
+              "type": "radiant"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "60-foot-radius sphere",
+          "on_fail_condition": "BLINDED",
+          "duration_minutes": 1
+        },
+        "text": "Brilliant sunlight in a 60-foot-radius sphere; each creature makes a Constitution save, taking 12d6 Radiant damage and being Blinded for 1 minute on a failure, half damage on a success. Undead and Oozes have Disadvantage.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/mass-heal",
+      "name": "Mass Heal",
+      "payload": {
+        "level": 9,
+        "school": "Abjuration",
+        "classes": [
+          "cleric"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "HEAL",
+          "dice": "700",
+          "add_modifier": false,
+          "pool": true,
+          "cures": [
+            "BLINDED",
+            "DEAFENED"
+          ],
+          "also": "all diseases"
+        },
+        "text": "A flood of healing energy restores up to 700 Hit Points divided among creatures you can see, also curing Blinded, Deafened and diseases.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/meteor-swarm",
+      "name": "Meteor Swarm",
+      "payload": {
+        "level": 9,
+        "school": "Evocation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "1 mile",
+        "components": [
+          "V",
+          "S"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "DEX",
+          "damage": [
+            {
+              "dice": "20d6",
+              "type": "fire"
+            },
+            {
+              "dice": "20d6",
+              "type": "bludgeoning"
+            }
+          ],
+          "on_success": "HALF",
+          "area": "four 40-foot-radius spheres"
+        },
+        "text": "Blazing orbs plummet onto four points you can see; each creature in a 40-foot-radius sphere makes a Dexterity save, taking 20d6 Fire and 20d6 Bludgeoning damage or half (no double dipping for overlapping spheres).",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/power-word-kill",
+      "name": "Power Word Kill",
+      "payload": {
+        "level": 9,
+        "school": "Enchantment",
+        "classes": [
+          "bard",
+          "sorcerer",
+          "wizard",
+          "warlock"
+        ],
+        "casting_time": "1 action",
+        "range": "60 feet",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "SAVE",
+          "save": "NONE",
+          "automatic_if_hp_at_most": 100,
+          "on_fail_effect": {
+            "dies": true
+          },
+          "note": "no effect on creatures with more than 100 HP"
+        },
+        "text": "A creature with 100 Hit Points or fewer dies instantly; otherwise the spell has no effect.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/time-stop",
+      "name": "Time Stop",
+      "payload": {
+        "level": 9,
+        "school": "Transmutation",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "Time stops for everyone but you for 1d4 + 1 turns; the spell ends if you affect another creature or an object someone else is carrying.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/true-resurrection",
+      "name": "True Resurrection",
+      "payload": {
+        "level": 9,
+        "school": "Necromancy",
+        "classes": [
+          "cleric",
+          "druid"
+        ],
+        "casting_time": "1 hour",
+        "range": "Touch",
+        "components": [
+          "V",
+          "S",
+          "M"
+        ],
+        "material": "diamonds worth 25,000+ GP, consumed",
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "RESURRECT",
+          "max_dead_years": 200,
+          "hp": "FULL",
+          "penalty": null,
+          "restores_body": true
+        },
+        "text": "A creature dead no longer than 200 years (not of old age) returns to life with all Hit Points, cured of all ailments; a new body forms if needed, and a name suffices if you know it.",
+        "text_is_paraphrase": true
+      }
+    },
+    {
+      "id": "srd5e:spell/wish",
+      "name": "Wish",
+      "payload": {
+        "level": 9,
+        "school": "Conjuration",
+        "classes": [
+          "sorcerer",
+          "wizard"
+        ],
+        "casting_time": "1 action",
+        "range": "Self",
+        "components": [
+          "V"
+        ],
+        "material": null,
+        "duration": "Instantaneous",
+        "concentration": false,
+        "ritual": false,
+        "mechanics": {
+          "kind": "UTILITY"
+        },
+        "text": "The mightiest spell: duplicate any level 8 or lower spell without components, or reshape reality at the GM's discretion with a risk of stress, weakness and losing the spell forever.",
+        "text_is_paraphrase": true
+      }
+    }
+  ]
+}
