@@ -53,8 +53,8 @@ import java.util.*;
 public final class RestService {
 
 	public static final String HIT_DICE = "hit_dice";
-	public static final Set<String> OVERRIDE_KINDS = Set.of("ADJUST_HP", "SET_MAX_HP", "SET_CAMPAIGN_RULE",
-			"SET_LIFE_STATE", "SET_MONEY", "SET_XP",
+	public static final Set<String> OVERRIDE_KINDS = Set.of("ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS",
+			"SET_CAMPAIGN_RULE", "SET_LIFE_STATE", "SET_MONEY", "SET_XP",
 			"SET_ABILITY_SCORE", "REMOVE_ENCOUNTER_PARTICIPANT", "SET_LOCATION", "SET_CONNECTION_STATE");
 
 	private final Database db;
@@ -311,7 +311,7 @@ public final class RestService {
 										campaign.lng("revision") + 1));
 						label = "campaign rule " + key + " " + before.get(key) + " → " + value;
 					}
-					case "ADJUST_HP", "SET_MAX_HP", "SET_LIFE_STATE", "SET_MONEY", "SET_XP", "SET_ABILITY_SCORE", "SET_LOCATION" -> {
+					case "ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS", "SET_LIFE_STATE", "SET_MONEY", "SET_XP", "SET_ABILITY_SCORE", "SET_LOCATION" -> {
 						Row c = CharacterService.character(tx, campaignId, targetRef);
 						Harness.requireRevision(c, targetRef, expectedRevision);
 						var cols = new LinkedHashMap<String, Object>();
@@ -354,6 +354,24 @@ public final class RestService {
 							cols.put("max_hp", target);
 							cols.put("current_hp", hp);
 							label = c.str("name") + " maximum hit points " + max + " → " + target;
+						}
+						case "SET_ARMOR_CLASS" -> {
+							// A fixed Armor Class outside the equipment path: a subclass feature the engine does not
+							// model yet (Draconic Resilience, Unarmored Defense), a boon. Effect bonuses and floors
+							// still apply on top; {clear: true} returns the character to equipment-derived AC.
+							Integer target = e.get("armor_class") instanceof Number n ? n.intValue() : null;
+							if (target == null && !Boolean.TRUE.equals(e.get("clear"))) {
+								throw RpgException.invalidArgument(
+										"effect.armor_class (1–30) or effect.clear = true is required.");
+							}
+							if (target != null && (target < 1 || target > 30)) {
+								throw RpgException.invalidArgument("effect.armor_class must be between 1 and 30.");
+							}
+							before.put("armor_class_override", c.integer("armor_class_override"));
+							after.put("armor_class_override", target);
+							cols.put("armor_class_override", target);
+							label = c.str("name") + " Armor Class " + (target == null ? "derives from equipment again"
+									: "fixed at " + target + " by fiat");
 						}
 						case "SET_LIFE_STATE" -> {
 							String state = String.valueOf(e.get("life_state")).toUpperCase();

@@ -262,7 +262,9 @@ public final class LevelUpService {
 				o.put("description", d.payload().getOrDefault("summary", ""));
 				return o;
 			}).toList() : "already set: " + c.str("species_ref"));
-			origin.put("background", c.isNull("background_ref") ? rules.ofKind("BACKGROUND").stream().map(d -> {
+			origin.put("background", c.isNull("background_ref") ? java.util.stream.Stream.concat(
+					rules.ofKind("BACKGROUND").stream(),
+					se.hirt.mcp.rpg.character.Origins.customBackgrounds(tx, c.lng("campaign_id")).stream()).map(d -> {
 				var o = new LinkedHashMap<String, Object>();
 				o.put("value", d.id());
 				o.put("label", d.name());
@@ -290,6 +292,22 @@ public final class LevelUpService {
 			asi.put("or_a_feat",
 					"Instead of the improvement, take a feat whose prerequisites are met " + "(get_character_choices scope FEAT lists them): pass choices.feat = {feat, ...its choices}.");
 			result.put("ability_score_improvement", asi);
+		}
+		var pendingFeats = new ArrayList<Map<String, Object>>();
+		for (Row f : se.hirt.mcp.rpg.character.Origins.featRows(tx, c)) {
+			Map<String, Object> fp = f.map("payload_json");
+			if (fp.get("pending") instanceof List<?> pending && !pending.isEmpty()) {
+				var pf = new LinkedHashMap<String, Object>();
+				pf.put("feat", se.hirt.mcp.rpg.character.Origins.featDefinition(rules, f)
+						.map(RulesData.Definition::name).orElse(f.str("content_ref")));
+				pf.put("pending", pending);
+				pf.put("rule",
+						"Complete it with choices.feat_choices = {\"feat\": \"<name>\", ...} — or a list, one object per feat.");
+				pendingFeats.add(pf);
+			}
+		}
+		if (!pendingFeats.isEmpty()) {
+			result.put("pending_feat_choices", pendingFeats);
 		}
 		result.put("automatic",
 				Map.of("proficiency_bonus", rules.proficiencyBonus(((Number) payload.get("to_level")).intValue()),
@@ -527,16 +545,26 @@ public final class LevelUpService {
 					// Recorded now, applied at commit with everything else: nothing touches the live character
 					// until the transaction is committed (MCP_PROTOCOL.md §21).
 					if (!Boolean.TRUE.equals(payload.get("class_required"))) {
-						throw RpgException.validation(List.of(new Violation(e.getKey(), "NOT_AVAILABLE",
-								"Species and background are settled at character creation, or with a companion's first class level.")));
+						// A feat that still owes choices (Magic Initiate's spells) may be completed at any level.
+						boolean pendingFeat = e.getKey().equals("feat_choices")
+								&& se.hirt.mcp.rpg.character.Origins.featRows(tx, c).stream().anyMatch(
+								f -> f.map("payload_json").get("pending") instanceof List<?> p && !p.isEmpty());
+						if (!pendingFeat) {
+							throw RpgException.validation(List.of(new Violation(e.getKey(), "NOT_AVAILABLE",
+									"Species and background are settled at character creation, or with a companion's first class level"
+											+ (e.getKey().equals("feat_choices")
+											? "; feat_choices later on only completes a feat with pending choices, and none is pending."
+											: "."))));
+						}
 					}
 					if (e.getKey().equals("species")) {
 						chosen.put("species", rules.resolve("SPECIES", String.valueOf(e.getValue())).orElseThrow(
 								() -> RpgException.invalidArgument(
 										"Unknown species '" + e.getValue() + "'; see the origin_choice options.")).id());
 					} else if (e.getKey().equals("background")) {
-						chosen.put("background", rules.resolve("BACKGROUND", String.valueOf(e.getValue())).orElseThrow(
-								() -> RpgException.invalidArgument("Unknown background '" + e.getValue()
+						chosen.put("background", se.hirt.mcp.rpg.character.Origins.resolveBackground(tx, rules,
+										c.lng("campaign_id"), String.valueOf(e.getValue()))
+								.orElseThrow(() -> RpgException.invalidArgument("Unknown background '" + e.getValue()
 										+ "'; see the origin_choice options.")).id());
 					} else {
 						chosen.put(e.getKey(), e.getValue());
@@ -726,6 +754,10 @@ public final class LevelUpService {
 				cols.put("max_hp", c.intOr("max_hp", 0) + gain);
 				// Raising the maximum raises current HP by the same amount (SRD 5.2.1 "Hit Points" at level advancement).
 				cols.put("current_hp", c.intOr("current_hp", 0) + gain);
+				if (chosen.get("feat_choices") != null) {
+					// Completing a feat's outstanding choices (Magic Initiate's spells) at a later level.
+					se.hirt.mcp.rpg.character.Origins.applyFeatChoices(tx, rules, c, chosen.get("feat_choices"));
+				}
 			}
 			Map<String, Object> asi =
 					chosen.get("ability_score_improvement") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
@@ -1022,9 +1054,10 @@ public final class LevelUpService {
 					chosen.get("origin_feat"));
 		}
 		if (chosen.get("background_tool") != null) {
-			RulesData.Definition bg = rules.require(
-					chosen.get("background") != null ? String.valueOf(chosen.get("background")) : c.str("background_ref"),
-					"BACKGROUND");
+			RulesData.Definition bg = se.hirt.mcp.rpg.character.Origins.resolveBackground(tx, rules,
+							c.lng("campaign_id"), chosen.get("background") != null ? String.valueOf(chosen.get("background"))
+									: c.str("background_ref"))
+					.orElseThrow(() -> RpgException.invalidArgument("Choose a background first."));
 			se.hirt.mcp.rpg.character.Origins.applyBackgroundTool(tx, rules, bg, c, chosen.get("background_tool"));
 		}
 		if (chosen.get("feat_choices") != null) {

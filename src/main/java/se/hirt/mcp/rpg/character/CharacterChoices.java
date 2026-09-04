@@ -153,7 +153,7 @@ public final class CharacterChoices {
 		var out = new ArrayList<Decision>();
 		Optional<RulesData.Definition> cls = classOf(tx, c);
 		Optional<RulesData.Definition> speciesDef = Origins.speciesOf(rules, c);
-		Optional<RulesData.Definition> backgroundDef = Origins.backgroundOf(rules, c);
+		Optional<RulesData.Definition> backgroundDef = Origins.backgroundOf(tx, rules, c);
 		if (speciesDef.isEmpty()) {
 			out.add(Decision.of("species", "Which species is the character?")
 					.recordedBy("update_character_draft", "changes.species").legal(species()));
@@ -164,7 +164,8 @@ public final class CharacterChoices {
 		}
 		if (backgroundDef.isEmpty()) {
 			out.add(Decision.of("background", "Which background shaped the character before adventuring?")
-					.recordedBy("update_character_draft", "changes.background").legal(backgrounds())
+					.recordedBy("update_character_draft", "changes.background")
+					.legal(backgrounds(tx, c.lng("campaign_id")))
 					.note("A background grants +2/+1 or +1/+1/+1 among its three abilities, an Origin feat, two skills, a tool proficiency and starting equipment (SRD 5.2.1 \"Character Backgrounds\")."));
 		}
 		if (c.isNull("str_score")) {
@@ -291,6 +292,16 @@ public final class CharacterChoices {
 	public List<Option> backgrounds() {
 		return rules.ofKind("BACKGROUND").stream()
 				.map(d -> option(d).details(pick(d.payload(), "ability_scores", "skills", "feat"))).toList();
+	}
+
+	/** Installed backgrounds plus the campaign's own (define_content kind BACKGROUND), in that order. */
+	public List<Option> backgrounds(Tx tx, long campaignId) {
+		var out = new ArrayList<>(backgrounds());
+		for (RulesData.Definition d : Origins.customBackgrounds(tx, campaignId)) {
+			out.add(option(d).details(pick(d.payload(), "ability_scores", "skills", "feat"))
+					.details(Map.of("custom", true)));
+		}
+		return out;
 	}
 
 	/** Feats, optionally restricted to a category (ORIGIN, GENERAL, FIGHTING_STYLE, EPIC_BOON). */

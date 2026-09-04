@@ -694,6 +694,12 @@ public final class RuntimeService {
 
 	/** Armor Class: creature stat block value for materialized creatures, derived from equipment otherwise. */
 	public static int armorClass(Tx tx, RulesData rules, Row c) {
+		if (!c.isNull("armor_class_override")) {
+			// apply_gm_override SET_ARMOR_CLASS: fixed by fiat, effect bonuses and floors still apply.
+			se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, c.id());
+			int value = c.integer("armor_class_override") + mods.acBonus;
+			return mods.acFloor != null ? Math.max(value, mods.acFloor) : value;
+		}
 		if (usesStatBlock(tx, c)) {
 			Optional<Integer> ac = rules.find(c.str("origin_content_ref")).map(d -> d.payload().get("ac"))
 					.map(a -> ((Number) a).intValue());

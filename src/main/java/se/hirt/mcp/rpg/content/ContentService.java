@@ -332,10 +332,19 @@ public final class ContentService {
 			if (campaign != null) {
 				for (Row row : tx.query("SELECT * FROM custom_content WHERE campaign_id = ? AND kind = ? ORDER BY id",
 						campaign.id(), k)) {
-					Item item = fromCustomRow(row);
-					Map<String, Object> entry = item.summary();
-					if (matches(entry, item.payload(), type, needle, min, maxC)) {
-						all.add(full ? withPayload(entry, item.payload()) : entry);
+					if (k.equals("ITEM")) {
+						Item item = fromCustomRow(row);
+						Map<String, Object> entry = item.summary();
+						if (matches(entry, item.payload(), type, needle, min, maxC)) {
+							all.add(full ? withPayload(entry, item.payload()) : entry);
+						}
+						continue;
+					}
+					var d = new RulesData.Definition("content:" + row.id(), k, row.str("name"), row.map("payload_json"));
+					Map<String, Object> entry = genericSummary(d);
+					entry.put("custom", true);
+					if (matches(entry, d.payload(), type, needle, min, maxC)) {
+						all.add(full ? withPayload(entry, d.payload()) : entry);
 					}
 				}
 			}
@@ -458,11 +467,15 @@ public final class ContentService {
 		return db.mutate(Database.Mutation.of("define_content", campaignId, operationId, prov, args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "define_content");
 			String k = kind == null || kind.isBlank() ? "ITEM" : kind.toUpperCase();
-			if (!k.equals("ITEM")) {
-				throw RpgException.capabilityUnavailable("Only ITEM custom content is supported in this milestone.");
-			}
 			if (name == null || name.isBlank()) {
 				throw RpgException.invalidArgument("A name is required.");
+			}
+			if (k.equals("BACKGROUND")) {
+				return defineBackground(tx, campaign, campaignId, name, symbolicId, description, properties, tags, prov);
+			}
+			if (!k.equals("ITEM")) {
+				throw RpgException.capabilityUnavailable(
+						"Only ITEM and BACKGROUND custom content are supported in this milestone.");
 			}
 			String type = itemType == null || itemType.isBlank() ? "GEAR" : itemType.toUpperCase();
 			if (!ITEM_TYPES.contains(type)) {
@@ -528,5 +541,157 @@ public final class ContentService {
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	/**
+	 * A campaign-scoped background (SRD 5.2.1 "Character Backgrounds"): three abilities for the +2/+1 increase, an
+	 * Origin feat, two skills, a tool proficiency (fixed or a category choice) and starting equipment. Validated
+	 * against installed content and stored in the seeded shape, so it behaves exactly like an SRD background wherever
+	 * one is chosen (RULES_ENGINE.md §8).
+	 */
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> defineBackground(
+			Tx tx, Row campaign, long campaignId, String name, String symbolicId, String description,
+			Map<String, Object> properties, List<String> tags, String prov) {
+		Map<String, Object> props = properties == null ? Map.of() : properties;
+		var payload = new LinkedHashMap<String, Object>();
+		var abilities = new ArrayList<String>();
+		if (props.get("ability_scores") instanceof List<?> list) {
+			for (Object o : list) {
+				String a = se.hirt.mcp.rpg.rules.Ability.parse(String.valueOf(o)).name();
+				if (!abilities.contains(a)) {
+					abilities.add(a);
+				}
+			}
+		}
+		if (abilities.size() != 3) {
+			throw RpgException.invalidArgument(
+					"properties.ability_scores must name three different abilities, e.g. [\"CHA\", \"INT\", \"WIS\"].");
+		}
+		payload.put("ability_scores", abilities);
+		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(props.get("feat")))
+				.orElseThrow(() -> RpgException.invalidArgument(
+						"properties.feat must name an Origin feat (get_character_choices scope FEAT lists them)."));
+		if (!"ORIGIN".equals(String.valueOf(feat.payload().get("category")))) {
+			throw RpgException.invalidArgument(feat.name() + " is not an Origin feat; a background grants an Origin feat.");
+		}
+		payload.put("feat", feat.id());
+		if (props.get("feat_choices") instanceof Map<?, ?> fc) {
+			payload.put("feat_choices", fc);
+		}
+		var skills = new ArrayList<String>();
+		if (props.get("skills") instanceof List<?> list) {
+			for (Object o : list) {
+				RulesData.Definition skill = rules.resolve("SKILL", String.valueOf(o))
+						.orElseThrow(() -> RpgException.invalidArgument("Unknown skill '" + o + "'."));
+				if (!skills.contains(skill.id())) {
+					skills.add(skill.id());
+				}
+			}
+		}
+		if (skills.size() != 2) {
+			throw RpgException.invalidArgument("properties.skills must name two different skills.");
+		}
+		payload.put("skills", skills);
+		var tool = new LinkedHashMap<String, Object>();
+		Object toolSpec = props.get("tool");
+		Object toolItem = toolSpec instanceof Map<?, ?> tm ? tm.get("item") : toolSpec instanceof String s ? s : null;
+		Object toolChoice = toolSpec instanceof Map<?, ?> tm ? tm.get("choice") : null;
+		if (toolItem != null) {
+			RulesData.Definition item = rules.resolve("ITEM", String.valueOf(toolItem))
+					.filter(d -> "TOOL".equals(String.valueOf(d.payload().get("type"))))
+					.orElseThrow(() -> RpgException.invalidArgument(
+							"properties.tool.item must name an installed tool, e.g. \"Calligrapher's Supplies\"."));
+			tool.put("item", item.id());
+		} else if (toolChoice != null) {
+			String choice = String.valueOf(toolChoice).toUpperCase();
+			if (!Set.of("ARTISANS_TOOLS", "GAMING_SET", "MUSICAL_INSTRUMENT", "TOOL").contains(choice)) {
+				throw RpgException.invalidArgument(
+						"properties.tool.choice must be ARTISANS_TOOLS, GAMING_SET, MUSICAL_INSTRUMENT or TOOL.");
+			}
+			tool.put("choice", choice);
+		} else {
+			throw RpgException.invalidArgument(
+					"properties.tool is required: {\"item\": \"Calligrapher's Supplies\"} or {\"choice\": \"ARTISANS_TOOLS\"}.");
+		}
+		payload.put("tool", tool);
+		if (props.get("starting_equipment") instanceof Map<?, ?> eq) {
+			var options = new LinkedHashMap<String, Object>();
+			for (var e : ((Map<String, Object>) eq).entrySet()) {
+				if (!(e.getValue() instanceof Map<?, ?> om)) {
+					throw RpgException.invalidArgument("starting_equipment options are objects like {gold_gp, items}.");
+				}
+				var option = new LinkedHashMap<String, Object>((Map<String, Object>) om);
+				if (option.get("items") instanceof List<?> items) {
+					var resolved = new ArrayList<Map<String, Object>>();
+					for (Object o : items) {
+						if (!(o instanceof Map<?, ?> im) || im.get("item") == null) {
+							throw RpgException.invalidArgument("starting_equipment items are objects like {item, quantity}.");
+						}
+						RulesData.Definition def = rules.resolve("ITEM", String.valueOf(im.get("item")))
+								.orElseThrow(() -> RpgException.invalidArgument("Unknown item '" + im.get("item") + "'."));
+						var line = new LinkedHashMap<String, Object>();
+						line.put("item", def.id());
+						line.put("quantity", im.get("quantity") instanceof Number n ? n.intValue() : 1);
+						resolved.add(line);
+					}
+					option.put("items", resolved);
+				}
+				options.put(String.valueOf(e.getKey()), option);
+			}
+			payload.put("starting_equipment", options);
+		} else {
+			payload.put("starting_equipment", Map.of("B", Map.of("gold_gp", 50)));
+		}
+		if (description != null && !description.isBlank()) {
+			payload.put("summary", description.trim());
+		}
+		String symbolic = null;
+		if (symbolicId != null && !symbolicId.isBlank()) {
+			symbolic = symbolicId.trim();
+			if (!symbolic.matches("custom:background/[a-z0-9][a-z0-9-]*")) {
+				throw RpgException.invalidArgument("symbolic_id must look like 'custom:background/noble'.");
+			}
+			if (tx.count("SELECT COUNT(*) FROM custom_content WHERE campaign_id = ? AND symbolic_id = ?", campaignId,
+					symbolic) > 0) {
+				throw RpgException.conflict("symbolic_id '" + symbolic + "' already exists in this campaign.");
+			}
+		}
+		if (rules.resolve("BACKGROUND", name).isPresent() || tx.count(
+				"SELECT COUNT(*) FROM custom_content WHERE campaign_id = ? AND kind = 'BACKGROUND' AND LOWER(name) = LOWER(?)",
+				campaignId, name.trim()) > 0) {
+			throw RpgException.conflict("A background named '" + name.trim() + "' already exists.");
+		}
+		var cols = new LinkedHashMap<String, Object>();
+		cols.put("campaign_id", campaignId);
+		cols.put("kind", "BACKGROUND");
+		cols.put("symbolic_id", symbolic);
+		cols.put("name", name.trim());
+		cols.put("payload_json", Json.write(payload));
+		cols.put("cost_cp", 0);
+		cols.put("weight_g", 0);
+		cols.put("tags_json", tags == null ? null : Json.write(tags));
+		cols.put("license_json", Json.write(Map.of("license", "campaign-owned", "provenance", prov)));
+		cols.put("provenance", prov);
+		cols.put("revision", 0);
+		cols.put("created_at", Instant.now().toString());
+		long id = tx.insert("custom_content", cols);
+		tx.touched(Ref.of(Ref.CONTENT, id), 0);
+		var definition = new LinkedHashMap<String, Object>();
+		definition.put("id", Ref.of(Ref.CONTENT, id));
+		definition.put("name", name.trim());
+		definition.put("ability_scores", abilities);
+		definition.put("feat", feat.name());
+		definition.put("skills", skills.stream().map(s -> rules.find(s).map(RulesData.Definition::name).orElse(s)).toList());
+		definition.put("tool", tool);
+		var result = new LinkedHashMap<String, Object>();
+		result.put("content", Ref.of(Ref.CONTENT, id));
+		result.put("symbolic_id", symbolic);
+		result.put("definition", definition);
+		result.put("note",
+				"Usable by name wherever a background is chosen: create_character_draft / update_character_draft "
+						+ "(background, background_ability_scores, background_tool) and a companion's promotion.");
+		result.put("meta", Harness.meta(campaign, null));
+		return result;
 	}
 }

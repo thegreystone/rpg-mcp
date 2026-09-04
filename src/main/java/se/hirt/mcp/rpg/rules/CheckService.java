@@ -62,6 +62,20 @@ public final class CheckService {
 	public Map<String, Object> resolveCheck(
 			String operationId, String campaignRef, String actorRef, String kind,
 			String abilityText, String skillText, Integer difficulty, String advantageText, String reason) {
+		return resolveCheck(operationId, campaignRef, actorRef, kind, abilityText, skillText, null, difficulty,
+				advantageText, reason);
+	}
+
+	/**
+	 * @param toolText
+	 * 		a tool used for the check (SRD 5.2.1 "Tool Proficiency"): the actor's proficiency bonus applies when they
+	 * 		are proficient with it, and a skill check made with a tool the actor is also proficient in has advantage
+	 * 		("Tools and Skills Together")
+	 */
+	public Map<String, Object> resolveCheck(
+			String operationId, String campaignRef, String actorRef, String kind,
+			String abilityText, String skillText, String toolText, Integer difficulty, String advantageText,
+			String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -69,6 +83,7 @@ public final class CheckService {
 		args.put("kind", kind);
 		args.put("ability", abilityText);
 		args.put("skill", skillText);
+		args.put("tool", toolText);
 		args.put("difficulty", difficulty);
 		args.put("advantage", advantageText);
 		args.put("reason", reason);
@@ -103,6 +118,38 @@ public final class CheckService {
 				proficient = k.equals("SAVING_THROW") && tx.count(
 						"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SAVE' AND content_ref = ?",
 						actor.id(), ability.name()) > 0;
+			}
+			RulesData.Definition tool = null;
+			boolean toolProficient = false;
+			String advantageSource = null;
+			if (toolText != null && !toolText.isBlank()) {
+				if (k.equals("SAVING_THROW")) {
+					throw RpgException.invalidArgument("A tool does not apply to a saving throw.");
+				}
+				tool = rules.resolve("ITEM", toolText)
+						.filter(d -> "TOOL".equals(String.valueOf(d.payload().get("type"))))
+						.orElseThrow(() -> RpgException.invalidArgument(
+								"Unknown tool '" + toolText + "'; see get_content_definitions item_type TOOL."));
+				toolProficient = tx.count(
+						"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY' AND content_ref = ?",
+						actor.id(), tool.id()) > 0;
+				if (k.equals("SKILL_CHECK")) {
+					// SRD 5.2.1 "Tools and Skills Together": proficiency in both the skill and the tool gives
+					// advantage; the skill's proficiency bonus is already in the modifier.
+					if (proficient && toolProficient) {
+						if (advantage.equals("NONE")) {
+							advantage = "ADVANTAGE";
+							advantageSource = "proficient in both " + skill.name() + " and " + tool.name();
+						} else if (advantage.equals("DISADVANTAGE")) {
+							advantage = "NONE";
+							advantageSource = "proficiency in both " + skill.name() + " and " + tool.name()
+									+ " cancels the disadvantage";
+						}
+					}
+				} else {
+					// An ability check made with a tool: the tool proficiency is the proficiency.
+					proficient = toolProficient;
+				}
 			}
 			Integer score = actor.integer(ability.column());
 			if (score == null) {
@@ -159,6 +206,10 @@ public final class CheckService {
 			if (skill != null) {
 				result.put("skill", skill.name());
 			}
+			if (tool != null) {
+				result.put("tool", tool.name());
+				result.put("tool_proficient", toolProficient);
+			}
 			result.put("proficient", proficient);
 			result.put("ability_modifier", abilityMod);
 			result.put("proficiency_bonus", profBonus);
@@ -167,6 +218,9 @@ public final class CheckService {
 				result.put("modifier_source", "STAT_BLOCK");
 			}
 			result.put("advantage", advantage);
+			if (advantageSource != null) {
+				result.put("advantage_source", advantageSource);
+			}
 			var rollMap = roll.toMap();
 			rollMap.put("roll_ref", Ref.of(Ref.ROLL, rollId));
 			result.put("roll", rollMap);

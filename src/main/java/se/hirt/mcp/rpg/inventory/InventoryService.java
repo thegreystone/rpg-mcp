@@ -109,6 +109,23 @@ public final class InventoryService {
 
 	public static Map<String, Object> armorClass(Tx tx, RulesData rules, Row character) {
 		se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, character.id());
+		if (!character.isNull("armor_class_override")) {
+			// apply_gm_override SET_ARMOR_CLASS (MCP_PROTOCOL.md §20.1): a fixed base instead of the equipment.
+			int base = character.integer("armor_class_override");
+			int value = base + mods.acBonus;
+			String basis = "GM override (" + base + ")";
+			if (mods.acFloor != null && value < mods.acFloor) {
+				value = mods.acFloor;
+				basis = basis + ", raised to a floor of " + mods.acFloor;
+			}
+			var m = new LinkedHashMap<String, Object>();
+			m.put("value", value);
+			m.put("basis", basis);
+			if (mods.acBonus != 0) {
+				m.put("bonus", mods.acBonus);
+			}
+			return m;
+		}
 		return Derived.armorClass(character.integer("dex_score"), equippedPayloads(tx, rules, character.id()),
 				mods.acBase, mods.acBonus, mods.acFloor);
 	}
@@ -247,7 +264,7 @@ public final class InventoryService {
 		var granted = new java.util.ArrayList<Map<String, Object>>(
 				grantBundle(tx, rules, campaignId, character.id(), items, choices));
 		// The background provides starting equipment too (SRD 5.2.1 "Choose Starting Equipment").
-		Optional<RulesData.Definition> bg = se.hirt.mcp.rpg.character.Origins.backgroundOf(rules, character);
+		Optional<RulesData.Definition> bg = se.hirt.mcp.rpg.character.Origins.backgroundOf(tx, rules, character);
 		if (bg.isPresent() && bg.get().payload().get("starting_equipment") instanceof Map<?, ?> bgOptionsRaw) {
 			Map<String, Object> bgOptions = (Map<String, Object>) bgOptionsRaw;
 			Map<String, Object> bgChosen =

@@ -66,6 +66,46 @@ public final class Origins {
 		return c.isNull("background_ref") ? Optional.empty() : rules.find(c.str("background_ref"));
 	}
 
+	/** The character's background, installed or campaign-defined ({@code content:N}, MCP_PROTOCOL.md §13.7). */
+	public static Optional<RulesData.Definition> backgroundOf(Tx tx, RulesData rules, Row c) {
+		if (c.isNull("background_ref")) {
+			return Optional.empty();
+		}
+		String ref = c.str("background_ref");
+		return ref.startsWith("content:") ? customBackground(tx, c.lng("campaign_id"), ref) : rules.find(ref);
+	}
+
+	/** Resolves a background by id, symbolic id or name: installed content first, then the campaign's own. */
+	public static Optional<RulesData.Definition> resolveBackground(Tx tx, RulesData rules, long campaignId, String text) {
+		Optional<RulesData.Definition> installed = rules.resolve("BACKGROUND", text);
+		return installed.isPresent() ? installed : customBackground(tx, campaignId, text);
+	}
+
+	/** The campaign's own backgrounds, defined with {@code define_content} kind BACKGROUND. */
+	public static List<RulesData.Definition> customBackgrounds(Tx tx, long campaignId) {
+		return tx.query("SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'BACKGROUND' ORDER BY id",
+				campaignId).stream().map(Origins::customDefinition).toList();
+	}
+
+	static Optional<RulesData.Definition> customBackground(Tx tx, long campaignId, String text) {
+		if (text == null || text.isBlank()) {
+			return Optional.empty();
+		}
+		String t = text.trim();
+		for (Row row : tx.query("SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'BACKGROUND' ORDER BY id",
+				campaignId)) {
+			boolean symbolic = !row.isNull("symbolic_id") && row.str("symbolic_id").equalsIgnoreCase(t);
+			if (("content:" + row.id()).equals(t) || row.str("name").equalsIgnoreCase(t) || symbolic) {
+				return Optional.of(customDefinition(row));
+			}
+		}
+		return Optional.empty();
+	}
+
+	static RulesData.Definition customDefinition(Row row) {
+		return new RulesData.Definition("content:" + row.id(), row.str("kind"), row.str("name"), row.map("payload_json"));
+	}
+
 	@SuppressWarnings("unchecked")
 	public static List<Map<String, Object>> traitsOf(RulesData.Definition species) {
 		return species.payload().get("traits") instanceof List<?> l ? (List<Map<String, Object>>) l : List.of();
@@ -436,7 +476,7 @@ public final class Origins {
 	public static void applyBackground(
 			Tx tx, RulesData rules, Row c, Object value, Map<String, Object> cols,
 			Map<String, Object> creation) {
-		RulesData.Definition bg = rules.resolve("BACKGROUND", String.valueOf(value)).orElseThrow(
+		RulesData.Definition bg = resolveBackground(tx, rules, c.lng("campaign_id"), String.valueOf(value)).orElseThrow(
 				() -> RpgException.invalidArgument(
 						"Unknown background '" + value + "'; see get_character_choices BACKGROUND."));
 		clearBackgroundGrants(tx, c, creation);
@@ -619,11 +659,23 @@ public final class Origins {
 		return row;
 	}
 
-	/** Resolves feat-choice values ({@code feat_choices} draft field / level-up feat choices). */
+	/**
+	 * Resolves feat-choice values ({@code feat_choices} draft field / level-up feat choices): one object naming the
+	 * feat, or a list of them when several feats owe choices at once (a Human Sage: Skilled and Magic Initiate).
+	 */
 	public static void applyFeatChoices(Tx tx, RulesData rules, Row c, Object value) {
+		if (value instanceof List<?> list) {
+			if (list.isEmpty()) {
+				throw RpgException.invalidArgument("feat_choices is an empty list; name at least one feat.");
+			}
+			for (Object one : list) {
+				applyFeatChoices(tx, rules, c, one);
+			}
+			return;
+		}
 		if (!(value instanceof Map<?, ?> m) || m.get("feat") == null) {
 			throw RpgException.invalidArgument(
-					"feat_choices must be an object naming the feat, e.g. {\"feat\": \"Skilled\", \"proficiencies\": [...]}.");
+					"feat_choices must be an object naming the feat, e.g. {\"feat\": \"Skilled\", \"proficiencies\": [...]}, or a list of such objects (one per feat).");
 		}
 		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(m.get("feat")))
 				.orElseThrow(() -> RpgException.invalidArgument("Unknown feat '" + m.get("feat") + "'."));
@@ -822,7 +874,7 @@ public final class Origins {
 	/** Origin-related whole-character violations (backgrounds, species grants, unresolved feat choices). */
 	public static List<Violation> validate(Tx tx, RulesData rules, Row c) {
 		var v = new ArrayList<Violation>();
-		Optional<RulesData.Definition> bg = backgroundOf(rules, c);
+		Optional<RulesData.Definition> bg = backgroundOf(tx, rules, c);
 		if (bg.isEmpty()) {
 			v.add(new Violation("background", "REQUIRED",
 					"Choose a background (SRD 5.2.1 \"Character Backgrounds\")."));
@@ -933,7 +985,7 @@ public final class Origins {
 	/** Origin blocks for the character sheet: background, species traits, feats, tools, tracked resources. */
 	public static void appendSheet(Tx tx, RulesData rules, Row c, Map<String, Object> m, String detail) {
 		boolean full = "FULL".equals(detail);
-		backgroundOf(rules, c).ifPresent(bg -> {
+		backgroundOf(tx, rules, c).ifPresent(bg -> {
 			var b = new LinkedHashMap<String, Object>();
 			b.put("ref", bg.id());
 			b.put("name", bg.name());

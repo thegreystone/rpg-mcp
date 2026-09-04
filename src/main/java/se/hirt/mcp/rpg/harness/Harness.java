@@ -87,7 +87,8 @@ public final class Harness {
 						"complete_campaign"));
 		case ENCOUNTER -> ops.addAll(
 				List.of("get_encounter_state", "perform_encounter_action", "resolve_pending_choice", "end_encounter",
-						"apply_runtime_change", "equip_item", "update_relationship", "materialize_character",
+						"resolve_check", "apply_runtime_change", "equip_item", "update_relationship",
+						"materialize_character",
 						"get_character_sheet", "record_memory", "get_continuation_options", "restore_checkpoint",
 						"transfer_player_control", "apply_gm_override", "complete_campaign"));
 		case CHECKPOINT_DECISION -> ops.addAll(

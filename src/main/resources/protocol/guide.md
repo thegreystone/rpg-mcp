@@ -68,6 +68,9 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
 
 - A normal turn is conversational; call tools only for authoritative facts, deterministic resolution,
   canonical mutation or memory.
+- Checks work in a fight too: a parley at the point of a spell or a lock under fire is a `resolve_check` mid-encounter
+  (it never advances the turn). Name the `tool` when one is used — thieves' tools, calligrapher's supplies — and the
+  engine applies the proficiency, and advantage when the actor is proficient in both the skill and the tool.
 - Commerce: you narrate the haggling, the engine does the accounting. Look prices up with
   `get_content_definitions`; never invent money or treasure — `grant_loot` exists for that and is audited.
 - Combat: materialize every opponent (`materialize_character`), `start_encounter` with sides, then one

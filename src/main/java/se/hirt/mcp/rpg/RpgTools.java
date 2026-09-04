@@ -226,7 +226,7 @@ public class RpgTools {
 
 	// ── Rules ──────────────────────────────────────────────────────────
 
-	@Tool(name = "resolve_check", description = "MUTATING (journaled roll). Resolves an ABILITY_CHECK, SKILL_CHECK or SAVING_THROW with authoritative " + "modifiers and server dice. You supply the fictional intent and the DC; never supply a die result. Returns the full breakdown, " + "success/margin against the DC, and a roll_ref. Narrate failure as new complications, not a dead end.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "resolve_check", description = "MUTATING (journaled roll). Resolves an ABILITY_CHECK, SKILL_CHECK or SAVING_THROW with authoritative " + "modifiers and server dice — in exploration and in the middle of an encounter alike (a parley, a shove, a lock under fire). " + "You supply the fictional intent and the DC; never supply a die result. Name the `tool` when one is used (thieves' tools, a forger's " + "calligrapher's supplies): a proficient actor adds their proficiency bonus, and proficiency in both the skill and the tool gives advantage. " + "Returns the full breakdown, success/margin against the DC, and a roll_ref. Narrate failure as new complications, not a dead end.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse resolveCheck(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Acting character reference") String actor,
@@ -234,12 +234,14 @@ public class RpgTools {
 			@ToolArg(description = "Ability (STR/DEX/CON/INT/WIS/CHA); optional for SKILL_CHECK (defaults to the skill's ability)")
 			Optional<String> ability,
 			@ToolArg(description = "Skill name for SKILL_CHECK, e.g. Deception") Optional<String> skill,
+			@ToolArg(description = "Tool used for the check, e.g. \"Thieves' Tools\" or \"Calligrapher's Supplies\" (SRD 5.2.1: proficiency bonus if proficient; advantage when also proficient in the skill)")
+			Optional<String> tool,
 			@ToolArg(description = "Difficulty class (DC), 1–40") Optional<Integer> difficulty,
 			@ToolArg(description = "NONE (default), ADVANTAGE or DISADVANTAGE") Optional<String> advantage,
 			@ToolArg(description = "Short reason, e.g. 'Bluffing the magistrate'") Optional<String> reason) {
 		return ToolSupport.run("resolve_check", () -> engine.checks()
 				.resolveCheck(operation_id, campaign, actor, kind, ability.orElse(null), skill.orElse(null),
-						difficulty.orElse(null), advantage.orElse(null), reason.orElse(null)));
+						tool.orElse(null), difficulty.orElse(null), advantage.orElse(null), reason.orElse(null)));
 	}
 
 	@Tool(name = "advance_time", description = "MUTATING. Advances the world clock by minutes and returns the new time plus a Director trigger " + "recommendation when a lot of time passed. (Effect expiry and scheduled world events arrive in a later milestone.)", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
@@ -361,18 +363,18 @@ public class RpgTools {
 				() -> engine.content().search(campaign, query, kind, limit == null ? 0 : limit));
 	}
 
-	@Tool(name = "define_content", description = "MUTATING. Creates a campaign-scoped custom item definition (a local newspaper, a regional delicacy, a quest " + "letter) with a stable content:N reference and optional 'custom:item/slug' symbolic id, so it can be bought, sold, carried and transferred. " + "Defining an item grants it to nobody. Mechanical WEAPON/ARMOR definitions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "define_content", description = "MUTATING. Creates campaign-scoped custom content with a stable content:N reference and an optional 'custom:<kind>/slug' symbolic id. " + "kind ITEM (default): a local newspaper, a regional delicacy, a quest letter — buyable, carried, transferable; defining it grants it to nobody. " + "kind BACKGROUND: a campaign background (a Noble, a Fen Keeper) built like an SRD one — properties {ability_scores: [3 abilities], feat: an Origin feat, " + "skills: [2 skills], tool: {item} or {choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}, feat_choices?, starting_equipment?} — " + "usable by name wherever a background is chosen (drafts and companion promotions). Mechanical WEAPON/ARMOR definitions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse defineContent(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Display name") String name,
-			@ToolArg(description = "Content kind (only ITEM for now)") Optional<String> kind,
-			@ToolArg(description = "Symbolic id like 'custom:item/bellhaven-broadsheet'") Optional<String> symbolic_id,
-			@ToolArg(description = "Description / rules text") Optional<String> description,
-			@ToolArg(description = "GEAR (default), CONSUMABLE, VALUABLE, DOCUMENT, TOOL, CONTAINER, MOUNT, OTHER…")
+			@ToolArg(description = "Content kind: ITEM (default) or BACKGROUND") Optional<String> kind,
+			@ToolArg(description = "Symbolic id like 'custom:item/bellhaven-broadsheet' or 'custom:background/noble'") Optional<String> symbolic_id,
+			@ToolArg(description = "Description / rules text (for a BACKGROUND: its summary)") Optional<String> description,
+			@ToolArg(description = "ITEM only: GEAR (default), CONSUMABLE, VALUABLE, DOCUMENT, TOOL, CONTAINER, MOUNT, OTHER…")
 			Optional<String> item_type,
-			@ToolArg(description = "List price, e.g. '2 cp', '15 gp 5 sp' or an integer in cp (default 0)")
-			Optional<String> cost, @ToolArg(description = "Weight in pounds (default 0)") Optional<Double> weight_lb,
-			@ToolArg(description = "Extra structured properties", required = false) Map<String, Object> properties,
+			@ToolArg(description = "ITEM only: list price, e.g. '2 cp', '15 gp 5 sp' or an integer in cp (default 0)")
+			Optional<String> cost, @ToolArg(description = "ITEM only: weight in pounds (default 0)") Optional<Double> weight_lb,
+			@ToolArg(description = "Extra structured properties; for a BACKGROUND the ability_scores/feat/skills/tool spec", required = false) Map<String, Object> properties,
 			@ToolArg(description = "Tags for search") Optional<List<String>> tags) {
 		return ToolSupport.run("define_content", () -> engine.content()
 				.define(operation_id, campaign, kind.orElse("ITEM"), name, symbolic_id.orElse(null),
@@ -566,7 +568,7 @@ public class RpgTools {
 				() -> engine.levelUps().choices(campaign, transaction.orElse(null)));
 	}
 
-	@Tool(name = "update_level_up", description = "MUTATING (transaction only). Records choices (hit points are fixed by campaign rules.hp_progression and are not a choice): " + "{\"ability_score_improvement\": {\"CHA\": 2}} or {\"DEX\": 1, \"CON\": 1}. The live character is untouched.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "update_level_up", description = "MUTATING (transaction only). Records choices (hit points are fixed by campaign rules.hp_progression and are not a choice): " + "{\"ability_score_improvement\": {\"CHA\": 2}} or {\"DEX\": 1, \"CON\": 1}. A companion's promotion also takes class, skills, species, background and their follow-ups; " + "feat_choices is one object naming the feat or a list of them (a Human Sage owes both Skilled and Magic Initiate their choices), and a feat left with " + "pending choices can be completed at any later level-up. The live character is untouched.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateLevelUp(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Choices object") Map<String, Object> choices,
@@ -733,7 +735,7 @@ public class RpgTools {
 				() -> engine.rest().rest(operation_id, campaign, kind, hit_dice, characters.orElse(null)));
 	}
 
-	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. The only general exceptional mutation, permitted only when the campaign's gm_override_policy is EXPLICIT_AUDITED. " + "kind: ADJUST_HP {amount|set_to}, SET_MAX_HP {amount|set_to} (the only way to record a maximum granted outside a level-up: a subclass feature, a boon, a permanent injury), " + "SET_LIFE_STATE {life_state, hp}, SET_MONEY {money}, SET_XP {xp}, SET_ABILITY_SCORE {ability, score}, SET_LOCATION {location}, " + "SET_CAMPAIGN_RULE {rule, value} (retunes a committed house rule: hp_progression, xp_policy, companion_level_up, progression, gm_override_policy; no target), " + "REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE {to, state}. Requires a reason; writes an immutable audit record and a GM_ONLY ledger event; " + "the result is labeled as an override and must never be narrated as a normal roll.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
+	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. The only general exceptional mutation, permitted only when the campaign's gm_override_policy is EXPLICIT_AUDITED. " + "kind: ADJUST_HP {amount|set_to}, SET_MAX_HP {amount|set_to} (the only way to record a maximum granted outside a level-up: a subclass feature, a boon, a permanent injury), " + "SET_ARMOR_CLASS {armor_class} or {clear: true} (a fixed AC outside the equipment path — Draconic Resilience, Unarmored Defense; effect bonuses still apply on top), " + "SET_LIFE_STATE {life_state, hp}, SET_MONEY {money}, SET_XP {xp}, SET_ABILITY_SCORE {ability, score}, SET_LOCATION {location}, " + "SET_CAMPAIGN_RULE {rule, value} (retunes a committed house rule: hp_progression, xp_policy, companion_level_up, progression, gm_override_policy; no target), " + "REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE {to, state}. Requires a reason; writes an immutable audit record and a GM_ONLY ledger event; " + "the result is labeled as an override and must never be narrated as a normal roll.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
 	ToolResponse applyGmOverride(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Override kind") String kind,

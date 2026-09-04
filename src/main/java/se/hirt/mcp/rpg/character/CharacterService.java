@@ -167,7 +167,8 @@ public final class CharacterService {
 				result.put("species", choices.species().stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("BACKGROUND")) {
-				result.put("backgrounds", choices.backgrounds().stream().map(Option::toMap).toList());
+				result.put("backgrounds",
+						choices.backgrounds(tx, campaign.id()).stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("FEAT")) {
 				result.put("feats", choices.feats(null).stream().map(Option::toMap).toList());
@@ -455,14 +456,14 @@ public final class CharacterService {
 						creation.put("base_scores", base);
 					}
 				}
-				Origins.applyBackgroundAbilityScores(requireBackground(c, cols), value, creation);
+				Origins.applyBackgroundAbilityScores(requireBackground(tx, c, cols), value, creation);
 				creationDirty = true;
 			}
 			case "species_skill" -> Origins.applySpeciesSkill(tx, rules, requireSpecies(c, cols), c, value);
 			case "species_choice" -> Origins.applySpeciesChoice(tx, rules, requireSpecies(c, cols), c, value, cols);
 			case "origin_feat" -> Origins.applyOriginFeat(tx, rules, requireSpecies(c, cols), c, value);
 			case "feat_choices" -> Origins.applyFeatChoices(tx, rules, c, value);
-			case "background_tool" -> Origins.applyBackgroundTool(tx, rules, requireBackground(c, cols), c, value);
+			case "background_tool" -> Origins.applyBackgroundTool(tx, rules, requireBackground(tx, c, cols), c, value);
 			case "skills" -> {
 				if (!(value instanceof List<?> list)) {
 					throw RpgException.invalidArgument("skills must be a list of skill names or ids.");
@@ -529,7 +530,7 @@ public final class CharacterService {
 				creationDirty = true;
 			}
 			case "background_equipment" -> {
-				RulesData.Definition bg = requireBackground(c, cols);
+				RulesData.Definition bg = requireBackground(tx, c, cols);
 				creation.put("background_equipment",
 						equipmentChoice(bg.name(), (Map<String, Object>) bg.payload().get("starting_equipment"),
 								value));
@@ -602,9 +603,11 @@ public final class CharacterService {
 				.orElseThrow(() -> RpgException.invalidArgument("Choose a species first."));
 	}
 
-	private RulesData.Definition requireBackground(Row c, Map<String, Object> cols) {
+	private RulesData.Definition requireBackground(Tx tx, Row c, Map<String, Object> cols) {
 		String ref = cols.get("background_ref") instanceof String s ? s : c.str("background_ref");
-		return Optional.ofNullable(ref).flatMap(rules::find)
+		return Optional.ofNullable(ref)
+				.flatMap(r -> r.startsWith("content:") ? Origins.customBackground(tx, c.lng("campaign_id"), r)
+						: rules.find(r))
 				.orElseThrow(() -> RpgException.invalidArgument("Choose a background first."));
 	}
 
