@@ -832,6 +832,16 @@ context:
 The server validates modifiers, advantage/disadvantage, effects, and resource use. The AI supplies the fictional intent
 and any GM-set difficulty permitted by the rules policy.
 
+`tool` names a tool used for the check (`Thieves' Tools`, `Calligrapher's Supplies`), validated against the installed
+TOOL items. An ability check made with a tool the actor is proficient with adds the proficiency bonus; a skill check made
+with a tool the actor is also proficient in has advantage, and a disadvantage the GM imposed is cancelled instead
+(SRD 5.2.1 "Tools and Skills Together"). The result reports `tool`, `tool_proficient` and, when the engine granted or
+cancelled it, `advantage_source`.
+
+`resolve_check` is legal in `EXPLORATION` and in `ENCOUNTER` alike: a parley at the point of a spell, a shove, a lock
+picked under fire. It never advances the initiative order; the actor's encounter action is recorded separately with
+`perform_encounter_action`.
+
 ### 13.3 `apply_runtime_change`
 
 Applies a named, rules-aware non-encounter operation such as healing, spending a resource, applying/removing a
@@ -904,8 +914,17 @@ how the GM prices purchases, selects appropriate opponents, and answers rules qu
 ### 13.7 `define_content`
 
 Creates a campaign-scoped custom content definition with a stable `content:` reference and an optional campaign-local
-symbolic identifier in the `custom:` namespace. The MVP kind is `ITEM` (name, type, cost, weight, description,
-mechanical properties, tags); other kinds MAY follow the same pattern.
+symbolic identifier in the `custom:` namespace. Two kinds exist:
+
+- `ITEM` (name, type, cost, weight, description, mechanical properties, tags).
+- `BACKGROUND`: a campaign background built to the SRD 5.2.1 shape — `properties.ability_scores` (three abilities for
+  the +2/+1 or +1/+1/+1 increase), `properties.feat` (an Origin feat), `properties.skills` (two), `properties.tool`
+  (`{item}` fixed or `{choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}`), optional `feat_choices` presets and
+  `starting_equipment` options (default: fifty gold). Every reference is validated against installed content, and the
+  name must not collide with an installed or campaign background. A defined background is usable by name, symbolic id
+  or `content:` reference wherever a background is chosen: `create_character_draft` / `update_character_draft`
+  (`background`, `background_ability_scores`, `background_tool`), a companion's promotion, `get_character_choices`
+  scope `BACKGROUND` and `get_content_definitions` kind `BACKGROUND` (flagged `custom: true`).
 
 The definition is validated against its kind's schema, recorded with provenance and licensing metadata, and immediately
 usable by `trade`, inventory, and encounter operations through its `content:` reference. The result returns that
@@ -1019,6 +1038,12 @@ Returns legal remaining choices and a preview of automatic changes.
 ### 16.3 `update_level_up`
 
 Adds or revises selections without changing the live character.
+
+`feat_choices` is one object naming the feat (`{"feat": "Skilled", "proficiencies": [...]}`) or a list of such objects
+when several feats owe choices at once — a Human Sage being promoted owes both Skilled (species) and Magic Initiate
+(background). A feat committed with choices still pending is reported by `get_level_up_choices` as
+`pending_feat_choices` at every later level-up, and `feat_choices` is accepted then to complete it; with nothing pending,
+`feat_choices` outside a first class level is refused.
 
 ### 16.4 `validate_level_up`
 
@@ -1200,6 +1225,10 @@ This is the only general exceptional mutation operation. Two kinds are campaign-
 
 - `SET_MAX_HP {amount|set_to}` — the only way to record a maximum granted outside the level-up path (a subclass
   feature, a boon, a permanent injury). Raising the maximum raises current hit points by the same amount.
+- `SET_ARMOR_CLASS {armor_class}` or `{clear: true}` — a fixed Armor Class outside the equipment path, for subclass
+  features the engine does not model yet (Draconic Resilience, Unarmored Defense) and boons. Effect bonuses and floors
+  (Shield of Faith, Barkskin) still apply on top; the sheet reports the basis as a GM override. `clear` returns the
+  character to equipment-derived AC.
 - `SET_CAMPAIGN_RULE {rule, value}` — retunes one house rule on a committed campaign (`hp_progression`, `xp_policy`,
   `companion_level_up`, `progression`, `gm_override_policy`); takes no target. Everything else in the setup draft is
   fixed at commit.

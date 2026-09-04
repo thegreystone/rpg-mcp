@@ -288,3 +288,11 @@ Encoded from SRD 5.2.1 "Character Origins" (pp. 83–86) and "Feats" (pp. 87–8
   GM-adjudicated until their milestones.
 - **Duplicate proficiencies are re-chosen** (background skills are fixed; class/species/feat pickers
   exclude held skills and reject duplicates).
+- **Campaign backgrounds (engine):** `define_content` kind `BACKGROUND` stores a background in the seeded
+  shape (three abilities, an Origin feat, two skills, a tool, equipment options), validated against installed
+  content; `Origins.resolveBackground` looks installed content up first and the campaign's own second, so a
+  Noble or a Fen Keeper behaves exactly like an SRD background in drafts, promotions and on the sheet.
+- **Tool proficiency in checks (engine):** `resolve_check` takes a `tool`; the actor's proficiency bonus applies
+  to an ability check made with a tool they are proficient with, and a skill check made with a tool they are also
+  proficient in has advantage, cancelling a GM-imposed disadvantage instead (SRD 5.2.1 "Tools and Skills
+  Together"). Checks are legal mid-encounter and never advance the initiative order.

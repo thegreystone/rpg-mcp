@@ -115,7 +115,8 @@ payload.)
 narrative: `name`, `description`, `appearance`, `personality`, `backstory`, `goals_json`, `alignment`, `age`,
 `presentation`,
 rules identity: `species_ref`, `background_ref` (SRD background), `str/dex/con/int_/wis/cha INTEGER` (final scores; the
-pre-background base lives in `creation_json.base_scores`), `max_hp INTEGER`, `speed INTEGER`, `senses_json`,
+pre-background base lives in `creation_json.base_scores`), `max_hp INTEGER`, `armor_class_override INTEGER` (V006: a fixed AC recorded by `apply_gm_override` `SET_ARMOR_CLASS`;
+NULL derives AC from equipment), `speed INTEGER`, `senses_json`,
 `origin_content_ref` columns (creature definition it was materialized from, nullable) + `origin_seed_id NULL`,
 runtime: `current_hp INTEGER`, `temp_hp INTEGER DEFAULT 0`, `exhaustion INTEGER DEFAULT 0`,
 `money_cp INTEGER NOT NULL DEFAULT 0 CHECK (money_cp >= 0)` (I-14), `location_id NULL → location`,
