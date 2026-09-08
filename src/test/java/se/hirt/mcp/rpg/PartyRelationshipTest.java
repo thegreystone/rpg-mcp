@@ -165,8 +165,11 @@ class PartyRelationshipTest {
 			assertEquals("Elara", rels.get(0).get("name"));
 			assertTrue(rels.get(0).get("summary").toString().startsWith("Engaged"));
 			assertEquals(1L, rels.get(0).get("significant_events"));
-			assertFalse(ctx.toString().contains("mother's ring"),
-					"the episodic detail is not loaded during routine turns");
+			assertFalse(rels.toString().contains("mother's ring"),
+					"the episodic detail is not part of the compact relationship state");
+			// The derived recap does retell last session's CRITICAL events in detail, once, at bootstrap.
+			assertTrue(m(ctx.get("since_last_session")).toString().contains("mother's ring"),
+					"since_last_session keeps the detail of critical events");
 			// …and the proposal is retrievable on demand, in detail.
 			Map<String, Object> rel = engine.party().relationship(campaign, pc, elara);
 			List<Map<String, Object>> events = list(m(rel.get("a_to_b")).get("significant_events"));

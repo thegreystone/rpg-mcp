@@ -54,7 +54,7 @@ public final class Harness {
 	private static final List<String> READ_TOOLS = List.of("get_server_state", "open_campaign", "get_character_sheet",
 			"query_memories", "query_timeline", "get_continuation_options", "get_content_definitions", "search_rules",
 			"get_encounter_state", "get_party", "get_relationship", "get_level_up_choices", "validate_level_up",
-			"get_context", "get_diegetic_information", "get_director_context");
+			"get_context", "get_diegetic_information", "get_director_context", "get_accounts", "list_cash_flows");
 
 	private Harness() {
 	}
@@ -71,14 +71,16 @@ public final class Harness {
 				List.of("bootstrap_session", "get_character_sheet", "query_memories", "query_timeline",
 						"get_continuation_options", "restore_checkpoint", "materialize_location",
 						"upsert_narrative_state", "commit_director_changes", "apply_gm_override", "prepare_spells",
-						"update_character", "complete_campaign"));
+						"update_character", "update_house_rules", "complete_campaign", "set_calendar", "create_account",
+						"transfer_money", "define_cash_flow", "update_cash_flow"));
 		case EXPLORATION -> ops.addAll(
-				List.of("bootstrap_session", "get_character_sheet", "resolve_check", "record_memory", "query_memories",
+				List.of("bootstrap_session", "get_character_sheet", "resolve_check", "roll_dice", "record_memory", "query_memories",
 						"query_timeline", "advance_time", "create_checkpoint", "get_continuation_options",
-						"restore_checkpoint", "transfer_item", "equip_item", "trade", "grant_loot", "define_content",
-						"materialize_character", "start_encounter", "apply_runtime_change", "award_xp",
+						"restore_checkpoint", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
+						"set_calendar", "create_account", "transfer_money", "define_cash_flow", "update_cash_flow",
+						"define_content", "materialize_character", "start_encounter", "apply_runtime_change", "award_xp",
 						"transfer_player_control", "begin_level_up", "update_character", "update_party_membership",
-						"update_relationship", "materialize_location", "move_party", "upsert_narrative_state",
+						"update_relationship", "update_house_rules", "materialize_location", "move_party", "upsert_narrative_state",
 						"commit_director_changes", "perform_rest", "apply_gm_override", "cast_spell", "prepare_spells",
 						"suspend_session", "complete_campaign"));
 		case LEVEL_UP -> ops.addAll(
@@ -87,7 +89,7 @@ public final class Harness {
 						"complete_campaign"));
 		case ENCOUNTER -> ops.addAll(
 				List.of("get_encounter_state", "perform_encounter_action", "resolve_pending_choice", "end_encounter",
-						"resolve_check", "apply_runtime_change", "equip_item", "update_relationship",
+						"resolve_check", "roll_dice", "apply_runtime_change", "equip_item", "update_relationship", "update_house_rules",
 						"materialize_character",
 						"get_character_sheet", "record_memory", "get_continuation_options", "restore_checkpoint",
 						"transfer_player_control", "apply_gm_override", "complete_campaign"));

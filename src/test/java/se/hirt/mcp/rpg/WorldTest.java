@@ -29,6 +29,7 @@
 package se.hirt.mcp.rpg;
 
 import org.junit.jupiter.api.Test;
+import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
@@ -259,6 +260,50 @@ class WorldTest {
 			Map<String, Object> closed = engine.narrative()
 					.upsert(op(), campaign, "STORY_SEED", "seed:3", map("materialized_character", mara), "DIRECTOR");
 			assertEquals("MATERIALIZED", closed.get("state"));
+		}
+	}
+
+	@Test
+	void travelEncountersAreSuggestedFromTheGround() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("travel-encounters"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			String bellhaven = "location:1";
+			// A day's road through forest to a wild place, and a short hop inside the town walls.
+			Map<String, Object> town = engine.world().materialize(op(), campaign, bellhaven,
+					map("description", "A town.", "tags", List.of("town"), "connections", List.of(
+							map("to", map("name", "Deep Wood", "kind", "SITE", "tags", List.of("forest")), "kind",
+									"PATH", "travel_minutes", 480),
+							map("to", map("name", "Harbour", "kind", "DISTRICT", "tags", List.of("town", "quay")),
+									"kind", "STREET", "travel_minutes", 300))), "GM");
+			String wood = (String) list(town.get("new_connections")).get(0).get("to");
+			String harbourRef = (String) list(town.get("new_connections")).get(1).get("to");
+
+			// Two four-hour blocks: the first d6 misses, the second hits; then the table pick.
+			dice.queue(4, 1, 1);
+			Map<String, Object> trip = engine.world().move(op(), campaign, wood, null, false, null, null);
+			List<?> consequences = (List<?>) trip.get("consequences");
+			assertEquals(1, consequences.size(), "one suggestion");
+			Map<String, Object> suggestion = m(consequences.get(0));
+			assertEquals("TRAVEL_ENCOUNTER_SUGGESTED", suggestion.get("kind"));
+			assertEquals("forest", suggestion.get("terrain"));
+			assertEquals(8L, suggestion.get("at_hour"));
+			Map<String, Object> creature = m(suggestion.get("creature"));
+			assertTrue(((String) creature.get("id")).startsWith("srd5e:creature/"));
+			assertTrue(((Number) suggestion.get("count")).intValue() >= 1);
+			assertTrue(((Number) suggestion.get("xp_budget")).intValue() > 0);
+			assertTrue(((List<?>) m(trip.get("director_trigger")).get("reasons")).contains(
+					"TRAVEL_ENCOUNTER_SUGGESTED"));
+			assertTrue(engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM encounter")) == 0,
+					"a suggestion writes nothing");
+
+			// Back to town, then a long walk inside the walls: safe ground never rolls.
+			dice.queue(1, 1, 1);
+			engine.world().move(op(), campaign, bellhaven, null, false, null, null);
+			Map<String, Object> harbour = engine.world().move(op(), campaign, harbourRef, null, false, null, null);
+			assertTrue(((List<?>) harbour.get("consequences")).isEmpty(), "town streets are safe ground");
+			assertFalse(dice.exhausted(), "no die was rolled for the street");
 		}
 	}
 }

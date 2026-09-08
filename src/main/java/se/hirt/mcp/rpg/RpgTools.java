@@ -393,6 +393,17 @@ public class RpgTools {
 				.transfer(operation_id, campaign, entry, to, quantity.orElse(null), reason.orElse(null)));
 	}
 
+	@Tool(name = "give_money", description = "MUTATING, atomic. Moves coin from one character to another (a tip, a wage, a bond bought, a debt paid): both must be " + "characters of this campaign, the giver must hold the amount, and the transfer is one ledger event both can recall. For coin found or " + "awarded from the world use grant_loot; for a purchase use trade.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse giveMoney(
+			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
+			@ToolArg(description = "Giving character reference, e.g. 'character:4'") String from,
+			@ToolArg(description = "Receiving character reference") String to,
+			@ToolArg(description = "Amount: '1 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in copper") Object money,
+			@ToolArg(description = "Why (narrative note, recorded on the event)") Optional<String> reason) {
+		return ToolSupport.run("give_money",
+				() -> engine.inventory().giveMoney(operation_id, campaign, from, to, money, reason.orElse(null)));
+	}
+
 	@Tool(name = "equip_item", description = "MUTATING. Equips or unequips a carried weapon, armor, shield or focus with slot validation (one body armor, " + "one shield, two hands). Returns Armor Class before/after and the equipped set.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse equipItem(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
@@ -517,7 +528,7 @@ public class RpgTools {
 				.end(operation_id, campaign, encounter.orElse(null), outcome, summary.orElse(null)));
 	}
 
-	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount, damage_type}; " + "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration}; STABILIZE. Plus reason. " + "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); " + "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration}; STABILIZE. Plus reason. " + "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse applyRuntimeChange(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Character reference") String character,
@@ -623,7 +634,7 @@ public class RpgTools {
 		return ToolSupport.run("get_relationship", () -> engine.party().relationship(campaign, a, b));
 	}
 
-	@Tool(name = "update_relationship", description = "MUTATING (upsert). Records a meaningful relationship development from `from` towards `to`: dimensions " + "({\"trust\": \"+1\", \"affection\": 3} — strings with a sign are deltas, numbers are absolute; affection, trust, respect, attraction, fear, resentment, loyalty; -5..+5), " + "a concise current summary, and a cause: cause_event (event:N whose participants include both — the event is linked as a significant memory) or a reason. " + "mutual=true applies the same change in both directions. Never converts a Director seed into a predetermined outcome.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "update_relationship", description = "MUTATING (upsert). Records a meaningful relationship development from `from` towards `to`: dimensions " + "({\"trust\": \"+1\", \"affection\": 3} — strings with a sign are deltas, numbers are absolute; affection, trust, respect, attraction, fear, resentment, loyalty; -5..+5), " + "a concise current summary, and a cause: cause_event (event:N whose participants include both — the event is linked as a significant memory) or a reason. " + "mutual=true applies the same change in both directions. " + "profile carries what drives a story: {milestones: [{kind: WEDDING|PROPOSAL|FIRST_NIGHT|PREGNANCY|PARTING|OATH|…, game_time (stamped now when omitted), note}], " + "terms: [standing agreements between the two], preferences: {likes: [], dislikes: [], limits: []} (intimate detail only under PEGI_18), wants: [], hard_lines: []}; " + "profile_mode MERGE (default: lists append without duplicates, maps overlay, null removes a key) or REPLACE. Never converts a Director seed into a predetermined outcome.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateRelationship(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Character whose feelings change") String from,
@@ -635,10 +646,23 @@ public class RpgTools {
 			Optional<String> cause_event,
 			@ToolArg(description = "Reason when no event is linked") Optional<String> reason,
 			@ToolArg(description = "Apply in both directions (default false)") Optional<Boolean> mutual,
-			@ToolArg(description = "GM (default) or DIRECTOR") Optional<String> provenance) {
+			@ToolArg(description = "GM (default) or DIRECTOR") Optional<String> provenance,
+			@ToolArg(description = "Relationship profile: milestones, terms, preferences, wants, hard_lines; see description", required = false)
+			Map<String, Object> profile,
+			@ToolArg(description = "MERGE (default) or REPLACE the stored profile") Optional<String> profile_mode) {
 		return ToolSupport.run("update_relationship", () -> engine.party()
 				.updateRelationship(operation_id, campaign, from, to, dimensions, summary.orElse(null),
-						cause_event.orElse(null), reason.orElse(null), mutual.orElse(false), provenance.orElse(null)));
+						cause_event.orElse(null), reason.orElse(null), mutual.orElse(false), provenance.orElse(null),
+						profile, profile_mode.orElse(null)));
+	}
+
+	@Tool(name = "update_house_rules", description = "MUTATING. The table's standing rulings, shown to every client at bootstrap (campaign.house_rules): " + "\"no firearms in this world\", \"the never-kill rule does not cover monsters\", \"probationers are asked daily\". " + "rules is a list of short strings; mode ADD (default), REMOVE or REPLACE. Audited as a HOUSE_RULE ledger event.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse updateHouseRules(
+			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
+			@ToolArg(description = "Rules, short strings", required = false) List<Object> rules,
+			@ToolArg(description = "ADD (default), REMOVE or REPLACE") Optional<String> mode) {
+		return ToolSupport.run("update_house_rules",
+				() -> engine.sessions().updateHouseRules(operation_id, campaign, rules, mode.orElse(null)));
 	}
 	// ── World ──────────────────────────────────────────────────────────
 
@@ -760,7 +784,7 @@ public class RpgTools {
 						spells.map(l -> (List<Object>) (List<?>) l).orElse(null)));
 	}
 
-	@Tool(name = "cast_spell", description = "MUTATING, atomic (outside encounters; in a fight use perform_encounter_action with kind CAST). Validates that the spell is known/prepared, " + "spends the slot (slot_level to upcast; cantrips are free; warlocks use pact slots), and resolves structured mechanics against the targets: spell attacks vs AC, " + "saving throws vs your DC (half/no damage, conditions with durations), healing, Magic Missile, temporary HP, buffs (Mage Armor, Bless, Shield of Faith…), cures, " + "resurrection. Concentration is enforced (a new concentration spell ends the previous one; damage forces a CON save). Utility spells return their rules text for you to adjudicate. " + "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb, {condition} for cures.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "cast_spell", description = "MUTATING, atomic (outside encounters; in a fight use perform_encounter_action with kind CAST). Validates that the spell is known/prepared, " + "spends the slot (slot_level to upcast; cantrips are free; warlocks use pact slots), and resolves structured mechanics against the targets: spell attacks vs AC, " + "saving throws vs your DC (half/no damage, conditions with durations), healing, Magic Missile, temporary HP, buffs (Mage Armor, Bless, Shield of Faith…), cures, " + "resurrection. Concentration is enforced (a new concentration spell ends the previous one; damage forces a CON save). Utility spells return their rules text for you to adjudicate. " + "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb, {condition} for cures, " + "{ritual: true} to cast a spell with the Ritual tag as a ritual (a class with Ritual Casting; ten minutes longer, no slot spent).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse castSpell(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Caster reference") String caster,

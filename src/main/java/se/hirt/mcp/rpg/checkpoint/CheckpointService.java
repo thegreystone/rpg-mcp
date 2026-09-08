@@ -97,7 +97,7 @@ public final class CheckpointService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("checkpoint", ref);
 			result.put("reason", reason);
-			result.put("game_time", GameTime.toMap(GameTime.currentSeq(tx, campaignId)));
+			result.put("game_time", GameTime.toMap(tx, campaignId, GameTime.currentSeq(tx, campaignId)));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
@@ -268,7 +268,7 @@ public final class CheckpointService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("restored_to", checkpointRef);
 			result.put("discarded_journal_entries", later.size());
-			result.put("game_time", GameTime.toMap(seq));
+			result.put("game_time", GameTime.toMap(tx, campaignId, seq));
 			result.put("status", after.str("status"));
 			result.put("requires_context_reset", true);
 			result.put("audit", "restoration recorded; discarded events are no longer canonical");

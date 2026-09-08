@@ -99,4 +99,13 @@ class DiceTest {
 		assertEquals(-5, Rules.modifier(1));
 		assertEquals(5, Rules.modifier(20));
 	}
+
+	@Test
+	void typesetDashesReadAsMinus() {
+		// The SRD PDF and model prose write "1d4–1" with an en dash (U+2013) or a minus sign (U+2212).
+		DiceExpression e = DiceExpression.parse("1d4–1");
+		assertEquals(2, e.terms().size());
+		assertEquals(-1, e.constantModifier());
+		assertEquals(-2, DiceExpression.parse("2d6 − 2").constantModifier());
+	}
 }

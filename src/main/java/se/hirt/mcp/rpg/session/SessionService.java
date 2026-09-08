@@ -41,6 +41,7 @@ import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -62,6 +63,12 @@ public final class SessionService {
 
 	// ── bootstrap_session ──────────────────────────────────────────────
 
+	/**
+	 * A session is never closed by hand (a lost connection must lose nothing): an open session is resumed when the
+	 * campaign was touched more recently than this, and closed and replaced by a new one otherwise. Tests shorten it.
+	 */
+	public static volatile Duration SESSION_GAP = Duration.ofHours(3);
+
 	public Map<String, Object> bootstrap(String operationId, String campaignRef, Integer contextBudget) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
@@ -74,10 +81,21 @@ public final class SessionService {
 					campaignId);
 			long sessionId;
 			boolean resumed;
-			if (open.isPresent()) {
+			if (open.isPresent() && !stale(tx, campaignId)) {
 				sessionId = open.get().id();
 				resumed = true;
 			} else {
+				if (open.isPresent()) {
+					Row stale = open.get();
+					var end = new LinkedHashMap<String, Object>();
+					end.put("ended_at", Instant.now().toString());
+					end.put("end_game_seq", seq);
+					end.put("end_journal_id", tx.journalId() - 1);
+					end.put("events_written", tx.count(
+							"SELECT COUNT(*) FROM event WHERE campaign_id = ? AND recorded_journal_id >= ? AND recorded_journal_id < ?",
+							campaignId, stale.lng("start_journal_id"), tx.journalId()));
+					tx.rawUpdate("session", stale.id(), end);
+				}
 				var cols = new LinkedHashMap<String, Object>();
 				cols.put("campaign_id", campaignId);
 				cols.put("started_at", Instant.now().toString());
@@ -110,6 +128,79 @@ public final class SessionService {
 		});
 	}
 
+	/** True when the campaign's last journal entry before this one is older than {@link #SESSION_GAP}. */
+	private static boolean stale(Tx tx, long campaignId) {
+		return tx.queryOne(
+						"SELECT recorded_at FROM journal_entry WHERE campaign_id = ? AND id < ? ORDER BY id DESC LIMIT 1",
+						campaignId, tx.journalId())
+				.map(r -> Duration.between(Instant.parse(r.str("recorded_at")), Instant.now()).compareTo(SESSION_GAP) > 0)
+				.orElse(false);
+	}
+
+	/** The campaign's standing table rulings (V007), an empty list when none were recorded. */
+	public static List<String> houseRules(Row campaign) {
+		if (campaign.isNull("house_rules_json")) {
+			return List.of();
+		}
+		return campaign.list("house_rules_json").stream().map(String::valueOf).toList();
+	}
+
+	/**
+	 * "Since you last played", derived from the ledger: everything recorded since the previous session began (going
+	 * back further when that session was tiny, at most three sessions), by importance under a share of the budget.
+	 */
+	static Map<String, Object> sinceLastSession(Tx tx, Row campaign, int budget) {
+		long campaignId = campaign.id();
+		long current = campaign.isNull("active_session_id") ? Long.MAX_VALUE : campaign.lng("active_session_id");
+		List<Row> previous = tx.query(
+				"SELECT * FROM session WHERE campaign_id = ? AND id < ? AND ended_at IS NOT NULL AND superseded = 0 " + "ORDER BY id DESC LIMIT 3",
+				campaignId, current);
+		if (previous.isEmpty()) {
+			return null;
+		}
+		int chars = Math.max(2000, budget * 3 / 2);
+		Map<String, Object> digest = null;
+		int covered = 0;
+		for (Row session : previous) {
+			covered++;
+			long from = session.isNull("start_journal_id") ? 0 : session.lng("start_journal_id") - 1;
+			digest = LedgerService.digest(tx, campaignId, from, tx.journalId(), chars);
+			if (((Number) digest.get("events")).intValue() >= 5) {
+				break;
+			}
+		}
+		var out = new LinkedHashMap<String, Object>();
+		out.put("sessions_covered", covered);
+		out.put("note",
+				"Derived from the ledger, so it is authoritative; previous_session_summary, when present, is only a pinned note that may be older.");
+		out.putAll(digest);
+		return out;
+	}
+
+	/** Members who died, left, were dismissed or whose guest spell ended, with where they are now and why they went. */
+	public static List<Map<String, Object>> formerMembers(Tx tx, long campaignId) {
+		var out = new ArrayList<Map<String, Object>>();
+		for (Row m : tx.query(
+				"SELECT m.state AS membership_state, m.left_time, m.notes AS membership_notes, c.* FROM party_membership m " + "JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? AND m.state IN ('DEAD','LEFT','DISMISSED','ENDED') ORDER BY m.id",
+				campaignId)) {
+			var f = new LinkedHashMap<String, Object>();
+			f.put("ref", Ref.of(Ref.CHARACTER, m.id()));
+			f.put("name", m.str("name"));
+			f.put("membership", m.str("membership_state"));
+			f.put("life_state", m.str("life_state"));
+			f.put("since", m.str("left_time"));
+			if (!m.isNull("location_id")) {
+				tx.find("location", m.lng("location_id")).ifPresent(
+						l -> f.put("whereabouts", Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
+			}
+			if (!m.isNull("membership_notes")) {
+				f.put("notes", m.str("membership_notes"));
+			}
+			out.add(f);
+		}
+		return out;
+	}
+
 	/** The Context Builder: canonical current state first, recent history second, never the whole campaign. */
 	public Map<String, Object> context(Tx tx, Row campaign, int budget) {
 		long campaignId = campaign.id();
@@ -134,9 +225,10 @@ public final class SessionService {
 		c.put("experience_guidance", style == null ? null : style.guidance());
 		c.put("party_preferences", prefs.get("party"));
 		c.put("rules", prefs.get("rules"));
+		c.put("house_rules", houseRules(campaign));
 		ctx.put("campaign", c);
 		ctx.put("harness_state", campaign.str("harness_state"));
-		ctx.put("game_time", GameTime.toMap(GameTime.currentSeq(tx, campaignId)));
+		ctx.put("game_time", GameTime.toMap(tx, campaignId, GameTime.currentSeq(tx, campaignId)));
 		ctx.put("location",
 				campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
 
@@ -157,6 +249,7 @@ public final class SessionService {
 			party.add(member);
 		}
 		ctx.put("party", party);
+		ctx.put("former_members", formerMembers(tx, campaignId));
 
 		ctx.put("story_beats", tx.query(
 				"SELECT * FROM story_beat WHERE campaign_id = ? AND state IN ('AVAILABLE','PLANNED','BLOCKED') " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
@@ -193,6 +286,7 @@ public final class SessionService {
 				"SELECT * FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE') ORDER BY id DESC LIMIT 1",
 				campaignId).ifPresent(e -> ctx.put("encounter", encounters.state(tx, e, 5)));
 		ctx.put("recent_events", LedgerService.recent(tx, campaignId, eventLimit));
+		ctx.put("since_last_session", sinceLastSession(tx, campaign, budget));
 		ctx.put("previous_session_summary", tx.queryOne(
 				"SELECT summary FROM session WHERE campaign_id = ? AND ended_at IS NOT NULL AND superseded = 0 ORDER BY id DESC LIMIT 1",
 				campaignId).map(r -> r.str("summary")).orElse(null));
@@ -254,23 +348,11 @@ public final class SessionService {
 				return result;
 			}
 			result.put("members", partyMembers(tx, campaignId, d));
-			var fallen = new ArrayList<Map<String, Object>>();
-			for (Row m : tx.query(
-					"SELECT m.state AS membership_state, m.left_time, c.* FROM party_membership m JOIN character c ON c.id = m.character_id " + "WHERE m.campaign_id = ? AND m.state IN ('DEAD','LEFT','DISMISSED','ENDED') ORDER BY m.id",
-					campaignId)) {
-				var f = new LinkedHashMap<String, Object>();
-				f.put("ref", Ref.of(Ref.CHARACTER, m.id()));
-				f.put("name", m.str("name"));
-				f.put("membership", m.str("membership_state"));
-				f.put("life_state", m.str("life_state"));
-				f.put("since", m.str("left_time"));
-				fallen.add(f);
-			}
-			result.put("former_members", fallen);
+			result.put("former_members", formerMembers(tx, campaignId));
 			result.put("location",
 					campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
 			tx.queryOne("SELECT seq FROM game_clock WHERE campaign_id = ?", campaignId)
-					.ifPresent(r -> result.put("game_time", GameTime.toMap(r.lng("seq"))));
+					.ifPresent(r -> result.put("game_time", GameTime.toMap(tx, campaignId, r.lng("seq"))));
 			tx.queryOne(
 					"SELECT * FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE') ORDER BY id DESC LIMIT 1",
 					campaignId).ifPresent(e -> result.put("encounter", encounters.state(tx, e, 3)));
@@ -306,6 +388,52 @@ public final class SessionService {
 			members.add(sheet);
 		}
 		return members;
+	}
+
+	// ── update_house_rules ─────────────────────────────────────────────
+
+	/** Table rulings every client sees at bootstrap: short strings, added to, removed from or replaced; audited. */
+	public Map<String, Object> updateHouseRules(String operationId, String campaignRef, List<Object> rules, String mode) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		var args = new LinkedHashMap<String, Object>();
+		args.put("campaign", campaignRef);
+		args.put("rules", rules);
+		args.put("mode", mode);
+		return db.mutate(Database.Mutation.of("update_house_rules", campaignId, operationId, "GM", args), tx -> {
+			Row campaign = Harness.requireMutation(tx, campaignRef, "update_house_rules");
+			String m = mode == null || mode.isBlank() ? "ADD" : mode.trim().toUpperCase();
+			if (!List.of("ADD", "REMOVE", "REPLACE").contains(m)) {
+				throw RpgException.invalidArgument("mode must be ADD, REMOVE or REPLACE.");
+			}
+			List<String> given = rules == null ? List.of()
+					: rules.stream().map(String::valueOf).map(String::trim).filter(s -> !s.isEmpty()).toList();
+			if (given.isEmpty() && !"REPLACE".equals(m)) {
+				throw RpgException.invalidArgument("Give at least one rule.");
+			}
+			var current = new ArrayList<>(houseRules(campaign));
+			switch (m) {
+			case "REPLACE" -> {
+				current.clear();
+				current.addAll(given);
+			}
+			case "ADD" -> given.stream().filter(r -> !current.contains(r)).forEach(current::add);
+			default -> current.removeIf(given::contains);
+			}
+			var cols = new LinkedHashMap<String, Object>();
+			cols.put("house_rules_json", se.hirt.mcp.rpg.protocol.Json.write(current));
+			cols.put("revision", campaign.lng("revision") + 1);
+			tx.update("campaign", campaignId, cols);
+			tx.touched(Ref.of(Ref.CAMPAIGN, campaignId), campaign.lng("revision") + 1);
+			long eventId = LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("HOUSE_RULE", "House rules (" + m.toLowerCase() + "): " + (
+							given.isEmpty() ? "cleared" : String.join("; ", given)), List.of(), "NOTABLE",
+							"PARTY_KNOWN", "GM", null, null, null, Map.of("mode", m, "rules", given)));
+			var result = new LinkedHashMap<String, Object>();
+			result.put("house_rules", current);
+			result.put("event", Ref.of(Ref.EVENT, eventId));
+			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
+			return result;
+		});
 	}
 
 	// ── suspend_session ────────────────────────────────────────────────
@@ -352,7 +480,7 @@ public final class SessionService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("session_closed", true);
 			result.put("session", Ref.of(Ref.SESSION, session.id()));
-			result.put("game_time", GameTime.toMap(seq));
+			result.put("game_time", GameTime.toMap(tx, campaignId, seq));
 			result.put("location",
 					current.isNull("current_location_id") ? null : location(tx, current.lng("current_location_id")));
 			result.put("session_summary", summary.trim());
@@ -380,11 +508,16 @@ public final class SessionService {
 			long to = from + minutes;
 			tx.update("game_clock", clock.id(), Map.of("seq", to, "instant", GameTime.render(to)));
 			int expired = se.hirt.mcp.rpg.rules.Effects.expireByTime(tx, campaignId, to);
+			var consequences = new java.util.ArrayList<Object>();
+			if (expired > 0) {
+				consequences.add(expired + " timed effect(s) expired");
+			}
+			consequences.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, from, to));
 			var result = new LinkedHashMap<String, Object>();
-			result.put("from", GameTime.toMap(from));
-			result.put("to", GameTime.toMap(to));
+			result.put("from", GameTime.toMap(tx, campaignId, from));
+			result.put("to", GameTime.toMap(tx, campaignId, to));
 			result.put("elapsed_minutes", minutes);
-			result.put("consequences", expired > 0 ? List.of(expired + " timed effect(s) expired") : List.of());
+			result.put("consequences", consequences);
 			result.put("expired_effects", expired);
 			result.put("director_trigger", directorTrigger(from, to));
 			result.put("meta", Harness.meta(campaign, null));

@@ -152,7 +152,12 @@ class SeedDataTest {
 				Map<String, Object> p = d.payload();
 				Map<String, Object> row = xpRows.stream().filter(r -> r.get("cr").equals(p.get("cr"))).findFirst()
 						.orElseThrow(() -> new AssertionError(d.id() + " cr"));
-				assertEquals(row.get("xp"), p.get("xp_value"), d.id() + " xp must match the CR table");
+				if ("0".equals(p.get("cr"))) {
+					// SRD 5.2.1: CR 0 creatures are worth 10 XP if they have attacks, 0 XP otherwise (Shrieker Fungus, Frog).
+					assertTrue(List.of(0, 10).contains(p.get("xp_value")), d.id() + " CR 0 xp must be 0 or 10");
+				} else {
+					assertEquals(row.get("xp"), p.get("xp_value"), d.id() + " xp must match the CR table");
+				}
 				assertEquals(row.get("cr_times_8"), p.get("cr_times_8"), d.id());
 				assertEquals(row.get("proficiency_bonus"), p.get("proficiency_bonus"), d.id());
 				Map<String, Object> abilities = (Map<String, Object>) p.get("abilities");
@@ -163,7 +168,7 @@ class SeedDataTest {
 				DiceExpression.parse(String.valueOf(hp.get("dice")));
 				assertTrue(((Number) hp.get("average")).intValue() > 0);
 				List<Map<String, Object>> actions = (List<Map<String, Object>>) p.get("actions");
-				assertFalse(actions.isEmpty(), d.id() + " needs at least one action");
+				assertNotNull(actions, d.id() + " needs an actions list (the Shrieker Fungus's is empty: it only reacts)");
 				for (Map<String, Object> a : actions) {
 					if (String.valueOf(a.get("kind")).endsWith("ATTACK")) {
 						assertNotNull(a.get("attack_bonus"), d.id() + " " + a.get("name"));

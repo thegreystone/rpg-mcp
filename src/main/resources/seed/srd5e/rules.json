@@ -1,7 +1,7 @@
 {
   "kind": "RULE",
   "citation": "SRD 5.2.1, Rules Glossary (pp. 176-191)",
-  "verify": "Lifted verbatim from the SRD 5.2.1 PDF text (CC-BY-4.0) on 2026-09-03 by tools/../build_rules.py: each entry is the glossary entry's own wording with the two-column hyphenation repaired, not a paraphrase. Re-check with tools/verify_srd.py after any edit.",
+  "verify": "Lifted verbatim from the SRD 5.2.1 PDF text (CC-BY-4.0) on 2026-09-08 by the tools/ rules builder (SrdTool build-rules): each entry is the glossary entry's own wording with the two-column hyphenation repaired, not a paraphrase. Re-check with SrdTool verify after any edit.",
   "entries": [
     {
       "id": "srd5e:rule/ability-check",
@@ -712,7 +712,7 @@
       "name": "High Jump",
       "payload": {
         "summary": "When you make a High Jump, you leap into the air a number of feet equal to 3 plus your Strength modifier (minimum of 0 feet) if you move at least 10 feet on foot immediately before the jump. When you…",
-        "text": "When you make a High Jump, you leap into the air a number of feet equal to 3 plus your Strength modifier (minimum of 0 feet) if you move at least 10 feet on foot immediately before the jump. When you make a standing High Jump, you can jump only half that distance. Either way, each foot of the jump costs a foot of movement. You can extend your arms half your height above yourself during the jump. Thus, you can reach a distance equal to the height of the jump plus 1 1/2 times your height. Hit Point Dice Hit Point Dice, or Hit Dice for short, help determine a player character's Hit Point maximum, as explained in \"Character Creation.\" Most monsters also have Hit Dice. A creature can spend Hit Dice during a Short Rest to regain Hit Points. See also \"Short Rest.\"",
+        "text": "When you make a High Jump, you leap into the air a number of feet equal to 3 plus your Strength modifier (minimum of 0 feet) if you move at least 10 feet on foot immediately before the jump. When you make a standing High Jump, you can jump only half that distance. Either way, each foot of the jump costs a foot of movement. You can extend your arms half your height above yourself during the jump. Thus, you can reach a distance equal to the height of the jump plus 1½ times your height. Hit Point Dice Hit Point Dice, or Hit Dice for short, help determine a player character's Hit Point maximum, as explained in \"Character Creation.\" Most monsters also have Hit Dice. A creature can spend Hit Dice during a Short Rest to regain Hit Points. See also \"Short Rest.\"",
         "text_is_paraphrase": false
       }
     },
@@ -1131,7 +1131,7 @@
       "name": "Saving Throw",
       "payload": {
         "summary": "A saving throw—also called a save—represents an attempt to avoid or resist a threat. You normally make a saving throw only when a rule requires you to do so, but you can decide to fail the save…",
-        "text": "A saving throw—also called a save—represents an attempt to avoid or resist a threat. You normally make a saving throw only when a rule requires you to do so, but you can decide to fail the save without rolling. The result of a save is detailed in the effect that allowed it. If a target is forced to make a save and lacks the ability score used by it, the target automatically fails. See also \"Playing the Game\" (\"D20 Test s\").",
+        "text": "A saving throw—also called a save—represents an attempt to avoid or resist a threat. You normally make a saving throw only when a rule requires you to do so, but you can decide to fail the save without rolling. The result of a save is detailed in the effect that allowed it. If a target is forced to make a save and lacks the ability score used by it, the target automatically fails. See also \"Playing the Game\" (\"D20 Tests\").",
         "text_is_paraphrase": false
       }
     },

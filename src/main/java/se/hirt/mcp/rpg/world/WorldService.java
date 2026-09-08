@@ -56,9 +56,13 @@ public final class WorldService {
 	private static final int DEFAULT_TRAVEL_MINUTES = 60;
 
 	private final Database db;
+	private final se.hirt.mcp.rpg.content.RulesData rules;
+	private final se.hirt.mcp.rpg.dice.RollService roller;
 
-	public WorldService(Database db) {
+	public WorldService(Database db, se.hirt.mcp.rpg.content.RulesData rules, se.hirt.mcp.rpg.dice.RollService roller) {
 		this.db = db;
+		this.rules = rules;
+		this.roller = roller;
 	}
 
 	// ── materialize_location ───────────────────────────────────────────
@@ -437,16 +441,35 @@ public final class WorldService {
 			result.put("moved", movers.stream().map(c -> Ref.of(Ref.CHARACTER, c.id())).toList());
 			result.put("route", hops);
 			result.put("travel_minutes", minutes);
-			result.put("game_time", GameTime.toMap(newSeq));
+			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
 			result.put("event", Ref.of(Ref.EVENT, eventId));
 			result.put("interrupted", false);
-			result.put("consequences",
-					expiredEffects > 0 ? List.of(expiredEffects + " timed effect(s) expired") : List.of());
+			var consequences = new ArrayList<Object>();
+			if (expiredEffects > 0) {
+				consequences.add(expiredEffects + " timed effect(s) expired");
+			}
+			consequences.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"),
+					newSeq));
+			// Travel encounters (RULES_ENGINE.md, "Travel encounters"): a suggestion the GM may take or ignore; the
+			// engine changes no state for it. The roll is made through the RollService so tests can script it.
+			Map<String, Object> suggestion = TravelEncounters.suggest(tx, rules, roller, campaignId, movers,
+					from == null ? List.of() : path, destination, minutes);
+			if (suggestion != null) {
+				consequences.add(suggestion);
+			}
+			result.put("consequences", consequences);
 			var trigger = new LinkedHashMap<String, Object>();
 			boolean significant = minutes >= GameTime.MINUTES_PER_DAY;
-			trigger.put("recommended", significant);
-			trigger.put("reasons", significant ? List.of("SIGNIFICANT_TRAVEL") : List.of());
-			trigger.put("urgency", significant ? "NORMAL" : "NONE");
+			var reasons = new ArrayList<String>();
+			if (significant) {
+				reasons.add("SIGNIFICANT_TRAVEL");
+			}
+			if (suggestion != null) {
+				reasons.add("TRAVEL_ENCOUNTER_SUGGESTED");
+			}
+			trigger.put("recommended", !reasons.isEmpty());
+			trigger.put("reasons", reasons);
+			trigger.put("urgency", reasons.isEmpty() ? "NONE" : "NORMAL");
 			result.put("director_trigger", trigger);
 			var warnings = new ArrayList<String>();
 			if ("SEMANTIC".equals(destination.str("materialization"))) {

@@ -43,6 +43,7 @@ import se.hirt.mcp.rpg.progression.LevelUpService;
 import se.hirt.mcp.rpg.progression.PartyXp;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.rules.Ability;
+import se.hirt.mcp.rpg.rules.CheckService;
 import se.hirt.mcp.rpg.rules.Combat;
 import se.hirt.mcp.rpg.rules.Rules;
 import se.hirt.mcp.rpg.session.GameTime;
@@ -191,11 +192,21 @@ public final class RuntimeService {
 				result.putAll(heal(tx, c, amount, reason));
 			}
 			case "DAMAGE" -> {
-				int amount = amount(change, "amount");
+				// Either a fixed amount or a dice expression the server rolls and journals ("2d6" for a fall,
+				// "3d8" for a creature ending its turn inside Spirit Guardians).
+				Roll damageRoll;
+				if (change.get("dice") instanceof String dice && !dice.isBlank()) {
+					damageRoll = roller.roll(dice);
+					CheckService.recordRoll(tx, campaignId, "damage", damageRoll, c.id(), reason);
+					result.put("roll", damageRoll.toMap());
+				} else {
+					int amount = amount(change, "amount");
+					damageRoll = new Roll(Integer.toString(amount), List.of(), List.of(), amount, amount);
+				}
+				int amount = Math.max(0, damageRoll.total());
 				String type = change.get("damage_type") == null ? "bludgeoning"
 						: change.get("damage_type").toString().toLowerCase();
-				var rolled = List.of(new Combat.RolledDamage(type,
-						new Roll(Integer.toString(amount), List.of(), List.of(), amount, amount), amount));
+				var rolled = List.of(new Combat.RolledDamage(type, damageRoll, amount));
 				Combat.DamageResult dr = Combat.applyDamage(c.intOr("current_hp", 0), c.intOr("temp_hp", 0),
 						c.intOr("max_hp", 1), rolled, defensesOf(tx, rules, c));
 				result.putAll(applyDamageResult(tx, rules, roller, c, dr, false, null, reason));

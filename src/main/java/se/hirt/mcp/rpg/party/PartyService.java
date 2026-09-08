@@ -274,6 +274,9 @@ public final class PartyService {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("summary", rel.str("summary"));
 		m.put("dimensions", rendered(rel.map("dimensions_json")));
+		if (!rel.isNull("profile_json")) {
+			m.put("profile", rel.map("profile_json"));
+		}
 		m.put("revision", rel.lng("revision"));
 		var events = new ArrayList<Map<String, Object>>();
 		for (Row e : tx.query(
@@ -327,6 +330,9 @@ public final class PartyService {
 			m.put("name", r.str("to_name"));
 			m.put("summary", r.str("summary"));
 			m.put("dimensions", r.map("dimensions_json"));
+			if (!r.isNull("profile_json")) {
+				m.put("profile", r.map("profile_json"));
+			}
 			m.put("significant_events",
 					tx.count("SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ?", r.id()));
 			out.add(m);
@@ -337,6 +343,21 @@ public final class PartyService {
 	public Map<String, Object> updateRelationship(
 			String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
 			String summary, String causeEventRef, String reason, boolean mutual, String provenance) {
+		return updateRelationship(operationId, campaignRef, fromRef, toRef, dimensions, summary, causeEventRef, reason,
+				mutual, provenance, null, null);
+	}
+
+	/**
+	 * The profile is the part of a relationship that drives a story: {@code milestones} (dated: FIRST_MEETING,
+	 * PROPOSAL, WEDDING, FIRST_NIGHT, PREGNANCY, PARTING, OATH…; the game time is stamped when missing),
+	 * {@code terms} (standing agreements between the two), {@code preferences} (likes, dislikes and limits mapped in
+	 * play; intimate detail only under a PEGI-18 profile), {@code wants} and {@code hard_lines}. MERGE (default)
+	 * appends to lists without duplicates and overlays maps; a null value removes a key; REPLACE starts over.
+	 */
+	public Map<String, Object> updateRelationship(
+			String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
+			String summary, String causeEventRef, String reason, boolean mutual, String provenance,
+			Map<String, Object> profile, String profileMode) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -344,6 +365,8 @@ public final class PartyService {
 		args.put("to", toRef);
 		args.put("dimensions", dimensions);
 		args.put("summary", summary);
+		args.put("profile", profile);
+		args.put("profile_mode", profileMode);
 		args.put("cause_event", causeEventRef);
 		args.put("reason", reason);
 		args.put("mutual", mutual);
@@ -364,8 +387,12 @@ public final class PartyService {
 				throw RpgException.invalidArgument(
 						"A relationship change needs a cause: cause_event (event:N) or a reason (I-20).");
 			}
-			if ((summary == null || summary.isBlank()) && (dimensions == null || dimensions.isEmpty()) && (causeEventRef == null || causeEventRef.isBlank())) {
-				throw RpgException.invalidArgument("Provide a summary, dimensions, or a cause_event to link.");
+			if ((summary == null || summary.isBlank()) && (dimensions == null || dimensions.isEmpty()) && (causeEventRef == null || causeEventRef.isBlank()) && (profile == null || profile.isEmpty())) {
+				throw RpgException.invalidArgument("Provide a summary, dimensions, a profile, or a cause_event to link.");
+			}
+			String pm = profileMode == null || profileMode.isBlank() ? "MERGE" : profileMode.trim().toUpperCase();
+			if (!List.of("MERGE", "REPLACE").contains(pm)) {
+				throw RpgException.invalidArgument("profile_mode must be MERGE or REPLACE.");
 			}
 			Long eventId = null;
 			if (causeEventRef != null && !causeEventRef.isBlank()) {
@@ -384,16 +411,17 @@ public final class PartyService {
 				eventId = e.id();
 			}
 			var updated = new ArrayList<Map<String, Object>>();
-			updated.add(upsert(tx, campaignId, from, to, dimensions, summary, eventId));
+			updated.add(upsert(tx, campaignId, from, to, dimensions, summary, eventId, profile, pm));
 			if (mutual) {
-				updated.add(upsert(tx, campaignId, to, from, dimensions, summary, eventId));
+				updated.add(upsert(tx, campaignId, to, from, dimensions, summary, eventId, profile, pm));
 			}
 			if (eventId == null) {
 				eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("RELATIONSHIP_CHANGED",
 						from.str("name") + " → " + to.str("name") + (mutual ? " (mutual)" : "") + ": " + (
 								summary == null ? reason : summary) + " (" + reason + ")", List.of(from.id(), to.id()),
 						"NOTABLE", "GM_ONLY", prov, null, from.lng("location_id"), null,
-						Map.of("dimensions", dimensions == null ? Map.of() : dimensions)));
+						Map.of("dimensions", dimensions == null ? Map.of() : dimensions, "profile",
+								profile == null ? Map.of() : profile)));
 			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("relationships", updated);
@@ -404,10 +432,13 @@ public final class PartyService {
 	}
 
 	private static Map<String, Object> upsert(
-			Tx tx, long campaignId, Row from, Row to, Map<String, Object> dimensions, String summary, Long eventId) {
+			Tx tx, long campaignId, Row from, Row to, Map<String, Object> dimensions, String summary, Long eventId,
+			Map<String, Object> givenProfile, String profileMode) {
 		Optional<Row> existing = tx.queryOne(
 				"SELECT * FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
 				campaignId, from.id(), to.id());
+		Map<String, Object> profile = mergeProfile(tx, campaignId, profile(existing.orElse(null)), givenProfile,
+				"REPLACE".equals(profileMode));
 		Map<String, Object> dims = existing.map(r -> r.map("dimensions_json")).orElseGet(LinkedHashMap::new);
 		if (dimensions != null) {
 			for (var e : dimensions.entrySet()) {
@@ -439,6 +470,9 @@ public final class PartyService {
 			if (summary != null && !summary.isBlank()) {
 				cols.put("summary", summary.trim());
 			}
+			if (givenProfile != null) {
+				cols.put("profile_json", profile.isEmpty() ? null : Json.write(profile));
+			}
 			cols.put("revision", existing.get().lng("revision") + 1);
 			tx.update("relationship", existing.get().id(), cols);
 			id = existing.get().id();
@@ -449,6 +483,7 @@ public final class PartyService {
 			cols.put("to_character_id", to.id());
 			cols.put("dimensions_json", Json.write(dims));
 			cols.put("summary", summary == null ? null : summary.trim());
+			cols.put("profile_json", profile.isEmpty() ? null : Json.write(profile));
 			cols.put("revision", 0);
 			id = tx.insert("relationship", cols);
 		}
@@ -463,8 +498,77 @@ public final class PartyService {
 		m.put("to", Ref.of(Ref.CHARACTER, to.id()));
 		m.put("summary", rel.str("summary"));
 		m.put("dimensions", rendered(dims));
+		if (!profile.isEmpty()) {
+			m.put("profile", profile);
+		}
 		m.put("revision", rel.lng("revision"));
 		m.put("significant_events", tx.count("SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ?", id));
 		return m;
+	}
+
+	/** The stored profile of a relationship row, empty when none. */
+	static Map<String, Object> profile(Row relationship) {
+		if (relationship == null || relationship.isNull("profile_json")) {
+			return new LinkedHashMap<>();
+		}
+		return new LinkedHashMap<>(relationship.map("profile_json"));
+	}
+
+	/** Milestones and other list keys append without duplicates, map keys overlay, a null removes; REPLACE starts over. */
+	static Map<String, Object> mergeProfile(
+			Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, boolean replace) {
+		if (given == null) {
+			return current;
+		}
+		var out = replace ? new LinkedHashMap<String, Object>() : new LinkedHashMap<>(current);
+		for (var e : given.entrySet()) {
+			String key = e.getKey().trim().toLowerCase();
+			Object v = e.getValue();
+			if (v == null) {
+				out.remove(key);
+			} else if (v instanceof List<?> list) {
+				var merged = new ArrayList<Object>();
+				if (out.get(key) instanceof List<?> old) {
+					merged.addAll(old);
+				}
+				for (Object item : list) {
+					Object norm = "milestones".equals(key) ? milestone(tx, campaignId, item) : item;
+					if (!merged.contains(norm)) {
+						merged.add(norm);
+					}
+				}
+				out.put(key, merged);
+			} else if (v instanceof Map<?, ?> map) {
+				var merged = new LinkedHashMap<String, Object>();
+				if (out.get(key) instanceof Map<?, ?> old) {
+					old.forEach((k, val) -> merged.put(String.valueOf(k), val));
+				}
+				map.forEach((k, val) -> {
+					if (val == null) {
+						merged.remove(String.valueOf(k));
+					} else {
+						merged.put(String.valueOf(k), val);
+					}
+				});
+				out.put(key, merged);
+			} else {
+				out.put(key, v);
+			}
+		}
+		return out;
+	}
+
+	/** A milestone is a map with at least a kind or note; the game time is stamped when the caller gave none. */
+	private static Object milestone(Tx tx, long campaignId, Object item) {
+		var out = new LinkedHashMap<String, Object>();
+		if (item instanceof Map<?, ?> m) {
+			m.forEach((k, v) -> out.put(String.valueOf(k), v));
+		} else {
+			out.put("note", String.valueOf(item));
+		}
+		if (!out.containsKey("game_time")) {
+			out.put("game_time", GameTime.render(GameTime.currentSeq(tx, campaignId)));
+		}
+		return out;
 	}
 }

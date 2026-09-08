@@ -45,13 +45,13 @@ public final class Tables {
 			"character_class", "character_trait", "player_control_assignment", "event", "event_actor", "event_causal",
 			"party_membership", "relationship", "relationship_event", "inventory_entry", "active_effect",
 			"resource_state", "encounter", "encounter_participant", "encounter_log", "quest", "faction", "story_beat",
-			"world_event", "pending_transaction", "roll");
+			"world_event", "pending_transaction", "roll", "account", "cash_flow", "cash_flow_run");
 
 	public static final Set<String> REWINDABLE_SET = Set.copyOf(REWINDABLE);
 
 	/** Tables that carry a campaign_id column (used to scope snapshot dumps). */
 	public static final Set<String> WITHOUT_CAMPAIGN_ID = Set.of("character_class", "character_trait", "event_actor",
-			"event_causal", "relationship_event", "resource_state", "encounter_participant");
+			"event_causal", "relationship_event", "resource_state", "encounter_participant", "cash_flow_run");
 
 	public static final Set<String> NOT_REWINDABLE = Set.of("schema_version", "installed_ruleset", "installed_content",
 			"session", "journal_entry", "checkpoint", "audit_record");

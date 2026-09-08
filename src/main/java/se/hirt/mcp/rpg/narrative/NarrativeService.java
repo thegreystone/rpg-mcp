@@ -603,7 +603,7 @@ public final class NarrativeService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("channel", ch);
 			result.put("location", Ref.ofNullable(Ref.LOCATION, locationId));
-			result.put("game_time", GameTime.toMap(now));
+			result.put("game_time", GameTime.toMap(tx, campaignId, now));
 			result.put("items", items);
 			result.put("note",
 					"These are committed facts the world can surface here; how (a headline, a drunk, a price hike) is yours. Nothing was created by asking.");
@@ -630,7 +630,7 @@ public final class NarrativeService {
 		ctx.put("visibility", "DIRECTOR_ONLY");
 		ctx.put("scope", scope);
 		ctx.put("game_time", tx.queryOne("SELECT seq FROM game_clock WHERE campaign_id = ?", campaignId)
-				.map(r -> GameTime.toMap(r.lng("seq"))).orElse(null));
+				.map(r -> GameTime.toMap(tx, campaignId, r.lng("seq"))).orElse(null));
 		ctx.put("adventure", campaign.isNull("adventure_json") ? Map.of() : campaign.map("adventure_json"));
 		Map<String, Object> prefs = campaign.map("preferences_json");
 		ctx.put("experience_preferences", prefs.get("experience"));

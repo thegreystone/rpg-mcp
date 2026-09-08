@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.rules;
 
+import se.hirt.mcp.rpg.character.CharacterService;
 import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
@@ -295,7 +296,51 @@ public final class CheckService {
 		return c;
 	}
 
-	static long recordRoll(Tx tx, long campaignId, String purpose, Roll roll, long actorId, String reason) {
+	/**
+	 * A free, journaled roll for anything the semantic tools do not cover: falling damage, a random table, an NPC's
+	 * dice, a coin toss. Nothing is applied; the breakdown and a roll_ref come back (MCP_PROTOCOL.md §13.6).
+	 */
+	public Map<String, Object> rollDice(
+			String operationId, String campaignRef, String expression, String actorRef, String reason) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		var args = new LinkedHashMap<String, Object>();
+		args.put("campaign", campaignRef);
+		args.put("expression", expression);
+		args.put("actor", actorRef);
+		args.put("reason", reason);
+		return db.mutate(Database.Mutation.of("roll_dice", campaignId, operationId, "GM", args), tx -> {
+			Harness.requireMutation(tx, campaignRef, "roll_dice");
+			if (expression == null || expression.isBlank()) {
+				throw RpgException.invalidArgument("expression is required, e.g. '2d6+3' or '4d6dl1'.");
+			}
+			Row actor = actorRef == null ? null : CharacterService.character(tx, campaignId, actorRef);
+			Roll roll = roller.roll(expression);
+			var cols = new LinkedHashMap<String, Object>();
+			cols.put("campaign_id", campaignId);
+			cols.put("journal_id", tx.journalId());
+			cols.put("purpose", "free roll" + (actor == null ? "" : " character:" + actor.id())
+					+ (reason == null ? "" : " — " + reason));
+			cols.put("expression", roll.expression());
+			cols.put("dice_json", Json.write(roll.dice()));
+			cols.put("dropped_json", Json.write(roll.dropped()));
+			cols.put("modifier", roll.modifier());
+			cols.put("total", roll.total());
+			long rollId = tx.insert("roll", cols);
+			var out = new LinkedHashMap<String, Object>();
+			out.put("roll", roll.toMap());
+			out.put("total", roll.total());
+			out.put("roll_ref", Ref.of(Ref.ROLL, rollId));
+			if (actor != null) {
+				out.put("actor", Ref.of(Ref.CHARACTER, actor.id()));
+			}
+			if (reason != null) {
+				out.put("reason", reason);
+			}
+			return out;
+		});
+	}
+
+	public static long recordRoll(Tx tx, long campaignId, String purpose, Roll roll, long actorId, String reason) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("journal_id", tx.journalId());

@@ -33,20 +33,74 @@ import io.quarkus.runtime.annotations.QuarkusMain;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Entry point. MCP over STDIO is a UTF-8 protocol, but a piped {@code System.out} defaults to the platform encoding on
  * Windows (cp1252), which mangles every non-ASCII character in tool descriptions and campaign text. The STDIO transport
  * captures {@code System.out} during runtime init, so it has to be rewrapped before Quarkus boots. Stdin is fine: the
  * default charset has been UTF-8 since JDK 18.
+ * <p>
+ * Desktop MCP hosts on Windows (Claude Desktop among them) may spawn the server with {@code C:\WINDOWS\system32} as the
+ * working directory. Quarkus lists {@code ${user.dir}/config} during boot to warn about stray config files, and
+ * {@code system32\config} is the registry hive directory: it exists but cannot be listed, so boot fails with
+ * {@code AccessDeniedException}. If the working directory's {@code config} entry cannot be listed, {@code user.dir} is
+ * redirected to the data directory before Quarkus starts. Nothing in the server resolves paths relative to the working
+ * directory, so this is invisible otherwise.
  */
 @QuarkusMain
 public class RpgMain {
 
 	public static void main(String... args) {
 		System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+		ensureScannableWorkingDirectory();
 		Quarkus.run(args);
+	}
+
+	private static void ensureScannableWorkingDirectory() {
+		String userDir = System.getProperty("user.dir");
+		if (userDir == null || canList(Paths.get(userDir, "config"))) {
+			return;
+		}
+		Path dataDir = dataDir();
+		try {
+			Files.createDirectories(dataDir);
+		} catch (IOException e) {
+			return; // Quarkus will report the real problem
+		}
+		System.setProperty("user.dir", dataDir.toAbsolutePath().toString());
+	}
+
+	/** True when the path is absent, or is a directory that can be listed. Mirrors what Quarkus does at boot. */
+	private static boolean canList(Path dir) {
+		if (!Files.exists(dir)) {
+			return true;
+		}
+		if (!Files.isDirectory(dir)) {
+			return true;
+		}
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+			return true;
+		} catch (IOException | SecurityException e) {
+			return false;
+		}
+	}
+
+	/** Same resolution order as {@code rpg.data-dir}: system property, {@code RPG_DATA_DIR}, then {@code ~/.rpg-mcp}. */
+	private static Path dataDir() {
+		String configured = System.getProperty("rpg.data-dir");
+		if (configured == null || configured.isBlank()) {
+			configured = System.getenv("RPG_DATA_DIR");
+		}
+		if (configured == null || configured.isBlank()) {
+			configured = System.getProperty("user.home") + "/.rpg-mcp";
+		}
+		return Paths.get(configured);
 	}
 }

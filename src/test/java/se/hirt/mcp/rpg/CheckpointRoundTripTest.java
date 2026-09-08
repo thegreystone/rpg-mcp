@@ -79,6 +79,11 @@ class CheckpointRoundTripTest {
 			engine.sessions().advanceTime(op(), campaignRef, 3 * 24 * 60, "travel");
 			engine.sessions().suspend(op(), campaignRef, "A doomed detour.");
 			engine.sessions().bootstrap(op(), campaignRef, null);
+			// The economy: an account, a rule, and a day so the rule has run once (account, cash_flow, cash_flow_run).
+			engine.accounts().create(op(), campaignRef, "The House", "OTHER", null, "5 gp", null);
+			engine.cashFlows().define(op(), campaignRef,
+					cols("name", "Alms", "from", "WORLD", "to", "The House", "amount", 3, "schedule", "DAILY"));
+			engine.sessions().advanceTime(op(), campaignRef, 24 * 60, "a day of alms");
 
 			// … plus direct journaled writes covering every rewindable table the slice's tools do not yet touch.
 			db.mutate(Database.Mutation.of("test_battery", campaignId, op(), "GM", null), tx -> {

@@ -225,4 +225,38 @@ class EconomyTest {
 				.read(tx -> "location:" + tx.queryOne("SELECT current_location_id AS l FROM campaign WHERE id = ?",
 						Long.parseLong(campaign.substring("campaign:".length()))).orElseThrow().lng("l"));
 	}
+
+	@Test
+	void giveMoneyBetweenCharacters() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("give-money"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String porter = (String) engine.runtime()
+					.materialize(op(), campaign, "Commoner", "Wat", null, null, null, null, false).get("character");
+			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money")).get(
+					"total_cp")).longValue();
+
+			Map<String, Object> given = engine.inventory()
+					.giveMoney(op(), campaign, pc, porter, "1 gp 5 sp", "for the dive");
+			assertEquals(150L, m(given.get("given")).get("total_cp"));
+			assertEquals(start - 150, m(given.get("giver_money")).get("total_cp"));
+			assertEquals(150L, m(given.get("receiver_money")).get("total_cp"));
+			assertEquals(150L,
+					m(engine.characters().characterSheet(campaign, porter, "PLAY").get("money")).get("total_cp"));
+			assertTrue(((String) given.get("event")).startsWith("event:"), "one ledger event names both");
+
+			// The giver must hold the amount; nobody pays themselves; the amount must be positive.
+			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class,
+					() -> engine.inventory().giveMoney(op(), campaign, porter, pc, "2 gp", null)).code());
+			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
+					() -> engine.inventory().giveMoney(op(), campaign, pc, pc, "1 gp", null)).code());
+			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
+					() -> engine.inventory().giveMoney(op(), campaign, pc, porter, 0, null)).code());
+			// The porter can pay it back in copper.
+			Map<String, Object> back = engine.inventory().giveMoney(op(), campaign, porter, pc, 150, "repaid");
+			assertEquals(0L, m(back.get("giver_money")).get("total_cp"));
+			assertEquals(start, m(back.get("receiver_money")).get("total_cp"));
+		}
+	}
 }

@@ -361,6 +361,62 @@ public final class InventoryService {
 		});
 	}
 
+	// ── give_money ─────────────────────────────────────────────────────
+
+	/**
+	 * Moves coin between two characters of the campaign in one transaction (DESIGN.md §12): a tip, a wage, a debt
+	 * paid. The giver must hold the amount; the receiver gets exactly it; one ledger event names both.
+	 */
+	public Map<String, Object> giveMoney(
+			String operationId, String campaignRef, String fromRef, String toRef, Object money, String reason) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		var args = new LinkedHashMap<String, Object>();
+		args.put("campaign", campaignRef);
+		args.put("from", fromRef);
+		args.put("to", toRef);
+		args.put("money", money);
+		args.put("reason", reason);
+		return db.mutate(Database.Mutation.of("give_money", campaignId, operationId, "GM", args), tx -> {
+			Row campaign = Harness.requireMutation(tx, campaignRef, "give_money");
+			Row giver = activeCharacter(tx, campaignId, fromRef);
+			Row receiver = activeCharacter(tx, campaignId, toRef);
+			if (giver.id() == receiver.id()) {
+				throw RpgException.invalidArgument(fromRef + " cannot give money to themselves.");
+			}
+			long cp = Money.parseCp(money);
+			if (cp <= 0) {
+				throw RpgException.invalidArgument("Give a positive amount.");
+			}
+			long have = giver.lng("money_cp") == null ? 0 : giver.lng("money_cp");
+			if (have < cp) {
+				throw RpgException.insufficientResource(
+						giver.str("name") + " has " + Money.format(have) + " but " + Money.format(cp) + " was asked.");
+			}
+			long theirs = receiver.lng("money_cp") == null ? 0 : receiver.lng("money_cp");
+			tx.update("character", giver.id(), Map.of("money_cp", have - cp, "revision", giver.lng("revision") + 1));
+			tx.update("character", receiver.id(),
+					Map.of("money_cp", theirs + cp, "revision", receiver.lng("revision") + 1));
+			String summary = giver.str("name") + " gave " + receiver.str("name") + " " + Money.format(cp)
+					+ (reason == null || reason.isBlank() ? "." : ": " + reason);
+			var payload = new LinkedHashMap<String, Object>();
+			payload.put("from", Ref.of(Ref.CHARACTER, giver.id()));
+			payload.put("to", Ref.of(Ref.CHARACTER, receiver.id()));
+			payload.put("money_cp", cp);
+			long eventId = LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("MONEY_GIVEN", summary, List.of(giver.id(), receiver.id()), "MINOR",
+							"PARTY_KNOWN", "GM", null, giver.lng("location_id"), null, payload));
+			var result = new LinkedHashMap<String, Object>();
+			result.put("from", Ref.of(Ref.CHARACTER, giver.id()));
+			result.put("to", Ref.of(Ref.CHARACTER, receiver.id()));
+			result.put("given", Money.render(cp));
+			result.put("giver_money", Money.render(have - cp));
+			result.put("receiver_money", Money.render(theirs + cp));
+			result.put("event", Ref.of(Ref.EVENT, eventId));
+			result.put("meta", Harness.meta(campaign, null));
+			return result;
+		});
+	}
+
 	// ── equip_item ─────────────────────────────────────────────────────
 
 	public Map<String, Object> equip(

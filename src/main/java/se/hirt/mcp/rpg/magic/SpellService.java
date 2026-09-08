@@ -417,7 +417,31 @@ public final class SpellService {
 		// Slot — or a free cast granted by the species trait or feat that taught the spell.
 		int used = 0;
 		Map<String, Object> slotInfo = null;
-		if (level > 0) {
+		boolean ritual = Boolean.TRUE.equals(opts.get("ritual")) || "true".equalsIgnoreCase(
+				String.valueOf(opts.get("ritual")));
+		if (ritual) {
+			// SRD 5.2.1 Rituals: a spell with the Ritual tag, cast by a class with Ritual Casting, takes ten minutes
+			// longer and spends no spell slot. Encounter turns never reach here (the CAST action has no ritual option).
+			if (level == 0) {
+				throw RpgException.validation(List.of(new Violation("options.ritual", "NOT_A_RITUAL",
+						def.name() + " is a cantrip; it is cast without a slot anyway.")));
+			}
+			if (!Boolean.TRUE.equals(p.get("ritual"))) {
+				throw RpgException.validation(List.of(new Violation("options.ritual", "NOT_A_RITUAL",
+						def.name() + " does not have the Ritual tag.")));
+			}
+			if (castingOpt.isEmpty() || !castingOpt.get().ritual()) {
+				throw RpgException.validation(List.of(new Violation("options.ritual", "NO_RITUAL_CASTING",
+						caster.str("name") + " cannot cast rituals; the class has no Ritual Casting feature.")));
+			}
+			if (slotLevel != null && slotLevel != level) {
+				throw RpgException.validation(List.of(new Violation("slot_level", "RITUAL",
+						"A ritual is cast at the spell's own level; omit slot_level.")));
+			}
+			used = level;
+			slotInfo = Map.of("ritual", true, "level", level, "note",
+					"cast as a ritual: ten minutes longer than the casting time, no spell slot spent");
+		} else if (level > 0) {
 			Optional<Row> free = traitPayload.get("free_cast_resource") instanceof String fr ? tx.queryOne(
 					"SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", caster.id(), fr)
 					: Optional.empty();
@@ -524,7 +548,7 @@ public final class SpellService {
 			}
 		}
 		case "SAVE" -> {
-			if (targets.isEmpty()) {
+			if (targets.isEmpty() && !selfCentred(p, mech)) {
 				throw RpgException.invalidArgument(
 						def.name() + " needs at least one target (the creatures in the area).");
 			}
@@ -532,6 +556,23 @@ public final class SpellService {
 				perTarget.add(
 						savingThrow(tx, rules, roller, campaignId, caster, target, def, mech, dc, upcast, casterLevel,
 								encounterId, round, concentrator, source, effectsCreated));
+			}
+			if (targets.isEmpty()) {
+				// An emanation or area centred on the caster (Spirit Guardians, Thunderwave) with nobody in it yet:
+				// the spell is up and its slot spent; creatures that enter or end their turn in the area later save
+				// against save_dc with resolve_check and take the damage with apply_runtime_change {dice}.
+				result.put("note", def.name() + " is centred on " + caster.str("name")
+						+ " with no creature in its area at casting. Resolve later saves with resolve_check (SAVING_THROW vs save_dc "
+						+ dc + ") and damage with apply_runtime_change DAMAGE {dice}.");
+			}
+			if (concentration && effectsCreated.isEmpty()) {
+				// Nothing on a target carries the concentration (damage-only or nobody failed): mark it on the caster
+				// so a later concentration spell, damage or a rest ends it properly.
+				long id = Effects.add(tx, campaignId, caster.id(), caster.id(), def.id(), source,
+						"srd5e:effect/concentrating", null,
+						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name()), caster.id(),
+						def.id(), "PLAYER");
+				effectsCreated.add(Ref.of("effect", id));
 			}
 		}
 		case "HEAL" -> {
@@ -695,8 +736,8 @@ public final class SpellService {
 			if (concentration) {
 				long id = Effects.add(tx, campaignId, caster.id(), caster.id(), def.id(), source,
 						"srd5e:effect/concentrating", null,
-						duration(tx, campaignId, p, upcast, encounterId, round, def.name()), caster.id(), def.id(),
-						"PLAYER");
+						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name()), caster.id(),
+						def.id(), "PLAYER");
 				effectsCreated.add(Ref.of("effect", id));
 			}
 			result.put("note", "No structured mechanics for " + def.name() + "; adjudicate from the rules text.");
@@ -1038,6 +1079,39 @@ public final class SpellService {
 		}
 		long minutes = mech.get("duration_minutes") instanceof Number n ? n.longValue() : 1;
 		return Effects.minutes(tx, campaignId, minutes, label);
+	}
+
+	private static final java.util.regex.Pattern DURATION_TEXT =
+			java.util.regex.Pattern.compile("(\\d+)\\s*(round|minute|hour|day)s?", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * The duration of the spell itself (for the caster's concentration marker): the mechanics' explicit rounds or
+	 * minutes when given, else the printed duration ("10 minutes", "Concentration, up to 1 hour"), else one minute.
+	 */
+	private static Map<String, Object> spellDuration(
+			Tx tx, long campaignId, Map<String, Object> payload, Map<String, Object> mech, int upcast, Long encounterId,
+			long round, String label) {
+		if (mech.get("duration_rounds") instanceof Number || mech.get("duration_minutes") instanceof Number) {
+			return duration(tx, campaignId, mech, upcast, encounterId, round, label);
+		}
+		var m = DURATION_TEXT.matcher(String.valueOf(payload.getOrDefault("duration", "")));
+		if (m.find()) {
+			long n = Long.parseLong(m.group(1));
+			return switch (m.group(2).toLowerCase()) {
+				case "round" -> Effects.rounds(tx, campaignId, encounterId, round, n, label);
+				case "hour" -> Effects.minutes(tx, campaignId, n * 60, label);
+				case "day" -> Effects.minutes(tx, campaignId, n * 60 * 24, label);
+				default -> Effects.minutes(tx, campaignId, n, label);
+			};
+		}
+		return Effects.minutes(tx, campaignId, 1, label);
+	}
+
+	/** A spell whose area starts at the caster: range "Self (15-foot emanation)", "Self (15-foot cube)". */
+	private static boolean selfCentred(Map<String, Object> payload, Map<String, Object> mech) {
+		String range = String.valueOf(payload.getOrDefault("range", "")).toLowerCase();
+		String area = String.valueOf(mech.getOrDefault("area", "")).toLowerCase();
+		return range.startsWith("self") || area.contains("emanation") || area.contains("around you");
 	}
 
 	private static boolean removeCondition(Tx tx, long characterId, String condition) {

@@ -1786,7 +1786,7 @@ public final class EncounterService {
 					tx.get("campaign", campaignId), result);
 			result.put("level_up_eligible", awards.stream().filter(a -> Boolean.TRUE.equals(a.get("level_up_eligible")))
 					.map(a -> a.get("character")).toList());
-			result.put("game_time", GameTime.toMap(newSeq));
+			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
 			if (!continuation.isEmpty()) {
 				result.put("continuation", continuation);
 			}

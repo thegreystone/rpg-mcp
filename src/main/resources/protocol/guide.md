@@ -36,7 +36,7 @@ get_server_state → create_campaign | open_campaign
          create_character_draft → generate_ability_scores → update_character_draft → commit_character_draft
          update_party_design → validate_campaign_setup → commit_campaign_setup
   ── context boundary: the setup conversation is disposable ──
-  bootstrap_session → play (resolve_check, trade, equip_item, grant_loot, record_memory, advance_time, create_checkpoint …) → suspend_session
+  bootstrap_session → play (resolve_check, roll_dice, trade, equip_item, grant_loot, record_memory, advance_time, create_checkpoint …) → suspend_session
 ```
 
 Setup is an interview, not a form. Every setup response carries `decisions` in interview order: ask
@@ -71,8 +71,19 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
 - Checks work in a fight too: a parley at the point of a spell or a lock under fire is a `resolve_check` mid-encounter
   (it never advances the turn). Name the `tool` when one is used — thieves' tools, calligrapher's supplies — and the
   engine applies the proficiency, and advantage when the actor is proficient in both the skill and the tool.
+- Never invent a die result. What no semantic tool rolls for you, `roll_dice` rolls and journals (falling damage, a
+  random table, an NPC's dice); `apply_runtime_change` DAMAGE takes `dice` directly. A spell centred on the caster
+  (Spirit Guardians, Thunderwave) can be cast with no targets; creatures that enter the area later save with
+  `resolve_check` against the returned `save_dc`.
 - Commerce: you narrate the haggling, the engine does the accounting. Look prices up with
-  `get_content_definitions`; never invent money or treasure — `grant_loot` exists for that and is audited.
+  `get_content_definitions`; never invent money or treasure — `grant_loot` exists for that and is audited. Coin passing between two characters (a tip, a wage, a debt) is `give_money`: one
+  ledger event both remember, nothing created.
+- Estate and calendar: a treasury that is not a purse (the House, a keep) is an `account` (`create_account`,
+  `transfer_money`, `get_accounts`); rents, tolls, stipends, tithes, debts and dated happenings are cash flows
+  (`define_cash_flow`: fixed or percent-of amounts, weekly/monthly/yearly/seasonal schedules, season multipliers, a
+  repayment `cap` that ends a debt by itself) that the engine fires whenever the clock moves — read them in the
+  `consequences` of `advance_time`, `move_party` and `perform_rest` and narrate them; never book them by hand.
+  `set_calendar` fixes what date Day 1 is, so every `game_time` carries a weekday, a date and a season.
 - Combat: materialize every opponent (`materialize_character`), `start_encounter` with sides, then one
   `perform_encounter_action` per action for whoever's turn it is — you choose NPC tactics, the engine rolls.
   `end_encounter` awards XP and tells you if the player character died and what the options are.
@@ -83,10 +94,21 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
   naming the creatures in an area yourself. The engine spends slots, rolls attacks and saves, applies damage,
   healing, conditions and concentration; for utility spells it hands you the rules text to adjudicate.
 - Relationships are gameplay: after a meaningful moment, `record_memory` it, then `update_relationship`
-  with that event as `cause_event` so it becomes a retrievable shared memory. Keep summaries current.
+  with that event as `cause_event` so it becomes a retrievable shared memory. Keep summaries current, and keep the
+  `profile` current too: dated milestones (a wedding, a first night, a pregnancy), the standing terms between two
+  people, what each wants and will not do, and — under PEGI_18 — the likes, dislikes and limits mapped in play. Like
+  in every good story, these details are the driver; a later session should not have to rediscover them.
+- Continuity is the engine's job: nobody has to suspend. Bootstrap returns `since_last_session`, a recap derived
+  from the ledger; retell it in prose before asking what the player does. `campaign.house_rules` are the table's
+  standing rulings (record new ones with `update_house_rules`), and `former_members` says where the people who left
+  are now.
 - Level-ups are transactions: `begin_level_up` → present choices → `update_level_up` → `commit_level_up`.
 - The world: persist places once they matter (`materialize_location`), move with `move_party`, and let
   off-screen facts reach the player through `get_diegetic_information` — a headline, a rumour, a price.
+- Travel encounters: a long `move_party` may return a `TRAVEL_ENCOUNTER_SUGGESTED` entry in `consequences`
+  (a creature, a count sized to the party, the hour it falls in, and open pressures as hooks). It is a suggestion:
+  play it with `materialize_character` and `start_encounter`, fold it into what the campaign is already worried
+  about, or let the road stay quiet. Tag locations (forest, marsh, road, town …) so the ground rolls the right table.
 - The Director: at session start, after major quests, big time jumps or when plans break, read
   `get_director_context` and commit seeds/pressures/world events with `commit_director_changes` — possibilities
   and facts, never scenes the player must play. "Nothing to change" is a valid review.

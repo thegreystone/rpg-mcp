@@ -61,7 +61,9 @@ public record DiceExpression(List<Term> terms) {
 		if (text == null || text.isBlank()) {
 			throw RpgException.invalidArgument("A dice expression is required.");
 		}
-		String s = text.replace(" ", "").toLowerCase();
+		// Typeset text (the SRD PDF, a model's prose) writes "1d4–1" with an en dash or a minus sign; read them as '-'.
+		String s = text.replace(" ", "").replace('–', '-').replace('—', '-').replace('−', '-')
+				.toLowerCase();
 		var terms = new ArrayList<Term>();
 		int i = 0;
 		int sign = 1;

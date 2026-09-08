@@ -318,4 +318,99 @@ class SpellTest {
 					"pact_slots")).get("current"));
 		}
 	}
+
+	/**
+	 * A spell centred on the caster can be cast with nobody in its area (Spirit Guardians before the enemy closes),
+	 * a damage-only concentration spell is still tracked as concentration, and the free roll / dice damage path
+	 * journals the server's dice.
+	 */
+	@Test
+	void selfCentredSpellsFreeRollsAndDiceDamage() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("emanation"))) {
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			String[] ids = caster(engine, "Druid", map("WIS", 15, "CON", 14, "STR", 13, "DEX", 12, "CHA", 10, "INT", 8),
+					List.of("Perception", "Insight"), List.of("Druidcraft", "Guidance"),
+					List.of("Thunderwave", "Faerie Fire", "Cure Wounds", "Goodberry"));
+			String campaign = ids[0];
+			String pc = ids[1];
+			String bandit = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
+
+			// Thunderwave (Self, 15-foot cube) with no creature in the cube: legal, the slot is spent, a note explains
+			// how to resolve later saves.
+			Map<String, Object> wave = engine.spells().cast(op(), campaign, pc, "Thunderwave", null, List.of(), null);
+			assertTrue(list(wave.get("targets")).isEmpty());
+			assertTrue(String.valueOf(wave.get("note")).contains("resolve_check"));
+			// A ranged save spell still needs a target.
+			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
+					() -> engine.spells().cast(op(), campaign, pc, "Faerie Fire", null, List.of(), null)).code());
+
+			// Faerie Fire on a bandit who saves: nothing lands on the target, but the caster is concentrating.
+			dice.queue(20);
+			Map<String, Object> fire = engine.spells()
+					.cast(op(), campaign, pc, "Faerie Fire", null, List.of(bandit), null);
+			assertEquals(Boolean.TRUE, list(fire.get("targets")).get(0).get("saved"));
+			assertEquals(List.of("Faerie Fire (Caster)"),
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"))).get(
+							"concentrating_on"));
+
+			// A free roll: 4d6 drop lowest = 6+5+4 (the 1 dropped), journaled with a roll_ref.
+			dice.queue(6, 1, 5, 4);
+			Map<String, Object> free = engine.checks().rollDice(op(), campaign, "4d6dl1", pc, "test");
+			assertEquals(15, free.get("total"));
+			assertEquals(List.of(1), m(free.get("roll")).get("dropped"));
+			assertTrue(String.valueOf(free.get("roll_ref")).startsWith("roll:"));
+
+			// DAMAGE with dice: 2d6 fall = 3 + 4 = 7 off the bandit's 11 HP, breakdown returned.
+			dice.queue(3, 4);
+			Map<String, Object> fall = engine.runtime().applyRuntimeChange(op(), campaign, bandit,
+					map("kind", "DAMAGE", "dice", "2d6", "damage_type", "bludgeoning", "reason", "fell off a roof"));
+			assertEquals(7, m(fall.get("roll")).get("total"));
+			assertEquals(11 - 7,
+					(Integer) m(engine.characters().characterSheet(campaign, bandit, "SUMMARY").get("hp")).get("current"));
+		}
+	}
+
+	@Test
+	void ritualCastingSpendsNoSlot() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("ritual"))) {
+			String[] ids = caster(engine, "Cleric",
+					map("WIS", 15, "CON", 14, "STR", 13, "DEX", 12, "CHA", 10, "INT", 8),
+					List.of("Insight", "Religion"), List.of("Sacred Flame", "Guidance", "Spare the Dying"),
+					List.of("Detect Magic", "Bless", "Cure Wounds", "Guiding Bolt"));
+			String campaign = ids[0];
+			String pc = ids[1];
+			Map<String, Object> slotsBefore = m(
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"));
+
+			// A ritual-tagged spell cast by a class with Ritual Casting spends nothing.
+			Map<String, Object> ritual = engine.spells()
+					.cast(op(), campaign, pc, "Detect Magic", null, null, map("ritual", true));
+			assertEquals(Boolean.TRUE, m(ritual.get("slot")).get("ritual"));
+			assertEquals(slotsBefore,
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots")),
+					"no slot spent");
+
+			// A spell without the Ritual tag cannot be cast as one; slot_level does not combine with a ritual.
+			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
+					() -> engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc), map("ritual", true)))
+					.code());
+			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
+					() -> engine.spells().cast(op(), campaign, pc, "Detect Magic", 2, null, map("ritual", true)))
+					.code());
+			// The same spell cast normally spends a level-1 slot.
+			Map<String, Object> normal = engine.spells().cast(op(), campaign, pc, "Detect Magic", null, null, null);
+			assertEquals(1, m(normal.get("slot")).get("slot_level"));
+		}
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("ritual-sorcerer"))) {
+			// Sorcerers have no Ritual Casting: the ritual option is refused even for a ritual-tagged spell.
+			String[] ids = caster(engine, "Sorcerer",
+					map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8),
+					List.of("Arcana", "Persuasion"), List.of("Fire Bolt", "Light", "Mage Hand", "Prestidigitation"),
+					List.of("Detect Magic", "Magic Missile"));
+			RpgException refused = assertThrows(RpgException.class, () -> engine.spells()
+					.cast(op(), ids[0], ids[1], "Detect Magic", null, null, map("ritual", true)));
+			assertEquals(ErrorCode.VALIDATION_FAILED, refused.code());
+		}
+	}
 }

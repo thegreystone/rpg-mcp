@@ -85,6 +85,9 @@ public final class LedgerService {
 		cols.put("recorded_journal_id", tx.journalId());
 		cols.put("location_id", spec.locationId());
 		cols.put("episodic_detail", spec.episodicDetail());
+		// Every event remembers the session it was written in (V007), so the recap can be derived from the ledger.
+		cols.put("session_id", tx.queryOne("SELECT active_session_id FROM campaign WHERE id = ?", campaignId)
+				.filter(r -> !r.isNull("active_session_id")).map(r -> r.lng("active_session_id")).orElse(null));
 		long eventId = tx.insert("event", cols);
 		if (spec.actorIds() != null) {
 			for (Long actor : new java.util.LinkedHashSet<>(spec.actorIds())) {
@@ -161,7 +164,7 @@ public final class LedgerService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("event", Ref.of(Ref.EVENT, eventId));
 			result.put("game_time",
-					GameTime.toMap(fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
+					GameTime.toMap(tx, campaignId, fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
@@ -308,6 +311,65 @@ public final class LedgerService {
 			m.put("detail", r.str("episodic_detail"));
 		}
 		return m;
+	}
+
+	/**
+	 * "Since you last played": the ledger between two journal points, arranged by importance under a character budget
+	 * and never by a model. CRITICAL events keep their episodic detail, MAJOR their summaries, NOTABLE one line each
+	 * while the budget lasts, MINOR only a count by type. Within each group the order is chronological. When the
+	 * budget is exceeded the least important lines go first, oldest first, and the digest says how many were left out.
+	 */
+	public static Map<String, Object> digest(Tx tx, long campaignId, long fromJournalId, long toJournalId,
+	                                         int charBudget) {
+		List<Row> rows = tx.query(
+				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
+				campaignId, fromJournalId, toJournalId);
+		var critical = new ArrayList<Map<String, Object>>();
+		var major = new ArrayList<Map<String, Object>>();
+		var notable = new ArrayList<String>();
+		var minor = new TreeMap<String, Integer>();
+		for (Row r : rows) {
+			switch (r.str("importance")) {
+			case "CRITICAL" -> critical.add(eventSummary(tx, r, true));
+			case "MAJOR" -> major.add(eventSummary(tx, r, false));
+			case "NOTABLE" -> notable.add(r.str("fictional_time") + " " + r.str("type") + ": " + r.str("summary"));
+			default -> minor.merge(r.str("type"), 1, Integer::sum);
+			}
+		}
+		int omitted = 0;
+		while (size(critical) + size(major) + notable.stream().mapToInt(String::length).sum() > charBudget) {
+			if (!notable.isEmpty()) {
+				notable.remove(0);
+			} else if (!major.isEmpty()) {
+				major.remove(0);
+			} else if (critical.stream().anyMatch(m -> m.containsKey("detail"))) {
+				critical.stream().filter(m -> m.containsKey("detail")).findFirst().ifPresent(m -> m.remove("detail"));
+				continue;
+			} else if (!critical.isEmpty()) {
+				critical.remove(0);
+			} else {
+				break;
+			}
+			omitted++;
+		}
+		var out = new LinkedHashMap<String, Object>();
+		out.put("events", rows.size());
+		if (!rows.isEmpty()) {
+			out.put("from", rows.get(0).str("fictional_time"));
+			out.put("to", rows.get(rows.size() - 1).str("fictional_time"));
+		}
+		out.put("critical", critical);
+		out.put("major", major);
+		out.put("notable", notable);
+		out.put("minor_by_type", minor);
+		if (omitted > 0) {
+			out.put("omitted_for_budget", omitted);
+		}
+		return out;
+	}
+
+	private static int size(List<Map<String, Object>> events) {
+		return events.stream().mapToInt(m -> Json.write(m).length()).sum();
 	}
 
 	private static String importanceAtLeast(String min) {

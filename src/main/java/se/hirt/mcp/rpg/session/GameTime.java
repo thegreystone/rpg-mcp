@@ -75,6 +75,20 @@ public final class GameTime {
 		return m;
 	}
 
+	/** As {@link #toMap(long)} plus the calendar date (year, month, day, weekday, season) of the campaign. */
+	public static Map<String, Object> toMap(long seq, Calendar calendar) {
+		var m = toMap(seq);
+		Calendar cal = calendar == null ? Calendar.DEFAULT : calendar;
+		m.put("date", cal.dateOf(seq));
+		m.put("display", cal.render(seq));
+		return m;
+	}
+
+	/** As {@link #toMap(long)} plus the date under the campaign's calendar (or the default one). */
+	public static Map<String, Object> toMap(Tx tx, long campaignId, long seq) {
+		return toMap(seq, Calendar.forCampaign(tx, campaignId));
+	}
+
 	public static Row clock(Tx tx, long campaignId) {
 		return tx.queryOne("SELECT * FROM game_clock WHERE campaign_id = ?", campaignId)
 				.orElseThrow(() -> RpgException.notFound("Game clock for campaign " + campaignId));

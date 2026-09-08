@@ -120,8 +120,10 @@ public final class RestService {
 			result.put("interrupted", false);
 			result.put("elapsed_minutes", minutes);
 			result.put("characters", results);
-			result.put("game_time", GameTime.toMap(newSeq));
+			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
 			result.put("expired_effects", expired);
+			result.put("consequences", se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId,
+					clock.lng("seq"), newSeq));
 			result.put("note",
 					"Interruptions (REST_INTERRUPT) are not modelled yet: if the fiction interrupts a rest, do not call perform_rest for it.");
 			result.put("meta", Harness.meta(campaign, null));
