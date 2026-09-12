@@ -52,7 +52,7 @@ public class EngineProducer {
 	Engine engine(
 			RpgConfig config,
 			@ConfigProperty(name = "quarkus.application.version", defaultValue = "unknown") String version) {
-		Path file = Path.of(config.dataDir()).resolve("rpg.db");
+		Path file = config.dataPath().resolve("rpg.db");
 		RollService roller = config.rollSeed().isPresent() ? RandomRollService.seeded(config.rollSeed().getAsLong())
 				: new RandomRollService();
 		if (config.rollSeed().isPresent()) {

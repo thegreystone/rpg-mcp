@@ -35,8 +35,8 @@
     "data_dir": {
       "type": "directory",
       "title": "Campaign data directory",
-      "description": "Where campaigns are stored (a single SQLite file, rpg.db). Back up this directory and your campaigns are safe.",
-      "default": "${HOME}/.rpg-mcp",
+      "description": "Where campaigns are stored (a single SQLite file, rpg.db). Back up this directory and your campaigns are safe. A leading ~ means your home directory.",
+      "default": "~/.rpg-mcp",
       "required": false
     }
   },

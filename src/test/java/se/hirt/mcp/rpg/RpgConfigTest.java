@@ -28,45 +28,32 @@
  */
 package se.hirt.mcp.rpg;
 
-import io.smallrye.config.ConfigMapping;
+import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
-import java.util.OptionalLong;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Server configuration ({@code rpg.*}). Everything else is campaign state in the database.
+ * The data directory may arrive as {@code ~/.rpg-mcp} from the MCP Bundle manifest; the server expands the tilde
+ * itself because the host does not, and a {@code ${HOME}} placeholder would fail on Windows.
  */
-@ConfigMapping(prefix = "rpg")
-public interface RpgConfig {
+class RpgConfigTest {
 
-	/** Directory holding {@code rpg.db}, as configured. Use {@link #dataPath()} for the resolved path. */
-	String dataDir();
+	private static final String HOME = System.getProperty("user.home");
 
-	/** {@link #dataDir()} with a leading {@code ~} expanded to the user's home directory. */
-	default Path dataPath() {
-		return Path.of(expandHome(dataDir()));
+	@Test
+	void expandsLeadingTilde() {
+		assertEquals(HOME + "/.rpg-mcp", RpgConfig.expandHome("~/.rpg-mcp"));
+		assertEquals(HOME + "\\.rpg-mcp", RpgConfig.expandHome("~\\.rpg-mcp"));
+		assertEquals(HOME, RpgConfig.expandHome("~"));
 	}
 
-	/**
-	 * Expands a leading {@code ~} ({@code ~}, {@code ~/...} or {@code ~\...}) to {@code user.home}. Hosts that
-	 * launch the server with a portable default such as {@code ~/.rpg-mcp} (the MCP Bundle manifest does) cannot
-	 * be relied on to expand it themselves, and a {@code ${HOME}}-style placeholder would fail in the config
-	 * layer on Windows, where no {@code HOME} variable exists.
-	 */
-	static String expandHome(String path) {
-		if (path == null) {
-			return null;
-		}
-		String home = System.getProperty("user.home");
-		if (path.equals("~")) {
-			return home;
-		}
-		if (path.startsWith("~/") || path.startsWith("~\\")) {
-			return home + path.substring(1);
-		}
-		return path;
+	@Test
+	void leavesOtherPathsAlone() {
+		assertEquals("/var/lib/rpg", RpgConfig.expandHome("/var/lib/rpg"));
+		assertEquals("C:\\Users\\Someone\\.rpg-mcp", RpgConfig.expandHome("C:\\Users\\Someone\\.rpg-mcp"));
+		assertEquals("~user/.rpg-mcp", RpgConfig.expandHome("~user/.rpg-mcp"));
+		assertEquals("data/~/x", RpgConfig.expandHome("data/~/x"));
+		assertNull(RpgConfig.expandHome(null));
 	}
-
-	/** Optional fixed seed for the roller — for reproducible local testing only; never set in real play. */
-	OptionalLong rollSeed();
 }

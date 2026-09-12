@@ -101,6 +101,6 @@ public class RpgMain {
 		if (configured == null || configured.isBlank()) {
 			configured = System.getProperty("user.home") + "/.rpg-mcp";
 		}
-		return Paths.get(configured);
+		return Paths.get(RpgConfig.expandHome(configured));
 	}
 }
