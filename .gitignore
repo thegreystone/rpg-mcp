@@ -29,7 +29,8 @@ Thumbs.db
 .quarkus/
 
 # Runtime artifacts
-rpg-mcp-server.log*
+*.log
+*.log.*
 *.db
 *.db-wal
 *.db-shm
