@@ -46,7 +46,8 @@ On Linux and macOS, make it executable:
 chmod +x rpg-mcp-server-0.1.2-*
 ```
 
-On macOS, also clear the quarantine flag the first time:
+The macOS binary is signed and notarized, so Gatekeeper accepts it as downloaded. Releases up to and
+including 0.1.2 were not; for those, clear the quarantine flag the first time:
 
 ```bash
 xattr -d com.apple.quarantine rpg-mcp-server-0.1.2-macos-aarch64
