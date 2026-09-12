@@ -1,0 +1,77 @@
+name: Bundles
+
+# Build the MCP Bundles (.mcpb) for an already published release and attach them to it. The release
+# workflow does this on every tag; this one exists for releases cut before it did, and for re-packing
+# after a binary on the release was replaced (for example by the Windows signing script, which re-packs
+# its own bundle, so normally only the Unix ones are needed). Each bundle is packed on its own platform
+# so the executable bit is preserved.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without the "v" prefix (e.g. 0.1.2)'
+        required: true
+        type: string
+      platforms:
+        description: 'Which bundles to build'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - unix-only
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suffix: linux-x86_64
+            exe: ''
+            mcpb_platform: linux
+          - os: ubuntu-latest
+            suffix: linux-aarch64
+            exe: ''
+            mcpb_platform: linux
+          - os: macos-latest
+            suffix: macos-aarch64
+            exe: ''
+            mcpb_platform: darwin
+          - os: windows-latest
+            suffix: windows-x86_64
+            exe: '.exe'
+            mcpb_platform: win32
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download binary from release
+        if: inputs.platforms == 'all' || matrix.mcpb_platform != 'win32'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p target
+          gh release download "v${{ inputs.version }}" \
+            --pattern "rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}${{ matrix.exe }}" --dir target
+
+      - name: Package MCP bundle
+        if: inputs.platforms == 'all' || matrix.mcpb_platform != 'win32'
+        shell: bash
+        run: |
+          bash mcpb/pack.sh "${{ inputs.version }}" "${{ matrix.suffix }}" "${{ matrix.mcpb_platform }}" \
+            "target/rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}${{ matrix.exe }}" \
+            "target/rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}.mcpb"
+
+      - name: Attach bundle to release
+        if: inputs.platforms == 'all' || matrix.mcpb_platform != 'win32'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ inputs.version }}" --clobber \
+            "target/rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}.mcpb"

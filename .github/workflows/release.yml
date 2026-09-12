@@ -37,20 +37,31 @@ jobs:
   # ── Native images ────────────────────────────────────────────────────
   native:
     strategy:
+      # One platform failing should not cancel the others: their binaries are still useful, and a re-run
+      # of the failed job alone is cheaper than rebuilding everything.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             arch: x86_64
             suffix: linux-x86_64
+            exe: ''
+            mcpb_platform: linux
           - os: ubuntu-24.04-arm
             arch: aarch64
             suffix: linux-aarch64
+            exe: ''
+            mcpb_platform: linux
           - os: macos-latest
             arch: aarch64
             suffix: macos-aarch64
+            exe: ''
+            mcpb_platform: darwin
           - os: windows-latest
             arch: x86_64
             suffix: windows-x86_64
+            exe: '.exe'
+            mcpb_platform: win32
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -161,6 +172,16 @@ jobs:
         if: runner.os == 'macOS' && always()
         run: security delete-keychain "$RUNNER_TEMP/build.keychain"
 
+      # One MCP Bundle per platform around the signed (macOS) or bare (Linux, Windows) binary, installable
+      # into Claude Desktop with a double-click. Packed here so the executable bit survives on Unix.
+      - name: Package MCP bundle
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash mcpb/pack.sh "$VERSION" "${{ matrix.suffix }}" "${{ matrix.mcpb_platform }}" \
+            "target/rpg-mcp-server-${VERSION}-${{ matrix.suffix }}${{ matrix.exe }}" \
+            "target/rpg-mcp-server-${VERSION}-${{ matrix.suffix }}.mcpb"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
@@ -168,6 +189,7 @@ jobs:
           path: |
             target/rpg-mcp-server-*-${{ matrix.suffix }}
             target/rpg-mcp-server-*-${{ matrix.suffix }}.exe
+            target/rpg-mcp-server-*-${{ matrix.suffix }}.mcpb
 
   # ── Create GitHub release with all artifacts ─────────────────────────
   release:

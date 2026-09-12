@@ -46,8 +46,9 @@ On Linux and macOS, make it executable:
 chmod +x rpg-mcp-server-0.1.2-*
 ```
 
-The macOS binary is signed and notarized, so Gatekeeper accepts it as downloaded. Releases up to and
-including 0.1.2 were not; for those, clear the quarantine flag the first time:
+The macOS binary is signed and notarized, so Gatekeeper accepts it as downloaded. The one exception is a
+first launch while offline, because Gatekeeper fetches the notarization ticket from Apple; if that
+happens, clear the quarantine flag once:
 
 ```bash
 xattr -d com.apple.quarantine rpg-mcp-server-0.1.2-macos-aarch64
@@ -111,7 +112,16 @@ harness state and the allowed operations, so the model is guided turn by turn ei
 
 ### Add it to Claude Desktop
 
-Edit `claude_desktop_config.json` — on Windows at
+The easiest way is the MCP Bundle. Download the `.mcpb` file for your platform from the
+[Releases page](https://github.com/thegreystone/rpg-mcp/releases/latest) (for example
+`rpg-mcp-server-0.1.2-windows-x86_64.mcpb`), then either double-click it or open it from
+*Settings → Extensions* in Claude Desktop. The installer asks for the campaign data directory (default
+`~/.rpg-mcp`) and takes care of the rest — no config file to edit. The bundle contains the same native
+binary as the standalone download: signed and notarized on macOS, Authenticode-signed on Windows. The
+bundle file itself carries no signature, so Claude Desktop shows its standard unsigned-extension notice
+before installing.
+
+If you prefer the manual route, edit `claude_desktop_config.json` — on Windows at
 `C:\Users\<UserName>\AppData\Roaming\Claude\claude_desktop_config.json`, on macOS at
 `~/Library/Application Support/Claude/claude_desktop_config.json` — and add:
 
@@ -128,8 +138,7 @@ Edit `claude_desktop_config.json` — on Windows at
 
 Restart Claude Desktop afterwards. Claude Desktop on Windows may launch the server with
 `C:\WINDOWS\system32` as the working directory; the server detects that and moves its working directory
-to the data directory itself. If you run a build older than 0.1.2 that lacks this, add
-`"-Duser.dir=C:\\Users\\YourName\\.rpg-mcp"` to `args` as a workaround.
+to the data directory itself, so nothing else is needed.
 
 ### Where your campaigns live
 
@@ -210,8 +219,6 @@ The engine reconstructs everything. Chat transcripts are never required.
   Desktop, `codex mcp list` for Codex).
 - **No log output** — logs go to `rpg-mcp-server.log` in the data directory (`~/.rpg-mcp` by default),
   never to stdout/stderr, so they cannot corrupt the STDIO transport. Check that file first.
-- **`AccessDeniedException: C:\WINDOWS\system32\config`** — the Windows working-directory problem; add
-  the `-Duser.dir` and `-Dquarkus.config.locations=.` arguments shown in the Claude Desktop section.
 - **The AI improvises mechanics instead of calling tools** — it did not read the guide. Say
   *"Read rpg://protocol/guide"* and start the session again; every session should begin with it.
 - **The AI batches setup questions** — tell it to follow the guide and ask one decision per turn, listing

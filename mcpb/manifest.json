@@ -1,0 +1,47 @@
+{
+  "manifest_version": "0.3",
+  "name": "rpg-mcp",
+  "display_name": "RPG MCP Server",
+  "version": "__VERSION__",
+  "description": "A persistent, rules-aware RPG engine (SRD 5.2.1) that turns your AI into a game master for campaigns that last for years.",
+  "long_description": "The AI improvises the fiction; the engine owns the truth. Characters, HP, money, XP, inventory, time, party, relationships, events and checkpoints live in one local SQLite file, so a campaign can run across many conversations without any chat transcript. Rules content from the SRD 5.2.1 (CC-BY-4.0) is embedded and imported on first run: no network access, no account. After installing, tell Claude to read the guide resource and start a campaign.",
+  "author": {
+    "name": "Marcus Hirt",
+    "url": "https://www.hirt.se"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thegreystone/rpg-mcp"
+  },
+  "homepage": "https://github.com/thegreystone/rpg-mcp",
+  "documentation": "https://github.com/thegreystone/rpg-mcp/blob/master/README.md",
+  "support": "https://github.com/thegreystone/rpg-mcp/issues",
+  "license": "BSD-3-Clause",
+  "keywords": ["rpg", "dungeon-master", "srd", "5e", "campaign", "game", "dice"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/__BINARY__",
+    "mcp_config": {
+      "command": "${__dirname}/server/__BINARY__",
+      "args": ["-Dquarkus.mcp.server.stdio.enabled=true"],
+      "env": {
+        "RPG_DATA_DIR": "${user_config.data_dir}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": false,
+  "user_config": {
+    "data_dir": {
+      "type": "directory",
+      "title": "Campaign data directory",
+      "description": "Where campaigns are stored (a single SQLite file, rpg.db). Back up this directory and your campaigns are safe.",
+      "default": "${HOME}/.rpg-mcp",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["__PLATFORM__"]
+  }
+}
