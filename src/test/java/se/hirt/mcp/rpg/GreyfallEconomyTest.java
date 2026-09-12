@@ -213,7 +213,7 @@ class GreyfallEconomyTest {
 			SessionService.SESSION_GAP = Duration.ZERO;
 			Map<String, Object> next = engine.sessions().bootstrap(op(), campaign, null);
 			assertEquals(false, next.get("session_resumed"));
-			Map<String, Object> recap = m(next.get("since_last_session"));
+			Map<String, Object> recap = m(m(next.get("chronicle")).get("since_last_chapter"));
 			assertNotNull(recap);
 			assertTrue(((List<?>) recap.get("notable")).stream().anyMatch(n -> n.toString().contains("Midsummer"))
 					|| m(recap.get("minor_by_type")).containsKey("WORLD_EVENT")

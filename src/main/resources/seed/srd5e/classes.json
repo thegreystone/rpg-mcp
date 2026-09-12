@@ -1009,7 +1009,158 @@
             22
           ],
           "ritual": false
-        }
+        },
+        "features": [
+          {
+            "name": "Innate Sorcery",
+            "level": 1,
+            "enforcement": "MIXED",
+            "summary": "Bonus Action: for 1 minute your Sorcerer spells' save DC is 1 higher and you have Advantage on their attack rolls. Two uses per Long Rest (tracked: innate_sorcery).",
+            "text": "As a Bonus Action, you can unleash the magic within you for 1 minute. For the duration, the spell save DC of your Sorcerer spells increases by 1, and you have Advantage on the attack rolls of Sorcerer spells you cast. You can use this feature twice, and you regain all expended uses when you finish a Long Rest.",
+            "text_is_paraphrase": true,
+            "resource": {
+              "ref": "innate_sorcery",
+              "max": 2,
+              "recharge": "LONG_REST"
+            }
+          },
+          {
+            "name": "Font of Magic",
+            "level": 2,
+            "enforcement": "ENGINE",
+            "summary": "Sorcery points equal to your Sorcerer level, back on a Long Rest; as a Bonus Action, points become a spell slot (level 1-5 at 2/3/5/6/7 points) or a slot becomes points equal to its level.",
+            "text": "You can tap into the wellspring of magic within you. This wellspring takes the form of Sorcery Points, which allow you to create a variety of magical effects. You have a number of Sorcery Points equal to your Sorcerer level, and you regain all expended points when you finish a Long Rest. Converting Spell Slots to Sorcery Points: as a Bonus Action, you can expend one spell slot and gain Sorcery Points equal to the slot's level. Creating Spell Slots: as a Bonus Action, you can transform unexpended Sorcery Points into one spell slot of level 1 (2 points), 2 (3), 3 (5), 4 (6) or 5 (7). A slot created this way vanishes when you finish a Long Rest.",
+            "text_is_paraphrase": true,
+            "mechanic": {
+              "kind": "FONT_OF_MAGIC",
+              "slot_costs": {
+                "1": 2,
+                "2": 3,
+                "3": 5,
+                "4": 6,
+                "5": 7
+              }
+            },
+            "resource": {
+              "ref": "sorcery_points",
+              "max": "CLASS_LEVEL",
+              "recharge": "LONG_REST"
+            }
+          },
+          {
+            "name": "Metamagic",
+            "level": 2,
+            "enforcement": "ENGINE",
+            "summary": "Shape a spell as you cast it by spending sorcery points: two options at level 2, three at 10, four at 17. One option per spell, plus Empowered and Seeking.",
+            "text": "Because your magic flows from within, you can alter your spells to suit your needs; you gain two Metamagic options of your choice from the list below, and one more at Sorcerer levels 10 and 17. Each time you gain a Sorcerer level, you can replace one of your Metamagic options with another. You can use only one Metamagic option on a spell when you cast it, unless the option says otherwise.",
+            "text_is_paraphrase": true,
+            "mechanic": {
+              "kind": "METAMAGIC",
+              "options_known": {
+                "2": 2,
+                "10": 3,
+                "17": 4
+              },
+              "options": [
+                {
+                  "id": "careful",
+                  "name": "Careful Spell",
+                  "cost": 1,
+                  "summary": "When you cast a spell that forces others to make a saving throw, choose up to your Charisma modifier (minimum 1) of those creatures: they automatically succeed and take no damage if they would normally take half on a success."
+                },
+                {
+                  "id": "distant",
+                  "name": "Distant Spell",
+                  "cost": 1,
+                  "summary": "A spell with a range of 5+ feet has its range doubled; a spell with a range of Touch reaches 30 feet."
+                },
+                {
+                  "id": "empowered",
+                  "name": "Empowered Spell",
+                  "cost": 1,
+                  "summary": "Reroll up to your Charisma modifier (minimum 1) of the spell's damage dice and use the new rolls. Can be used with another Metamagic option."
+                },
+                {
+                  "id": "extended",
+                  "name": "Extended Spell",
+                  "cost": 1,
+                  "summary": "A duration of 1 minute or longer is doubled, to a maximum of 24 hours, and you have Advantage on saving throws to maintain Concentration on the spell."
+                },
+                {
+                  "id": "heightened",
+                  "name": "Heightened Spell",
+                  "cost": 2,
+                  "summary": "One target of the spell has Disadvantage on saving throws made against it."
+                },
+                {
+                  "id": "quickened",
+                  "name": "Quickened Spell",
+                  "cost": 2,
+                  "summary": "A spell with a casting time of 1 action is cast as a Bonus Action instead; you still cast only one spell with a spell slot on the turn."
+                },
+                {
+                  "id": "seeking",
+                  "name": "Seeking Spell",
+                  "cost": 1,
+                  "summary": "If you miss with a spell's attack roll, reroll the d20 and use the new roll. Can be used with another Metamagic option."
+                },
+                {
+                  "id": "subtle",
+                  "name": "Subtle Spell",
+                  "cost": 1,
+                  "summary": "The spell needs no Verbal or Somatic components, nor a Material component unless it is consumed or has a cost; it cannot be identified as being cast."
+                },
+                {
+                  "id": "transmuted",
+                  "name": "Transmuted Spell",
+                  "cost": 1,
+                  "summary": "Change the spell's damage type from acid, cold, fire, lightning, poison or thunder to another of those types."
+                },
+                {
+                  "id": "twinned",
+                  "name": "Twinned Spell",
+                  "cost": 1,
+                  "summary": "A spell that targets one more creature when cast with a higher-level slot (Charm Person, Hold Person, ...) gains that extra target: its effective level is one higher for the target count only."
+                }
+              ]
+            }
+          },
+          {
+            "name": "Sorcerer Subclass",
+            "level": 3,
+            "enforcement": "GM",
+            "summary": "Choose a Sorcerer subclass; its features are narrated from the SRD and recorded with record_memory (subclasses are not yet data-driven).",
+            "text": "You gain a Sorcerer subclass of your choice. A subclass is a specialization that grants you features at certain Sorcerer levels.",
+            "text_is_paraphrase": true
+          },
+          {
+            "name": "Sorcerous Restoration",
+            "level": 5,
+            "enforcement": "ENGINE",
+            "summary": "When you finish a Short Rest, regain expended sorcery points up to half your Sorcerer level; once per Long Rest.",
+            "text": "When you finish a Short Rest, you can regain expended Sorcery Points, but no more than a number equal to half your Sorcerer level (round down). Once you use this feature, you can't do so again until you finish a Long Rest.",
+            "text_is_paraphrase": true,
+            "mechanic": {
+              "kind": "SORCEROUS_RESTORATION"
+            },
+            "resource": {
+              "ref": "sorcerous_restoration",
+              "max": 1,
+              "recharge": "LONG_REST"
+            }
+          },
+          {
+            "name": "Sorcery Incarnate",
+            "level": 7,
+            "enforcement": "MIXED",
+            "summary": "With no Innate Sorcery uses left, spend 2 sorcery points to activate it; while it is active you may use up to two Metamagic options on each spell (pass options.sorcery_incarnate: true when casting).",
+            "text": "If you have no uses of Innate Sorcery left, you can use it if you spend 2 Sorcery Points when you take the Bonus Action to activate it. In addition, while your Innate Sorcery feature is active, you can use up to two of your Metamagic options on each spell you cast.",
+            "text_is_paraphrase": true,
+            "mechanic": {
+              "kind": "SORCERY_INCARNATE"
+            }
+          }
+        ]
       }
     },
     {

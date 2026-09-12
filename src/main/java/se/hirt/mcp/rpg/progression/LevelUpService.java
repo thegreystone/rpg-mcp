@@ -172,6 +172,42 @@ public final class LevelUpService {
 		return result;
 	}
 
+	/**
+	 * The Metamagic options a sorcerer owes at the new level: the class feature's count for that level minus the
+	 * options already known (SRD 5.2.1 "Sorcerer": two at level 2, one more at 10 and 17). Empty when nothing is owed.
+	 */
+	private Optional<Map<String, Object>> metamagicChoice(Tx tx, Map<String, Object> payload, Row c) {
+		if (!(payload.get("class_ref") instanceof String classRef)) {
+			return Optional.empty();
+		}
+		Optional<RulesData.Definition> cls = rules.find(classRef);
+		if (cls.isEmpty()) {
+			return Optional.empty();
+		}
+		int toLevel = ((Number) payload.get("to_level")).intValue();
+		Optional<Map<String, Object>> spec = se.hirt.mcp.rpg.magic.Metamagic.featureSpec(cls.get(), toLevel);
+		if (spec.isEmpty()) {
+			return Optional.empty();
+		}
+		List<se.hirt.mcp.rpg.magic.Metamagic.Option> options = se.hirt.mcp.rpg.magic.Metamagic.options(spec.get());
+		List<String> known = se.hirt.mcp.rpg.magic.Metamagic.known(tx, c.id());
+		int allowed = se.hirt.mcp.rpg.magic.Metamagic.allowed(spec.get(), toLevel);
+		int owed = allowed - known.size();
+		if (owed <= 0) {
+			return Optional.empty();
+		}
+		var m = new LinkedHashMap<String, Object>();
+		m.put("choice", "metamagic");
+		m.put("choose", owed);
+		m.put("known", known);
+		m.put("allowed_at_level", allowed);
+		m.put("options", options.stream().filter(o -> !known.contains(o.id()))
+				.map(se.hirt.mcp.rpg.magic.Metamagic.Option::toMap).toList());
+		m.put("rule", "Required: pass choices.metamagic = [\"Empowered Spell\", \"Quickened Spell\"] (" + owed
+				+ " option" + (owed == 1 ? "" : "s") + "). One option shapes a spell; Empowered and Seeking may join it.");
+		return Optional.of(m);
+	}
+
 	@SuppressWarnings("unchecked")
 	private static List<Integer> asiLevels(RulesData.Definition cls) {
 		Object levels = cls.payload().get("asi_levels");
@@ -309,10 +345,11 @@ public final class LevelUpService {
 		if (!pendingFeats.isEmpty()) {
 			result.put("pending_feat_choices", pendingFeats);
 		}
+		metamagicChoice(tx, payload, c).ifPresent(choice -> result.put("metamagic_choice", choice));
 		result.put("automatic",
 				Map.of("proficiency_bonus", rules.proficiencyBonus(((Number) payload.get("to_level")).intValue()),
 						"note",
-						"Class features, spell slots and subclass choices are not yet data-driven; narrate them from the SRD and record notable ones with record_memory."));
+						"Spell slots resize and ENGINE class features (Sneak Attack, Font of Magic, Metamagic) apply at commit; subclass choices and GM-adjudicated features are narrated from the SRD and recorded with record_memory."));
 		result.put("chosen", payload.get("choices"));
 		result.put("preview", preview(tx, t, c));
 		rules.find((String) payload.get("class_ref")).map(d -> d.payload().get("spellcasting"))
@@ -527,6 +564,20 @@ public final class LevelUpService {
 					chosen.put("feat", record);
 					chosen.remove("ability_score_improvement");
 				}
+				case "metamagic" -> {
+					Map<String, Object> choice = metamagicChoice(tx, payload, c).orElseThrow(
+							() -> RpgException.validation(List.of(new Violation("metamagic", "NOT_AVAILABLE",
+									"Level " + payload.get("to_level") + " grants no new Metamagic option for " + payload.get(
+											"class_name") + "."))));
+					RulesData.Definition cls = rules.require((String) payload.get("class_ref"), "CLASS");
+					int toLevel = ((Number) payload.get("to_level")).intValue();
+					Map<String, Object> spec = se.hirt.mcp.rpg.magic.Metamagic.featureSpec(cls, toLevel).orElseThrow();
+					List<String> ids = se.hirt.mcp.rpg.magic.Metamagic.validateChoice(
+							se.hirt.mcp.rpg.magic.Metamagic.options(spec),
+							((Number) choice.get("allowed_at_level")).intValue(),
+							se.hirt.mcp.rpg.magic.Metamagic.known(tx, c.id()), e.getValue(), true);
+					chosen.put("metamagic", ids);
+				}
 				case "class" -> {
 					if (!Boolean.TRUE.equals(payload.get("class_required"))) {
 						throw RpgException.validation(List.of(new Violation("class", "NOT_AVAILABLE",
@@ -627,7 +678,7 @@ public final class LevelUpService {
 			Row t = transaction(tx, campaign.id(), transactionRef);
 			Map<String, Object> payload = t.map("payload_json");
 			Row c = tx.get("character", Ref.id((String) payload.get("character"), Ref.CHARACTER));
-			List<Violation> violations = violations(t, c);
+			List<Violation> violations = violations(tx, t, c);
 			var result = new LinkedHashMap<String, Object>();
 			result.put("transaction", pending(t));
 			result.put("valid", violations.isEmpty());
@@ -639,10 +690,16 @@ public final class LevelUpService {
 	}
 
 	@SuppressWarnings("unchecked")
-	private List<Violation> violations(Row t, Row c) {
+	private List<Violation> violations(Tx tx, Row t, Row c) {
 		Map<String, Object> payload = t.map("payload_json");
 		Map<String, Object> chosen = (Map<String, Object>) payload.get("choices");
 		var v = new ArrayList<Violation>();
+		if (chosen.get("metamagic") == null) {
+			metamagicChoice(tx, payload, c).ifPresent(choice -> v.add(new Violation("metamagic", "REQUIRED",
+					"Level " + payload.get("to_level") + " grants " + choice.get("choose") + " Metamagic option"
+							+ (((Number) choice.get("choose")).intValue() == 1 ? "" : "s")
+							+ "; pass choices.metamagic (get_level_up_choices lists them).")));
+		}
 		if (Boolean.TRUE.equals(payload.get("class_required"))) {
 			if (chosen.get("class") == null) {
 				v.add(new Violation("class", "REQUIRED",
@@ -714,7 +771,7 @@ public final class LevelUpService {
 			Harness.requireRevision(t, "Transaction", expectedRevision);
 			Map<String, Object> payload = t.map("payload_json");
 			Row c = tx.get("character", Ref.id((String) payload.get("character"), Ref.CHARACTER));
-			List<Violation> violations = violations(t, c);
+			List<Violation> violations = violations(tx, t, c);
 			if (!violations.isEmpty()) {
 				throw RpgException.validation(violations);
 			}
@@ -759,6 +816,21 @@ public final class LevelUpService {
 					se.hirt.mcp.rpg.character.Origins.applyFeatChoices(tx, rules, c, chosen.get("feat_choices"));
 				}
 			}
+			// Metamagic options chosen at this level become METAMAGIC traits (SRD 5.2.1 "Sorcerer").
+			var metamagicNames = new ArrayList<String>();
+			if (chosen.get("metamagic") instanceof List<?> ids) {
+				long characterId = c.id();
+				se.hirt.mcp.rpg.magic.Metamagic.featureSpec(classDef, toLevel).ifPresent(spec -> {
+					List<se.hirt.mcp.rpg.magic.Metamagic.Option> options =
+							se.hirt.mcp.rpg.magic.Metamagic.options(spec);
+					List<String> chosenIds = ids.stream().map(String::valueOf).toList();
+					se.hirt.mcp.rpg.magic.Metamagic.addKnown(tx, characterId, chosenIds, options);
+					for (String id : chosenIds) {
+						options.stream().filter(o -> o.id().equals(id)).findFirst()
+								.ifPresent(o -> metamagicNames.add(o.name()));
+					}
+				});
+			}
 			Map<String, Object> asi =
 					chosen.get("ability_score_improvement") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
 			for (var e : asi.entrySet()) {
@@ -793,7 +865,8 @@ public final class LevelUpService {
 					c.str("name") + " reached level " + toLevel + " (" + payload.get(
 							"class_name") + "): +" + gain + " HP" + (asi.isEmpty() ? ""
 							: ", ability improvement " + asi) + (featName == null ? "" : ", feat " + featName) + (
-							lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells) + ".", List.of(c.id()),
+							lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells) + (
+							metamagicNames.isEmpty() ? "" : ", Metamagic " + metamagicNames) + ".", List.of(c.id()),
 					"MAJOR", "PARTY_KNOWN", "PLAYER", null, c.lng("location_id"), null,
 					Map.of("level", toLevel, "hp_gain", gain, "choices", chosen)));
 			tx.update("campaign", campaignId,
@@ -811,6 +884,9 @@ public final class LevelUpService {
 			}
 			if (!lineageSpells.isEmpty()) {
 				result.put("species_spells_granted", lineageSpells);
+			}
+			if (!metamagicNames.isEmpty()) {
+				result.put("metamagic", metamagicNames);
 			}
 			result.put("sheet", characters.sheet(tx, after, "PLAY"));
 			result.put("level_up_eligible", rules.levelForXp(after.lng("xp")) > toLevel);

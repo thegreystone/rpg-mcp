@@ -740,12 +740,13 @@ public final class CharacterService {
 
 	/** Narrative/identity fields that may be changed on a committed character (MCP_PROTOCOL.md §10.9). */
 	private static final Set<String> NARRATIVE_FIELDS = Set.of("name", "description", "appearance", "personality",
-			"backstory", "goals", "age", "presentation", "alignment");
+			"backstory", "goals", "age", "presentation", "alignment", "biography", "intimacy");
 
 	/**
 	 * Applies canonical narrative changes to a non-draft character: name, appearance, personality, backstory, goals,
-	 * age and presentation. Mechanical state is never touched here — that belongs to rules-governed transactions or an
-	 * audited override.
+	 * age and presentation, plus the merged aggregates {@code biography} (timeline, voice, state, marks) and, under
+	 * PEGI_18 only, {@code intimacy} (see {@link Biography}). Mechanical state is never touched here — that belongs to
+	 * rules-governed transactions or an audited override.
 	 */
 	public Map<String, Object> updateCharacter(
 			String operationId, String campaignRef, String characterRef,
@@ -782,6 +783,30 @@ public final class CharacterService {
 						throw RpgException.invalidArgument("age must be a number.");
 					}
 					cols.put("age", value == null ? null : ((Number) value).intValue());
+				}
+				case "biography" -> {
+					if (value != null && !(value instanceof Map<?, ?>)) {
+						throw RpgException.invalidArgument(
+								"biography must be a map of " + Biography.BIOGRAPHY_KEYS.stream().sorted().toList() + " (or null to clear).");
+					}
+					@SuppressWarnings("unchecked") Map<String, Object> merged = value == null ? Map.of()
+							: Biography.merge(tx, campaignId, Biography.biography(c), (Map<String, Object>) value,
+									Biography.BIOGRAPHY_KEYS, "biography");
+					cols.put("biography_json", merged.isEmpty() ? null : Json.write(merged));
+				}
+				case "intimacy" -> {
+					if (!Biography.intimacyAllowed(tx, campaignId)) {
+						throw RpgException.policyDenied(
+								"An intimate profile is recorded only under the PEGI_18 content profile.");
+					}
+					if (value != null && !(value instanceof Map<?, ?>)) {
+						throw RpgException.invalidArgument(
+								"intimacy must be a map of " + Biography.INTIMACY_KEYS.stream().sorted().toList() + " (or null to clear).");
+					}
+					@SuppressWarnings("unchecked") Map<String, Object> merged = value == null ? Map.of()
+							: Biography.merge(tx, campaignId, Biography.intimacy(c), (Map<String, Object>) value,
+									Biography.INTIMACY_KEYS, "intimacy");
+					cols.put("intimacy_json", merged.isEmpty() ? null : Json.write(merged));
 				}
 				case "alignment" -> {
 					String a = value == null ? null : value.toString().trim().toUpperCase().replace(' ', '_');
@@ -862,11 +887,13 @@ public final class CharacterService {
 		m.put("classes", classes.stream().map(r -> rules.find(r.str("class_ref")).map(RulesData.Definition::name)
 				.orElse(r.str("class_ref")) + " " + r.lng("level")).toList());
 		m.put("level", classes.isEmpty() ? null : level);
-		var hp = new LinkedHashMap<String, Object>();
-		hp.put("current", c.integer("current_hp"));
-		hp.put("max", c.integer("max_hp"));
-		hp.put("temp", c.integer("temp_hp"));
+		Map<String, Object> hp = RuntimeService.hpView(tx, c);
+		if (c.isNull("max_hp")) {
+			hp.put("max", null);
+		}
 		m.put("hp", hp);
+		Biography.appendBrief(c, m);
+		m.put("location", Ref.ofNullable(Ref.LOCATION, c.lng("location_id")));
 		if (detail.equals("SUMMARY")) {
 			return m;
 		}
@@ -946,7 +973,6 @@ public final class CharacterService {
 			m.put("starting_equipment", startingEquipmentPreview(tx, c));
 		}
 		m.put("alignment", c.str("alignment"));
-		m.put("location", Ref.ofNullable(Ref.LOCATION, c.lng("location_id")));
 		m.put("revision", c.lng("revision"));
 		if (detail.equals("PLAY")) {
 			m.put("personality", c.str("personality"));
@@ -959,6 +985,14 @@ public final class CharacterService {
 		m.put("goals", c.isNull("goals_json") ? List.of() : c.list("goals_json"));
 		m.put("age", c.integer("age"));
 		m.put("presentation", c.str("presentation"));
+		Map<String, Object> biography = Biography.biography(c);
+		if (!biography.isEmpty()) {
+			m.put("biography", biography);
+		}
+		if (!c.isNull("intimacy_json") && Biography.intimacyAllowed(tx, c.lng("campaign_id"))) {
+			m.put("intimacy", Map.of("visibility", "GM_ONLY", "content_profile", "PEGI_18", "profile",
+					Biography.intimacy(c)));
+		}
 		m.put("creation", c.map("creation_json"));
 		if (!c.isNull("agenda_json")) {
 			m.put("agenda", Map.of("visibility", "GM_ONLY", "agenda", c.map("agenda_json")));

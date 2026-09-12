@@ -334,7 +334,7 @@ public final class EncounterService {
 			boolean party = p.str("side").equals(partySide);
 			var hp = new LinkedHashMap<String, Object>();
 			hp.put("current", c.integer("current_hp"));
-			hp.put("max", c.integer("max_hp"));
+			hp.put("max", c.isNull("max_hp") ? null : RuntimeService.effectiveMaxHp(tx, c));
 			hp.put("temp", c.integer("temp_hp"));
 			if (!party) {
 				hp.put("visibility", "GM_ONLY");
@@ -1014,7 +1014,8 @@ public final class EncounterService {
 						d.roll());
 			}
 			Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
-					target.intOr("max_hp", 1), damages, RuntimeService.defensesOf(tx, rules, target));
+					Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), damages,
+					RuntimeService.defensesOf(tx, rules, target));
 			boolean knockOut = Boolean.TRUE.equals(action.get("nonlethal")) && dr.droppedToZero();
 			Map<String, Object> applied;
 			if (knockOut) {
@@ -1799,7 +1800,8 @@ public final class EncounterService {
 			result.put("director_trigger", trigger);
 			result.put("note",
 					"Loot is not automatic: use grant_loot with source ENCOUNTER for what the fallen carried.");
-			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
+			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
+			result.put("meta", Harness.meta(tx.get("campaign", campaignId), due == null ? null : List.of(due)));
 			return result;
 		});
 	}

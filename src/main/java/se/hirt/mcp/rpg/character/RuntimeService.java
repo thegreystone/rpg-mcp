@@ -179,7 +179,7 @@ public final class RuntimeService {
 			}
 			if (change == null || change.get("kind") == null) {
 				throw RpgException.invalidArgument(
-						"change.kind is required: HEAL, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, USE_RESOURCE, RESTORE_RESOURCE.");
+						"change.kind is required: HEAL, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, USE_RESOURCE, RESTORE_RESOURCE, REDUCE_MAX_HP, RESTORE_MAX_HP, CREATE_SPELL_SLOT, CONVERT_SPELL_SLOT.");
 			}
 			String kind = String.valueOf(change.get("kind")).toUpperCase();
 			String reason = change.get("reason") == null ? null : change.get("reason").toString();
@@ -208,8 +208,30 @@ public final class RuntimeService {
 						: change.get("damage_type").toString().toLowerCase();
 				var rolled = List.of(new Combat.RolledDamage(type, damageRoll, amount));
 				Combat.DamageResult dr = Combat.applyDamage(c.intOr("current_hp", 0), c.intOr("temp_hp", 0),
-						c.intOr("max_hp", 1), rolled, defensesOf(tx, rules, c));
+						Math.max(1, effectiveMaxHp(tx, c)), rolled, defensesOf(tx, rules, c));
 				result.putAll(applyDamageResult(tx, rules, roller, c, dr, false, null, reason));
+			}
+			case "ADJUST_MAX_HP" -> {
+				// A signed, temporary change to the hit point maximum (SRD 5.2.1 "Hit Point Maximum"): a Life
+				// Drain's -16, Aid's +5. An active effect with a max_hp modifier; ends with a Long Rest by default,
+				// after `minutes`, or only when RESTORE_MAX_HP lifts it (until = RESTORED: Greater Restoration in
+				// the fiction). A reduction clamps current HP; a maximum of 0 kills.
+				if (!(change.get("amount") instanceof Number n) || n.intValue() == 0) {
+					throw RpgException.invalidArgument("change.amount must be a non-zero integer (negative reduces).");
+				}
+				result.putAll(adjustMaxHp(tx, campaignId, c, n.intValue(), change, reason));
+			}
+			case "RESTORE_MAX_HP" -> {
+				// Lifts every reduction of the maximum (bonuses stay), whatever it was waiting for.
+				int lifted = 0;
+				for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL",
+						c.id())) {
+					if (e.map("modifier_json").get("max_hp") instanceof Number n && n.intValue() < 0) {
+						se.hirt.mcp.rpg.rules.Effects.end(tx, e);
+						lifted++;
+					}
+				}
+				result.put("reductions_lifted", lifted);
 			}
 			case "SET_TEMP_HP" -> {
 				int amount = amount(change, "amount");
@@ -277,17 +299,113 @@ public final class RuntimeService {
 				result.put("resource",
 						Map.of("ref", ref, "current", current, "max", max, "recharge", res.str("recharge")));
 			}
+			case "CREATE_SPELL_SLOT", "CONVERT_SPELL_SLOT" ->
+				// Font of Magic (Sorcerer): sorcery points into a slot, or a slot into points; a Bonus Action.
+					result.putAll(se.hirt.mcp.rpg.magic.Metamagic.fontOfMagic(tx, rules, c, kind, change));
 			default -> throw RpgException.invalidArgument("Unknown change kind '" + kind + "'.");
 			}
 			Row after = tx.get("character", c.id());
 			tx.touched(Ref.of(Ref.CHARACTER, c.id()), after.lng("revision"));
-			result.put("hp", Map.of("current", after.intOr("current_hp", 0), "max", after.intOr("max_hp", 0), "temp",
-					after.intOr("temp_hp", 0)));
+			result.put("hp", hpView(tx, after));
 			result.put("life_state", after.str("life_state"));
 			result.put("conditions", conditions(tx, c.id()));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	/** {current, max, temp}, plus the unadjusted maximum and the adjustments when any are in force. */
+	public static Map<String, Object> hpView(Tx tx, Row c) {
+		var hp = new LinkedHashMap<String, Object>();
+		hp.put("current", c.intOr("current_hp", 0));
+		hp.put("max", c.intOr("max_hp", 0));
+		hp.put("temp", c.intOr("temp_hp", 0));
+		List<Map<String, Object>> adjustments = maxHpAdjustments(tx, c.id());
+		if (!adjustments.isEmpty()) {
+			int adjusted = adjustments.stream().mapToInt(a -> ((Number) a.get("amount")).intValue()).sum();
+			hp.put("max_base", c.intOr("max_hp", 0) - adjusted);
+			hp.put("max_adjustments", adjustments);
+		}
+		return hp;
+	}
+
+	/** The active effects that change the hit point maximum: {amount, source, until}. */
+	public static List<Map<String, Object>> maxHpAdjustments(Tx tx, long characterId) {
+		var out = new ArrayList<Map<String, Object>>();
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL ORDER BY id",
+				characterId)) {
+			if (e.map("modifier_json").get("max_hp") instanceof Number n && n.intValue() != 0) {
+				var m = new LinkedHashMap<String, Object>();
+				m.put("amount", n.intValue());
+				m.put("source", e.str("source_description"));
+				if (!e.isNull("duration_json")) {
+					m.put("until", e.map("duration_json"));
+				}
+				out.add(m);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * The hit point maximum in force. Temporary changes (Aid, a Life Drain) are applied to the stored maximum when
+	 * their effect begins and taken back when it ends ({@link se.hirt.mcp.rpg.rules.Effects#end}), so the column is
+	 * always the number that counts and I-13 holds in the database; the effects list says what is temporary.
+	 */
+	public static int effectiveMaxHp(Tx tx, Row c) {
+		return Math.max(0, c.intOr("max_hp", 0));
+	}
+
+	/**
+	 * Adds a signed max_hp effect and applies it to the maximum. A bonus raises the maximum (current HP is unchanged:
+	 * Aid also heals, separately); a reduction clamps current HP to the new maximum, and a maximum of 0 kills
+	 * (SRD 5.2.1 "Hit Point Maximum").
+	 */
+	public static Map<String, Object> adjustMaxHp(
+			Tx tx, long campaignId, Row c, int amount, Map<String, Object> change, String reason) {
+		Map<String, Object> duration;
+		String until = change.get("until") == null ? null : change.get("until").toString().trim().toUpperCase();
+		if (change.get("minutes") instanceof Number mins && mins.longValue() > 0) {
+			duration = se.hirt.mcp.rpg.rules.Effects.minutes(tx, campaignId, mins.longValue(),
+					mins.longValue() + " minutes");
+		} else if (until == null || "LONG_REST".equals(until)) {
+			duration = Map.of("kind", "UNTIL", "until", "LONG_REST", "label", "until a Long Rest");
+		} else if ("RESTORED".equals(until)) {
+			duration = Map.of("kind", "UNTIL", "until", "RESTORED", "label", "until restored");
+		} else {
+			throw RpgException.invalidArgument("change.until must be LONG_REST (default) or RESTORED, or give minutes.");
+		}
+		String source = reason == null || reason.isBlank()
+				? (amount < 0 ? "hit point maximum reduced" : "hit point maximum raised") : reason;
+		String stackingKey = change.get("stacking_key") == null ? null : change.get("stacking_key").toString();
+		long effectId = se.hirt.mcp.rpg.rules.Effects.add(tx, campaignId, c.id(), null, null, source, null,
+				Map.of("max_hp", amount), duration, null, stackingKey, "GM");
+		var out = new LinkedHashMap<String, Object>();
+		out.put("effect", effectId);
+		out.put("adjustment", Map.of("amount", amount, "duration", duration));
+		int effective = Math.max(0, c.intOr("max_hp", 0) + amount);
+		var cols = new LinkedHashMap<String, Object>();
+		cols.put("max_hp", effective);
+		cols.put("current_hp", Math.min(c.intOr("current_hp", 0), effective));
+		if (effective == 0 && !"DEAD".equals(c.str("life_state"))) {
+			// Dead: the effects go, and with them the maximum they changed; write the death on the row we have.
+			tx.update("character", c.id(), Map.of("max_hp", effective, "current_hp", 0));
+			se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id());
+			se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+			cols.remove("max_hp");
+			cols.put("current_hp", 0);
+			cols.put("life_state", "DEAD");
+			cols.put("death_saves_json", null);
+			endMemberships(tx, campaignId, c.id(), "DEAD");
+			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
+					c.str("name") + " died: hit point maximum reduced to 0" + (reason == null ? "" : " (" + reason + ")") + ".",
+					List.of(c.id()), isPartyMember(tx, campaignId, c.id()) ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN",
+					"MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null, Map.of("max_hp_adjustment", amount)));
+			out.put("died", true);
+		}
+		cols.put("revision", c.lng("revision") + 1);
+		tx.update("character", c.id(), cols);
+		return out;
 	}
 
 	private static int amount(Map<String, Object> change, String key) {
@@ -343,7 +461,7 @@ public final class RuntimeService {
 
 	/** Healing (SRD 5.2.1 "Healing"): HP can't exceed max; a creature at 0 HP that regains HP is no longer dying. */
 	public static Map<String, Object> heal(Tx tx, Row c, int amount, String reason) {
-		int max = c.intOr("max_hp", 0);
+		int max = effectiveMaxHp(tx, c);
 		int before = c.intOr("current_hp", 0);
 		int after = Math.min(max, before + amount);
 		var cols = new LinkedHashMap<String, Object>();
@@ -473,9 +591,7 @@ public final class RuntimeService {
 		if ("DEAD".equals(life) && !"DEAD".equals(c.str("life_state"))) {
 			out.put("died", true);
 			se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id());
-			for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ?", c.id())) {
-				tx.delete("active_effect", e.id());
-			}
+			se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
 			cols.put("death_saves_json", null);
 			endMemberships(tx, campaignId, c.id(), "DEAD");
 			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",

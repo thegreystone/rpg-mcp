@@ -65,6 +65,8 @@ public final class Effects {
 		public final List<String> resistances = new ArrayList<>();
 		public int speedBonus;
 		public boolean deathWard;
+		/** Signed change to the hit point maximum already applied to the stored maximum (Aid +5, a Life Drain −16). */
+		public int maxHp;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -127,8 +129,54 @@ public final class Effects {
 			if (Boolean.TRUE.equals(mod.get("death_ward"))) {
 				m.deathWard = true;
 			}
+			if (mod.get("max_hp") instanceof Number n) {
+				m.maxHp += n.intValue();
+			}
 		}
 		return m;
+	}
+
+	/**
+	 * Ends one effect. A {@code max_hp} modifier was applied to the character's maximum when the effect began (so the
+	 * stored maximum is always the one in force and the I-13 check holds); ending it takes the change back and clamps
+	 * current HP to the new maximum (SRD 5.2.1 "Hit Point Maximum").
+	 */
+	public static void end(Tx tx, Row effect) {
+		if (!effect.isNull("modifier_json") && effect.map("modifier_json").get("max_hp") instanceof Number n
+				&& n.intValue() != 0) {
+			tx.find("character", effect.lng("character_id")).ifPresent(c -> {
+				int max = Math.max(0, c.intOr("max_hp", 0) - n.intValue());
+				var cols = new LinkedHashMap<String, Object>();
+				cols.put("max_hp", max);
+				cols.put("current_hp", Math.min(c.intOr("current_hp", 0), max));
+				cols.put("revision", c.lng("revision") + 1);
+				tx.update("character", c.id(), cols);
+			});
+		}
+		tx.delete("active_effect", effect.id());
+	}
+
+	/** Ends every effect on a character (death, a revival by fiat), reversing maximum-HP changes on the way. */
+	public static int removeAll(Tx tx, long characterId) {
+		int removed = 0;
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ?", characterId)) {
+			end(tx, e);
+			removed++;
+		}
+		return removed;
+	}
+
+	/** Ends the effects that last until a Long Rest ({@code duration.until = LONG_REST}); returns their descriptions. */
+	public static List<String> expireOnLongRest(Tx tx, long characterId) {
+		var ended = new ArrayList<String>();
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
+				characterId)) {
+			if ("LONG_REST".equals(e.map("duration_json").get("until"))) {
+				ended.add(e.str("source_description"));
+				end(tx, e);
+			}
+		}
+		return ended;
 	}
 
 	/** Adds an effect row; returns its id. */
@@ -138,9 +186,9 @@ public final class Effects {
 			Long concentrationCharacterId, String stackingKey, String provenance) {
 		// Same-source stacking: replace an existing effect with the same stacking key on this character.
 		if (stackingKey != null) {
-			for (Row old : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND stacking_key = ?",
+			for (Row old : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND stacking_key = ?",
 					characterId, stackingKey)) {
-				tx.delete("active_effect", old.id());
+				end(tx, old);
 			}
 		}
 		var cols = new LinkedHashMap<String, Object>();
@@ -192,7 +240,7 @@ public final class Effects {
 				campaignId)) {
 			Map<String, Object> d = e.map("duration_json");
 			if (d.get("expires_seq") instanceof Number n && n.longValue() <= nowSeq) {
-				tx.delete("active_effect", e.id());
+				end(tx, e);
 				removed++;
 			}
 		}
@@ -207,7 +255,7 @@ public final class Effects {
 				encounterId)) {
 			Map<String, Object> d = e.map("duration_json");
 			if (d.get("expires_round") instanceof Number n && n.longValue() <= round) {
-				tx.delete("active_effect", e.id());
+				end(tx, e);
 				removed++;
 			}
 		}

@@ -84,7 +84,12 @@ class LevelUpTest {
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, gated.code());
 			assertTrue(((List<?>) gated.details().get("allowed_operations")).contains("commit_level_up"));
 
-			// Hit points are preset by the campaign policy: the transaction validates immediately.
+			// A sorcerer reaching level 2 owes two Metamagic options (SRD 5.2.1); until they are chosen the
+			// transaction does not validate. Hit points themselves are preset by the campaign policy.
+			assertEquals(Boolean.FALSE, engine.levelUps().validate(campaign, tx).get("valid"));
+			assertEquals(2, m(begun.get("metamagic_choice")).get("choose"));
+			engine.levelUps().update(op(), campaign, tx, null,
+					map("metamagic", List.of("Empowered Spell", "Quickened Spell")));
 			assertEquals(Boolean.TRUE, engine.levelUps().validate(campaign, tx).get("valid"));
 			// ASI is not offered at level 2.
 			RpgException noAsi = assertThrows(RpgException.class, () -> engine.levelUps()

@@ -55,7 +55,8 @@ public final class RestService {
 	public static final String HIT_DICE = "hit_dice";
 	public static final Set<String> OVERRIDE_KINDS = Set.of("ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS",
 			"SET_CAMPAIGN_RULE", "SET_LIFE_STATE", "SET_MONEY", "SET_XP",
-			"SET_ABILITY_SCORE", "REMOVE_ENCOUNTER_PARTICIPANT", "SET_LOCATION", "SET_CONNECTION_STATE");
+			"SET_ABILITY_SCORE", "REMOVE_ENCOUNTER_PARTICIPANT", "SET_LOCATION", "SET_CONNECTION_STATE",
+			"SET_METAMAGIC");
 
 	private final Database db;
 	private final RulesData rules;
@@ -122,8 +123,13 @@ public final class RestService {
 			result.put("characters", results);
 			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
 			result.put("expired_effects", expired);
-			result.put("consequences", se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId,
+			var consequences = new ArrayList<Object>(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId,
 					clock.lng("seq"), newSeq));
+			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
+			if (due != null) {
+				consequences.add(due);
+			}
+			result.put("consequences", consequences);
 			result.put("note",
 					"Interruptions (REST_INTERRUPT) are not modelled yet: if the fiction interrupts a rest, do not call perform_rest for it.");
 			result.put("meta", Harness.meta(campaign, null));
@@ -196,8 +202,11 @@ public final class RestService {
 				c.id())) {
 			tx.update("resource_state", res.id(), Map.of("current", res.intOr("max", 0)));
 		}
+		// Sorcerous Restoration: some sorcery points back on a Short Rest, once per Long Rest (SRD 5.2.1 "Sorcerer").
+		se.hirt.mcp.rpg.magic.Metamagic.sorcerousRestoration(tx, rules, c)
+				.ifPresent(r -> m.put("sorcerous_restoration", r));
 		Row after = tx.get("character", c.id());
-		m.put("hp", Map.of("current", after.intOr("current_hp", 0), "max", after.intOr("max_hp", 0)));
+		m.put("hp", RuntimeService.hpView(tx, after));
 		return m;
 	}
 
@@ -205,9 +214,16 @@ public final class RestService {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("character", Ref.of(Ref.CHARACTER, c.id()));
 		m.put("name", c.str("name"));
-		int before = c.intOr("current_hp", 0);
-		int max = c.intOr("max_hp", 0);
-		Map<String, Object> heal = RuntimeService.heal(tx, c, Math.max(0, max - before), "long rest");
+		// Effects that last until a Long Rest (a reduced hit point maximum among them) end here.
+		List<String> ended = se.hirt.mcp.rpg.rules.Effects.expireOnLongRest(tx, c.id());
+		Row rested = c;
+		if (!ended.isEmpty()) {
+			rested = tx.get("character", c.id());
+			m.put("effects_ended", ended);
+		}
+		int before = rested.intOr("current_hp", 0);
+		int max = RuntimeService.effectiveMaxHp(tx, rested);
+		Map<String, Object> heal = RuntimeService.heal(tx, rested, Math.max(0, max - before), "long rest");
 		Row after = tx.get("character", c.id());
 		var cols = new LinkedHashMap<String, Object>();
 		// Exhaustion drops by one level (SRD 5.2.1 "Long Rest").
@@ -232,8 +248,10 @@ public final class RestService {
 				HIT_DICE)) {
 			tx.update("resource_state", res.id(), Map.of("current", res.intOr("max", 0)));
 		}
+		// Spell slots return to the class table: a slot created with Font of Magic vanishes here (SRD 5.2.1).
+		se.hirt.mcp.rpg.magic.SpellService.initializeSlots(tx, rules, tx.get("character", c.id()));
 		m.putAll(heal);
-		m.put("hp", Map.of("current", after.intOr("current_hp", 0), "max", max));
+		m.put("hp", RuntimeService.hpView(tx, tx.get("character", c.id())));
 		return m;
 	}
 
@@ -319,7 +337,7 @@ public final class RestService {
 						var cols = new LinkedHashMap<String, Object>();
 						switch (k) {
 						case "ADJUST_HP" -> {
-							int max = c.intOr("max_hp", 0);
+							int max = RuntimeService.effectiveMaxHp(tx, c);
 							int current = c.intOr("current_hp", 0);
 							int target = e.get("set_to") instanceof Number n ? n.intValue()
 									: current + (e.get("amount") instanceof Number a ? a.intValue() : 0);
@@ -386,11 +404,13 @@ public final class RestService {
 							if (state.equals("ALIVE")) {
 								int hp = Math.max(1, e.get("hp") instanceof Number n ? n.intValue()
 										: Math.max(1, c.intOr("current_hp", 0)));
-								cols.put("current_hp", Math.min(c.intOr("max_hp", hp), hp));
+								cols.put("current_hp", Math.min(Math.max(1, RuntimeService.effectiveMaxHp(tx, c)), hp));
 								cols.put("death_saves_json", null);
-								for (Row fx : tx.query("SELECT id FROM active_effect WHERE character_id = ?", c.id())) {
-									tx.delete("active_effect", fx.id());
-								}
+								// Every effect ends, and a temporary change to the maximum with it; the fiat HP
+								// above is then clamped to the maximum that remains.
+								se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+								Row plain = tx.get("character", c.id());
+								cols.put("current_hp", Math.min(Math.max(1, plain.intOr("max_hp", 1)), hp));
 								// A revived former member rejoins nothing automatically; use update_party_membership.
 							} else if (state.equals("DEAD")) {
 								cols.put("current_hp", 0);
@@ -446,6 +466,25 @@ public final class RestService {
 						cols.put("revision", c.lng("revision") + 1);
 						tx.update("character", c.id(), cols);
 						tx.touched(Ref.of(Ref.CHARACTER, c.id()), c.lng("revision") + 1);
+					}
+					case "SET_METAMAGIC" -> {
+						// A sorcerer who levelled before Metamagic was data-driven chooses the options here, audited;
+						// from now on the level-up asks for them (RULES_ENGINE.md §2.2).
+						Row c = CharacterService.character(tx, campaignId, targetRef);
+						Harness.requireRevision(c, targetRef, expectedRevision);
+						var feature = se.hirt.mcp.rpg.magic.Metamagic.feature(tx, rules, c).orElseThrow(
+								() -> RpgException.notAllowed(c.str("name") + " has no Metamagic feature."));
+						List<se.hirt.mcp.rpg.magic.Metamagic.Option> options =
+								se.hirt.mcp.rpg.magic.Metamagic.options(feature.spec());
+						int allowed = se.hirt.mcp.rpg.magic.Metamagic.allowed(feature.spec(), feature.classLevel());
+						List<String> ids = se.hirt.mcp.rpg.magic.Metamagic.validateChoice(options, allowed, List.of(),
+								e.get("options"), false);
+						before.put("metamagic", se.hirt.mcp.rpg.magic.Metamagic.known(tx, c.id()));
+						se.hirt.mcp.rpg.magic.Metamagic.setKnown(tx, c.id(), ids, options);
+						after.put("metamagic", ids);
+						tx.update("character", c.id(), Map.of("revision", c.lng("revision") + 1));
+						tx.touched(Ref.of(Ref.CHARACTER, c.id()), c.lng("revision") + 1);
+						label = c.str("name") + " Metamagic set to " + ids;
 					}
 					case "REMOVE_ENCOUNTER_PARTICIPANT" -> {
 						Row c = CharacterService.character(tx, campaignId, targetRef);

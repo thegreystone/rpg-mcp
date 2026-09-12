@@ -232,8 +232,11 @@ class VerticalSliceTest {
 		// And again after the hiatus: recap comes from the server.
 		try (Engine fourth = TestCampaigns.engine(db)) {
 			Map<String, Object> ctx = fourth.sessions().bootstrap(op(), campaign, 4000);
+			// The suspend summary became a chapter; the recap is the chapter plus the ledger since it.
+			Map<String, Object> chronicle = m(ctx.get("chronicle"));
 			assertEquals("Mara found the survivor and heard about the burned wagons.",
-					ctx.get("previous_session_summary"));
+					m(((List<?>) chronicle.get("chapters_since_synopsis")).get(0)).get("summary"));
+			assertEquals(0, m(chronicle.get("since_last_chapter")).get("events"), "everything is covered");
 			assertEquals("Day 1, 09:30", m(ctx.get("game_time")).get("instant"));
 		}
 	}

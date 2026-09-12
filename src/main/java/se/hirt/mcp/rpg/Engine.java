@@ -81,6 +81,7 @@ public final class Engine implements AutoCloseable {
 	private final SpellService spells;
 	private final se.hirt.mcp.rpg.economy.AccountService accounts;
 	private final se.hirt.mcp.rpg.economy.CashFlowService cashFlows;
+	private final se.hirt.mcp.rpg.session.ChronicleService chronicle;
 
 	public Engine(Path databaseFile, RollService roller, String serverVersion) {
 		this.db = new Database(databaseFile);
@@ -91,7 +92,7 @@ public final class Engine implements AutoCloseable {
 		this.characters = new CharacterService(db, rules, this.roller);
 		this.encounters = new EncounterService(db, rules, this.roller, characters);
 		this.runtime = new RuntimeService(db, rules, this.roller, characters);
-		this.sessions = new SessionService(db, characters, encounters);
+		this.sessions = new SessionService(db, rules, characters, encounters);
 		this.levelUps = new LevelUpService(db, rules, this.roller, characters);
 		this.party = new PartyService(db, rules, sessions);
 		this.world = new WorldService(db, rules, this.roller);
@@ -100,6 +101,7 @@ public final class Engine implements AutoCloseable {
 		this.spells = new SpellService(db, rules, this.roller, characters);
 		this.accounts = new se.hirt.mcp.rpg.economy.AccountService(db);
 		this.cashFlows = new se.hirt.mcp.rpg.economy.CashFlowService(db);
+		this.chronicle = new se.hirt.mcp.rpg.session.ChronicleService(db);
 		this.ledger = new LedgerService(db);
 		this.checkpoints = new CheckpointService(db);
 		this.checks = new CheckService(db, rules, this.roller);
@@ -189,6 +191,10 @@ public final class Engine implements AutoCloseable {
 
 	public se.hirt.mcp.rpg.economy.AccountService accounts() {
 		return accounts;
+	}
+
+	public se.hirt.mcp.rpg.session.ChronicleService chronicle() {
+		return chronicle;
 	}
 
 	public se.hirt.mcp.rpg.economy.CashFlowService cashFlows() {

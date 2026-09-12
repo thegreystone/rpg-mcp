@@ -355,11 +355,24 @@ public final class WorldService {
 				throw RpgException.invalidArgument("The party is already at " + destination.str("name") + ".");
 			}
 			var movers = new ArrayList<Row>();
+			var leftBehind = new ArrayList<Map<String, Object>>();
 			if (characterRefs == null || characterRefs.isEmpty()) {
+				// The party is whoever is with it: active members and guests standing where the party stands. A guest
+				// left at the manor, or a member who stayed behind without being separated, does not teleport.
 				for (Row m : tx.query(
 						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
 						campaignId)) {
-					movers.add(m);
+					boolean here = from == null || m.isNull("location_id") || m.lng("location_id") == from.id();
+					if (here) {
+						movers.add(m);
+					} else {
+						var stay = new LinkedHashMap<String, Object>();
+						stay.put("character", Ref.of(Ref.CHARACTER, m.id()));
+						stay.put("name", m.str("name"));
+						stay.put("location", tx.find("location", m.lng("location_id"))
+								.map(l -> Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")").orElse(null));
+						leftBehind.add(stay);
+					}
 				}
 			} else {
 				for (String ref : characterRefs) {
@@ -439,6 +452,9 @@ public final class WorldService {
 			result.put("from", from == null ? null : summary(from));
 			result.put("arrived_at", detail(tx, tx.get("location", destination.id())));
 			result.put("moved", movers.stream().map(c -> Ref.of(Ref.CHARACTER, c.id())).toList());
+			if (!leftBehind.isEmpty()) {
+				result.put("left_behind", leftBehind);
+			}
 			result.put("route", hops);
 			result.put("travel_minutes", minutes);
 			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
@@ -450,6 +466,10 @@ public final class WorldService {
 			}
 			consequences.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"),
 					newSeq));
+			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
+			if (due != null) {
+				consequences.add(due);
+			}
 			// Travel encounters (RULES_ENGINE.md, "Travel encounters"): a suggestion the GM may take or ignore; the
 			// engine changes no state for it. The roll is made through the RollService so tests can script it.
 			Map<String, Object> suggestion = TravelEncounters.suggest(tx, rules, roller, campaignId, movers,

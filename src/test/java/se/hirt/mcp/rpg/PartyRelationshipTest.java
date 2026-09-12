@@ -167,9 +167,11 @@ class PartyRelationshipTest {
 			assertEquals(1L, rels.get(0).get("significant_events"));
 			assertFalse(rels.toString().contains("mother's ring"),
 					"the episodic detail is not part of the compact relationship state");
-			// The derived recap does retell last session's CRITICAL events in detail, once, at bootstrap.
-			assertTrue(m(ctx.get("since_last_session")).toString().contains("mother's ring"),
-					"since_last_session keeps the detail of critical events");
+			// The suspend summary became a chapter that covers the proposal; the tail after it is empty.
+			Map<String, Object> chronicle = m(ctx.get("chronicle"));
+			assertEquals("Richard proposed; Elara said yes.",
+					list(chronicle.get("chapters_since_synopsis")).get(0).get("summary"));
+			assertEquals(0, m(chronicle.get("since_last_chapter")).get("events"));
 			// …and the proposal is retrievable on demand, in detail.
 			Map<String, Object> rel = engine.party().relationship(campaign, pc, elara);
 			List<Map<String, Object>> events = list(m(rel.get("a_to_b")).get("significant_events"));

@@ -165,7 +165,9 @@ public final class LedgerService {
 			result.put("event", Ref.of(Ref.EVENT, eventId));
 			result.put("game_time",
 					GameTime.toMap(tx, campaignId, fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
-			result.put("meta", Harness.meta(campaign, null));
+			// A long session learns here, not only at bootstrap, that the chronicle is owed a chapter.
+			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
+			result.put("meta", Harness.meta(campaign, due == null ? null : List.of(due)));
 			return result;
 		});
 	}
@@ -322,7 +324,7 @@ public final class LedgerService {
 	public static Map<String, Object> digest(Tx tx, long campaignId, long fromJournalId, long toJournalId,
 	                                         int charBudget) {
 		List<Row> rows = tx.query(
-				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
+				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? " + "AND visibility <> 'DIRECTOR_ONLY' AND type <> 'CHRONICLE_WRITTEN' ORDER BY id",
 				campaignId, fromJournalId, toJournalId);
 		var critical = new ArrayList<Map<String, Object>>();
 		var major = new ArrayList<Map<String, Object>>();

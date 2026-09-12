@@ -115,7 +115,7 @@ public class RpgResources {
 				"move_party", "upsert_narrative_state", "get_diegetic_information", "get_director_context",
 				"commit_director_changes", "get_context", "perform_rest", "apply_gm_override", "prepare_spells",
 				"cast_spell", "set_calendar", "create_account", "transfer_money", "get_accounts", "define_cash_flow",
-				"update_cash_flow", "list_cash_flows"));
+				"update_cash_flow", "list_cash_flows", "find", "get_chronicle_material", "write_chronicle"));
 		return new ResourceResponse(TextResourceContents.create("rpg://protocol/capabilities", Json.write(m)));
 	}
 

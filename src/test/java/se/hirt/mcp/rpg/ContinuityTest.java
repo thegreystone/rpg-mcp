@@ -66,7 +66,8 @@ class ContinuityTest {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			String pc = "character:1";
 			Map<String, Object> first = engine.sessions().bootstrap(op(), campaign, null);
-			assertNull(first.get("since_last_session"), "nothing before the first session");
+			assertNull(m(first.get("chronicle")).get("synopsis"), "no synopsis before anyone wrote one");
+			assertTrue(list(m(first.get("chronicle")).get("chapters_since_synopsis")).isEmpty());
 			String session = (String) first.get("session");
 
 			engine.ledger().record(op(), campaign, "RELATIONSHIP_MILESTONE", "Richard married Vess and Maren.",
@@ -97,16 +98,17 @@ class ContinuityTest {
 			Map<String, Object> next = engine.sessions().bootstrap(op(), campaign, null);
 			assertEquals(false, next.get("session_resumed"));
 			assertNotEquals(session, next.get("session"));
-			Map<String, Object> recap = m(next.get("since_last_session"));
-			assertNotNull(recap, "since_last_session");
-			assertEquals(1, recap.get("sessions_covered"));
+			// The recap is the ledger since the last chapter (all of it, before the first chapter), by importance.
+			Map<String, Object> recap = m(m(next.get("chronicle")).get("since_last_chapter"));
+			assertNotNull(recap, "since_last_chapter");
 			assertEquals(1, list(recap.get("critical")).size());
 			assertTrue(String.valueOf(list(recap.get("critical")).get(0).get("detail")).contains("ash tree"),
 					"critical events keep their episodic detail");
-			assertEquals(1, list(recap.get("major")).size());
-			assertEquals(1, ((List<?>) recap.get("notable")).size());
+			assertTrue(list(recap.get("major")).stream().anyMatch(e -> String.valueOf(e.get("summary")).contains("Treasury Bell")));
+			assertTrue(((List<?>) recap.get("notable")).stream().anyMatch(n -> n.toString().contains("sergeant a map")));
 			assertEquals(3, m(recap.get("minor_by_type")).get("NOTE"));
-			assertNull(next.get("previous_session_summary"), "no hand-written summary was ever pinned");
+			assertNull(next.get("previous_session_summary"), "the pinned session summary is gone; chapters replace it");
+			assertEquals(false, m(m(next.get("chronicle")).get("due")).get("chapter"), "six events are not a chapter's worth");
 		} finally {
 			SessionService.SESSION_GAP = gap;
 		}
@@ -175,7 +177,9 @@ class ContinuityTest {
 			assertEquals(1, list(m(m(rel.get("b_to_a")).get("profile")).get("milestones")).size(),
 					"the mutual first update wrote the wedding on both sides; the second was one-way");
 			Map<String, Object> context = engine.sessions().bootstrap(op(), campaign, null);
-			assertTrue(list(context.get("relationships")).stream().anyMatch(r -> r.containsKey("profile")));
+			// Bootstrap stays compact: it says a profile exists and how big; the scopes carry it.
+			assertTrue(list(context.get("relationships")).stream().noneMatch(r -> r.containsKey("profile")));
+			assertEquals(2, m(list(context.get("relationships")).get(0).get("profile_available")).get("milestones"));
 
 			// REPLACE starts over.
 			Map<String, Object> replaced = engine.party()

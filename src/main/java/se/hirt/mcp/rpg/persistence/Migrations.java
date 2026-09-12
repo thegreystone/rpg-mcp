@@ -48,7 +48,8 @@ final class Migrations {
 
 	/** Add new migrations here, in order. Never edit an applied one. */
 	static final List<String> MIGRATIONS = List.of("V001__baseline.sql", "V002__encounters.sql", "V003__world.sql",
-			"V004__reactions.sql", "V005__origins.sql", "V006__armor_class_override.sql", "V007__continuity.sql");
+			"V004__reactions.sql", "V005__origins.sql", "V006__armor_class_override.sql", "V007__continuity.sql",
+			"V008__biography.sql");
 
 	private static final Pattern NAME = Pattern.compile("^V(\\d+)__(.+)\\.sql$");
 

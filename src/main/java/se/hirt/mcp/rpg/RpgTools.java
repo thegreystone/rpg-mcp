@@ -190,20 +190,53 @@ public class RpgTools {
 
 	// ── Session and context ────────────────────────────────────────────
 
-	@Tool(name = "bootstrap_session", description = "MUTATING (opens/resumes a session). Returns the bounded context package to continue play: " + "campaign config, game time, location, player character sheet, party, story beats, quests, adventure premise (+ GM_ONLY truth), " + "recent significant events, previous session summary, pending transaction and legal operations. Call after commit and at the start of every new conversation. " + "Trust this over anything you remember.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "bootstrap_session", description = "MUTATING (opens/resumes a session). Returns the bounded context package to continue play: " + "campaign config and house rules, game time, location, the player character's sheet (inventory as names), the party with each member's whereabouts, " + "compact relationships (profiles are fetched with get_context RELATIONSHIP/INTIMACY), story beats, quests, adventure premise (+ GM_ONLY truth), " + "recent events, and `chronicle`: the synopsis (the story so far), the chapters since it, a digest of the ledger since the last chapter, and `due` " + "(when a chapter or synopsis is owed, delegate it: a summarizing agent calls get_chronicle_material and write_chronicle while play continues). " + "Honours context_budget (default 16000 tokens; `budget` reports the size). Call after commit and at the start of every new conversation. Trust this over anything you remember.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse bootstrapSession(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
-			@ToolArg(description = "Approximate token budget for the context (default 12000)")
+			@ToolArg(description = "Approximate token budget for the context (default 16000, maximum 32000)")
 			Optional<Integer> context_budget) {
 		return ToolSupport.run("bootstrap_session",
 				() -> engine.sessions().bootstrap(operation_id, campaign, context_budget.orElse(null)));
 	}
 
-	@Tool(name = "suspend_session", description = "MUTATING. Closes the session with a compact summary (the recap the next session starts from), " + "records game time/location and the number of events written. Commit important consequences (record_memory) first.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "suspend_session", description = "MUTATING. Closes the session; records game time/location and the number of events written. A summary, when given, " + "is written as a chronicle CHAPTER covering the ledger since the last one (the same as write_chronicle). Optional: an abandoned session loses nothing. " + "Commit important consequences (record_memory) first.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse suspendSession(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
-			@ToolArg(description = "Compact narrative summary of what happened this session") String summary) {
-		return ToolSupport.run("suspend_session", () -> engine.sessions().suspend(operation_id, campaign, summary));
+			@ToolArg(description = "Compact narrative summary of what happened since the last chapter (becomes a chapter)")
+			Optional<String> summary) {
+		return ToolSupport.run("suspend_session",
+				() -> engine.sessions().suspend(operation_id, campaign, summary.orElse(null)));
+	}
+
+	@Tool(name = "find", description = "Lookup by name: kind CHARACTER or LOCATION, a case-insensitive query matched against the name first (exact, prefix, " + "substring) and the description second. Each hit is one line: ref, name, and for people their membership, life state and whereabouts; " + "for places kind, parent and who is there. Use it whenever a name is known but the ref is not. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	ToolResponse find(
+			@ToolArg(description = REF) String campaign,
+			@ToolArg(description = "CHARACTER (default) or LOCATION") Optional<String> kind,
+			@ToolArg(description = "Name or part of a name, e.g. 'Hollin'") String query,
+			@ToolArg(description = "Max hits (default 20)") Optional<Integer> limit) {
+		return ToolSupport.run("find",
+				() -> engine.sessions().find(campaign, kind.orElse(null), query, limit.orElse(null)));
+	}
+
+	@Tool(name = "get_chronicle_material", description = "Read-only. Everything a summarizing agent needs to write one chronicle entry and nothing else. " + "kind CHAPTER: the previous chapter, the two before it in brief, every non-minor ledger event since the last chapter with its detail (paged by `cursor`), " + "the campaign's voice, the target length, and `through` (the journal position the chapter will close at; events recorded later stay uncovered). " + "kind SYNOPSIS: the current synopsis, the chapters written since it, the voice, the target, and `through` (the last chapter id). " + "Meant for a fresh agent delegated by the GM when bootstrap's chronicle.due says a chapter or synopsis is owed.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	ToolResponse getChronicleMaterial(
+			@ToolArg(description = REF) String campaign,
+			@ToolArg(description = "CHAPTER (default) or SYNOPSIS") Optional<String> kind,
+			@ToolArg(description = "next_cursor from a previous page of chapter material") Optional<String> cursor) {
+		return ToolSupport.run("get_chronicle_material",
+				() -> engine.chronicle().material(campaign, kind.orElse(null), cursor.orElse(null)));
+	}
+
+	@Tool(name = "write_chronicle", description = "MUTATING. Stores one chronicle entry written from get_chronicle_material. kind CHAPTER: an immutable prose summary " + "(about 300 tokens, at most 3000 characters) of the ledger since the last chapter, closed at `through` (the material's through.journal_id; now when omitted). " + "kind SYNOPSIS: the rolling story so far (about 1500 tokens, at most 12000 characters) rewritten from the previous synopsis and the chapters since, " + "closed at `through` (the material's through.chapter_id); it supersedes the previous synopsis. Both record the game time covered and the game time written. " + "Never invent: a chapter says only what the ledger says.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse writeChronicle(
+			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
+			@ToolArg(description = "CHAPTER (default) or SYNOPSIS") Optional<String> kind,
+			@ToolArg(description = "A short title, e.g. 'The seven under one roof'") Optional<String> title,
+			@ToolArg(description = "The prose") String summary,
+			@ToolArg(description = "The material's `through` marker: a journal id for a chapter, a chapter id for a synopsis")
+			Optional<Long> through) {
+		return ToolSupport.run("write_chronicle", () -> engine.chronicle()
+				.write(operation_id, campaign, kind.orElse(null), title.orElse(null), summary, through.orElse(null)));
 	}
 
 	@Tool(name = "get_character_sheet", description = "Character sheet at detail SUMMARY, PLAY (default: abilities, proficiencies, HP, money, XP) or FULL " + "(+ narrative fields). Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
@@ -214,7 +247,7 @@ public class RpgTools {
 				() -> engine.characters().characterSheet(campaign, character, detail.orElse("PLAY")));
 	}
 
-	@Tool(name = "update_character", description = "MUTATING. Applies canonical narrative/identity changes to a committed character: name, description, " + "appearance, personality, backstory, goals (list), age (number), presentation. Use this to record facts established in play " + "(an NPC's revealed age, a companion's true name, a changed appearance). Mechanical state is never changed here — that belongs to " + "rules-governed operations or an audited override. Drafts use update_character_draft instead.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "update_character", description = "MUTATING. Applies canonical narrative/identity changes to a committed character: name, description, " + "appearance, personality, backstory, goals (list), age (number), presentation, alignment; plus two merged aggregates: `biography` " + "{timeline: [{game_time?, note}], voice: [verbatim lines], state: [{note, since?, until?}] (carrying a child, an arm in a sling; give until to end one), " + "marks: [..], wants: [{note, with: [refs]?, status OPEN|DONE|ABANDONED}] (the character's drives: what they are working toward; open wants show in every " + "party list so the NPC is played toward the same things every scene)} and, under PEGI_18 only, `intimacy` {body, likes, dislikes, limits, hard_lines, " + "wants: [{note, with, status}] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. Lists append without duplicates; " + "an entry with the same note replaces the old one (mark a want DONE, end a state); a null removes a key; {replace: true} starts over. Record facts as they " + "are established in play: an age, a line worth keeping, a pregnancy, a scar, what someone wants. Mechanical state is never changed here. Drafts use update_character_draft.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateCharacter(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Character reference") String character,
@@ -506,7 +539,7 @@ public class RpgTools {
 				() -> engine.encounters().encounterState(campaign, encounter.orElse(null), log_limit.orElse(10)));
 	}
 
-	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: " + "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), " + "two_handed, advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level}; " + "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged); DISENGAGE; HELP; HIDE; " + "USE_ITEM {item, target} (Potion of Healing is mechanical); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, " + "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters " + "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. " + "end_turn (default true) advances to the next participant, rolling death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: " + "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), " + "two_handed, advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};" + "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged); DISENGAGE; HELP; HIDE; " + "USE_ITEM {item, target} (Potion of Healing is mechanical); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, " + "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters " + "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. " + "end_turn (default true) advances to the next participant, rolling death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performEncounterAction(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Acting character reference (must be the current turn)") String actor,
@@ -528,7 +561,7 @@ public class RpgTools {
 				.end(operation_id, campaign, encounter.orElse(null), outcome, summary.orElse(null)));
 	}
 
-	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); " + "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration}; STABILIZE. Plus reason. " + "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); " + "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} " + "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT / CONVERT_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, a Bonus Action); " + "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; " + "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. " + "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse applyRuntimeChange(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Character reference") String character,
@@ -676,7 +709,7 @@ public class RpgTools {
 				() -> engine.world().materialize(operation_id, campaign, location.orElse(null), spec, "GM"));
 	}
 
-	@Tool(name = "move_party", description = "MUTATING. Moves the party (or named characters) to a location over known traversable connections, advancing the clock by " + "the route's travel time; with no known route, pass authorized_route=true with a reason and travel_minutes (the route is then remembered). " + "Returns the arrival view, elapsed time and a Director trigger for long journeys. Interruptions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "move_party", description = "MUTATING. Moves the party (or named characters) to a location over known traversable connections, advancing the clock by " + "the route's travel time; with no known route, pass authorized_route=true with a reason and travel_minutes (the route is then remembered). " + "Without `characters`, whoever stands where the party stands travels (active members and guests); members and guests elsewhere stay and are listed in " + "`left_behind`; separated members never move. Returns the arrival view, elapsed time and a Director trigger for long journeys. Interruptions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse moveParty(
 			@ToolArg(description = OP) String operation_id, @ToolArg(description = REF) String campaign,
 			@ToolArg(description = "Destination location reference") String to,
@@ -733,7 +766,7 @@ public class RpgTools {
 				.commitDirectorChanges(operation_id, campaign, changes, review_note.orElse(null)));
 	}
 
-	@Tool(name = "get_context", description = "Purpose-built context for one scope: SCENE (like bootstrap, read-only), CHARACTER {ref}, RELATIONSHIP {ref, second_ref}, " + "LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR. Visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	@Tool(name = "get_context", description = "Purpose-built context for one scope: SCENE (like bootstrap, read-only), CHARACTER {ref} (full sheet, biography, " + "relationships with profiles, membership history), RELATIONSHIP {ref, second_ref}, INTIMACY {ref, second_ref optional} (everything needed to play one " + "person believably in a bed: biography, voice, state, open wants, their own intimate profile and intimate wants, every partner with both directions of the pairwise " + "profile, the household terms, the intimate ledger events with detail, and the PEGI 18 guidance; below PEGI_18 the romance layer only), " + "LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR. Visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getContext(
 			@ToolArg(description = REF) String campaign, @ToolArg(description = "Scope") String scope,
 			@ToolArg(description = "Primary reference for the scope") Optional<String> ref,
@@ -792,7 +825,7 @@ public class RpgTools {
 			@ToolArg(description = "Slot level to use (default: the spell's level)") Optional<Integer> slot_level,
 			@ToolArg(description = "Target character references (repeat a target for multi-dart/ray spells; omit for self-only)")
 			Optional<List<String>> targets,
-			@ToolArg(description = "Spell-specific options; see description", required = false)
+			@ToolArg(description = "Spell-specific options: ritual: true; damage_type (Chromatic Orb, Transmuted); against (Hunter's Mark style buffs); condition (a cure); " + "metamagic: [\"Empowered Spell\", \"Quickened Spell\"] with heightened_target / careful: [refs] as the option needs (sorcerers; the sheet's spellcasting.metamagic lists what is known)", required = false)
 			Map<String, Object> options) {
 		return ToolSupport.run("cast_spell", () -> engine.spells()
 				.cast(operation_id, campaign, caster, spell, slot_level.orElse(null), targets.orElse(null), options));

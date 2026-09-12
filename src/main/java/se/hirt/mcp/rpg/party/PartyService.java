@@ -321,6 +321,15 @@ public final class PartyService {
 
 	/** Compact summaries of one character's relationships, for context building. */
 	public static List<Map<String, Object>> compact(Tx tx, long campaignId, long characterId, int limit) {
+		return compact(tx, campaignId, characterId, limit, true);
+	}
+
+	/**
+	 * With {@code includeProfile} false (bootstrap) the profile stays out and only its keys and sizes are listed, so
+	 * the reader knows to fetch it with the RELATIONSHIP or INTIMACY scope.
+	 */
+	public static List<Map<String, Object>> compact(
+			Tx tx, long campaignId, long characterId, int limit, boolean includeProfile) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row r : tx.query(
 				"SELECT r.*, c.name AS to_name FROM relationship r JOIN character c ON c.id = r.to_character_id WHERE r.campaign_id = ? AND r.from_character_id = ? ORDER BY r.revision DESC, r.id LIMIT ?",
@@ -331,7 +340,14 @@ public final class PartyService {
 			m.put("summary", r.str("summary"));
 			m.put("dimensions", r.map("dimensions_json"));
 			if (!r.isNull("profile_json")) {
-				m.put("profile", r.map("profile_json"));
+				Map<String, Object> profile = r.map("profile_json");
+				if (includeProfile) {
+					m.put("profile", profile);
+				} else {
+					var keys = new LinkedHashMap<String, Object>();
+					profile.forEach((k, v) -> keys.put(k, v instanceof List<?> l ? l.size() : 1));
+					m.put("profile_available", keys);
+				}
 			}
 			m.put("significant_events",
 					tx.count("SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ?", r.id()));

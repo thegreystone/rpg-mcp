@@ -28,7 +28,9 @@
  */
 package se.hirt.mcp.rpg.narrative;
 
+import se.hirt.mcp.rpg.character.Biography;
 import se.hirt.mcp.rpg.character.CharacterService;
+import se.hirt.mcp.rpg.choice.ContentProfile;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.party.PartyService;
@@ -767,12 +769,17 @@ public final class NarrativeService {
 					ctx.put("agenda", Map.of("visibility", "GM_ONLY", "agenda", c.map("agenda_json")));
 				}
 				ctx.put("relationships", PartyService.compact(tx, campaignId, c.id(), 20));
+				ctx.put("membership_history", sessions.membershipHistory(tx, c.id()));
 				ctx.put("recent_events", tx.query(
 						"SELECT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? ORDER BY e.id DESC LIMIT 10",
 						c.id(), campaignId).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
 				ctx.put("location", c.isNull("location_id") ? null
 						: WorldService.summary(tx.get("location", c.lng("location_id"))));
 			}
+			case "INTIMACY" -> ctx = intimacy(tx, campaign,
+					CharacterService.character(tx, campaignId, required(ref, "ref (character)")),
+					secondRef == null || secondRef.isBlank() ? null
+							: CharacterService.character(tx, campaignId, secondRef), b);
 			case "RELATIONSHIP" -> {
 				Row a = CharacterService.character(tx, campaignId, required(ref, "ref (character)"));
 				Row other = CharacterService.character(tx, campaignId, required(secondRef, "second_ref (character)"));
@@ -827,12 +834,206 @@ public final class NarrativeService {
 			}
 			case "DIRECTOR" -> ctx = directorView(tx, campaign, "CAMPAIGN_REVIEW");
 			default -> throw RpgException.invalidArgument(
-					"scope must be SCENE, CHARACTER, RELATIONSHIP, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
+					"scope must be SCENE, CHARACTER, RELATIONSHIP, INTIMACY, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
 			}
 			ctx.put("scope", s);
 			ctx.put("meta", Harness.meta(campaign, null));
 			return ctx;
 		});
+	}
+
+	/** Ledger event types that record what happened between people in a bed or on the way to one. */
+	private static final Set<String> INTIMATE_EVENT_TYPES = Set.of("RELATIONSHIP_MILESTONE", "INTIMACY", "ROMANCE",
+			"FIRST_KISS", "FIRST_NIGHT", "PROPOSAL", "WEDDING", "WEDDING_NIGHT");
+
+	/**
+	 * The INTIMACY scope (MCP_PROTOCOL.md §11.2): everything needed to play one character believably in an intimate
+	 * scene, gathered in one call. The focal character's biography and (PEGI_18) intimate profile; every partner
+	 * (the second character, or everyone with mapped preferences, attraction of 3 or more, an open want naming them,
+	 * or a household term naming them) with both directions of the pairwise profile, their own profile, where they
+	 * are and what state they are in; the household terms that bind them; the intimate ledger events, newest first,
+	 * with their detail; and the content-profile guidance. Below PEGI_18 the romance layer only is returned:
+	 * milestones, terms, wants and hard lines, never preferences or the intimate profile.
+	 */
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> intimacy(Tx tx, Row campaign, Row focal, Row second, int budget) {
+		long campaignId = campaign.id();
+		boolean explicit = Biography.intimacyAllowed(tx, campaignId);
+		var ctx = new LinkedHashMap<String, Object>();
+		Optional<Row> policy = tx.queryOne("SELECT content_profile FROM policy_state WHERE campaign_id = ?",
+				campaignId);
+		String profileName = policy.map(p -> p.str("content_profile")).orElse(null);
+		ctx.put("content_profile", profileName);
+		ctx.put("layer", explicit ? "INTIMATE" : "ROMANCE_ONLY");
+		if (explicit) {
+			ContentProfile cp = ContentProfile.of(profileName);
+			ctx.put("guidance", cp == null ? null : cp.guidance());
+		} else {
+			ctx.put("note",
+					"Below PEGI_18 this scope carries the romance layer only: milestones, terms, wants and hard lines; no preferences, no intimate profile.");
+		}
+		Long here = campaign.isNull("current_location_id") ? null : campaign.lng("current_location_id");
+		ctx.put("character", person(tx, focal, here, explicit, true));
+
+		// Partners: the named one, or everyone this character is intimately entangled with.
+		var partnerIds = new java.util.LinkedHashSet<Long>();
+		if (second != null) {
+			partnerIds.add(second.id());
+		} else {
+			for (Row r : tx.query(
+					"SELECT * FROM relationship WHERE campaign_id = ? AND (from_character_id = ? OR to_character_id = ?) ORDER BY id",
+					campaignId, focal.id(), focal.id())) {
+				long other = r.lng("from_character_id") == focal.id() ? r.lng("to_character_id")
+						: r.lng("from_character_id");
+				Map<String, Object> dims = r.map("dimensions_json");
+				boolean attracted = dims.get("attraction") instanceof Number n && n.intValue() >= 3;
+				boolean mapped = !r.isNull("profile_json") && r.map("profile_json").containsKey("preferences");
+				if (attracted || mapped) {
+					partnerIds.add(other);
+				}
+			}
+			for (Map<String, Object> w : Biography.openIntimateWants(focal)) {
+				namedRefs(w.get("with")).forEach(partnerIds::add);
+			}
+			if (Biography.intimacy(focal).get("household_terms") instanceof List<?> terms) {
+				for (Object t : terms) {
+					if (t instanceof Map<?, ?> m) {
+						namedRefs(m.get("with")).forEach(partnerIds::add);
+					}
+				}
+			}
+		}
+		var partners = new ArrayList<Map<String, Object>>();
+		var householdTerms = new ArrayList<Map<String, Object>>();
+		householdTermsOf(focal, householdTerms);
+		for (Long id : partnerIds) {
+			Optional<Row> p = tx.find("character", id);
+			if (p.isEmpty() || p.get().lng("campaign_id") != campaignId) {
+				continue;
+			}
+			Row partner = p.get();
+			Map<String, Object> view = person(tx, partner, here, explicit, false);
+			view.put("focal_to_partner", direction(tx, campaignId, focal.id(), partner.id(), explicit));
+			view.put("partner_to_focal", direction(tx, campaignId, partner.id(), focal.id(), explicit));
+			partners.add(view);
+			householdTermsOf(partner, householdTerms);
+		}
+		ctx.put("partners", partners);
+		if (explicit) {
+			ctx.put("household_terms", householdTerms);
+		}
+
+		// The nights themselves, newest first, with detail, under the budget.
+		var events = new ArrayList<Map<String, Object>>();
+		int chars = 0;
+		int cap = Math.max(3_000, budget * 3 / 2);
+		String types = INTIMATE_EVENT_TYPES.stream().map(t -> "'" + t + "'").collect(java.util.stream.Collectors.joining(","));
+		String sql = second == null
+				? "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? AND e.type IN (" + types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25"
+				: "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? JOIN event_actor b ON b.event_id = e.id AND b.character_id = ? WHERE e.campaign_id = ? AND e.type IN (" + types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25";
+		List<Row> rows = second == null ? tx.query(sql, focal.id(), campaignId)
+				: tx.query(sql, focal.id(), second.id(), campaignId);
+		for (Row e : rows) {
+			Map<String, Object> m = LedgerService.eventSummary(tx, e, explicit && chars < cap);
+			chars += m.containsKey("detail") ? String.valueOf(m.get("detail")).length()
+					: String.valueOf(m.get("summary")).length();
+			events.add(m);
+			if (chars > cap * 2) {
+				break;
+			}
+		}
+		ctx.put("intimate_events", events);
+		return ctx;
+	}
+
+	private static List<Long> namedRefs(Object with) {
+		var out = new ArrayList<Long>();
+		if (with instanceof List<?> l) {
+			for (Object o : l) {
+				try {
+					out.add(Ref.id(String.valueOf(o), Ref.CHARACTER));
+				} catch (RpgException ignored) {
+					// a name rather than a ref: not resolvable here
+				}
+			}
+		}
+		return out;
+	}
+
+	private static void householdTermsOf(Row c, List<Map<String, Object>> into) {
+		if (Biography.intimacy(c).get("household_terms") instanceof List<?> terms) {
+			for (Object t : terms) {
+				if (t instanceof Map<?, ?> m) {
+					var e = new LinkedHashMap<String, Object>();
+					e.put("held_by", Ref.of(Ref.CHARACTER, c.id()) + " (" + c.str("name") + ")");
+					m.forEach((k, v) -> e.put(String.valueOf(k), v));
+					if (!into.contains(e)) {
+						into.add(e);
+					}
+				}
+			}
+		}
+	}
+
+	/** One person for the intimate context: identity, body, voice, state, whereabouts, and (PEGI_18) their own profile. */
+	private static Map<String, Object> person(Tx tx, Row c, Long partyLocation, boolean explicit, boolean focal) {
+		var m = new LinkedHashMap<String, Object>();
+		m.put("ref", Ref.of(Ref.CHARACTER, c.id()));
+		m.put("name", c.str("name"));
+		m.put("age", c.integer("age"));
+		m.put("presentation", c.str("presentation"));
+		m.put("appearance", c.str("appearance"));
+		m.put("personality", c.str("personality"));
+		Map<String, Object> bio = Biography.biography(c);
+		if (!bio.isEmpty()) {
+			var b = new LinkedHashMap<String, Object>();
+			b.put("voice", bio.get("voice"));
+			b.put("marks", bio.get("marks"));
+			b.put("state", Biography.currentState(c));
+			b.put("wants", Biography.openWants(c));
+			if (focal && bio.get("timeline") instanceof List<?> t) {
+				b.put("timeline", t.size() <= 12 ? t : t.subList(t.size() - 12, t.size()));
+			}
+			m.put("biography", b);
+		}
+		m.put("hp", se.hirt.mcp.rpg.character.RuntimeService.hpView(tx, c));
+		m.put("conditions", se.hirt.mcp.rpg.character.RuntimeService.conditions(tx, c.id()));
+		if (!c.isNull("location_id")) {
+			tx.find("location", c.lng("location_id")).ifPresent(l -> m.put("location",
+					Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
+			m.put("with_party", partyLocation == null || c.lng("location_id") == partyLocation);
+		}
+		if (explicit) {
+			Map<String, Object> intimacy = Biography.intimacy(c);
+			intimacy.remove("household_terms");
+			if (!intimacy.isEmpty()) {
+				m.put("intimate_profile", intimacy);
+			}
+			List<Map<String, Object>> wants = Biography.openIntimateWants(c);
+			if (!wants.isEmpty()) {
+				m.put("intimate_wants", wants);
+			}
+		}
+		return m;
+	}
+
+	/** One direction of a pair for the intimate context; preferences only under PEGI_18. */
+	private static Map<String, Object> direction(Tx tx, long campaignId, long from, long to, boolean explicit) {
+		return tx.queryOne(
+						"SELECT * FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
+						campaignId, from, to).map(r -> {
+					var m = new LinkedHashMap<String, Object>();
+					m.put("summary", r.str("summary"));
+					m.put("dimensions", r.map("dimensions_json"));
+					if (!r.isNull("profile_json")) {
+						var profile = new LinkedHashMap<>(r.map("profile_json"));
+						if (!explicit) {
+							profile.remove("preferences");
+						}
+						m.put("profile", profile);
+					}
+					return (Map<String, Object>) m;
+				}).orElse(null);
 	}
 
 	private static Map<String, Object> relationshipPair(Tx tx, long campaignId, Row a, Row b) {

@@ -218,6 +218,7 @@ public final class SpellService {
 		m.put("concentrating_on",
 				tx.query("SELECT DISTINCT source_description FROM active_effect WHERE concentration_character_id = ?",
 						c.id()).stream().map(r -> r.str("source_description")).toList());
+		Metamagic.appendSheet(tx, rules, c, m);
 		return m;
 	}
 
@@ -522,6 +523,8 @@ public final class SpellService {
 		var effectsCreated = new ArrayList<String>();
 		String source = def.name() + " (" + caster.str("name") + ")";
 		Long concentrator = concentration ? caster.id() : null;
+		// Metamagic (Sorcerer): validated against this spell and paid for before anything is rolled.
+		Metamagic.Plan mm = Metamagic.plan(tx, rules, campaignId, caster, opts, def, mech, targets);
 		int casterLevel = castingOpt.map(Casting::level)
 				.orElse(Math.max(1, se.hirt.mcp.rpg.character.Origins.characterLevel(tx, caster)));
 		switch (kind) {
@@ -544,7 +547,7 @@ public final class SpellService {
 			}
 			for (Row target : queue) {
 				perTarget.add(spellAttack(tx, rules, roller, campaignId, caster, target, def, mech, atk, mod, upcast,
-						casterLevel, encounterId, round, concentrator, source, effectsCreated));
+						casterLevel, encounterId, round, concentrator, source, effectsCreated, opts, mm));
 			}
 		}
 		case "SAVE" -> {
@@ -555,7 +558,7 @@ public final class SpellService {
 			for (Row target : targets) {
 				perTarget.add(
 						savingThrow(tx, rules, roller, campaignId, caster, target, def, mech, dc, upcast, casterLevel,
-								encounterId, round, concentrator, source, effectsCreated));
+								encounterId, round, concentrator, source, effectsCreated, opts, mm));
 			}
 			if (targets.isEmpty()) {
 				// An emanation or area centred on the caster (Spirit Guardians, Thunderwave) with nobody in it yet:
@@ -570,7 +573,7 @@ public final class SpellService {
 				// so a later concentration spell, damage or a rest ends it properly.
 				long id = Effects.add(tx, campaignId, caster.id(), caster.id(), def.id(), source,
 						"srd5e:effect/concentrating", null,
-						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name()), caster.id(),
+						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name(), mm), caster.id(),
 						def.id(), "PLAYER");
 				effectsCreated.add(Ref.of("effect", id));
 			}
@@ -609,10 +612,13 @@ public final class SpellService {
 				for (Map<String, Object> d : perDart) {
 					Roll roll = roller.roll(String.valueOf(d.get("dice")));
 					CharacterService.recordRoll(tx, campaignId, def.name() + " dart", roll);
+					roll = Metamagic.empower(tx, roller, campaignId, mm, String.valueOf(d.get("dice")), roll,
+							def.name() + " dart " + (i + 1));
 					rolled.add(new Combat.RolledDamage(String.valueOf(d.get("type")), roll, Math.max(0, roll.total())));
 				}
 				Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
-						target.intOr("max_hp", 1), rolled, RuntimeService.defensesOf(tx, rules, target));
+						Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), rolled,
+						RuntimeService.defensesOf(tx, rules, target));
 				var t = targetView(target);
 				t.put("dart", i + 1);
 				t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, false, caster.id(),
@@ -644,7 +650,7 @@ public final class SpellService {
 				targets.add(caster);
 			}
 			Map<String, Object> modifiers =
-					mech.get("modifiers") instanceof Map<?, ?> mm ? new LinkedHashMap<>((Map<String, Object>) mm)
+					mech.get("modifiers") instanceof Map<?, ?> given ? new LinkedHashMap<>((Map<String, Object>) given)
 							: new LinkedHashMap<>();
 			String condition = mech.get("condition") == null ? null : mech.get("condition").toString();
 			for (Row target : targets) {
@@ -653,7 +659,8 @@ public final class SpellService {
 					mods.put("against_target_id",
 							CharacterService.character(tx, campaignId, opts.get("against").toString()).id());
 				}
-				Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name());
+				Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name(),
+						mm);
 				long id = Effects.add(tx, campaignId, target.id(), caster.id(), def.id(), source,
 						condition == null ? "srd5e:effect/" + String.valueOf(mech.getOrDefault("effect", def.id()))
 								.toLowerCase() : RuntimeService.conditionRef(condition), mods, duration, concentrator,
@@ -697,11 +704,12 @@ public final class SpellService {
 					throw RpgException.validation(
 							List.of(new Violation("targets", "NOT_DEAD", target.str("name") + " is not dead.")));
 				}
-				int hp = "FULL".equals(String.valueOf(mech.get("hp"))) ? target.intOr("max_hp", 1)
+				int effectiveMax = Math.max(1, RuntimeService.effectiveMaxHp(tx, target));
+				int hp = "FULL".equals(String.valueOf(mech.get("hp"))) ? effectiveMax
 						: ((Number) mech.getOrDefault("hp", 1)).intValue();
 				var cols = new LinkedHashMap<String, Object>();
 				cols.put("life_state", "ALIVE");
-				cols.put("current_hp", Math.min(target.intOr("max_hp", hp), hp));
+				cols.put("current_hp", Math.min(effectiveMax, hp));
 				cols.put("death_saves_json", null);
 				cols.put("revision", target.lng("revision") + 1);
 				tx.update("character", target.id(), cols);
@@ -713,7 +721,7 @@ public final class SpellService {
 								null, Map.of("spell", def.id())));
 				var t = targetView(target);
 				t.put("revived", true);
-				t.put("hp", Math.min(target.intOr("max_hp", hp), hp));
+				t.put("hp", Math.min(effectiveMax, hp));
 				t.put("note",
 						"Time-since-death and material components are the GM's to verify; a former party member rejoins via update_party_membership.");
 				perTarget.add(t);
@@ -736,12 +744,15 @@ public final class SpellService {
 			if (concentration) {
 				long id = Effects.add(tx, campaignId, caster.id(), caster.id(), def.id(), source,
 						"srd5e:effect/concentrating", null,
-						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name()), caster.id(),
+						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name(), mm), caster.id(),
 						def.id(), "PLAYER");
 				effectsCreated.add(Ref.of("effect", id));
 			}
 			result.put("note", "No structured mechanics for " + def.name() + "; adjudicate from the rules text.");
 		}
+		}
+		if (mm != null) {
+			result.put("metamagic", mm.toMap());
 		}
 		result.put("targets", perTarget);
 		result.put("effects_created", effectsCreated);
@@ -758,7 +769,7 @@ public final class SpellService {
 			log.put("kind", "CAST");
 			log.put("summary",
 					caster.str("name") + " casts " + def.name() + (used > level ? " (level " + used + " slot)"
-							: "") + ": " + perTarget.stream()
+							: "") + (mm == null ? "" : " " + mm.summary()) + ": " + perTarget.stream()
 							.map(t -> t.get("name") + (t.get("hit") != null ? (Boolean.TRUE.equals(t.get("hit"))
 																			   ? " hit" : " missed")
 									: t.get("saved") != null ? (Boolean.TRUE.equals(t.get("saved")) ? " saved"
@@ -831,7 +842,7 @@ public final class SpellService {
 	@SuppressWarnings("unchecked")
 	private static List<Combat.RolledDamage> rollSpellDamage(
 			Tx tx, RollService roller, long campaignId, RulesData.Definition def, Map<String, Object> mech, int upcast,
-			int casterLevel, boolean critical, int modifierIfAny, Map<String, Object> opts) {
+			int casterLevel, boolean critical, int modifierIfAny, Map<String, Object> opts, Metamagic.Plan mm) {
 		var out = new ArrayList<Combat.RolledDamage>();
 		Object dmg = mech.get("damage");
 		if (!(dmg instanceof List<?> parts)) {
@@ -852,8 +863,10 @@ public final class SpellService {
 					"damage_type") != null && choices.contains(opts.get("damage_type").toString().toLowerCase())) {
 				type = opts.get("damage_type").toString().toLowerCase();
 			}
+			type = Metamagic.transmute(mm, type);
 			Roll roll = roller.roll(dice);
 			CharacterService.recordRoll(tx, campaignId, "damage " + def.name() + " (" + type + ")", roll);
+			roll = Metamagic.empower(tx, roller, campaignId, mm, dice, roll, def.name());
 			out.add(new Combat.RolledDamage(type, roll, Math.max(0, roll.total())));
 			first = false;
 		}
@@ -864,7 +877,8 @@ public final class SpellService {
 	private static Map<String, Object> spellAttack(
 			Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
 			RulesData.Definition def, Map<String, Object> mech, int atk, int mod, int upcast, int casterLevel,
-			Long encounterId, long round, Long concentrator, String source, List<String> effectsCreated) {
+			Long encounterId, long round, Long concentrator, String source, List<String> effectsCreated,
+			Map<String, Object> opts, Metamagic.Plan mm) {
 		Row target = tx.get("character", targetRow.id());
 		var t = targetView(target);
 		if ("DEAD".equals(target.str("life_state"))) {
@@ -894,6 +908,21 @@ public final class SpellService {
 		boolean melee = "MELEE_SPELL".equals(mech.get("attack"));
 		boolean critical = natural == 20 || (unconscious && melee);
 		boolean hit = natural != 1 && (natural == 20 || total >= ac);
+		if (!hit && Metamagic.seek(tx, mm)) {
+			// Seeking Spell: the d20 is rerolled and the new roll used (SRD 5.2.1 "Sorcerer").
+			var first = roll.toMap();
+			first.put("roll_ref", Ref.of(Ref.ROLL, rollId));
+			roll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
+			rollId = CharacterService.recordRoll(tx, campaignId, "Seeking reroll " + def.name(), roll);
+			total = roll.total();
+			for (Map<String, Object> bd : bonusDice) {
+				total += ((Number) bd.get("total")).intValue();
+			}
+			natural = roll.dice().get(0);
+			critical = natural == 20 || (unconscious && melee);
+			hit = natural != 1 && (natural == 20 || total >= ac);
+			t.put("seeking", Map.of("first_roll", first, "rerolled", true));
+		}
 		var rm = roll.toMap();
 		rm.put("roll_ref", Ref.of(Ref.ROLL, rollId));
 		t.put("attack_roll", rm);
@@ -906,10 +935,11 @@ public final class SpellService {
 		t.put("critical", hit && critical);
 		if (hit) {
 			List<Combat.RolledDamage> damages = rollSpellDamage(tx, roller, campaignId, def, mech, upcast, casterLevel,
-					critical, Boolean.TRUE.equals(mech.get("add_modifier")) ? mod : 0, Map.of());
+					critical, Boolean.TRUE.equals(mech.get("add_modifier")) ? mod : 0, opts, mm);
 			if (!damages.isEmpty()) {
 				Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
-						target.intOr("max_hp", 1), damages, RuntimeService.defensesOf(tx, rules, target));
+						Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), damages,
+						RuntimeService.defensesOf(tx, rules, target));
 				t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, critical, caster.id(),
 						"slain by " + def.name()));
 				markDefeated(tx, encounterId, target.id());
@@ -936,7 +966,8 @@ public final class SpellService {
 	private static Map<String, Object> savingThrow(
 			Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
 			RulesData.Definition def, Map<String, Object> mech, int dc, int upcast, int casterLevel, Long encounterId,
-			long round, Long concentrator, String source, List<String> effectsCreated) {
+			long round, Long concentrator, String source, List<String> effectsCreated, Map<String, Object> opts,
+			Metamagic.Plan mm) {
 		Row target = tx.get("character", targetRow.id());
 		var t = targetView(target);
 		if ("DEAD".equals(target.str("life_state"))) {
@@ -946,17 +977,30 @@ public final class SpellService {
 		String saveAbility = String.valueOf(mech.get("save"));
 		boolean automatic = Boolean.TRUE.equals(mech.get("automatic")) || "NONE".equals(saveAbility);
 		boolean saved = false;
+		boolean careful = mm != null && mm.carefulFor(target.id());
 		if (mech.get("automatic_if_hp_at_most") instanceof Number threshold && target.intOr("current_hp",
 				0) <= threshold.intValue()) {
 			automatic = true;
 			t.put("automatic", "HP at or below " + threshold);
+		}
+		if (careful) {
+			// Careful Spell: the named creature succeeds automatically and takes no damage (SRD 5.2.1 "Sorcerer").
+			automatic = true;
+			saved = true;
+			t.put("careful", true);
+			t.put("saved", true);
 		}
 		if (!automatic) {
 			Ability ability = Ability.parse(saveAbility);
 			int bonus = saveBonus(tx, rules, target, ability);
 			Effects.Modifiers targetMods = Effects.modifiers(tx, target.id());
 			bonus += targetMods.saveBonus;
-			Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
+			boolean heightened = mm != null && mm.heightenedTarget() != null && mm.heightenedTarget() == target.id();
+			String d20 = heightened ? "2d20kl1" : "1d20";
+			if (heightened) {
+				t.put("heightened", true);
+			}
+			Roll roll = roller.roll(d20 + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 			long rollId = CharacterService.recordRoll(tx, campaignId,
 					ability.name() + " save vs " + def.name() + " " + Ref.of(Ref.CHARACTER, target.id()), roll);
 			int total = roll.total();
@@ -972,9 +1016,9 @@ public final class SpellService {
 			t.put("dc", dc);
 			t.put("saved", saved);
 		}
-		String onSuccess = String.valueOf(mech.getOrDefault("on_success", "HALF"));
+		String onSuccess = careful ? "NONE" : String.valueOf(mech.getOrDefault("on_success", "HALF"));
 		List<Combat.RolledDamage> damages = rollSpellDamage(tx, roller, campaignId, def, mech, upcast, casterLevel,
-				false, 0, Map.of());
+				false, 0, opts, mm);
 		if (!damages.isEmpty() && !(saved && onSuccess.equals("NONE"))) {
 			if (saved && onSuccess.equals("HALF")) {
 				damages = damages.stream().map(d -> new Combat.RolledDamage(d.type(), d.roll(), d.amount() / 2))
@@ -982,7 +1026,8 @@ public final class SpellService {
 				t.put("halved", true);
 			}
 			Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
-					target.intOr("max_hp", 1), damages, RuntimeService.defensesOf(tx, rules, target));
+					Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), damages,
+					RuntimeService.defensesOf(tx, rules, target));
 			t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, false, caster.id(),
 					"slain by " + def.name()));
 			markDefeated(tx, encounterId, target.id());
@@ -995,7 +1040,7 @@ public final class SpellService {
 			if (mech.get("also_condition") instanceof String c) {
 				conditions.add(c);
 			}
-			Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name());
+			Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name(), mm);
 			// A spell whose description grants the target another save carries that instruction onto the effect,
 			// so the encounter can roll it at the end of the target's turn instead of the GM remembering to
 			// (SRD 5.2.1 spell descriptions; RULES_ENGINE.md §3).
@@ -1073,12 +1118,24 @@ public final class SpellService {
 	}
 
 	private static Map<String, Object> duration(
-			Tx tx, long campaignId, Map<String, Object> mech, int upcast, Long encounterId, long round, String label) {
+			Tx tx, long campaignId, Map<String, Object> mech, int upcast, Long encounterId, long round, String label,
+			Metamagic.Plan mm) {
 		if (mech.get("duration_rounds") instanceof Number n) {
-			return Effects.rounds(tx, campaignId, encounterId, round, n.longValue(), label);
+			return Effects.rounds(tx, campaignId, encounterId, round, extended(mm, n.longValue(), true), label);
 		}
 		long minutes = mech.get("duration_minutes") instanceof Number n ? n.longValue() : 1;
-		return Effects.minutes(tx, campaignId, minutes, label);
+		return Effects.minutes(tx, campaignId, extended(mm, minutes, false), label);
+	}
+
+	/** Extended Spell doubles a duration of a minute or more, to at most 24 hours (SRD 5.2.1 "Sorcerer"). */
+	private static long extended(Metamagic.Plan mm, long amount, boolean rounds) {
+		if (mm == null || !mm.extended()) {
+			return amount;
+		}
+		if (rounds) {
+			return amount >= 10 ? amount * 2 : amount;
+		}
+		return Math.min(24 * 60, amount * 2);
 	}
 
 	private static final java.util.regex.Pattern DURATION_TEXT =
@@ -1090,21 +1147,21 @@ public final class SpellService {
 	 */
 	private static Map<String, Object> spellDuration(
 			Tx tx, long campaignId, Map<String, Object> payload, Map<String, Object> mech, int upcast, Long encounterId,
-			long round, String label) {
+			long round, String label, Metamagic.Plan mm) {
 		if (mech.get("duration_rounds") instanceof Number || mech.get("duration_minutes") instanceof Number) {
-			return duration(tx, campaignId, mech, upcast, encounterId, round, label);
+			return duration(tx, campaignId, mech, upcast, encounterId, round, label, mm);
 		}
 		var m = DURATION_TEXT.matcher(String.valueOf(payload.getOrDefault("duration", "")));
 		if (m.find()) {
 			long n = Long.parseLong(m.group(1));
 			return switch (m.group(2).toLowerCase()) {
-				case "round" -> Effects.rounds(tx, campaignId, encounterId, round, n, label);
-				case "hour" -> Effects.minutes(tx, campaignId, n * 60, label);
-				case "day" -> Effects.minutes(tx, campaignId, n * 60 * 24, label);
-				default -> Effects.minutes(tx, campaignId, n, label);
+				case "round" -> Effects.rounds(tx, campaignId, encounterId, round, extended(mm, n, true), label);
+				case "hour" -> Effects.minutes(tx, campaignId, extended(mm, n * 60, false), label);
+				case "day" -> Effects.minutes(tx, campaignId, extended(mm, n * 60 * 24, false), label);
+				default -> Effects.minutes(tx, campaignId, extended(mm, n, false), label);
 			};
 		}
-		return Effects.minutes(tx, campaignId, 1, label);
+		return Effects.minutes(tx, campaignId, extended(mm, 1, false), label);
 	}
 
 	/** A spell whose area starts at the caster: range "Self (15-foot emanation)", "Self (15-foot cube)". */

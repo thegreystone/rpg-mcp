@@ -950,6 +950,22 @@ public final class Origins {
 						String.valueOf(resource.getOrDefault("recharge", "LONG_REST")));
 			}
 		});
+		// Class features with a tracked resource (sorcery points, Innate Sorcery uses, ...): the feature block's
+		// `resource` names the pool; `max` may be a number, CLASS_LEVEL, HALF_CLASS_LEVEL or PROFICIENCY_BONUS.
+		for (Map<String, Object> feature : se.hirt.mcp.rpg.progression.ClassFeatures.featuresOf(tx, rules, c)) {
+			Map<String, Object> resource =
+					feature.get("resource") instanceof Map<?, ?> ? castMap(feature.get("resource")) : null;
+			if (resource == null || resource.get("ref") == null) {
+				continue;
+			}
+			int classLevel = feature.get("class_level") instanceof Number n ? n.intValue() : level;
+			Object maxSpec = resource.get("max");
+			int max = "CLASS_LEVEL".equals(maxSpec) ? classLevel
+					: "HALF_CLASS_LEVEL".equals(maxSpec) ? Math.max(1, classLevel / 2)
+					: "PROFICIENCY_BONUS".equals(maxSpec) ? pb : maxSpec instanceof Number n ? n.intValue() : 1;
+			upsertResource(tx, c.id(), String.valueOf(resource.get("ref")), max,
+					String.valueOf(resource.getOrDefault("recharge", "LONG_REST")));
+		}
 		grantSpeciesSpells(tx, rules, c);
 		for (Row t : tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'",
 				c.id())) {
