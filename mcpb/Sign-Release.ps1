@@ -11,7 +11,8 @@
       1. downloads rpg-mcp-server-<version>-windows-x86_64.exe from the GitHub release,
       2. signs it (SHA-256, RFC 3161 timestamp from Certum) and verifies signature + timestamp,
       3. re-creates rpg-mcp-server-<version>-windows-x86_64.mcpb around the signed binary,
-      4. uploads both assets back to the release, replacing the unsigned ones.
+      4. uploads both assets back to the release, replacing the unsigned ones,
+      5. dispatches the Bundles workflow to re-pack the universal bundle (Linux-only job, for executable bits).
 
     Preconditions: SimplySign Desktop logged in (cert visible in Cert:\CurrentUser\My); signtool (Windows SDK);
     gh authenticated against the repo; node/npx for @anthropic-ai/mcpb.
@@ -117,3 +118,9 @@ Write-Host "Replacing release assets..."
 gh release upload "v$Version" --repo $Repo --clobber $exe (Join-Path $work $bundle)
 if ($LASTEXITCODE -ne 0) { throw "gh release upload failed (exit $LASTEXITCODE)" }
 Write-Host "Done. Release v$Version now has a signed $binary and a $bundle wrapping it." -ForegroundColor Green
+
+# 5. The universal bundle also contains the Windows binary, but it must be packed on Linux (executable bits),
+#    so hand that to the Bundles workflow.
+Write-Host "Dispatching the Bundles workflow to re-pack the universal bundle around the signed binary..."
+gh workflow run bundle.yml --repo $Repo -f "version=$Version" -f platforms=universal
+if ($LASTEXITCODE -ne 0) { throw 'gh workflow run failed; run the Bundles workflow (universal) by hand from the Actions tab' }

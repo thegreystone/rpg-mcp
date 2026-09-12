@@ -196,11 +196,21 @@ jobs:
     needs: [ uber-jar, native ]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+
       - name: Download all artifacts
         uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
+
+      # The universal bundle carries every native binary; its manifest picks one per platform at launch.
+      # It is what a plugin marketplace entry points at. Packed here, on Linux, so the executable bits of
+      # the Unix binaries survive (download-artifact drops them, pack-universal.sh restores them).
+      - name: Package universal MCP bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash mcpb/pack-universal.sh "$VERSION" artifacts "artifacts/rpg-mcp-server-${VERSION}-universal.mcpb"
 
       - name: List artifacts
         run: find artifacts -type f | sort

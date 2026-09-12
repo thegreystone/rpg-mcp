@@ -3,8 +3,9 @@ name: Bundles
 # Build the MCP Bundles (.mcpb) for an already published release and attach them to it. Bundles exist
 # only for the platforms Claude Desktop runs on: macOS and Windows. The release workflow builds them on
 # every tag; this one exists for releases cut before it did, and for re-packing after a binary on the
-# release was replaced (the Windows signing script re-packs its own bundle, so usually only macOS is
-# needed). Each bundle is packed on its own platform so the executable bit is preserved.
+# release was replaced (the Windows signing script re-packs its own Windows bundle and then dispatches this
+# workflow for the universal one). Each per-platform bundle is packed on its own platform, and the universal
+# bundle on Linux, so the executable bits are preserved.
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +21,7 @@ on:
         options:
           - all
           - macos-only
+          - universal
 
 jobs:
   bundle:
@@ -42,7 +44,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download binary from release
-        if: inputs.platforms == 'all' || matrix.mcpb_platform == 'darwin'
+        if: inputs.platforms == 'all' || (inputs.platforms == 'macos-only' && matrix.mcpb_platform == 'darwin')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,7 +54,7 @@ jobs:
             --pattern "rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}${{ matrix.exe }}" --dir target
 
       - name: Package MCP bundle
-        if: inputs.platforms == 'all' || matrix.mcpb_platform == 'darwin'
+        if: inputs.platforms == 'all' || (inputs.platforms == 'macos-only' && matrix.mcpb_platform == 'darwin')
         shell: bash
         run: |
           bash mcpb/pack.sh "${{ inputs.version }}" "${{ matrix.suffix }}" "${{ matrix.mcpb_platform }}" \
@@ -60,10 +62,40 @@ jobs:
             "target/rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}.mcpb"
 
       - name: Attach bundle to release
-        if: inputs.platforms == 'all' || matrix.mcpb_platform == 'darwin'
+        if: inputs.platforms == 'all' || (inputs.platforms == 'macos-only' && matrix.mcpb_platform == 'darwin')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ inputs.version }}" --clobber \
             "target/rpg-mcp-server-${{ inputs.version }}-${{ matrix.suffix }}.mcpb"
+
+  universal:
+    if: inputs.platforms == 'all' || inputs.platforms == 'universal'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download binaries from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p target/bin
+          for suffix in linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64.exe; do
+            gh release download "v${{ inputs.version }}" \
+              --pattern "rpg-mcp-server-${{ inputs.version }}-${suffix}" --dir target/bin
+          done
+
+      - name: Package universal MCP bundle
+        run: |
+          bash mcpb/pack-universal.sh "${{ inputs.version }}" target/bin \
+            "target/rpg-mcp-server-${{ inputs.version }}-universal.mcpb"
+
+      - name: Attach bundle to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ inputs.version }}" --clobber \
+            "target/rpg-mcp-server-${{ inputs.version }}-universal.mcpb"

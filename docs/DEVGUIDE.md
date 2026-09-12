@@ -132,8 +132,17 @@ manifest declares the data directory as a `user_config` entry (a folder picker a
 shared by the release workflow and by the manual **Bundles** workflow
 ([`.github/workflows/bundle.yml`](../.github/workflows/bundle.yml)), which builds the bundles for an already
 published release from its binaries and attaches them: run it from the Actions tab with the version, and
-choose *macos-only* when the Windows bundle has already been produced by the signing script. To try a
-bundle locally (Git Bash on Windows):
+choose *macos-only* when the Windows bundle has already been produced by the signing script.
+
+The release job additionally packs a **universal** bundle, `rpg-mcp-server-<version>-universal.mcpb`, with
+all four native binaries and a manifest whose `platform_overrides` pick one per operating system
+([`mcpb/manifest-universal.json`](../mcpb/manifest-universal.json); on Linux a small launcher script,
+[`mcpb/linux-launcher.sh`](../mcpb/linux-launcher.sh), picks the architecture). It is about 56 MB and exists for
+one purpose: a Claude plugin marketplace entry can reference only one bundle for every platform. Direct
+downloads should keep using the per-platform bundles. It is packed by [`mcpb/pack-universal.sh`](../mcpb/pack-universal.sh)
+on Linux only, since a pack done on Windows cannot set the executable bits of the Unix binaries; the Bundles
+workflow's *universal* choice re-packs it for an existing release, and the Windows signing script dispatches
+that automatically after replacing the Windows binary. To try a bundle locally (Git Bash on Windows):
 
 ```bash
 bash mcpb/pack.sh 0.0.0 windows-x86_64 win32 target/rpg-mcp-server-*-runner.exe target/rpg-mcp-server-dev.mcpb
