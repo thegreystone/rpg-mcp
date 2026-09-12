@@ -42,16 +42,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # mcpb_platform is set only where Claude Desktop exists: there is nothing to install a bundle into on Linux.
           - os: ubuntu-latest
             arch: x86_64
             suffix: linux-x86_64
             exe: ''
-            mcpb_platform: linux
           - os: ubuntu-24.04-arm
             arch: aarch64
             suffix: linux-aarch64
             exe: ''
-            mcpb_platform: linux
           - os: macos-latest
             arch: aarch64
             suffix: macos-aarch64
@@ -172,9 +171,10 @@ jobs:
         if: runner.os == 'macOS' && always()
         run: security delete-keychain "$RUNNER_TEMP/build.keychain"
 
-      # One MCP Bundle per platform around the signed (macOS) or bare (Linux, Windows) binary, installable
-      # into Claude Desktop with a double-click. Packed here so the executable bit survives on Unix.
+      # An MCP Bundle for each platform that has Claude Desktop (macOS, Windows), around the notarized (macOS)
+      # or bare (Windows, signed later) binary. Packed here so the executable bit survives on macOS.
       - name: Package MCP bundle
+        if: matrix.mcpb_platform != ''
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

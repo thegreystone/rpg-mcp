@@ -112,7 +112,7 @@ harness state and the allowed operations, so the model is guided turn by turn ei
 
 ### Add it to Claude Desktop
 
-The easiest way is the MCP Bundle. Download the `.mcpb` file for your platform from the
+The easiest way is the MCP Bundle. Download the `.mcpb` file for macOS or Windows from the
 [Releases page](https://github.com/thegreystone/rpg-mcp/releases/latest) (for example
 `rpg-mcp-server-0.1.2-windows-x86_64.mcpb`), then either double-click it or open it from
 *Settings → Extensions* in Claude Desktop. The installer asks for the campaign data directory (default
