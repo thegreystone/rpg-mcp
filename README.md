@@ -28,14 +28,14 @@ campaign**.
 ### Download a binary
 
 Grab the file for your platform from the [Releases page](https://github.com/thegreystone/rpg-mcp/releases/latest).
-The examples below use version `0.1.1` — substitute the version you downloaded.
+The examples below use version `0.1.2` — substitute the version you downloaded.
 
 | Platform            | File                                      |
 |---------------------|-------------------------------------------|
-| Linux x86_64        | `rpg-mcp-server-0.1.1-linux-x86_64`       |
-| Linux aarch64       | `rpg-mcp-server-0.1.1-linux-aarch64`      |
-| macOS Apple Silicon | `rpg-mcp-server-0.1.1-macos-aarch64`      |
-| Windows x86_64      | `rpg-mcp-server-0.1.1-windows-x86_64.exe` |
+| Linux x86_64        | `rpg-mcp-server-0.1.2-linux-x86_64`       |
+| Linux aarch64       | `rpg-mcp-server-0.1.2-linux-aarch64`      |
+| macOS Apple Silicon | `rpg-mcp-server-0.1.2-macos-aarch64`      |
+| Windows x86_64      | `rpg-mcp-server-0.1.2-windows-x86_64.exe` |
 
 These are native images — no Java required, and they start in milliseconds, which matters because your
 MCP client launches the server on every conversation.
@@ -43,25 +43,25 @@ MCP client launches the server on every conversation.
 On Linux and macOS, make it executable:
 
 ```bash
-chmod +x rpg-mcp-server-0.1.1-*
+chmod +x rpg-mcp-server-0.1.2-*
 ```
 
 On macOS, also clear the quarantine flag the first time:
 
 ```bash
-xattr -d com.apple.quarantine rpg-mcp-server-0.1.1-macos-aarch64
+xattr -d com.apple.quarantine rpg-mcp-server-0.1.2-macos-aarch64
 ```
 
-> Prefer the JVM? Download `rpg-mcp-server-0.1.1-runner.jar` instead and run it with
+> Prefer the JVM? Download `rpg-mcp-server-0.1.2-runner.jar` instead and run it with
 > [Java 21+](https://adoptium.net/): the command becomes `java` and the arguments start with
-> `-jar /path/to/rpg-mcp-server-0.1.1-runner.jar`. Everything else below is identical.
+> `-jar /path/to/rpg-mcp-server-0.1.2-runner.jar`. Everything else below is identical.
 
 ### Add it to Claude Code
 
 One command, from anywhere:
 
 ```bash
-claude mcp add rpg --scope user -- /path/to/rpg-mcp-server-0.1.1-linux-x86_64 -Dquarkus.mcp.server.stdio.enabled=true
+claude mcp add rpg --scope user -- /path/to/rpg-mcp-server-0.1.2-linux-x86_64 -Dquarkus.mcp.server.stdio.enabled=true
 ```
 
 `--scope user` makes the campaign available in every project — you do not want your campaign tied to one
@@ -74,7 +74,7 @@ config by hand, the equivalent entry in `~/.claude.json` is:
 {
   "mcpServers": {
     "rpg": {
-      "command": "/path/to/rpg-mcp-server-0.1.1-linux-x86_64",
+      "command": "/path/to/rpg-mcp-server-0.1.2-linux-x86_64",
       "args": ["-Dquarkus.mcp.server.stdio.enabled=true"],
       "env": { "RPG_DATA_DIR": "/path/to/campaigns" }
     }
@@ -90,7 +90,7 @@ Add the server to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.rpg]
-command = "/path/to/rpg-mcp-server-0.1.1-linux-x86_64"
+command = "/path/to/rpg-mcp-server-0.1.2-linux-x86_64"
 args = ["-Dquarkus.mcp.server.stdio.enabled=true"]
 
 [mcp_servers.rpg.env]
@@ -100,7 +100,7 @@ RPG_DATA_DIR = "/path/to/campaigns"
 Or let the CLI write it for you:
 
 ```bash
-codex mcp add rpg -- /path/to/rpg-mcp-server-0.1.1-linux-x86_64 -Dquarkus.mcp.server.stdio.enabled=true
+codex mcp add rpg -- /path/to/rpg-mcp-server-0.1.2-linux-x86_64 -Dquarkus.mcp.server.stdio.enabled=true
 ```
 
 Then `codex mcp list` should show `rpg`. If your Codex version surfaces MCP tools but not MCP *resources*,
@@ -118,7 +118,7 @@ Edit `claude_desktop_config.json` — on Windows at
 {
   "mcpServers": {
     "rpg": {
-      "command": "C:\\Users\\YourName\\path\\to\\rpg-mcp-server-0.1.1-windows-x86_64.exe",
+      "command": "C:\\Users\\YourName\\path\\to\\rpg-mcp-server-0.1.2-windows-x86_64.exe",
       "args": ["-Dquarkus.mcp.server.stdio.enabled=true"]
     }
   }
@@ -127,7 +127,7 @@ Edit `claude_desktop_config.json` — on Windows at
 
 Restart Claude Desktop afterwards. Claude Desktop on Windows may launch the server with
 `C:\WINDOWS\system32` as the working directory; the server detects that and moves its working directory
-to the data directory itself. If you run a build older than 0.1.1 that lacks this, add
+to the data directory itself. If you run a build older than 0.1.2 that lacks this, add
 `"-Duser.dir=C:\\Users\\YourName\\.rpg-mcp"` to `args` as a workaround.
 
 ### Where your campaigns live
