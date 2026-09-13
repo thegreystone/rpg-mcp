@@ -47,9 +47,9 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Inventory and economy (DESIGN.md §12, DOMAIN_MODEL.md §8, MCP_PROTOCOL.md §14). The GM narrates commerce; the engine
- * performs the accounting: quantities are positive (I-23), every transfer and trade is atomic (I-25), equipment is
- * slot-validated (I-26), carry weight is derived (I-27).
+ * Inventory and economy (DESIGN.md §12, DOMAIN_MODEL.md §8, MCP_PROTOCOL.md §14). The GM narrates
+ * commerce; the engine performs the accounting: quantities are positive (I-23), every transfer and
+ * trade is atomic (I-25), equipment is slot-validated (I-26), carry weight is derived (I-27).
  */
 public final class InventoryService {
 
@@ -137,9 +137,8 @@ public final class InventoryService {
 		}
 		double coins = Money.coinWeightLb(character.lng("money_cp") == null ? 0 : character.lng("money_cp"));
 		// Goliath Powerful Build counts as one size larger for carrying capacity (SRD 5.2.1).
-		int capacity = Derived.carryCapacityLb(
-				character.integer("str_score")) * se.hirt.mcp.rpg.character.Origins.carryCapacityMultiplier(rules,
-				character);
+		int capacity = Derived.carryCapacityLb(character.integer("str_score"))
+				* se.hirt.mcp.rpg.character.Origins.carryCapacityMultiplier(rules, character);
 		var m = new LinkedHashMap<String, Object>();
 		m.put("items_lb", round1(items));
 		m.put("coins_lb", round1(coins));
@@ -155,18 +154,25 @@ public final class InventoryService {
 
 	// ── write helpers ──────────────────────────────────────────────────
 
-	/** Adds quantity of an item to a character or location, merging into an existing unequipped stack. */
+	/**
+	 * Adds quantity of an item to a character or location, merging into an existing unequipped
+	 * stack.
+	 */
 	public static long addItem(Tx tx, long campaignId, Long characterId, Long locationId, Item item, long quantity) {
 		if (quantity <= 0) {
 			throw RpgException.invalidArgument("Quantity must be positive.");
 		}
 		String owner = characterId != null ? "character_id" : "location_id";
 		long ownerId = characterId != null ? characterId : locationId;
-		Optional<Row> existing = item.custom() ? tx.queryOne(
-				"SELECT * FROM inventory_entry WHERE " + owner + " = ? AND custom_content_id = ? AND equipped = 0 AND charges_json IS NULL",
-				ownerId, item.customId()) : tx.queryOne(
-				"SELECT * FROM inventory_entry WHERE " + owner + " = ? AND content_ref = ? AND equipped = 0 AND charges_json IS NULL",
-				ownerId, item.contentRef());
+		Optional<Row> existing = item.custom()
+				? tx.queryOne(
+						"SELECT * FROM inventory_entry WHERE " + owner
+								+ " = ? AND custom_content_id = ? AND equipped = 0 AND charges_json IS NULL",
+						ownerId, item.customId())
+				: tx.queryOne(
+						"SELECT * FROM inventory_entry WHERE " + owner
+								+ " = ? AND content_ref = ? AND equipped = 0 AND charges_json IS NULL",
+						ownerId, item.contentRef());
 		if (existing.isPresent()) {
 			tx.update("inventory_entry", existing.get().id(),
 					Map.of("quantity", existing.get().lng("quantity") + quantity));
@@ -200,11 +206,14 @@ public final class InventoryService {
 		}
 	}
 
-	/** Grants a list of {@code {item, quantity}} (or {@code {choice, default}}) entries; packs are expanded. */
+	/**
+	 * Grants a list of {@code {item, quantity}} (or {@code {choice, default}}) entries; packs are
+	 * expanded.
+	 */
 	@SuppressWarnings("unchecked")
 	public static List<Map<String, Object>> grantBundle(
-			Tx tx, RulesData rules, long campaignId, long characterId,
-			List<Map<String, Object>> items, Map<String, Object> choices) {
+		Tx tx, RulesData rules, long campaignId, long characterId, List<Map<String, Object>> items,
+		Map<String, Object> choices) {
 		var granted = new ArrayList<Map<String, Object>>();
 		for (Map<String, Object> spec : items) {
 			String ref = (String) spec.get("item");
@@ -215,8 +224,8 @@ public final class InventoryService {
 			long qty = spec.get("quantity") instanceof Number n ? n.longValue() : 1;
 			Item item = ContentService.resolveItem(tx, rules, campaignId, ref);
 			if (item.type().equals("PACK")) {
-				List<Map<String, Object>> contents = (List<Map<String, Object>>) item.payload()
-						.getOrDefault("contents", List.of());
+				List<Map<String, Object>> contents = (List<Map<String, Object>>) item.payload().getOrDefault("contents",
+						List.of());
 				for (int i = 0; i < qty; i++) {
 					granted.addAll(grantBundle(tx, rules, campaignId, characterId, contents, choices));
 				}
@@ -233,8 +242,9 @@ public final class InventoryService {
 	}
 
 	/**
-	 * Resolves and grants a class's starting equipment for a character being activated (SRD 5.2.1 class "Starting
-	 * Equipment": Option A bundle + gold, or Option B gold only). Returns the money in copper.
+	 * Resolves and grants a class's starting equipment for a character being activated (SRD 5.2.1
+	 * class "Starting Equipment": Option A bundle + gold, or Option B gold only). Returns the money
+	 * in copper.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> grantStartingEquipment(Tx tx, RulesData rules, long campaignId, Row character) {
@@ -249,8 +259,8 @@ public final class InventoryService {
 		}
 		Map<String, Object> options = (Map<String, Object>) def.get().payload().get("starting_equipment");
 		Map<String, Object> creation = character.map("creation_json");
-		Map<String, Object> chosen =
-				creation.get("starting_equipment") instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
+		Map<String, Object> chosen = creation.get("starting_equipment") instanceof Map<?, ?> m ? (Map<String, Object>) m
+				: null;
 		String optionKey = chosen == null ? goldOnlyOption(options) : String.valueOf(chosen.get("option"));
 		Map<String, Object> option = (Map<String, Object>) options.get(optionKey);
 		if (option == null) {
@@ -267,8 +277,8 @@ public final class InventoryService {
 		Optional<RulesData.Definition> bg = se.hirt.mcp.rpg.character.Origins.backgroundOf(tx, rules, character);
 		if (bg.isPresent() && bg.get().payload().get("starting_equipment") instanceof Map<?, ?> bgOptionsRaw) {
 			Map<String, Object> bgOptions = (Map<String, Object>) bgOptionsRaw;
-			Map<String, Object> bgChosen =
-					creation.get("background_equipment") instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
+			Map<String, Object> bgChosen = creation.get("background_equipment") instanceof Map<?, ?> m
+					? (Map<String, Object>) m : null;
 			String bgKey = bgChosen == null ? goldOnlyOption(bgOptions) : String.valueOf(bgChosen.get("option"));
 			Map<String, Object> bgOption = (Map<String, Object>) bgOptions.get(bgKey);
 			if (bgOption == null) {
@@ -281,8 +291,10 @@ public final class InventoryService {
 			}
 			// A GAMING_SET bundle choice defaults to the gaming set chosen as the background tool proficiency.
 			tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY'", character.id())
-					.stream().filter(t -> se.hirt.mcp.rpg.character.Origins.SOURCE_BACKGROUND.equals(
-							se.hirt.mcp.rpg.character.Origins.sourceOf(t))).filter(t -> rules.find(t.str("content_ref"))
+					.stream()
+					.filter(t -> se.hirt.mcp.rpg.character.Origins.SOURCE_BACKGROUND
+							.equals(se.hirt.mcp.rpg.character.Origins.sourceOf(t)))
+					.filter(t -> rules.find(t.str("content_ref"))
 							.map(d -> "GAMING_SET".equals(String.valueOf(d.payload().get("tool_kind")))).orElse(false))
 					.findFirst().ifPresent(t -> bgChoices.putIfAbsent("GAMING_SET", t.str("content_ref")));
 			gold += ((Number) bgOption.getOrDefault("gold_gp", 0)).longValue() * Money.GP;
@@ -307,7 +319,7 @@ public final class InventoryService {
 	// ── transfer_item ──────────────────────────────────────────────────
 
 	public Map<String, Object> transfer(
-			String operationId, String campaignRef, String entryRef, String toRef, Integer quantity, String reason) {
+		String operationId, String campaignRef, String entryRef, String toRef, Integer quantity, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -364,11 +376,12 @@ public final class InventoryService {
 	// ── give_money ─────────────────────────────────────────────────────
 
 	/**
-	 * Moves coin between two characters of the campaign in one transaction (DESIGN.md §12): a tip, a wage, a debt
-	 * paid. The giver must hold the amount; the receiver gets exactly it; one ledger event names both.
+	 * Moves coin between two characters of the campaign in one transaction (DESIGN.md §12): a tip,
+	 * a wage, a debt paid. The giver must hold the amount; the receiver gets exactly it; one ledger
+	 * event names both.
 	 */
 	public Map<String, Object> giveMoney(
-			String operationId, String campaignRef, String fromRef, String toRef, Object money, String reason) {
+		String operationId, String campaignRef, String fromRef, String toRef, Object money, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -420,7 +433,7 @@ public final class InventoryService {
 	// ── equip_item ─────────────────────────────────────────────────────
 
 	public Map<String, Object> equip(
-			String operationId, String campaignRef, String characterRef, String entryRef, boolean equipped) {
+		String operationId, String campaignRef, String characterRef, String entryRef, boolean equipped) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -450,9 +463,9 @@ public final class InventoryService {
 				for (Row c : current) {
 					String s = c.str("slot");
 					if ("BODY".equals(s) && "BODY".equals(slot)) {
-						throw RpgException.validation(List.of(new Violation("entry", "SLOT_OCCUPIED",
-								"Body armor is already equipped (" + Ref.of(Ref.INVENTORY,
-										c.id()) + "); unequip it first.")));
+						throw RpgException.validation(
+								List.of(new Violation("entry", "SLOT_OCCUPIED", "Body armor is already equipped ("
+										+ Ref.of(Ref.INVENTORY, c.id()) + "); unequip it first.")));
 					}
 					if ("SHIELD".equals(s) && "SHIELD".equals(slot)) {
 						throw RpgException.validation(
@@ -461,14 +474,14 @@ public final class InventoryService {
 					hands += handsFor(s);
 				}
 				if (hands + handsFor(slot) > 2) {
-					throw RpgException.validation(List.of(new Violation("entry", "HANDS",
-							"Not enough free hands to hold " + item.name() + ".")));
+					throw RpgException.validation(List
+							.of(new Violation("entry", "HANDS", "Not enough free hands to hold " + item.name() + ".")));
 				}
-				if (item.payload().get("armor") instanceof Map<?, ?> armor && armor.get(
-						"strength_requirement") instanceof Number req && character.intOr("str_score",
-						10) < req.intValue()) {
-					warnings.add(
-							item.name() + " requires Strength " + req + "; speed is reduced by 10 feet while wearing it.");
+				if (item.payload().get("armor") instanceof Map<?, ?> armor
+						&& armor.get("strength_requirement") instanceof Number req
+						&& character.intOr("str_score", 10) < req.intValue()) {
+					warnings.add(item.name() + " requires Strength " + req
+							+ "; speed is reduced by 10 feet while wearing it.");
 				}
 				if (entry.lng("quantity") > 1) {
 					// Split one unit off the stack so the equipped state is unambiguous.
@@ -497,9 +510,8 @@ public final class InventoryService {
 			result.put("equipped", equipped);
 			result.put("armor_class_before", acBefore.get("value"));
 			result.put("armor_class", acAfter);
-			result.put("equipped_items",
-					entries(tx, rules, character.id()).stream().filter(e -> Boolean.TRUE.equals(e.get("equipped")))
-							.toList());
+			result.put("equipped_items", entries(tx, rules, character.id()).stream()
+					.filter(e -> Boolean.TRUE.equals(e.get("equipped"))).toList());
 			result.put("meta", Harness.meta(campaign, warnings));
 			return result;
 		});
@@ -512,8 +524,8 @@ public final class InventoryService {
 	// ── trade ──────────────────────────────────────────────────────────
 
 	public Map<String, Object> trade(
-			String operationId, String campaignRef, String characterRef, String kind, String itemText, String entryRef,
-			Integer quantity, String merchantRef, Object negotiatedPrice, String reason) {
+		String operationId, String campaignRef, String characterRef, String kind, String itemText, String entryRef,
+		Integer quantity, String merchantRef, Object negotiatedPrice, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -537,8 +549,8 @@ public final class InventoryService {
 			}
 			Long negotiated = negotiatedPrice == null ? null : Money.parseCp(negotiatedPrice);
 			if (negotiated != null && (reason == null || reason.isBlank())) {
-				throw RpgException.invalidArgument(
-						"A negotiated price requires a reason (it is recorded with GM provenance).");
+				throw RpgException
+						.invalidArgument("A negotiated price requires a reason (it is recorded with GM provenance).");
 			}
 			long money = character.lng("money_cp");
 			var result = new LinkedHashMap<String, Object>();
@@ -554,8 +566,8 @@ public final class InventoryService {
 				long price = negotiated != null ? negotiated : listPrice;
 				if (price > money) {
 					throw RpgException.insufficientResource(
-							character.str("name") + " has " + Money.format(money) + " but " + item.name() + (units > 1
-									? " ×" + units : "") + " costs " + Money.format(price) + ".");
+							character.str("name") + " has " + Money.format(money) + " but " + item.name()
+									+ (units > 1 ? " ×" + units : "") + " costs " + Money.format(price) + ".");
 				}
 				long pieces = units * item.bundleSize();
 				long entryId;
@@ -578,9 +590,10 @@ public final class InventoryService {
 					result.put("entry", Ref.of(Ref.INVENTORY, entryId));
 				}
 				result.put("money", Money.render(money - price));
-				recordTrade(tx, campaignId, character, merchantId, "ITEM_PURCHASED",
-						character.str("name") + " bought " + describe(item, pieces) + " for " + Money.format(
-								price) + ".", item, pieces, price, negotiated != null, reason);
+				recordTrade(
+						tx, campaignId, character, merchantId, "ITEM_PURCHASED", character.str("name") + " bought "
+								+ describe(item, pieces) + " for " + Money.format(price) + ".",
+						item, pieces, price, negotiated != null, reason);
 			} else {
 				Row entry = entryRef != null && !entryRef.isBlank() ? entry(tx, campaignId, entryRef)
 						: findOwnedItem(tx, campaignId, character.id(), itemText);
@@ -622,8 +635,8 @@ public final class InventoryService {
 	}
 
 	private static void recordTrade(
-			Tx tx, long campaignId, Row character, Long merchantId, String type, String summary,
-			Item item, long pieces, long price, boolean negotiated, String reason) {
+		Tx tx, long campaignId, Row character, Long merchantId, String type, String summary, Item item, long pieces,
+		long price, boolean negotiated, String reason) {
 		var payload = new LinkedHashMap<String, Object>();
 		payload.put("item", item.display());
 		payload.put("quantity", pieces);
@@ -638,18 +651,18 @@ public final class InventoryService {
 		if (merchantId != null) {
 			actors.add(merchantId);
 		}
-		LedgerService.append(tx, campaignId,
-				new LedgerService.EventSpec(type, summary, actors, "MINOR", "PARTY_KNOWN", negotiated ? "GM" : "PLAYER",
-						null, character.lng("location_id"), null, payload));
+		LedgerService.append(tx, campaignId, new LedgerService.EventSpec(type, summary, actors, "MINOR", "PARTY_KNOWN",
+				negotiated ? "GM" : "PLAYER", null, character.lng("location_id"), null, payload));
 	}
 
 	private Row findOwnedItem(Tx tx, long campaignId, long characterId, String itemText) {
 		Item item = ContentService.resolveItem(tx, rules, campaignId, itemText);
 		List<Row> rows = item.custom() ? tx.query(
 				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY equipped, id",
-				characterId, item.customId()) : tx.query(
-				"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY equipped, id",
-				characterId, item.contentRef());
+				characterId, item.customId())
+				: tx.query(
+						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY equipped, id",
+						characterId, item.contentRef());
 		if (rows.isEmpty()) {
 			throw RpgException.notFound(item.name() + " in that character's inventory");
 		}
@@ -659,8 +672,8 @@ public final class InventoryService {
 	// ── grant_loot ─────────────────────────────────────────────────────
 
 	public Map<String, Object> grantLoot(
-			String operationId, String campaignRef, String toRef,
-			List<Map<String, Object>> items, Object money, String source, String reason) {
+		String operationId, String campaignRef, String toRef, List<Map<String, Object>> items, Object money,
+		String source, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -672,105 +685,107 @@ public final class InventoryService {
 		String src = source == null ? "GM_GRANT" : source.toUpperCase();
 		return db.mutate(Database.Mutation.of("grant_loot", campaignId, operationId,
 				src.equals("GM_GRANT") ? "ADMINISTRATIVE_OVERRIDE" : "GM", args), tx -> {
-			Row campaign = Harness.requireMutation(tx, campaignRef, "grant_loot");
-			if (!LOOT_SOURCES.contains(src)) {
-				throw RpgException.invalidArgument("source must be one of " + LOOT_SOURCES + ".");
-			}
-			if (src.equals("GM_GRANT")) {
-				Map<String, Object> policy =
-						campaign.isNull("gm_override_policy_json") ? Map.of() : campaign.map("gm_override_policy_json");
-				if ("DISABLED".equals(policy.get("policy"))) {
-					throw RpgException.policyDenied(
-							"This campaign disables GM overrides; arbitrary treasure grants are not permitted. Use an ENCOUNTER, QUEST or WORLD source tied to play.");
-				}
-				if (reason == null || reason.isBlank()) {
-					throw RpgException.invalidArgument("GM_GRANT loot requires a reason; it is audited.");
-				}
-			}
-			if ((items == null || items.isEmpty()) && money == null) {
-				throw RpgException.invalidArgument("Grant at least one item or some money.");
-			}
-			Ref target = Ref.parse(toRef);
-			Long toCharacter = null;
-			Long toLocation = null;
-			Row character = null;
-			if (target.type().equals(Ref.CHARACTER)) {
-				character = activeCharacter(tx, campaignId, toRef);
-				toCharacter = character.id();
-			} else if (target.type().equals(Ref.LOCATION)) {
-				Row l = tx.find("location", target.id()).orElseThrow(() -> RpgException.notFound("Location " + toRef));
-				if (l.lng("campaign_id") != campaignId) {
-					throw RpgException.invalidArgument(toRef + " belongs to another campaign.");
-				}
-				toLocation = l.id();
-			} else {
-				throw RpgException.invalidArgument("to must be a character:N or location:N reference.");
-			}
-			var granted = new ArrayList<Map<String, Object>>();
-			if (items != null) {
-				for (Map<String, Object> spec : items) {
-					Item item = ContentService.resolveItem(tx, rules, campaignId, String.valueOf(spec.get("item")));
-					long qty = spec.get("quantity") instanceof Number n ? n.longValue() : 1;
-					if (item.type().equals("PACK") && toCharacter != null) {
-						granted.addAll(grantBundle(tx, rules, campaignId, toCharacter, List.of(spec), null));
-						continue;
+					Row campaign = Harness.requireMutation(tx, campaignRef, "grant_loot");
+					if (!LOOT_SOURCES.contains(src)) {
+						throw RpgException.invalidArgument("source must be one of " + LOOT_SOURCES + ".");
 					}
-					long entryId = addItem(tx, campaignId, toCharacter, toLocation, item, qty);
-					var g = new LinkedHashMap<String, Object>();
-					g.put("entry", Ref.of(Ref.INVENTORY, entryId));
-					g.put("item", item.display());
-					g.put("name", item.name());
-					g.put("quantity", qty);
-					granted.add(g);
-				}
-			}
-			long moneyCp = money == null ? 0 : Money.parseCp(money);
-			if (moneyCp > 0) {
-				if (character == null) {
-					throw RpgException.invalidArgument("Money can only be granted to a character.");
-				}
-				tx.update("character", character.id(),
-						Map.of("money_cp", character.lng("money_cp") + moneyCp, "revision",
-								character.lng("revision") + 1));
-			}
-			String summary = (character == null ? "Loot left at " + toRef
-					: character.str("name") + " acquired") + " " + granted.stream()
-					.map(g -> g.get("quantity") + " × " + g.get("name")).toList() + (moneyCp > 0
-					? " and " + Money.format(moneyCp) : "") + " (" + src + (reason == null ? "" : ": " + reason) + ").";
-			var payload = new LinkedHashMap<String, Object>();
-			payload.put("source", src);
-			payload.put("items", granted);
-			payload.put("money_cp", moneyCp);
-			payload.put("reason", reason);
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("LOOT_ACQUIRED", summary,
-					character == null ? List.of() : List.of(character.id()), "NOTABLE", "PARTY_KNOWN",
-					src.equals("GM_GRANT") ? "ADMINISTRATIVE_OVERRIDE" : "GM", null,
-					character == null ? toLocation : character.lng("location_id"), null, payload));
-			if (src.equals("GM_GRANT")) {
-				var audit = new LinkedHashMap<String, Object>();
-				audit.put("campaign_id", campaignId);
-				audit.put("kind", "DISCRETIONARY_LOOT");
-				audit.put("actor", "gm");
-				audit.put("provenance", "ADMINISTRATIVE_OVERRIDE");
-				audit.put("reason", reason);
-				audit.put("before_json", null);
-				audit.put("after_json", Json.write(payload));
-				audit.put("recorded_at", Instant.now().toString());
-				tx.rawInsert("audit_record", audit);
-			}
-			var result = new LinkedHashMap<String, Object>();
-			result.put("to", toRef);
-			result.put("source", src);
-			result.put("granted", granted);
-			result.put("money_granted", Money.render(moneyCp));
-			if (character != null) {
-				result.put("money", Money.render(tx.get("character", character.id()).lng("money_cp")));
-			}
-			result.put("event", Ref.of(Ref.EVENT, eventId));
-			result.put("audited", src.equals("GM_GRANT"));
-			result.put("meta", Harness.meta(campaign, null));
-			return result;
-		});
+					if (src.equals("GM_GRANT")) {
+						Map<String, Object> policy = campaign.isNull("gm_override_policy_json") ? Map.of()
+								: campaign.map("gm_override_policy_json");
+						if ("DISABLED".equals(policy.get("policy"))) {
+							throw RpgException.policyDenied(
+									"This campaign disables GM overrides; arbitrary treasure grants are not permitted. Use an ENCOUNTER, QUEST or WORLD source tied to play.");
+						}
+						if (reason == null || reason.isBlank()) {
+							throw RpgException.invalidArgument("GM_GRANT loot requires a reason; it is audited.");
+						}
+					}
+					if ((items == null || items.isEmpty()) && money == null) {
+						throw RpgException.invalidArgument("Grant at least one item or some money.");
+					}
+					Ref target = Ref.parse(toRef);
+					Long toCharacter = null;
+					Long toLocation = null;
+					Row character = null;
+					if (target.type().equals(Ref.CHARACTER)) {
+						character = activeCharacter(tx, campaignId, toRef);
+						toCharacter = character.id();
+					} else if (target.type().equals(Ref.LOCATION)) {
+						Row l = tx.find("location", target.id())
+								.orElseThrow(() -> RpgException.notFound("Location " + toRef));
+						if (l.lng("campaign_id") != campaignId) {
+							throw RpgException.invalidArgument(toRef + " belongs to another campaign.");
+						}
+						toLocation = l.id();
+					} else {
+						throw RpgException.invalidArgument("to must be a character:N or location:N reference.");
+					}
+					var granted = new ArrayList<Map<String, Object>>();
+					if (items != null) {
+						for (Map<String, Object> spec : items) {
+							Item item = ContentService.resolveItem(tx, rules, campaignId,
+									String.valueOf(spec.get("item")));
+							long qty = spec.get("quantity") instanceof Number n ? n.longValue() : 1;
+							if (item.type().equals("PACK") && toCharacter != null) {
+								granted.addAll(grantBundle(tx, rules, campaignId, toCharacter, List.of(spec), null));
+								continue;
+							}
+							long entryId = addItem(tx, campaignId, toCharacter, toLocation, item, qty);
+							var g = new LinkedHashMap<String, Object>();
+							g.put("entry", Ref.of(Ref.INVENTORY, entryId));
+							g.put("item", item.display());
+							g.put("name", item.name());
+							g.put("quantity", qty);
+							granted.add(g);
+						}
+					}
+					long moneyCp = money == null ? 0 : Money.parseCp(money);
+					if (moneyCp > 0) {
+						if (character == null) {
+							throw RpgException.invalidArgument("Money can only be granted to a character.");
+						}
+						tx.update("character", character.id(), Map.of("money_cp", character.lng("money_cp") + moneyCp,
+								"revision", character.lng("revision") + 1));
+					}
+					String summary = (character == null ? "Loot left at " + toRef : character.str("name") + " acquired")
+							+ " " + granted.stream().map(g -> g.get("quantity") + " × " + g.get("name")).toList()
+							+ (moneyCp > 0 ? " and " + Money.format(moneyCp) : "") + " (" + src
+							+ (reason == null ? "" : ": " + reason) + ").";
+					var payload = new LinkedHashMap<String, Object>();
+					payload.put("source", src);
+					payload.put("items", granted);
+					payload.put("money_cp", moneyCp);
+					payload.put("reason", reason);
+					long eventId = LedgerService.append(tx, campaignId,
+							new LedgerService.EventSpec("LOOT_ACQUIRED", summary,
+									character == null ? List.of() : List.of(character.id()), "NOTABLE", "PARTY_KNOWN",
+									src.equals("GM_GRANT") ? "ADMINISTRATIVE_OVERRIDE" : "GM", null,
+									character == null ? toLocation : character.lng("location_id"), null, payload));
+					if (src.equals("GM_GRANT")) {
+						var audit = new LinkedHashMap<String, Object>();
+						audit.put("campaign_id", campaignId);
+						audit.put("kind", "DISCRETIONARY_LOOT");
+						audit.put("actor", "gm");
+						audit.put("provenance", "ADMINISTRATIVE_OVERRIDE");
+						audit.put("reason", reason);
+						audit.put("before_json", null);
+						audit.put("after_json", Json.write(payload));
+						audit.put("recorded_at", Instant.now().toString());
+						tx.rawInsert("audit_record", audit);
+					}
+					var result = new LinkedHashMap<String, Object>();
+					result.put("to", toRef);
+					result.put("source", src);
+					result.put("granted", granted);
+					result.put("money_granted", Money.render(moneyCp));
+					if (character != null) {
+						result.put("money", Money.render(tx.get("character", character.id()).lng("money_cp")));
+					}
+					result.put("event", Ref.of(Ref.EVENT, eventId));
+					result.put("audited", src.equals("GM_GRANT"));
+					result.put("meta", Harness.meta(campaign, null));
+					return result;
+				});
 	}
 
 	// ── helpers ────────────────────────────────────────────────────────

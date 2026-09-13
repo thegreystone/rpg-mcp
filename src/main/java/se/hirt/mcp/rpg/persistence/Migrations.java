@@ -40,9 +40,10 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Forward-only, numbered SQL migrations embedded as classpath resources ({@code db/migration/Vnnn__name.sql}), recorded
- * in {@code schema_version} (DATABASE.md §7). Deliberately tiny: no down-migrations, checksums verified so an edited
- * already-applied migration fails loudly.
+ * Forward-only, numbered SQL migrations embedded as classpath resources
+ * ({@code db/migration/Vnnn__name.sql}), recorded in {@code schema_version} (DATABASE.md §7).
+ * Deliberately tiny: no down-migrations, checksums verified so an edited already-applied migration
+ * fails loudly.
  */
 final class Migrations {
 
@@ -59,13 +60,13 @@ final class Migrations {
 	static void apply(Connection c) throws SQLException {
 		try (Statement st = c.createStatement()) {
 			st.execute("""
-			           CREATE TABLE IF NOT EXISTS schema_version (
-			               id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			               version     INTEGER NOT NULL UNIQUE,
-			               description TEXT NOT NULL,
-			               checksum    TEXT NOT NULL,
-			               applied_at  TEXT NOT NULL
-			           )""");
+					CREATE TABLE IF NOT EXISTS schema_version (
+					    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+					    version     INTEGER NOT NULL UNIQUE,
+					    description TEXT NOT NULL,
+					    checksum    TEXT NOT NULL,
+					    applied_at  TEXT NOT NULL
+					)""");
 		}
 		for (String file : MIGRATIONS) {
 			var m = NAME.matcher(file);
@@ -118,23 +119,28 @@ final class Migrations {
 	}
 
 	/**
-	 * The fingerprint of an applied migration: the statements it actually executes, with comments stripped, runs of
-	 * whitespace collapsed to one space, and spaces around {@code ( ) , ;} removed. Reformatting a migration file,
-	 * rewrapping it, retyping a comment or checking it out with different line endings therefore leaves the checksum
-	 * alone, while any real change to the DDL still trips the guard. Hashing the raw bytes instead did the opposite:
-	 * running a SQL formatter over the migrations locked an existing campaign database out of its own schema
+	 * The fingerprint of an applied migration: the statements it actually executes, with comments
+	 * stripped, runs of whitespace collapsed to one space, and spaces around {@code ( ) , ;}
+	 * removed. Reformatting a migration file, rewrapping it, retyping a comment or checking it out
+	 * with different line endings therefore leaves the checksum alone, while any real change to the
+	 * DDL still trips the guard. Hashing the raw bytes instead did the opposite: running a SQL
+	 * formatter over the migrations locked an existing campaign database out of its own schema
 	 * (DATABASE.md §2).
 	 * <p>
-	 * The one thing this cannot see is whitespace inside a string literal that sits next to one of those characters.
-	 * No shipped migration contains such a literal; a future one that does must not rely on it.
+	 * The one thing this cannot see is whitespace inside a string literal that sits next to one of
+	 * those characters. No shipped migration contains such a literal; a future one that does must
+	 * not rely on it.
 	 */
 	static String checksum(String sql) {
-		String canonical = String.join(";", splitStatements(sql)).replaceAll("\\s+", " ")
-				.replaceAll("\\s*([(),;])\\s*", "$1");
+		String canonical = String.join(";", splitStatements(sql)).replaceAll("\\s+", " ").replaceAll("\\s*([(),;])\\s*",
+				"$1");
 		return Json.hashBytes(Json.utf8(canonical));
 	}
 
-	/** Splits on statement-terminating semicolons; comments are stripped first. Sufficient for our DDL. */
+	/**
+	 * Splits on statement-terminating semicolons; comments are stripped first. Sufficient for our
+	 * DDL.
+	 */
 	static List<String> splitStatements(String sql) {
 		String noComments = sql.lines().map(line -> {
 			int i = line.indexOf("--");

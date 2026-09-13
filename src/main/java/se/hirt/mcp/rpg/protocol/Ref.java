@@ -31,8 +31,9 @@ package se.hirt.mcp.rpg.protocol;
 import java.util.regex.Pattern;
 
 /**
- * Typed reference at the protocol boundary: {@code <entity-type>:<positive-integer>} (MCP_PROTOCOL.md §5.1). Internally
- * the database uses table-scoped numeric primary keys; this record is only the rendering.
+ * Typed reference at the protocol boundary: {@code <entity-type>:<positive-integer>}
+ * (MCP_PROTOCOL.md §5.1). Internally the database uses table-scoped numeric primary keys; this
+ * record is only the rendering.
  */
 public record Ref(String type, long id) {
 
@@ -59,8 +60,8 @@ public record Ref(String type, long id) {
 		}
 		var m = PATTERN.matcher(text.trim());
 		if (!m.matches()) {
-			throw RpgException.invalidArgument(
-					"Malformed typed reference '" + text + "'; expected '<type>:<positive-integer>'.");
+			throw RpgException
+					.invalidArgument("Malformed typed reference '" + text + "'; expected '<type>:<positive-integer>'.");
 		}
 		return new Ref(m.group(1), Long.parseLong(m.group(2)));
 	}

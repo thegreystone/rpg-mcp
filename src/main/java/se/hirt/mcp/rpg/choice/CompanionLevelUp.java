@@ -29,16 +29,14 @@
 package se.hirt.mcp.rpg.choice;
 
 /**
- * Who makes a companion's level-up choices (campaign house-rule setting; RULES_ENGINE.md §6). A companion who has no
- * class yet always needs a class chosen for them: the engine never invents one.
+ * Who makes a companion's level-up choices (campaign house-rule setting; RULES_ENGINE.md §6). A
+ * companion who has no class yet always needs a class chosen for them: the engine never invents
+ * one.
  */
 public enum CompanionLevelUp implements Described {
 
-	PLAYER("You level companions",
-			"A companion who reaches a new level is flagged together with the choices the engine would make for them, so you can accept the proposal as it stands or change any part of it before it is committed.",
-			true),
-	ENGINE("The engine levels companions",
-			"When a companion earns enough experience the server levels them immediately and silently: hit points by the campaign's hp_progression, ability improvements into the class's primary ability.");
+	PLAYER("You level companions", "A companion who reaches a new level is flagged together with the choices the engine would make for them, so you can accept the proposal as it stands or change any part of it before it is committed.", true),
+	ENGINE("The engine levels companions", "When a companion earns enough experience the server levels them immediately and silently: hit points by the campaign's hp_progression, ability improvements into the class's primary ability.");
 
 	private final String label;
 	private final String description;

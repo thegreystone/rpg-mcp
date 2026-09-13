@@ -35,8 +35,8 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import java.util.*;
 
 /**
- * Read-mostly view over installed content (DOMAIN_MODEL.md §18). Installed content is immutable at runtime (I-65), so
- * it is loaded once and served from memory.
+ * Read-mostly view over installed content (DOMAIN_MODEL.md §18). Installed content is immutable at
+ * runtime (I-65), so it is loaded once and served from memory.
  */
 public final class RulesData {
 
@@ -88,8 +88,8 @@ public final class RulesData {
 	public Definition require(String contentId, String expectedKind) {
 		Definition d = byId.get(contentId);
 		if (d == null || !d.kind().equals(expectedKind)) {
-			throw RpgException.invalidArgument(
-					"Unknown " + expectedKind.toLowerCase() + " '" + contentId + "'. Use get_character_choices to list legal options.");
+			throw RpgException.invalidArgument("Unknown " + expectedKind.toLowerCase() + " '" + contentId
+					+ "'. Use get_character_choices to list legal options.");
 		}
 		return d;
 	}

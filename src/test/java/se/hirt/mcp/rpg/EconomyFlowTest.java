@@ -42,8 +42,8 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * The calendar, accounts and scheduled cash flows (MCP_PROTOCOL.md §14.6–14.8, DATABASE.md §3.11): the engine does
- * the bookkeeping when the clock moves.
+ * The calendar, accounts and scheduled cash flows (MCP_PROTOCOL.md §14.6–14.8, DATABASE.md §3.11):
+ * the engine does the bookkeeping when the clock moves.
  */
 class EconomyFlowTest {
 
@@ -92,7 +92,8 @@ class EconomyFlowTest {
 		assertEquals("WINTER", newYear.get("season"));
 		assertEquals("Tuesday", newYear.get("weekday_name"), "365 days move the weekday by one");
 		assertEquals(306L * GameTime.MINUTES_PER_DAY + 90, cal.seqOf(2, 1, 1, 90));
-		assertEquals("Day 307, 01:30 (Tuesday 1 January, year 2, winter)", cal.render(306L * GameTime.MINUTES_PER_DAY + 90));
+		assertEquals("Day 307, 01:30 (Tuesday 1 January, year 2, winter)",
+				cal.render(306L * GameTime.MINUTES_PER_DAY + 90));
 
 		Calendar december = new Calendar(1, 12, 1);
 		assertEquals("Saturday", december.dateOf(0).get("weekday_name"));
@@ -119,8 +120,8 @@ class EconomyFlowTest {
 			assertThrows(RpgException.class, () -> engine.cashFlows().setCalendar(op(), campaign, 1, 1, 1, false),
 					"a set epoch is not moved without force");
 
-			Map<String, Object> house = engine.accounts()
-					.create(op(), campaign, "The House of Greystone", "OTHER", null, null, "The estate treasury.");
+			Map<String, Object> house = engine.accounts().create(op(), campaign, "The House of Greystone", "OTHER",
+					null, null, "The estate treasury.");
 			assertEquals("account:1", house.get("account"));
 			assertEquals(0L, m(house.get("money")).get("total_cp"));
 			assertThrows(RpgException.class,
@@ -130,9 +131,9 @@ class EconomyFlowTest {
 			long start = seq(engine, campaign);
 
 			Map<String, Object> market = engine.cashFlows().define(op(), campaign,
-					map("name", "Thursday market", "from", "WORLD", "to", "The House of Greystone", "amount", "3 gp 4 sp",
-							"schedule", map("kind", "WEEKLY", "weekday", "Thursday", "time", "06:00"), "season",
-							map("WINTER", 0.5), "description", "Stallage from the Thursday market."));
+					map("name", "Thursday market", "from", "WORLD", "to", "The House of Greystone", "amount",
+							"3 gp 4 sp", "schedule", map("kind", "WEEKLY", "weekday", "Thursday", "time", "06:00"),
+							"season", map("WINTER", 0.5), "description", "Stallage from the Thursday market."));
 			assertEquals("cash_flow:1", market.get("cash_flow"));
 			assertEquals("Day 6, 06:00", m(market.get("next_due")).get("instant"), "the first Thursday after Day 2");
 			assertEquals("Thursday", m(m(market.get("next_due")).get("date")).get("weekday_name"));
@@ -149,9 +150,11 @@ class EconomyFlowTest {
 							map("kind", "WEEKLY", "weekday", "Friday")));
 
 			long purseBefore = balance(engine, "character", 1);
-			Map<String, Object> advanced = engine.sessions().advanceTime(op(), campaign, 10 * GameTime.MINUTES_PER_DAY, "ten days");
+			Map<String, Object> advanced = engine.sessions().advanceTime(op(), campaign, 10 * GameTime.MINUTES_PER_DAY,
+					"ten days");
 			List<Map<String, Object>> consequences = list(advanced.get("consequences"));
-			List<Map<String, Object>> flows = consequences.stream().filter(c -> "CASH_FLOW".equals(c.get("type"))).toList();
+			List<Map<String, Object>> flows = consequences.stream().filter(c -> "CASH_FLOW".equals(c.get("type")))
+					.toList();
 			assertEquals(3, flows.size(), "one Thursday and one Friday in Day 2..12: " + consequences);
 			assertEquals("Thursday market", flows.get(0).get("name"));
 			assertEquals("PAID", flows.get(0).get("status"));
@@ -166,17 +169,16 @@ class EconomyFlowTest {
 			assertEquals("WINTER", m(m(advanced.get("to")).get("date")).get("season"));
 
 			// The ledger carries dated MONEY_FLOW events at the due point, not at the end of the advance.
-			List<Row> events = engine.db().read(tx -> tx.query(
-					"SELECT * FROM event WHERE campaign_id = 1 AND type = 'MONEY_FLOW' ORDER BY id"));
+			List<Row> events = engine.db().read(
+					tx -> tx.query("SELECT * FROM event WHERE campaign_id = 1 AND type = 'MONEY_FLOW' ORDER BY id"));
 			assertEquals(3, events.size());
 			assertEquals(start + 4 * GameTime.MINUTES_PER_DAY + 360, events.get(0).lng("fictional_seq"));
 			assertTrue(events.get(0).str("summary").startsWith("Thursday market: 1 gp 7 sp to The House of Greystone"),
 					events.get(0).str("summary"));
 
 			// A long rest crossing a DAILY due point fires it too.
-			engine.cashFlows().define(op(), campaign,
-					map("name", "Alms", "from", "WORLD", "to", "account:1", "amount", 5, "schedule",
-							map("kind", "DAILY", "time", "04:00")));
+			engine.cashFlows().define(op(), campaign, map("name", "Alms", "from", "WORLD", "to", "account:1", "amount",
+					5, "schedule", map("kind", "DAILY", "time", "04:00")));
 			Map<String, Object> rest = engine.rest().rest(op(), campaign, "LONG", null, null);
 			assertEquals(1, list(rest.get("consequences")).size(), rest.get("consequences").toString());
 			assertEquals(141L, balance(engine, "account", 1));
@@ -208,29 +210,29 @@ class EconomyFlowTest {
 			engine.accounts().create(op(), campaign, "Sterncliff", "OTHER", null, null, null);
 			toMidnight(engine, campaign); // Day 2 — 2 March (default calendar)
 
-			engine.cashFlows().define(op(), campaign,
-					map("name", "Hollins Reach lease", "from", "Sterncliff", "to", "WORLD", "amount", map("gp", 25),
-							"schedule", map("kind", "MONTHLY", "day", 1)));
+			engine.cashFlows().define(op(), campaign, map("name", "Hollins Reach lease", "from", "Sterncliff", "to",
+					"WORLD", "amount", map("gp", 25), "schedule", map("kind", "MONTHLY", "day", 1)));
 			engine.cashFlows().define(op(), campaign,
 					map("name", "Dark of the moon", "kind", "EVENT", "description",
 							"The dark of the moon: the fen hearth is at its weakest.", "schedule", "ONCE", "start",
 							"Day 20, 00:00"));
-			engine.cashFlows().define(op(), campaign,
-					map("name", "Midsummer", "kind", "EVENT", "description", "Midsummer.", "schedule",
-							map("kind", "YEARLY", "month", "June", "day", 21)));
-			engine.cashFlows().define(op(), campaign,
-					map("name", "Harvest", "from", "WORLD", "to", "Sterncliff", "amount", "100 gp", "schedule",
-							map("kind", "SEASONAL", "season", "AUTUMN")));
+			engine.cashFlows().define(op(), campaign, map("name", "Midsummer", "kind", "EVENT", "description",
+					"Midsummer.", "schedule", map("kind", "YEARLY", "month", "June", "day", 21)));
+			engine.cashFlows().define(op(), campaign, map("name", "Harvest", "from", "WORLD", "to", "Sterncliff",
+					"amount", "100 gp", "schedule", map("kind", "SEASONAL", "season", "AUTUMN")));
 
 			// Day 2 → Day 40: crosses 1 April (lease, unpaid) and Day 20 (the event); not midsummer, not autumn.
-			Map<String, Object> advanced = engine.sessions().advanceTime(op(), campaign, 38 * GameTime.MINUTES_PER_DAY, "spring");
+			Map<String, Object> advanced = engine.sessions().advanceTime(op(), campaign, 38 * GameTime.MINUTES_PER_DAY,
+					"spring");
 			List<Map<String, Object>> flows = list(advanced.get("consequences")).stream()
 					.filter(c -> "CASH_FLOW".equals(c.get("type"))).toList();
 			assertEquals(2, flows.size(), flows.toString());
-			Map<String, Object> event = flows.stream().filter(f -> f.get("name").equals("Dark of the moon")).findFirst().orElseThrow();
+			Map<String, Object> event = flows.stream().filter(f -> f.get("name").equals("Dark of the moon")).findFirst()
+					.orElseThrow();
 			assertEquals("FIRED", event.get("status"));
 			assertEquals(Boolean.TRUE, event.get("finished"), "a ONCE rule is finished after it fires");
-			Map<String, Object> lease = flows.stream().filter(f -> f.get("name").equals("Hollins Reach lease")).findFirst().orElseThrow();
+			Map<String, Object> lease = flows.stream().filter(f -> f.get("name").equals("Hollins Reach lease"))
+					.findFirst().orElseThrow();
 			assertEquals("UNPAID", lease.get("status"));
 			assertEquals(2500L, m(lease.get("amount")).get("total_cp"));
 			assertEquals(0L, balance(engine, "account", 1));
@@ -241,24 +243,29 @@ class EconomyFlowTest {
 			assertEquals("WORLD_EVENT", events.get(0).str("type"));
 			assertEquals("The dark of the moon: the fen hearth is at its weakest.", events.get(0).str("summary"));
 			assertEquals("NOTABLE", events.get(1).str("importance"));
-			assertTrue(events.get(1).str("summary").startsWith("Unpaid: Hollins Reach lease"), events.get(1).str("summary"));
+			assertTrue(events.get(1).str("summary").startsWith("Unpaid: Hollins Reach lease"),
+					events.get(1).str("summary"));
 
 			// Money arrives; the next due month is paid. Midsummer and the harvest fall in the same long advance.
 			engine.accounts().transfer(op(), campaign, "WORLD", "Sterncliff", "60 gp", "the Archbishop's purse");
 			assertThrows(RpgException.class,
 					() -> engine.accounts().transfer(op(), campaign, "Sterncliff", "character:1", "500 gp", null));
-			Map<String, Object> summer = engine.sessions().advanceTime(op(), campaign, 200 * GameTime.MINUTES_PER_DAY, "to autumn");
+			Map<String, Object> summer = engine.sessions().advanceTime(op(), campaign, 200 * GameTime.MINUTES_PER_DAY,
+					"to autumn");
 			List<Map<String, Object>> later = list(summer.get("consequences")).stream()
 					.filter(c -> "CASH_FLOW".equals(c.get("type"))).toList();
-			long paid = later.stream().filter(f -> "PAID".equals(f.get("status")) && f.get("name").equals("Hollins Reach lease")).count();
+			long paid = later.stream()
+					.filter(f -> "PAID".equals(f.get("status")) && f.get("name").equals("Hollins Reach lease")).count();
 			long unpaid = later.stream().filter(f -> "UNPAID".equals(f.get("status"))).count();
 			assertEquals(3, paid, "60 gp covers May and June; the harvest pays October: " + later);
 			assertEquals(3, unpaid, "July to September the treasury holds only 10 gp: " + later);
-			assertTrue(later.stream().anyMatch(f -> f.get("name").equals("Midsummer") && "FIRED".equals(f.get("status"))));
+			assertTrue(
+					later.stream().anyMatch(f -> f.get("name").equals("Midsummer") && "FIRED".equals(f.get("status"))));
 			assertTrue(later.stream().anyMatch(f -> f.get("name").equals("Harvest") && "PAID".equals(f.get("status"))));
 			List<Map<String, Object>> listed = list(engine.cashFlows().list(campaign, true).get("cash_flows"));
 			assertEquals(4, listed.size());
-			assertEquals(Boolean.FALSE, listed.stream().filter(f -> f.get("name").equals("Dark of the moon")).findFirst().orElseThrow().get("active"));
+			assertEquals(Boolean.FALSE, listed.stream().filter(f -> f.get("name").equals("Dark of the moon"))
+					.findFirst().orElseThrow().get("active"));
 		}
 	}
 
@@ -273,28 +280,32 @@ class EconomyFlowTest {
 
 			Map<String, Object> advance = engine.cashFlows().define(op(), campaign,
 					map("name", "Keeper's Advance", "from", "The House of Greystone", "to", "character:1", "amount",
-							"100 gp", "cap", "662 gp 5 sp", "schedule", map("kind", "MONTHLY", "day", 1),
-							"description", "The Keeper's Advance, repaid from House money."));
+							"100 gp", "cap", "662 gp 5 sp", "schedule", map("kind", "MONTHLY", "day", 1), "description",
+							"The Keeper's Advance, repaid from House money."));
 			assertEquals(66250L, m(advance.get("cap")).get("total_cp"));
 			assertEquals(66250L, m(advance.get("remaining")).get("total_cp"));
 			assertEquals("Day 32, 00:00", m(advance.get("next_due")).get("instant"), "1 April");
 
 			// Day 2 -> Day 125 (2 July): April, May, June paid; July unpaid — the treasury holds nothing.
-			Map<String, Object> spring = engine.sessions().advanceTime(op(), campaign, 123 * GameTime.MINUTES_PER_DAY, "spring");
+			Map<String, Object> spring = engine.sessions().advanceTime(op(), campaign, 123 * GameTime.MINUTES_PER_DAY,
+					"spring");
 			List<Map<String, Object>> runs = list(spring.get("consequences")).stream()
 					.filter(c -> "CASH_FLOW".equals(c.get("type"))).toList();
 			assertEquals(4, runs.size(), runs.toString());
 			assertEquals(List.of("PAID", "PAID", "PAID", "UNPAID"), runs.stream().map(r -> r.get("status")).toList());
-			assertEquals(36250L, m(runs.get(3).get("remaining")).get("total_cp"), "an unpaid month leaves the debt as it was");
+			assertEquals(36250L, m(runs.get(3).get("remaining")).get("total_cp"),
+					"an unpaid month leaves the debt as it was");
 			assertEquals(0L, balance(engine, "account", 1));
 			assertEquals(purseBefore + 30000, balance(engine, "character", 1));
 
 			// Money arrives; four more months clear the debt with a final partial payment, then the rule stops.
 			engine.accounts().transfer(op(), campaign, "WORLD", "The House of Greystone", "400 gp", "the harvest");
-			Map<String, Object> autumn = engine.sessions().advanceTime(op(), campaign, 123 * GameTime.MINUTES_PER_DAY, "to November");
+			Map<String, Object> autumn = engine.sessions().advanceTime(op(), campaign, 123 * GameTime.MINUTES_PER_DAY,
+					"to November");
 			runs = list(autumn.get("consequences")).stream().filter(c -> "CASH_FLOW".equals(c.get("type"))).toList();
 			assertEquals(4, runs.size(), runs.toString());
-			assertEquals(List.of(10000L, 10000L, 10000L, 6250L), runs.stream().map(r -> m(r.get("amount")).get("total_cp")).toList());
+			assertEquals(List.of(10000L, 10000L, 10000L, 6250L),
+					runs.stream().map(r -> m(r.get("amount")).get("total_cp")).toList());
 			assertEquals(Boolean.TRUE, runs.get(3).get("finished"));
 			assertEquals("cleared: 662 gp 5 sp of 662 gp 5 sp paid", runs.get(3).get("note"));
 			assertEquals(0L, m(runs.get(3).get("remaining")).get("total_cp"));
@@ -303,8 +314,10 @@ class EconomyFlowTest {
 			List<Row> paid = engine.db().read(tx -> tx.query(
 					"SELECT * FROM event WHERE campaign_id = 1 AND type = 'MONEY_FLOW' AND summary LIKE 'Keeper''s Advance:%' ORDER BY id"));
 			assertEquals(7, paid.size());
-			assertTrue(paid.get(6).str("summary").contains("cleared: 662 gp 5 sp of 662 gp 5 sp paid"), paid.get(6).str("summary"));
-			assertTrue(paid.get(0).str("summary").contains("562 gp 5 sp of 662 gp 5 sp still owed"), paid.get(0).str("summary"));
+			assertTrue(paid.get(6).str("summary").contains("cleared: 662 gp 5 sp of 662 gp 5 sp paid"),
+					paid.get(6).str("summary"));
+			assertTrue(paid.get(0).str("summary").contains("562 gp 5 sp of 662 gp 5 sp still owed"),
+					paid.get(0).str("summary"));
 
 			Map<String, Object> listed = list(engine.cashFlows().list(campaign, true).get("cash_flows")).get(0);
 			assertEquals(Boolean.FALSE, listed.get("active"));
@@ -313,7 +326,8 @@ class EconomyFlowTest {
 			assertTrue(list(engine.cashFlows().list(campaign, false).get("cash_flows")).isEmpty());
 
 			// No eighth run.
-			Map<String, Object> winter = engine.sessions().advanceTime(op(), campaign, 40 * GameTime.MINUTES_PER_DAY, "December");
+			Map<String, Object> winter = engine.sessions().advanceTime(op(), campaign, 40 * GameTime.MINUTES_PER_DAY,
+					"December");
 			assertTrue(list(winter.get("consequences")).stream().noneMatch(c -> "CASH_FLOW".equals(c.get("type"))));
 			assertEquals(40000L - 36250L, balance(engine, "account", 1));
 		}
@@ -332,15 +346,16 @@ class EconomyFlowTest {
 					map("name", "Nowhere", "from", "WORLD", "to", "WORLD", "amount", 5, "schedule", "DAILY")));
 			assertThrows(RpgException.class, () -> engine.cashFlows().define(op(), campaign,
 					map("name", "No schedule", "from", "WORLD", "to", "Chest", "amount", 5)));
-			assertThrows(RpgException.class, () -> engine.cashFlows().define(op(), campaign,
-					map("name", "Bad weekday", "from", "WORLD", "to", "Chest", "amount", 5, "schedule",
-							map("kind", "WEEKLY", "weekday", "Someday"))));
-			assertThrows(RpgException.class, () -> engine.cashFlows().define(op(), campaign,
-					map("name", "Missing", "from", "WORLD", "to", "Chest", "amount", 5, "schedule", "DAILY",
-							"condition", map("quest", "quest:99"))));
+			assertThrows(RpgException.class,
+					() -> engine.cashFlows().define(op(), campaign, map("name", "Bad weekday", "from", "WORLD", "to",
+							"Chest", "amount", 5, "schedule", map("kind", "WEEKLY", "weekday", "Someday"))));
+			assertThrows(RpgException.class,
+					() -> engine.cashFlows().define(op(), campaign, map("name", "Missing", "from", "WORLD", "to",
+							"Chest", "amount", 5, "schedule", "DAILY", "condition", map("quest", "quest:99"))));
 
 			// A quest-conditioned flow is SKIPPED until the quest reaches the required status.
-			engine.narrative().upsert(op(), campaign, "QUEST", null, map("title", "Keep the hearth", "status", "OFFERED"), null);
+			engine.narrative().upsert(op(), campaign, "QUEST", null,
+					map("title", "Keep the hearth", "status", "OFFERED"), null);
 			engine.cashFlows().define(op(), campaign,
 					map("name", "Keeper's fee", "from", "WORLD", "to", "Chest", "amount", "1 gp", "schedule",
 							map("kind", "DAILY", "time", "12:00"), "condition",

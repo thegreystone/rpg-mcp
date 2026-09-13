@@ -42,25 +42,29 @@ import se.hirt.mcp.rpg.session.GameTime;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Cash-flow rules (MCP_PROTOCOL.md §14.7, DATABASE.md §3.11): recurring or one-off transfers between money bags, and
- * dated events, that the {@link Scheduler} fires whenever the clock crosses their next due point. The GM defines them
- * once — "Thursday market stallage to the House", "a fifth of the yield at harvest", "the Keeper's stipend, a tenth of
- * the House's takings, every week" — and never has to remember them again.
+ * Cash-flow rules (MCP_PROTOCOL.md §14.7, DATABASE.md §3.11): recurring or one-off transfers
+ * between money bags, and dated events, that the {@link Scheduler} fires whenever the clock crosses
+ * their next due point. The GM defines them once — "Thursday market stallage to the House", "a
+ * fifth of the yield at harvest", "the Keeper's stipend, a tenth of the House's takings, every
+ * week" — and never has to remember them again.
  * <p>
  * Stored shapes (all JSON columns on {@code cash_flow}):
  * <ul>
- * <li>{@code amount_json}: {@code {"fixed_cp": n}}, {@code {"percent": p, "of_rule": cashFlowId}} (a share of another
- * rule's payout at the same due time) or {@code {"percent": p, "of_inflows": "account:n"|"character:n"}} (a share of
- * everything that flowed into that bag since this rule last ran).</li>
- * <li>{@code schedule_json}: {@code {"kind": ONCE|DAILY|WEEKLY|MONTHLY|YEARLY|SEASONAL, "weekday": 1-7, "day": 1-31,
+ * <li>{@code amount_json}: {@code {"fixed_cp": n}}, {@code {"percent": p, "of_rule": cashFlowId}}
+ * (a share of another rule's payout at the same due time) or
+ * {@code {"percent": p, "of_inflows": "account:n"|"character:n"}} (a share of everything that
+ * flowed into that bag since this rule last ran).</li>
+ * <li>{@code schedule_json}:
+ * {@code {"kind": ONCE|DAILY|WEEKLY|MONTHLY|YEARLY|SEASONAL, "weekday": 1-7, "day": 1-31,
  * "month": 1-12, "season": SPRING|SUMMER|AUTUMN|WINTER, "minute_of_day": 0-1439}}.</li>
- * <li>{@code season_json}: multipliers per season of the due date, e.g. {@code {"WINTER": 0.2}}.</li>
- * <li>{@code condition_json}: {@code {"quest": "quest:n", "status": "ACCEPTED"}}; a mismatch skips the run.</li>
+ * <li>{@code season_json}: multipliers per season of the due date, e.g.
+ * {@code {"WINTER": 0.2}}.</li>
+ * <li>{@code condition_json}: {@code {"quest": "quest:n", "status": "ACCEPTED"}}; a mismatch skips
+ * the run.</li>
  * </ul>
  */
 public final class CashFlowService {
@@ -88,11 +92,13 @@ public final class CashFlowService {
 		return db.mutate(Database.Mutation.of("define_cash_flow", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "define_cash_flow");
 			if (spec == null || spec.isEmpty()) {
-				throw RpgException.invalidArgument("A cash-flow spec is required: name, kind, from, to, amount, schedule …");
+				throw RpgException
+						.invalidArgument("A cash-flow spec is required: name, kind, from, to, amount, schedule …");
 			}
 			for (String key : spec.keySet()) {
 				if (!SPEC_KEYS.contains(key)) {
-					throw RpgException.invalidArgument("Unknown cash-flow key '" + key + "'; allowed: " + SPEC_KEYS + ".");
+					throw RpgException
+							.invalidArgument("Unknown cash-flow key '" + key + "'; allowed: " + SPEC_KEYS + ".");
 				}
 			}
 			String name = requireName(spec.get("name"));
@@ -132,7 +138,8 @@ public final class CashFlowService {
 					throw RpgException.invalidArgument("An EVENT cash flow has no cap: it moves no money.");
 				}
 				if (description == null || description.isBlank()) {
-					throw RpgException.invalidArgument("An EVENT cash flow needs a description: the event it announces.");
+					throw RpgException
+							.invalidArgument("An EVENT cash flow needs a description: the event it announces.");
 				}
 				if (spec.get("amount") != null || spec.get("from") != null || spec.get("to") != null) {
 					throw RpgException.invalidArgument("An EVENT cash flow moves no money: omit from, to and amount.");
@@ -174,7 +181,7 @@ public final class CashFlowService {
 	// ── update_cash_flow ───────────────────────────────────────────────
 
 	public Map<String, Object> update(
-			String operationId, String campaignRef, String flowRef, Map<String, Object> changes) {
+		String operationId, String campaignRef, String flowRef, Map<String, Object> changes) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -217,8 +224,8 @@ public final class CashFlowService {
 				cols.put("from_ref", from.toString());
 				cols.put("to_ref", to.toString());
 				if (changes.containsKey("amount") || changes.containsKey("cap")) {
-					Map<String, Object> amount = changes.containsKey("amount") ? normalizeAmount(tx, campaignId,
-							changes.get("amount")) : flow.map("amount_json");
+					Map<String, Object> amount = changes.containsKey("amount")
+							? normalizeAmount(tx, campaignId, changes.get("amount")) : flow.map("amount_json");
 					if (changes.containsKey("cap")) {
 						amount.remove("total_cp");
 						if (changes.get("cap") != null) {
@@ -234,7 +241,8 @@ public final class CashFlowService {
 				throw RpgException.invalidArgument("An EVENT cash flow moves no money: omit from, to and amount.");
 			}
 			if (changes.containsKey("description")) {
-				cols.put("description", changes.get("description") == null ? null : changes.get("description").toString());
+				cols.put("description",
+						changes.get("description") == null ? null : changes.get("description").toString());
 			}
 			if (changes.containsKey("season")) {
 				cols.put("season_json", Json.writeOrNull(normalizeSeason(changes.get("season"))));
@@ -253,14 +261,15 @@ public final class CashFlowService {
 			}
 			boolean active = changes.containsKey("active") ? Boolean.parseBoolean(String.valueOf(changes.get("active")))
 					: flow.bool("active");
-			boolean reschedule = changes.containsKey("schedule") || changes.containsKey("start") || changes.containsKey(
-					"end") || (active && !flow.bool("active"));
+			boolean reschedule = changes.containsKey("schedule") || changes.containsKey("start")
+					|| changes.containsKey("end") || (active && !flow.bool("active"));
 			cols.put("schedule_json", Json.write(schedule));
 			cols.put("start_seq", start);
 			cols.put("end_seq", end);
 			if (reschedule && active) {
-				Long nextDue = schedule.get("kind").equals("ONCE") ? (start > now || flow.lng("next_due_seq") != null
-						? start : null) : nextDue(schedule, cal, now, start, end);
+				Long nextDue = schedule.get("kind").equals("ONCE")
+						? (start > now || flow.lng("next_due_seq") != null ? start : null)
+						: nextDue(schedule, cal, now, start, end);
 				if (nextDue == null) {
 					throw RpgException.invalidArgument("This schedule never falls due again between now and end.");
 				}
@@ -271,11 +280,13 @@ public final class CashFlowService {
 			tx.update(AccountService.CASH_FLOW, flow.id(), cols);
 			Row updated = tx.get(AccountService.CASH_FLOW, flow.id());
 			Map<String, Object> view = view(tx, campaignId, updated, cal);
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CASH_FLOW_UPDATED",
-					"Cash flow " + (active ? "updated" : "stopped") + ": " + updated.str("name") + " — " + view.get(
-							"summary") + ".", null, "MINOR", "PARTY_KNOWN", "GM", null, null, null,
-					Map.of("cash_flow", Ref.of(AccountService.CASH_FLOW, flow.id()), "changes", changes.keySet()
-							.stream().sorted().toList())));
+			long eventId = LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("CASH_FLOW_UPDATED",
+							"Cash flow " + (active ? "updated" : "stopped") + ": " + updated.str("name") + " — "
+									+ view.get("summary") + ".",
+							null, "MINOR", "PARTY_KNOWN", "GM", null, null, null,
+							Map.of("cash_flow", Ref.of(AccountService.CASH_FLOW, flow.id()), "changes",
+									changes.keySet().stream().sorted().toList())));
 			var result = new LinkedHashMap<String, Object>(view);
 			result.put("event", Ref.of(Ref.EVENT, eventId));
 			result.put("meta", Harness.meta(campaign, null));
@@ -292,8 +303,9 @@ public final class CashFlowService {
 			Calendar cal = Calendar.forCampaign(campaign);
 			long now = GameTime.currentSeq(tx, campaignId);
 			var flows = new ArrayList<Map<String, Object>>();
-			for (Row f : tx.query("SELECT * FROM cash_flow WHERE campaign_id = ?" + (includeInactive ? ""
-					: " AND active = 1") + " ORDER BY CASE WHEN next_due_seq IS NULL THEN 1 ELSE 0 END, next_due_seq, id",
+			for (Row f : tx.query(
+					"SELECT * FROM cash_flow WHERE campaign_id = ?" + (includeInactive ? "" : " AND active = 1")
+							+ " ORDER BY CASE WHEN next_due_seq IS NULL THEN 1 ELSE 0 END, next_due_seq, id",
 					campaignId)) {
 				flows.add(view(tx, campaignId, f, cal));
 			}
@@ -308,7 +320,7 @@ public final class CashFlowService {
 	// ── set_calendar ───────────────────────────────────────────────────
 
 	public Map<String, Object> setCalendar(
-			String operationId, String campaignRef, int year, int month, int day, boolean force) {
+		String operationId, String campaignRef, int year, int month, int day, boolean force) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -321,9 +333,8 @@ public final class CashFlowService {
 			Calendar before = Calendar.forCampaign(campaign);
 			boolean wasSet = campaign.str("calendar_json") != null;
 			if (wasSet && !force) {
-				throw RpgException.conflict(
-						"The calendar is already set (Day 1 = " + before.dateOf(0).get("display") + "); pass force=true to move it.")
-						.withDetail("epoch", before.epoch());
+				throw RpgException.conflict("The calendar is already set (Day 1 = " + before.dateOf(0).get("display")
+						+ "); pass force=true to move it.").withDetail("epoch", before.epoch());
 			}
 			Calendar cal = new Calendar(year, month, day);
 			long now = GameTime.currentSeq(tx, campaignId);
@@ -347,11 +358,12 @@ public final class CashFlowService {
 				tx.update(AccountService.CASH_FLOW, f.id(), cols);
 				rescheduled++;
 			}
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CALENDAR_SET",
-					"The calendar was " + (wasSet ? "moved" : "set") + ": Day 1 is " + cal.dateOf(0).get("display")
-							+ "; today is " + cal.render(now) + ".", null, "MINOR", "GM_ONLY", "GM", null, null, null,
-					Map.of("epoch", cal.epoch(), "previous", wasSet ? before.epoch() : Map.of(), "rescheduled",
-							rescheduled)));
+			long eventId = LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("CALENDAR_SET",
+							"The calendar was " + (wasSet ? "moved" : "set") + ": Day 1 is "
+									+ cal.dateOf(0).get("display") + "; today is " + cal.render(now) + ".",
+							null, "MINOR", "GM_ONLY", "GM", null, null, null, Map.of("epoch", cal.epoch(), "previous",
+									wasSet ? before.epoch() : Map.of(), "rescheduled", rescheduled)));
 			var result = new LinkedHashMap<String, Object>();
 			result.put("calendar", AccountService.calendarView(tx.get("campaign", campaignId), cal));
 			result.put("game_time", GameTime.toMap(now, cal));
@@ -374,8 +386,8 @@ public final class CashFlowService {
 			f = tx.find(AccountService.CASH_FLOW, id)
 					.orElseThrow(() -> RpgException.notFound("Cash flow " + refOrName));
 		} else {
-			f = tx.queryOne("SELECT * FROM cash_flow WHERE campaign_id = ? AND name = ?", campaignId,
-					refOrName.trim()).orElseThrow(() -> RpgException.notFound("Cash flow '" + refOrName + "'"));
+			f = tx.queryOne("SELECT * FROM cash_flow WHERE campaign_id = ? AND name = ?", campaignId, refOrName.trim())
+					.orElseThrow(() -> RpgException.notFound("Cash flow '" + refOrName + "'"));
 		}
 		if (f.lng("campaign_id") != campaignId) {
 			throw RpgException.invalidArgument(refOrName + " belongs to another campaign.");
@@ -404,8 +416,8 @@ public final class CashFlowService {
 				m.put("paid", Money.render(paid));
 				m.put("remaining", Money.render(Math.max(0, cap.longValue() - paid)));
 			}
-			m.put("summary", describeAmount(tx, campaignId, f) + " from " + from.name(tx, campaignId) + " to " + to.name(
-					tx, campaignId) + ", " + when);
+			m.put("summary", describeAmount(tx, campaignId, f) + " from " + from.name(tx, campaignId) + " to "
+					+ to.name(tx, campaignId) + ", " + when);
 		} else {
 			m.put("summary", "event '" + f.str("description") + "', " + when);
 		}
@@ -418,8 +430,8 @@ public final class CashFlowService {
 		m.put("end", f.lng("end_seq") == null ? null : cal.render(f.lng("end_seq")));
 		m.put("next_due", f.lng("next_due_seq") == null ? null : GameTime.toMap(f.lng("next_due_seq"), cal));
 		m.put("active", f.bool("active"));
-		tx.queryOne("SELECT * FROM cash_flow_run WHERE cash_flow_id = ? ORDER BY due_seq DESC, id DESC LIMIT 1",
-				f.id()).ifPresent(r -> m.put("last_run", AccountService.runView(r, cal)));
+		tx.queryOne("SELECT * FROM cash_flow_run WHERE cash_flow_id = ? ORDER BY due_seq DESC, id DESC LIMIT 1", f.id())
+				.ifPresent(r -> m.put("last_run", AccountService.runView(r, cal)));
 		m.put("revision", f.lng("revision"));
 		return m;
 	}
@@ -484,16 +496,21 @@ public final class CashFlowService {
 		return name.toString().trim();
 	}
 
-	/** Accepts money in any form (fixed), {@code {"fixed": money}} or {@code {"percent": p, "of_rule"|"of_inflows"}}. */
+	/**
+	 * Accepts money in any form (fixed), {@code {"fixed": money}} or
+	 * {@code {"percent": p, "of_rule"|"of_inflows"}}.
+	 */
 	static Map<String, Object> normalizeAmount(Tx tx, long campaignId, Object amount) {
 		if (amount == null) {
 			throw RpgException.invalidArgument(
-					"amount is required: money ('3 gp 4 sp', {\"gp\": 25}, cp), {\"percent\": 10, \"of_rule\": \"Thursday market\"} " + "or {\"percent\": 10, \"of_inflows\": \"account:1\"}.");
+					"amount is required: money ('3 gp 4 sp', {\"gp\": 25}, cp), {\"percent\": 10, \"of_rule\": \"Thursday market\"} "
+							+ "or {\"percent\": 10, \"of_inflows\": \"account:1\"}.");
 		}
 		var out = new LinkedHashMap<String, Object>();
-		if (amount instanceof Map<?, ?> raw && (raw.containsKey("percent") || raw.containsKey("fixed") || raw.containsKey(
-				"fixed_cp"))) {
-			@SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) raw;
+		if (amount instanceof Map<?, ?> raw
+				&& (raw.containsKey("percent") || raw.containsKey("fixed") || raw.containsKey("fixed_cp"))) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> m = (Map<String, Object>) raw;
 			if (m.containsKey("percent")) {
 				if (!(m.get("percent") instanceof Number p) || p.doubleValue() <= 0) {
 					throw RpgException.invalidArgument("percent must be a positive number.");
@@ -512,7 +529,8 @@ public final class CashFlowService {
 					}
 					out.put("of_inflows", of.toString());
 				} else {
-					throw RpgException.invalidArgument("A percent amount needs of_rule (another cash flow) or of_inflows (a money bag).");
+					throw RpgException.invalidArgument(
+							"A percent amount needs of_rule (another cash flow) or of_inflows (a money bag).");
 				}
 				return out;
 			}
@@ -536,8 +554,8 @@ public final class CashFlowService {
 		Object value = cap instanceof Map<?, ?> m && m.containsKey("total_cp") ? m.get("total_cp") : cap;
 		long cp = Money.parseCp(value);
 		if (cp <= 0) {
-			throw RpgException.invalidArgument(
-					"cap must be a positive total, e.g. '662 gp 5 sp' or {\"total_cp\": 66250}.");
+			throw RpgException
+					.invalidArgument("cap must be a positive total, e.g. '662 gp 5 sp' or {\"total_cp\": 66250}.");
 		}
 		return cp;
 	}
@@ -545,7 +563,8 @@ public final class CashFlowService {
 	static Map<String, Object> normalizeSchedule(Object schedule) {
 		Map<String, Object> m;
 		if (schedule instanceof Map<?, ?> raw) {
-			@SuppressWarnings("unchecked") Map<String, Object> cast = (Map<String, Object>) raw;
+			@SuppressWarnings("unchecked")
+			Map<String, Object> cast = (Map<String, Object>) raw;
 			m = cast;
 		} else if (schedule != null) {
 			m = Map.of("kind", schedule.toString());
@@ -567,8 +586,8 @@ public final class CashFlowService {
 			out.put("month", month);
 			out.put("day", dayOfMonth(m.get("day"), Calendar.daysInMonth(month)));
 		}
-		case "SEASONAL" -> out.put("season", Calendar.normalizeSeason(
-				m.get("season") == null ? null : m.get("season").toString()));
+		case "SEASONAL" ->
+			out.put("season", Calendar.normalizeSeason(m.get("season") == null ? null : m.get("season").toString()));
 		default -> {
 		}
 		}
@@ -627,8 +646,8 @@ public final class CashFlowService {
 	}
 
 	private static int dayOfMonth(Object v, int max) {
-		int d = v instanceof Number n ? n.intValue() : v != null && v.toString().trim().matches("\\d+")
-				? Integer.parseInt(v.toString().trim()) : -1;
+		int d = v instanceof Number n ? n.intValue()
+				: v != null && v.toString().trim().matches("\\d+") ? Integer.parseInt(v.toString().trim()) : -1;
 		if (d < 1 || d > max) {
 			throw RpgException.invalidArgument("day must be 1–" + max + ".");
 		}
@@ -679,9 +698,9 @@ public final class CashFlowService {
 	// ── Schedule math ──────────────────────────────────────────────────
 
 	/**
-	 * The first due point strictly after {@code afterSeq}, at or after {@code startSeq} and (when set) at or before
-	 * {@code endSeq}; null when the schedule never falls due again. ONCE schedules are due at their start and never
-	 * again.
+	 * The first due point strictly after {@code afterSeq}, at or after {@code startSeq} and (when
+	 * set) at or before {@code endSeq}; null when the schedule never falls due again. ONCE
+	 * schedules are due at their start and never again.
 	 */
 	public static Long nextDue(Map<String, Object> schedule, Calendar cal, long afterSeq, long startSeq, Long endSeq) {
 		String kind = String.valueOf(schedule.get("kind"));
@@ -710,13 +729,13 @@ public final class CashFlowService {
 		int month = (Integer) date.get("month");
 		int day = (Integer) date.get("day");
 		return switch (kind) {
-			case "DAILY" -> true;
-			case "WEEKLY" -> ((Number) schedule.get("weekday")).intValue() == (Integer) date.get("weekday");
-			case "MONTHLY" -> day == Math.min(((Number) schedule.get("day")).intValue(), Calendar.daysInMonth(month));
-			case "YEARLY" -> month == ((Number) schedule.get("month")).intValue() && day == Math.min(
-					((Number) schedule.get("day")).intValue(), Calendar.daysInMonth(month));
-			case "SEASONAL" -> day == 1 && month == Calendar.seasonStartMonth(String.valueOf(schedule.get("season")));
-			default -> false;
+		case "DAILY" -> true;
+		case "WEEKLY" -> ((Number) schedule.get("weekday")).intValue() == (Integer) date.get("weekday");
+		case "MONTHLY" -> day == Math.min(((Number) schedule.get("day")).intValue(), Calendar.daysInMonth(month));
+		case "YEARLY" -> month == ((Number) schedule.get("month")).intValue()
+				&& day == Math.min(((Number) schedule.get("day")).intValue(), Calendar.daysInMonth(month));
+		case "SEASONAL" -> day == 1 && month == Calendar.seasonStartMonth(String.valueOf(schedule.get("season")));
+		default -> false;
 		};
 	}
 
@@ -725,14 +744,16 @@ public final class CashFlowService {
 		int minute = schedule.get("minute_of_day") instanceof Number n ? n.intValue() : 0;
 		String at = String.format("%02d:%02d", minute / 60, minute % 60);
 		return switch (kind) {
-			case "ONCE" -> "once, on " + cal.render(startSeq);
-			case "DAILY" -> "daily at " + at;
-			case "WEEKLY" -> "every " + Calendar.WEEKDAYS.get(((Number) schedule.get("weekday")).intValue() - 1) + " at " + at;
-			case "MONTHLY" -> "on day " + schedule.get("day") + " of every month at " + at;
-			case "YEARLY" -> "every year on " + schedule.get("day") + " " + Calendar.MONTHS.get(
-					((Number) schedule.get("month")).intValue() - 1) + " at " + at;
-			case "SEASONAL" -> "on the first day of every " + String.valueOf(schedule.get("season")).toLowerCase() + " at " + at;
-			default -> kind;
+		case "ONCE" -> "once, on " + cal.render(startSeq);
+		case "DAILY" -> "daily at " + at;
+		case "WEEKLY" ->
+			"every " + Calendar.WEEKDAYS.get(((Number) schedule.get("weekday")).intValue() - 1) + " at " + at;
+		case "MONTHLY" -> "on day " + schedule.get("day") + " of every month at " + at;
+		case "YEARLY" -> "every year on " + schedule.get("day") + " "
+				+ Calendar.MONTHS.get(((Number) schedule.get("month")).intValue() - 1) + " at " + at;
+		case "SEASONAL" ->
+			"on the first day of every " + String.valueOf(schedule.get("season")).toLowerCase() + " at " + at;
+		default -> kind;
 		};
 	}
 }

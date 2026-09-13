@@ -44,8 +44,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The three required MCP resources (MCP_PROTOCOL.md §3.2): the GM guide, protocol capabilities, and the installed
- * rulesets with their licensing/attribution.
+ * The three required MCP resources (MCP_PROTOCOL.md §3.2): the GM guide, protocol capabilities, and
+ * the installed rulesets with their licensing/attribution.
  */
 public class RpgResources {
 
@@ -55,7 +55,8 @@ public class RpgResources {
 	@ConfigProperty(name = "quarkus.application.version", defaultValue = "unknown")
 	String applicationVersion;
 
-	@Resource(uri = "rpg://protocol/guide", name = "gm-guide", mimeType = "text/markdown", description = "Concise instructions for an AI Game Master using this server: tool-use rules, the Harness/GM/Director split, " + "the setup → commit → context-boundary → play → suspend lifecycle.")
+	@Resource(uri = "rpg://protocol/guide", name = "gm-guide", mimeType = "text/markdown", description = "Concise instructions for an AI Game Master using this server: tool-use rules, the Harness/GM/Director split, "
+			+ "the setup → commit → context-boundary → play → suspend lifecycle.")
 	ResourceResponse guide() {
 		return new ResourceResponse(
 				TextResourceContents.create("rpg://protocol/guide", classpath("protocol/guide.md")));
@@ -111,11 +112,12 @@ public class RpgResources {
 				"perform_encounter_action", "resolve_pending_choice", "end_encounter", "apply_runtime_change",
 				"award_xp", "transfer_player_control", "get_party", "begin_level_up", "get_level_up_choices",
 				"update_level_up", "validate_level_up", "commit_level_up", "abandon_transaction",
-				"update_party_membership", "get_relationship", "update_relationship", "update_house_rules", "materialize_location",
-				"move_party", "upsert_narrative_state", "get_diegetic_information", "get_director_context",
-				"commit_director_changes", "get_context", "perform_rest", "apply_gm_override", "prepare_spells",
-				"cast_spell", "set_calendar", "create_account", "transfer_money", "get_accounts", "define_cash_flow",
-				"update_cash_flow", "list_cash_flows", "find", "get_chronicle_material", "write_chronicle"));
+				"update_party_membership", "get_relationship", "update_relationship", "update_house_rules",
+				"materialize_location", "move_party", "upsert_narrative_state", "get_diegetic_information",
+				"get_director_context", "commit_director_changes", "get_context", "perform_rest", "apply_gm_override",
+				"prepare_spells", "cast_spell", "set_calendar", "create_account", "transfer_money", "get_accounts",
+				"define_cash_flow", "update_cash_flow", "list_cash_flows", "find", "get_chronicle_material",
+				"write_chronicle"));
 		return new ResourceResponse(TextResourceContents.create("rpg://protocol/capabilities", Json.write(m)));
 	}
 

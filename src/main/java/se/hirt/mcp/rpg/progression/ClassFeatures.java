@@ -39,14 +39,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Class features that the engine enforces, read from the class definition's {@code features} array rather than from
- * Java (RULES_ENGINE.md §2.2). A feature carries {@code enforcement} - ENGINE features have a {@code mechanic} the
- * rules engine applies; GM features are surfaced on the sheet and adjudicated in prose - so adding one is a seed edit,
- * not a code change, as long as its {@code mechanic.kind} is understood here.
+ * Class features that the engine enforces, read from the class definition's {@code features} array
+ * rather than from Java (RULES_ENGINE.md §2.2). A feature carries {@code enforcement} - ENGINE
+ * features have a {@code mechanic} the rules engine applies; GM features are surfaced on the sheet
+ * and adjudicated in prose - so adding one is a seed edit, not a code change, as long as its
+ * {@code mechanic.kind} is understood here.
  * <p>
- * Understood kinds so far: {@code SNEAK_ATTACK} (EncounterService), {@code FONT_OF_MAGIC}, {@code METAMAGIC} and
- * {@code SORCEROUS_RESTORATION} (magic.Metamagic). A feature may also carry a top-level {@code resource} block
- * ({@code ref}, {@code max}, {@code recharge}) that Origins.initializeResources turns into a tracked pool.
+ * Understood kinds so far: {@code SNEAK_ATTACK} (EncounterService), {@code FONT_OF_MAGIC},
+ * {@code METAMAGIC} and {@code SORCEROUS_RESTORATION} (magic.Metamagic). A feature may also carry a
+ * top-level {@code resource} block ({@code ref}, {@code max}, {@code recharge}) that
+ * Origins.initializeResources turns into a tracked pool.
  */
 public final class ClassFeatures {
 
@@ -57,13 +59,15 @@ public final class ClassFeatures {
 	public static List<Map.Entry<RulesData.Definition, Integer>> classesOf(Tx tx, RulesData rules, Row c) {
 		var out = new ArrayList<Map.Entry<RulesData.Definition, Integer>>();
 		for (Row row : tx.query("SELECT * FROM character_class WHERE character_id = ? ORDER BY id", c.id())) {
-			rules.find(row.str("class_ref"))
-					.ifPresent(d -> out.add(Map.entry(d, row.intOr("level", 1))));
+			rules.find(row.str("class_ref")).ifPresent(d -> out.add(Map.entry(d, row.intOr("level", 1))));
 		}
 		return out;
 	}
 
-	/** Features the character has actually reached, newest class first, each with the level it was gained at. */
+	/**
+	 * Features the character has actually reached, newest class first, each with the level it was
+	 * gained at.
+	 */
 	@SuppressWarnings("unchecked")
 	public static List<Map<String, Object>> featuresOf(Tx tx, RulesData rules, Row c) {
 		var out = new ArrayList<Map<String, Object>>();
@@ -89,7 +93,10 @@ public final class ClassFeatures {
 		return out;
 	}
 
-	/** The first ENGINE-enforced feature of a given mechanic kind, with the class level the character has in it. */
+	/**
+	 * The first ENGINE-enforced feature of a given mechanic kind, with the class level the
+	 * character has in it.
+	 */
 	@SuppressWarnings("unchecked")
 	public static Optional<Mechanic> mechanic(Tx tx, RulesData rules, Row c, String kind) {
 		for (Map<String, Object> feature : featuresOf(tx, rules, c)) {
@@ -109,8 +116,8 @@ public final class ClassFeatures {
 	public record Mechanic(String name, Map<String, Object> spec, int classLevel) {
 
 		/**
-		 * The dice expression for a feature that scales one die per N class levels, rounded up: a Rogue's Sneak Attack
-		 * is 1d6 at levels 1-2, 2d6 at 3-4, and so on (SRD 5.2.1 "Rogue").
+		 * The dice expression for a feature that scales one die per N class levels, rounded up: a
+		 * Rogue's Sneak Attack is 1d6 at levels 1-2, 2d6 at 3-4, and so on (SRD 5.2.1 "Rogue").
 		 */
 		public String scaledDice() {
 			String die = String.valueOf(spec.getOrDefault("die", "d6"));

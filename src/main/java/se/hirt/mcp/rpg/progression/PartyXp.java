@@ -39,10 +39,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Where experience lands. The campaign's {@code rules.xp_policy} decides whether an award is divided among the party,
- * carried by the player characters with companions kept level, or reserved for player characters alone
- * (RULES_ENGINE.md §6). Every XP-granting operation routes through here so the policy cannot be forgotten in one place
- * and honoured in another.
+ * Where experience lands. The campaign's {@code rules.xp_policy} decides whether an award is
+ * divided among the party, carried by the player characters with companions kept level, or reserved
+ * for player characters alone (RULES_ENGINE.md §6). Every XP-granting operation routes through here
+ * so the policy cannot be forgotten in one place and honoured in another.
  */
 public final class PartyXp {
 
@@ -53,7 +53,10 @@ public final class PartyXp {
 	private PartyXp() {
 	}
 
-	/** One campaign house rule from {@code preferences_json.rules}, upper-cased, or the default when unset. */
+	/**
+	 * One campaign house rule from {@code preferences_json.rules}, upper-cased, or the default when
+	 * unset.
+	 */
 	public static String rule(Row campaign, String key, String fallback) {
 		Map<String, Object> prefs = campaign.isNull("preferences_json") ? Map.of() : campaign.map("preferences_json");
 		if (prefs.get("rules") instanceof Map<?, ?> rc && rc.get(key) != null) {
@@ -90,8 +93,9 @@ public final class PartyXp {
 	}
 
 	/**
-	 * Who an award reaches under the campaign's xp_policy. {@code extra} are characters that earned it without being
-	 * party members (allies who fought alongside the party); they are folded in but never duplicated.
+	 * Who an award reaches under the campaign's xp_policy. {@code extra} are characters that earned
+	 * it without being party members (allies who fought alongside the party); they are folded in
+	 * but never duplicated.
 	 */
 	public static List<Row> recipients(Tx tx, Row campaign, List<Row> extra) {
 		long campaignId = campaign.id();
@@ -128,8 +132,8 @@ public final class PartyXp {
 	}
 
 	/**
-	 * Under LOCKSTEP, pulls every companion up to the leading player character's total. Returns one grant record per
-	 * companion that moved, so the caller can report it.
+	 * Under LOCKSTEP, pulls every companion up to the leading player character's total. Returns one
+	 * grant record per companion that moved, so the caller can report it.
 	 */
 	public static List<Map<String, Object>> lockstep(Tx tx, RulesData rules, Row campaign) {
 		var changed = new ArrayList<Map<String, Object>>();
@@ -151,9 +155,10 @@ public final class PartyXp {
 	}
 
 	/**
-	 * The experience a newcomer joins with: the leading player character's total, under every policy. A companion
-	 * recruited in act three is someone who has been living in the same world, not a level 1 liability — what the
-	 * xp_policy governs is what they earn from here on, not what they arrive with.
+	 * The experience a newcomer joins with: the leading player character's total, under every
+	 * policy. A companion recruited in act three is someone who has been living in the same world,
+	 * not a level 1 liability — what the xp_policy governs is what they earn from here on, not what
+	 * they arrive with.
 	 */
 	public static long joiningXp(Tx tx, Row campaign) {
 		return playerXp(tx, campaign.id());

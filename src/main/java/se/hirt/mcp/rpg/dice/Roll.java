@@ -36,15 +36,15 @@ import java.util.Map;
  * An authoritative random result with its auditable breakdown (MCP_PROTOCOL.md §7.3).
  *
  * @param expression
- * 		the expression as rolled
+ *            the expression as rolled
  * @param dice
- * 		every kept die value, in roll order
+ *            every kept die value, in roll order
  * @param dropped
- * 		die values discarded by keep/drop rules
+ *            die values discarded by keep/drop rules
  * @param modifier
- * 		the constant part of the expression
+ *            the constant part of the expression
  * @param total
- * 		kept dice + modifier
+ *            kept dice + modifier
  */
 public record Roll(String expression, List<Integer> dice, List<Integer> dropped, int modifier, int total) {
 

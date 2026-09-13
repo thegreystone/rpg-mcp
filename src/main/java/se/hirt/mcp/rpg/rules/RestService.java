@@ -47,16 +47,16 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Rests (MCP_PROTOCOL.md §13.4; SRD 5.2.1 Rules Glossary "Short Rest" / "Long Rest" — [verify]) and the explicit,
- * audited GM override (§20, DESIGN.md §15.1): the only general exceptional mutation, always labeled.
+ * Rests (MCP_PROTOCOL.md §13.4; SRD 5.2.1 Rules Glossary "Short Rest" / "Long Rest" — [verify]) and
+ * the explicit, audited GM override (§20, DESIGN.md §15.1): the only general exceptional mutation,
+ * always labeled.
  */
 public final class RestService {
 
 	public static final String HIT_DICE = "hit_dice";
 	public static final Set<String> OVERRIDE_KINDS = Set.of("ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS",
-			"SET_CAMPAIGN_RULE", "SET_LIFE_STATE", "SET_MONEY", "SET_XP",
-			"SET_ABILITY_SCORE", "REMOVE_ENCOUNTER_PARTICIPANT", "SET_LOCATION", "SET_CONNECTION_STATE",
-			"SET_METAMAGIC");
+			"SET_CAMPAIGN_RULE", "SET_LIFE_STATE", "SET_MONEY", "SET_XP", "SET_ABILITY_SCORE",
+			"REMOVE_ENCOUNTER_PARTICIPANT", "SET_LOCATION", "SET_CONNECTION_STATE", "SET_METAMAGIC");
 
 	private final Database db;
 	private final RulesData rules;
@@ -73,8 +73,7 @@ public final class RestService {
 	// ── perform_rest ───────────────────────────────────────────────────
 
 	public Map<String, Object> rest(
-			String operationId, String campaignRef, String kind, Map<String, Object> hitDice,
-			List<String> characterRefs) {
+		String operationId, String campaignRef, String kind, Map<String, Object> hitDice, List<String> characterRefs) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -90,7 +89,8 @@ public final class RestService {
 			var resters = new ArrayList<Row>();
 			if (characterRefs == null || characterRefs.isEmpty()) {
 				for (Row m : tx.query(
-						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
+						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
+								+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
 						campaignId)) {
 					resters.add(m);
 				}
@@ -111,10 +111,11 @@ public final class RestService {
 			long newSeq = clock.lng("seq") + minutes;
 			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
 			int expired = Effects.expireByTime(tx, campaignId, newSeq);
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("REST",
-					(k.equals("SHORT") ? "The party took a short rest." : "The party took a long rest."),
-					resters.stream().map(Row::id).toList(), "MINOR", "PARTY_KNOWN", "GM", null,
-					campaign.lng("current_location_id"), null, Map.of("kind", k)));
+			LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("REST",
+							(k.equals("SHORT") ? "The party took a short rest." : "The party took a long rest."),
+							resters.stream().map(Row::id).toList(), "MINOR", "PARTY_KNOWN", "GM", null,
+							campaign.lng("current_location_id"), null, Map.of("kind", k)));
 			var result = new LinkedHashMap<String, Object>();
 			result.put("kind", k);
 			result.put("completed", true);
@@ -123,8 +124,8 @@ public final class RestService {
 			result.put("characters", results);
 			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
 			result.put("expired_effects", expired);
-			var consequences = new ArrayList<Object>(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId,
-					clock.lng("seq"), newSeq));
+			var consequences = new ArrayList<Object>(
+					se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"), newSeq));
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			if (due != null) {
 				consequences.add(due);
@@ -164,21 +165,21 @@ public final class RestService {
 		m.put("name", c.str("name"));
 		Optional<Row> cls = tx.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1",
 				c.id());
-		int spend =
-				hitDice == null ? 0 : hitDice.get(Ref.of(Ref.CHARACTER, c.id())) instanceof Number n ? n.intValue() : 0;
+		int spend = hitDice == null ? 0
+				: hitDice.get(Ref.of(Ref.CHARACTER, c.id())) instanceof Number n ? n.intValue() : 0;
 		if (spend > 0) {
 			if (cls.isEmpty()) {
-				throw RpgException.notAllowed(
-						c.str("name") + " has no Hit Point Dice (creatures advance by stat block).");
+				throw RpgException
+						.notAllowed(c.str("name") + " has no Hit Point Dice (creatures advance by stat block).");
 			}
 			int level = cls.get().intOr("level", 1);
 			Row pool = hitDicePool(tx, c, level);
 			if (pool.intOr("current", 0) < spend) {
-				throw RpgException.insufficientResource(c.str("name") + " has " + pool.intOr("current",
-						0) + " Hit Point Dice left, not " + spend + ".");
+				throw RpgException.insufficientResource(c.str("name") + " has " + pool.intOr("current", 0)
+						+ " Hit Point Dice left, not " + spend + ".");
 			}
-			int hitDie = ((Number) rules.require(cls.get().str("class_ref"), "CLASS").payload()
-					.get("hit_die")).intValue();
+			int hitDie = ((Number) rules.require(cls.get().str("class_ref"), "CLASS").payload().get("hit_die"))
+					.intValue();
 			int conMod = Rules.modifier(c.intOr("con_score", 10));
 			int healed = 0;
 			var rolls = new ArrayList<Map<String, Object>>();
@@ -259,8 +260,8 @@ public final class RestService {
 
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> override(
-			String operationId, String campaignRef, String kind, String targetRef, Map<String, Object> effect,
-			String reason, Long expectedRevision) {
+		String operationId, String campaignRef, String kind, String targetRef, Map<String, Object> effect,
+		String reason, Long expectedRevision) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -275,9 +276,8 @@ public final class RestService {
 					Map<String, Object> policy = campaign.isNull("gm_override_policy_json") ? Map.of()
 							: campaign.map("gm_override_policy_json");
 					if (!"EXPLICIT_AUDITED".equals(policy.get("policy"))) {
-						throw RpgException.policyDenied(
-								"This campaign's GM override policy is " + policy.getOrDefault("policy",
-										"unset") + "; overrides are not permitted.");
+						throw RpgException.policyDenied("This campaign's GM override policy is "
+								+ policy.getOrDefault("policy", "unset") + "; overrides are not permitted.");
 					}
 					String k = kind == null ? "" : kind.toUpperCase();
 					if (!OVERRIDE_KINDS.contains(k)) {
@@ -297,26 +297,26 @@ public final class RestService {
 						// the change is audited like any other override (RULES_ENGINE.md §6).
 						String key = String.valueOf(e.get("rule"));
 						if (!se.hirt.mcp.rpg.campaign.SetupDraft.RULE_KEYS.contains(key)) {
-							throw RpgException.invalidArgument(
-									"effect.rule must be one of " + se.hirt.mcp.rpg.campaign.SetupDraft.RULE_KEYS.stream()
-											.sorted().toList() + ".");
+							throw RpgException.invalidArgument("effect.rule must be one of "
+									+ se.hirt.mcp.rpg.campaign.SetupDraft.RULE_KEYS.stream().sorted().toList() + ".");
 						}
 						String value = e.get("value") == null ? null : String.valueOf(e.get("value")).toUpperCase();
 						List<String> legal = switch (key) {
-							case "hp_progression" -> se.hirt.mcp.rpg.campaign.SetupDraft.HP_PROGRESSIONS;
-							case "xp_policy" -> se.hirt.mcp.rpg.campaign.SetupDraft.XP_POLICIES;
-							case "companion_level_up" -> se.hirt.mcp.rpg.campaign.SetupDraft.COMPANION_LEVEL_UP;
-							case "progression" -> se.hirt.mcp.rpg.campaign.SetupDraft.PROGRESSION;
-							case "gm_override_policy" -> se.hirt.mcp.rpg.campaign.SetupDraft.OVERRIDE_POLICIES;
-							default -> null;
+						case "hp_progression" -> se.hirt.mcp.rpg.campaign.SetupDraft.HP_PROGRESSIONS;
+						case "xp_policy" -> se.hirt.mcp.rpg.campaign.SetupDraft.XP_POLICIES;
+						case "companion_level_up" -> se.hirt.mcp.rpg.campaign.SetupDraft.COMPANION_LEVEL_UP;
+						case "progression" -> se.hirt.mcp.rpg.campaign.SetupDraft.PROGRESSION;
+						case "gm_override_policy" -> se.hirt.mcp.rpg.campaign.SetupDraft.OVERRIDE_POLICIES;
+						default -> null;
 						};
 						if (legal == null) {
-							throw RpgException.invalidArgument(
-									"'" + key + "' is fixed once the campaign is committed; only " + "hp_progression, xp_policy, companion_level_up, progression and gm_override_policy may be retuned.");
+							throw RpgException.invalidArgument("'" + key
+									+ "' is fixed once the campaign is committed; only "
+									+ "hp_progression, xp_policy, companion_level_up, progression and gm_override_policy may be retuned.");
 						}
 						if (value == null || !legal.contains(value)) {
-							throw RpgException.invalidArgument(
-									"effect.value for " + key + " must be one of " + legal + ".");
+							throw RpgException
+									.invalidArgument("effect.value for " + key + " must be one of " + legal + ".");
 						}
 						Map<String, Object> prefs = campaign.isNull("preferences_json") ? new LinkedHashMap<>()
 								: new LinkedHashMap<>(campaign.map("preferences_json"));
@@ -326,12 +326,12 @@ public final class RestService {
 						houseRules.put(key, value);
 						prefs.put("rules", houseRules);
 						after.put(key, value);
-						tx.update("campaign", campaignId,
-								Map.of("preferences_json", Json.write(prefs), "revision",
-										campaign.lng("revision") + 1));
+						tx.update("campaign", campaignId, Map.of("preferences_json", Json.write(prefs), "revision",
+								campaign.lng("revision") + 1));
 						label = "campaign rule " + key + " " + before.get(key) + " → " + value;
 					}
-					case "ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS", "SET_LIFE_STATE", "SET_MONEY", "SET_XP", "SET_ABILITY_SCORE", "SET_LOCATION" -> {
+					case "ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS", "SET_LIFE_STATE", "SET_MONEY", "SET_XP",
+							"SET_ABILITY_SCORE", "SET_LOCATION" -> {
 						Row c = CharacterService.character(tx, campaignId, targetRef);
 						Harness.requireRevision(c, targetRef, expectedRevision);
 						var cols = new LinkedHashMap<String, Object>();
@@ -426,8 +426,8 @@ public final class RestService {
 							before.put("money_cp", c.lng("money_cp"));
 							after.put("money_cp", cp);
 							cols.put("money_cp", cp);
-							label = c.str("name") + " money " + Money.format(c.lng("money_cp")) + " → " + Money.format(
-									cp);
+							label = c.str("name") + " money " + Money.format(c.lng("money_cp")) + " → "
+									+ Money.format(cp);
 						}
 						case "SET_XP" -> {
 							if (!(e.get("xp") instanceof Number n) || n.longValue() < 0) {
@@ -446,8 +446,8 @@ public final class RestService {
 							before.put(a.name(), c.integer(a.column()));
 							after.put(a.name(), n.intValue());
 							cols.put(a.column(), n.intValue());
-							label = c.str("name") + " " + a.fullName() + " " + c.integer(
-									a.column()) + " → " + n.intValue();
+							label = c.str("name") + " " + a.fullName() + " " + c.integer(a.column()) + " → "
+									+ n.intValue();
 						}
 						default -> {
 							Row l = se.hirt.mcp.rpg.world.WorldService.location(tx, campaignId,
@@ -474,8 +474,8 @@ public final class RestService {
 						Harness.requireRevision(c, targetRef, expectedRevision);
 						var feature = se.hirt.mcp.rpg.magic.Metamagic.feature(tx, rules, c).orElseThrow(
 								() -> RpgException.notAllowed(c.str("name") + " has no Metamagic feature."));
-						List<se.hirt.mcp.rpg.magic.Metamagic.Option> options =
-								se.hirt.mcp.rpg.magic.Metamagic.options(feature.spec());
+						List<se.hirt.mcp.rpg.magic.Metamagic.Option> options = se.hirt.mcp.rpg.magic.Metamagic
+								.options(feature.spec());
 						int allowed = se.hirt.mcp.rpg.magic.Metamagic.allowed(feature.spec(), feature.classLevel());
 						List<String> ids = se.hirt.mcp.rpg.magic.Metamagic.validateChoice(options, allowed, List.of(),
 								e.get("options"), false);
@@ -489,8 +489,8 @@ public final class RestService {
 					case "REMOVE_ENCOUNTER_PARTICIPANT" -> {
 						Row c = CharacterService.character(tx, campaignId, targetRef);
 						Row p = tx.queryOne(
-										"SELECT p.* FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND e.status IN ('RUNNING','WAITING_CHOICE')",
-										c.id())
+								"SELECT p.* FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND e.status IN ('RUNNING','WAITING_CHOICE')",
+								c.id())
 								.orElseThrow(() -> RpgException.notFound(c.str("name") + " in a running encounter"));
 						before.put("status", p.str("status"));
 						after.put("status", "REMOVED");
@@ -512,14 +512,14 @@ public final class RestService {
 								String.valueOf(e.get("to")));
 						String state = String.valueOf(e.get("state")).toUpperCase();
 						if (!se.hirt.mcp.rpg.world.WorldService.CONNECTION_STATES.contains(state)) {
-							throw RpgException.invalidArgument(
-									"effect.state must be one of " + se.hirt.mcp.rpg.world.WorldService.CONNECTION_STATES + ".");
+							throw RpgException.invalidArgument("effect.state must be one of "
+									+ se.hirt.mcp.rpg.world.WorldService.CONNECTION_STATES + ".");
 						}
 						Row conn = tx.queryOne(
 								"SELECT * FROM location_connection WHERE campaign_id = ? AND location_a_id = ? AND location_b_id = ?",
-								campaignId, Math.min(a.id(), b.id()), Math.max(a.id(), b.id())).orElseThrow(
-								() -> RpgException.notFound(
-										"A connection between " + targetRef + " and " + e.get("to")));
+								campaignId, Math.min(a.id(), b.id()), Math.max(a.id(), b.id()))
+								.orElseThrow(() -> RpgException
+										.notFound("A connection between " + targetRef + " and " + e.get("to")));
 						Map<String, Object> st = conn.map("state_json");
 						before.put("state", st.get("state"));
 						st.put("state", state);
@@ -540,9 +540,10 @@ public final class RestService {
 					tx.rawInsert("audit_record", audit);
 					LedgerService.append(tx, campaignId,
 							new LedgerService.EventSpec("GM_OVERRIDE", "GM override — " + label + " (" + reason + ")",
-									targetRef != null && targetRef.startsWith(Ref.CHARACTER + ":") ? List.of(
-											Ref.id(targetRef, Ref.CHARACTER)) : List.of(), "NOTABLE", "GM_ONLY",
-									"ADMINISTRATIVE_OVERRIDE", null, campaign.lng("current_location_id"), null,
+									targetRef != null && targetRef.startsWith(Ref.CHARACTER + ":")
+											? List.of(Ref.id(targetRef, Ref.CHARACTER)) : List.of(),
+									"NOTABLE", "GM_ONLY", "ADMINISTRATIVE_OVERRIDE", null,
+									campaign.lng("current_location_id"), null,
 									Map.of("kind", k, "before", before, "after", after)));
 					var result = new LinkedHashMap<String, Object>();
 					result.put("override", true);

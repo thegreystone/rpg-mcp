@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,8 +44,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
 /**
- * The SRD's Rules Glossary is installed as searchable RULE content so a rules question can be answered with a citation
- * instead of a recollection (MCP_PROTOCOL.md §13.8). These tests pin the corpus's shape and the search's ranking.
+ * The SRD's Rules Glossary is installed as searchable RULE content so a rules question can be
+ * answered with a citation instead of a recollection (MCP_PROTOCOL.md §13.8). These tests pin the
+ * corpus's shape and the search's ranking.
  */
 class RulesSearchTest {
 
@@ -125,7 +125,10 @@ class RulesSearchTest {
 		}
 	}
 
-	/** The glossary is the SRD's own wording, not a paraphrase — that is the whole point of installing it. */
+	/**
+	 * The glossary is the SRD's own wording, not a paraphrase — that is the whole point of
+	 * installing it.
+	 */
 	@Test
 	void ruleTextIsNotAParaphrase() throws Exception {
 		Path db = tempDb("rules-verbatim");
@@ -133,9 +136,8 @@ class RulesSearchTest {
 			Map<String, Object> defs = engine.content().definitions(null, "RULE", null, "Difficult Terrain", null, null,
 					null, 5, "FULL");
 			List<Map<String, Object>> items = (List<Map<String, Object>>) defs.get("items");
-			Map<String, Object> payload =
-					(Map<String, Object>) items.stream().filter(d -> "Difficult Terrain".equals(d.get("name")))
-							.findFirst().orElseThrow().get("payload");
+			Map<String, Object> payload = (Map<String, Object>) items.stream()
+					.filter(d -> "Difficult Terrain".equals(d.get("name"))).findFirst().orElseThrow().get("payload");
 			assertEquals(Boolean.FALSE, payload.get("text_is_paraphrase"));
 			assertTrue(String.valueOf(payload.get("text")).startsWith("If a space is Difficult Terrain, every foot"),
 					payload.get("text") + "");

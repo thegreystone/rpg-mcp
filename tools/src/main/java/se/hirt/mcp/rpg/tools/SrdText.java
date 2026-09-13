@@ -42,9 +42,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The SRD 5.2.1 as one text file: pages separated by {@code === PAGE n ===} markers, each page starting with the
- * running header ("System Reference Document 5.2.1" and the page number). The marker format is the interchange
- * contract between extraction and the parsers, so an extracted {@code srd.txt} can be inspected and reused.
+ * The SRD 5.2.1 as one text file: pages separated by {@code === PAGE n ===} markers, each page
+ * starting with the running header ("System Reference Document 5.2.1" and the page number). The
+ * marker format is the interchange contract between extraction and the parsers, so an extracted
+ * {@code srd.txt} can be inspected and reused.
  */
 public final class SrdText {
 	public static final Pattern PAGE_MARKER = Pattern.compile("=== PAGE (\\d+) ===");
@@ -59,7 +60,8 @@ public final class SrdText {
 
 	// Python's re module is Unicode-aware for \s and \w; Java's is not unless asked.
 	private static final Pattern WS = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
-	private static final Pattern HYPHENATION = Pattern.compile("(\\w) ?- (?!\\d)(\\w)", Pattern.UNICODE_CHARACTER_CLASS);
+	private static final Pattern HYPHENATION = Pattern.compile("(\\w) ?- (?!\\d)(\\w)",
+			Pattern.UNICODE_CHARACTER_CLASS);
 	private static final Pattern NOT_NAME = Pattern.compile("[^a-z0-9 /+]");
 
 	private SrdText() {
@@ -88,13 +90,16 @@ public final class SrdText {
 		return out;
 	}
 
-	private static final Pattern HEADER_FIRST = Pattern.compile("^(System Reference Document 5\\.2\\.1)(\\d+)$", Pattern.MULTILINE);
-	private static final Pattern HEADER_LAST = Pattern.compile("^(\\d+) (System Reference Document 5\\.2\\.1)$", Pattern.MULTILINE);
+	private static final Pattern HEADER_FIRST = Pattern.compile("^(System Reference Document 5\\.2\\.1)(\\d+)$",
+			Pattern.MULTILINE);
+	private static final Pattern HEADER_LAST = Pattern.compile("^(\\d+) (System Reference Document 5\\.2\\.1)$",
+			Pattern.MULTILINE);
 
 	/**
-	 * PDFBox emits tabs and no-break spaces where the PDF has positioned gaps, and joins the running header ("System
-	 * Reference Document 5.2.1" and the page number) onto one line. The parsers expect plain spaces and the header as
-	 * two lines directly after the page marker, in whichever order the page prints them.
+	 * PDFBox emits tabs and no-break spaces where the PDF has positioned gaps, and joins the
+	 * running header ("System Reference Document 5.2.1" and the page number) onto one line. The
+	 * parsers expect plain spaces and the header as two lines directly after the page marker, in
+	 * whichever order the page prints them.
 	 */
 	private static String cleanPage(String page) {
 		page = page.replace("\t", " ").replace(NBSP, " ").replace(ZWSP, "");
@@ -115,11 +120,14 @@ public final class SrdText {
 	public static String load(Path src) throws IOException {
 		String txt = readRaw(src);
 		// Curly apostrophe, no-break space, soft hyphen, minus sign, vulgar halves: the same list as the Python tool.
-		return txt.replace(RIGHT_QUOTE, "'").replace(NBSP, " ").replace(SOFT_HYPHEN, "")
-				.replace(MINUS, "-").replace("1" + HALF, "1.5").replace(HALF, "0.5");
+		return txt.replace(RIGHT_QUOTE, "'").replace(NBSP, " ").replace(SOFT_HYPHEN, "").replace(MINUS, "-")
+				.replace("1" + HALF, "1.5").replace(HALF, "0.5");
 	}
 
-	/** Normalise a name for matching: lower-case, no apostrophes, letters/digits and a few separators only. */
+	/**
+	 * Normalise a name for matching: lower-case, no apostrophes, letters/digits and a few
+	 * separators only.
+	 */
 	public static String norm(String s) {
 		s = s.toLowerCase().replace("'", "").replace(RIGHT_QUOTE, "");
 		s = NOT_NAME.matcher(s).replaceAll(" ");
@@ -132,7 +140,10 @@ public final class SrdText {
 		return WS.matcher(s).replaceAll(" ");
 	}
 
-	/** Join a block of lines, dropping page markers and the two running-header lines that follow each. */
+	/**
+	 * Join a block of lines, dropping page markers and the two running-header lines that follow
+	 * each.
+	 */
 	public static String joinBlock(List<String> blk) {
 		List<String> out = new ArrayList<>();
 		int skip = 0;
@@ -163,7 +174,10 @@ public final class SrdText {
 		return m.find() ? m : null;
 	}
 
-	/** Python's {@code re.findall} restricted to the first group (or the whole match without groups). */
+	/**
+	 * Python's {@code re.findall} restricted to the first group (or the whole match without
+	 * groups).
+	 */
 	public static List<String> findAll(Pattern p, String s) {
 		List<String> out = new ArrayList<>();
 		Matcher m = p.matcher(s);
@@ -173,7 +187,9 @@ public final class SrdText {
 		return out;
 	}
 
-	/** First line index at or after {@code from} whose stripped form equals {@code needle}, or -1. */
+	/**
+	 * First line index at or after {@code from} whose stripped form equals {@code needle}, or -1.
+	 */
 	public static int lineNo(List<String> lines, String needle, int from) {
 		for (int i = Math.max(from, 0); i < lines.size(); i++) {
 			if (lines.get(i).strip().equals(needle)) {

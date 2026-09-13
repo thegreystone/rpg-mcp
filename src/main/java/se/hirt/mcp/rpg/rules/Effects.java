@@ -39,9 +39,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The generic effects system (DESIGN.md §14, DOMAIN_MODEL.md §9): active effects carry a condition and/or a modifier
- * spec, a duration, and an optional concentration link. This class merges the mechanical modifiers for a character and
- * expires effects on time and round boundaries (I-28, I-29).
+ * The generic effects system (DESIGN.md §14, DOMAIN_MODEL.md §9): active effects carry a condition
+ * and/or a modifier spec, a duration, and an optional concentration link. This class merges the
+ * mechanical modifiers for a character and expires effects on time and round boundaries (I-28,
+ * I-29).
  */
 public final class Effects {
 
@@ -65,7 +66,10 @@ public final class Effects {
 		public final List<String> resistances = new ArrayList<>();
 		public int speedBonus;
 		public boolean deathWard;
-		/** Signed change to the hit point maximum already applied to the stored maximum (Aid +5, a Life Drain −16). */
+		/**
+		 * Signed change to the hit point maximum already applied to the stored maximum (Aid +5, a
+		 * Life Drain −16).
+		 */
 		public int maxHp;
 	}
 
@@ -137,9 +141,10 @@ public final class Effects {
 	}
 
 	/**
-	 * Ends one effect. A {@code max_hp} modifier was applied to the character's maximum when the effect began (so the
-	 * stored maximum is always the one in force and the I-13 check holds); ending it takes the change back and clamps
-	 * current HP to the new maximum (SRD 5.2.1 "Hit Point Maximum").
+	 * Ends one effect. A {@code max_hp} modifier was applied to the character's maximum when the
+	 * effect began (so the stored maximum is always the one in force and the I-13 check holds);
+	 * ending it takes the change back and clamps current HP to the new maximum (SRD 5.2.1 "Hit
+	 * Point Maximum").
 	 */
 	public static void end(Tx tx, Row effect) {
 		if (!effect.isNull("modifier_json") && effect.map("modifier_json").get("max_hp") instanceof Number n
@@ -156,7 +161,10 @@ public final class Effects {
 		tx.delete("active_effect", effect.id());
 	}
 
-	/** Ends every effect on a character (death, a revival by fiat), reversing maximum-HP changes on the way. */
+	/**
+	 * Ends every effect on a character (death, a revival by fiat), reversing maximum-HP changes on
+	 * the way.
+	 */
 	public static int removeAll(Tx tx, long characterId) {
 		int removed = 0;
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ?", characterId)) {
@@ -166,7 +174,10 @@ public final class Effects {
 		return removed;
 	}
 
-	/** Ends the effects that last until a Long Rest ({@code duration.until = LONG_REST}); returns their descriptions. */
+	/**
+	 * Ends the effects that last until a Long Rest ({@code duration.until = LONG_REST}); returns
+	 * their descriptions.
+	 */
 	public static List<String> expireOnLongRest(Tx tx, long characterId) {
 		var ended = new ArrayList<String>();
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
@@ -181,9 +192,9 @@ public final class Effects {
 
 	/** Adds an effect row; returns its id. */
 	public static long add(
-			Tx tx, long campaignId, long characterId, Long sourceCharacterId, String sourceContentRef,
-			String description, String conditionRef, Map<String, Object> modifiers, Map<String, Object> duration,
-			Long concentrationCharacterId, String stackingKey, String provenance) {
+		Tx tx, long campaignId, long characterId, Long sourceCharacterId, String sourceContentRef, String description,
+		String conditionRef, Map<String, Object> modifiers, Map<String, Object> duration, Long concentrationCharacterId,
+		String stackingKey, String provenance) {
 		// Same-source stacking: replace an existing effect with the same stacking key on this character.
 		if (stackingKey != null) {
 			for (Row old : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND stacking_key = ?",
@@ -217,9 +228,12 @@ public final class Effects {
 		return d;
 	}
 
-	/** Duration in encounter rounds (expires when that round begins); outside encounters, one minute. */
+	/**
+	 * Duration in encounter rounds (expires when that round begins); outside encounters, one
+	 * minute.
+	 */
 	public static Map<String, Object> rounds(
-			Tx tx, long campaignId, Long encounterId, long currentRound, long rounds, String label) {
+		Tx tx, long campaignId, Long encounterId, long currentRound, long rounds, String label) {
 		var d = new LinkedHashMap<String, Object>();
 		d.put("label", label);
 		if (encounterId != null) {
@@ -262,7 +276,10 @@ public final class Effects {
 		return removed;
 	}
 
-	/** Ends every effect the character is concentrating on (I-29). Returns the removed effects' descriptions. */
+	/**
+	 * Ends every effect the character is concentrating on (I-29). Returns the removed effects'
+	 * descriptions.
+	 */
 	public static List<String> breakConcentration(Tx tx, long characterId) {
 		var ended = new ArrayList<String>();
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE concentration_character_id = ?", characterId)) {

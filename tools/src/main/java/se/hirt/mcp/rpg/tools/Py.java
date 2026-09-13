@@ -40,14 +40,18 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Small helpers that keep the verifier close to the Python original it was ported from: Python-style value
- * formatting for the report, lenient JSON access, and Unicode-aware regex compilation.
+ * Small helpers that keep the verifier close to the Python original it was ported from:
+ * Python-style value formatting for the report, lenient JSON access, and Unicode-aware regex
+ * compilation.
  */
 final class Py {
 	private Py() {
 	}
 
-	/** Compile with Python's Unicode semantics for {@code \w}, {@code \d}, {@code \s} and {@code \b}. */
+	/**
+	 * Compile with Python's Unicode semantics for {@code \w}, {@code \d}, {@code \s} and
+	 * {@code \b}.
+	 */
 	static Pattern re(String regex) {
 		return Pattern.compile(regex, Pattern.UNICODE_CHARACTER_CLASS);
 	}

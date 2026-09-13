@@ -39,7 +39,10 @@ import java.util.OptionalLong;
 @ConfigMapping(prefix = "rpg")
 public interface RpgConfig {
 
-	/** Directory holding {@code rpg.db}, as configured. Use {@link #dataPath()} for the resolved path. */
+	/**
+	 * Directory holding {@code rpg.db}, as configured. Use {@link #dataPath()} for the resolved
+	 * path.
+	 */
 	String dataDir();
 
 	/** {@link #dataDir()} with a leading {@code ~} expanded to the user's home directory. */
@@ -48,10 +51,11 @@ public interface RpgConfig {
 	}
 
 	/**
-	 * Expands a leading {@code ~} ({@code ~}, {@code ~/...} or {@code ~\...}) to {@code user.home}. Hosts that
-	 * launch the server with a portable default such as {@code ~/.rpg-mcp} (the MCP Bundle manifest does) cannot
-	 * be relied on to expand it themselves, and a {@code ${HOME}}-style placeholder would fail in the config
-	 * layer on Windows, where no {@code HOME} variable exists.
+	 * Expands a leading {@code ~} ({@code ~}, {@code ~/...} or {@code ~\...}) to {@code user.home}.
+	 * Hosts that launch the server with a portable default such as {@code ~/.rpg-mcp} (the MCP
+	 * Bundle manifest does) cannot be relied on to expand it themselves, and a
+	 * {@code ${HOME}}-style placeholder would fail in the config layer on Windows, where no
+	 * {@code HOME} variable exists.
 	 */
 	static String expandHome(String path) {
 		if (path == null) {
@@ -67,6 +71,9 @@ public interface RpgConfig {
 		return path;
 	}
 
-	/** Optional fixed seed for the roller — for reproducible local testing only; never set in real play. */
+	/**
+	 * Optional fixed seed for the roller — for reproducible local testing only; never set in real
+	 * play.
+	 */
 	OptionalLong rollSeed();
 }

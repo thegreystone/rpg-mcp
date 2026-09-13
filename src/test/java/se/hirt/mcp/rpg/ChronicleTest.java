@@ -45,9 +45,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * The chronicle (MCP_PROTOCOL.md §11.6): chapters and a synopsis written by a delegated summarizer from material the
- * server cuts, closed at a marker so play may continue meanwhile; bootstrap's story section stays the same size for a
- * campaign of any length; the triggers are sizes, not counts, and reach a long session through the results of play.
+ * The chronicle (MCP_PROTOCOL.md §11.6): chapters and a synopsis written by a delegated summarizer
+ * from material the server cuts, closed at a marker so play may continue meanwhile; bootstrap's
+ * story section stays the same size for a campaign of any length; the triggers are sizes, not
+ * counts, and reach a long session through the results of play.
  */
 class ChronicleTest {
 
@@ -85,8 +86,8 @@ class ChronicleTest {
 			assertEquals(true, due.get("chapter"));
 			assertEquals(false, due.get("synopsis"));
 			assertTrue(due.get("how").toString().contains("get_chronicle_material"));
-			assertTrue(((Number) m(m(boot.get("chronicle")).get("since_last_chapter")).get("omitted_for_budget")).intValue() > 0,
-					"the tail is digested under the budget, never shipped whole");
+			assertTrue(((Number) m(m(boot.get("chronicle")).get("since_last_chapter")).get("omitted_for_budget"))
+					.intValue() > 0, "the tail is digested under the budget, never shipped whole");
 
 			// The material is cut at a marker; an event recorded while the summarizer works stays uncovered.
 			Map<String, Object> material = engine.chronicle().material(campaign, "CHAPTER", null);
@@ -100,8 +101,8 @@ class ChronicleTest {
 			long through = ((Number) m(material.get("through")).get("journal_id")).longValue();
 			engine.ledger().record(op(), campaign, "PLOT_EVENT", "Meanwhile, a rider came.", List.of(pc), "MAJOR",
 					"PARTY_KNOWN", "GM", null, null, null, null);
-			Map<String, Object> written = engine.chronicle()
-					.write(op(), campaign, "CHAPTER", "The twelve coals", "Twelve coals were found, one a day.", through);
+			Map<String, Object> written = engine.chronicle().write(op(), campaign, "CHAPTER", "The twelve coals",
+					"Twelve coals were found, one a day.", through);
 			Map<String, Object> chapter = m(written.get("chronicle"));
 			assertEquals("CHAPTER", chapter.get("kind"));
 			assertNotNull(chapter.get("written_at_game_time"));
@@ -112,7 +113,8 @@ class ChronicleTest {
 			Map<String, Object> chronicle = m(boot.get("chronicle"));
 			assertNull(chronicle.get("synopsis"));
 			assertEquals(1, list(chronicle.get("chapters_since_synopsis")).size());
-			assertEquals("Twelve coals were found, one a day.", list(chronicle.get("chapters_since_synopsis")).get(0).get("summary"));
+			assertEquals("Twelve coals were found, one a day.",
+					list(chronicle.get("chapters_since_synopsis")).get(0).get("summary"));
 			Map<String, Object> tail = m(chronicle.get("since_last_chapter"));
 			assertEquals(1, tail.get("events"), "only the rider is uncovered");
 			assertTrue(tail.toString().contains("rider"));
@@ -121,8 +123,8 @@ class ChronicleTest {
 			RpgException stale = assertThrows(RpgException.class,
 					() -> engine.chronicle().write(op(), campaign, "CHAPTER", null, "again", through));
 			assertEquals(ErrorCode.CONFLICT, stale.code());
-			RpgException bloated = assertThrows(RpgException.class, () -> engine.chronicle()
-					.write(op(), campaign, "CHAPTER", null, "x".repeat(ChronicleService.CHAPTER_MAX_CHARS + 1), null));
+			RpgException bloated = assertThrows(RpgException.class, () -> engine.chronicle().write(op(), campaign,
+					"CHAPTER", null, "x".repeat(ChronicleService.CHAPTER_MAX_CHARS + 1), null));
 			assertEquals(ErrorCode.INVALID_ARGUMENT, bloated.code());
 			engine.chronicle().write(op(), campaign, "CHAPTER", "The rider", "A rider came.", null);
 			RpgException empty = assertThrows(RpgException.class,

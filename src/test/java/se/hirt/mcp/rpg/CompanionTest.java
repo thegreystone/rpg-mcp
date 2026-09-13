@@ -47,9 +47,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
 /**
- * Companions: stat-block skills and saves are the character's own, party experience follows the campaign's xp_policy,
- * recruits join at the party's total, and a companion recruited as a stat block can take a class and level from there
- * (RULES_ENGINE.md §6).
+ * Companions: stat-block skills and saves are the character's own, party experience follows the
+ * campaign's xp_policy, recruits join at the party's total, and a companion recruited as a stat
+ * block can take a class and level from there (RULES_ENGINE.md §6).
  */
 class CompanionTest {
 
@@ -68,21 +68,23 @@ class CompanionTest {
 			String scout = (String) engine.runtime()
 					.materialize(op(), campaign, "Scout", "Vess", null, null, null, null, false).get("character");
 
-			Map<String, Object> perception = engine.checks()
-					.resolveCheck(op(), campaign, scout, "SKILL_CHECK", null, "Perception", 14, null, "tailing a dray");
+			Map<String, Object> perception = engine.checks().resolveCheck(op(), campaign, scout, "SKILL_CHECK", null,
+					"Perception", 14, null, "tailing a dray");
 			assertEquals(5, perception.get("modifier"), "the Scout's listed Perception bonus");
 			assertEquals("STAT_BLOCK", perception.get("modifier_source"));
 			assertEquals(Boolean.TRUE, perception.get("proficient"));
 
 			// A skill the stat block does not list falls back to the plain ability modifier.
-			Map<String, Object> arcana = engine.checks()
-					.resolveCheck(op(), campaign, scout, "SKILL_CHECK", null, "Arcana", 10, null, "reading a seal");
+			Map<String, Object> arcana = engine.checks().resolveCheck(op(), campaign, scout, "SKILL_CHECK", null,
+					"Arcana", 10, null, "reading a seal");
 			assertEquals(0, arcana.get("modifier"), "INT 11 with no proficiency");
 			assertNull(arcana.get("modifier_source"));
 		}
 	}
 
-	/** Under LOCKSTEP the player character earns in full and companions are kept level with them. */
+	/**
+	 * Under LOCKSTEP the player character earns in full and companions are kept level with them.
+	 */
 	@Test
 	void lockstepKeepsCompanionsLevelWithThePlayerCharacter() throws Exception {
 		Path db = tempDb("companion-lockstep");
@@ -97,22 +99,25 @@ class CompanionTest {
 			engine.party().updateMembership(op(), campaign, vess, "JOIN", "recruited at the manor");
 
 			// No character list: the award follows the policy.
-			Map<String, Object> award = engine.runtime()
-					.awardXp(op(), campaign, null, 300, "QUEST", "unmasked the copyist");
+			Map<String, Object> award = engine.runtime().awardXp(op(), campaign, null, 300, "QUEST",
+					"unmasked the copyist");
 			assertEquals("LOCKSTEP", award.get("xp_policy"));
 			List<Map<String, Object>> awarded = (List<Map<String, Object>>) award.get("awarded");
 			assertEquals(2, awarded.size(), "the player character earns, the companion is brought level");
 			for (Map<String, Object> a : awarded) {
 				assertEquals(300L, ((Number) a.get("xp")).longValue());
 			}
-			assertEquals(300L, ((Number) m(engine.characters().characterSheet(campaign, vess, "PLAY")).get("xp"))
-					.longValue());
+			assertEquals(300L,
+					((Number) m(engine.characters().characterSheet(campaign, vess, "PLAY")).get("xp")).longValue());
 			assertEquals(300L,
 					((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY")).get("xp")).longValue());
 		}
 	}
 
-	/** A companion recruited later starts at the party's experience rather than at zero, under every policy. */
+	/**
+	 * A companion recruited later starts at the party's experience rather than at zero, under every
+	 * policy.
+	 */
 	@Test
 	void recruitsJoinAtThePartysExperience() throws Exception {
 		Path db = tempDb("companion-join");
@@ -121,18 +126,19 @@ class CompanionTest {
 			engine.sessions().bootstrap(op(), campaign, null);
 			engine.runtime().awardXp(op(), campaign, null, 900, "MILESTONE", "the seal held");
 			String maude = (String) engine.runtime()
-					.materialize(op(), campaign, "Scout", "Maude Brenn", null, null, null, null, false).get("character");
-			Map<String, Object> joined = engine.party()
-					.updateMembership(op(), campaign, maude, "JOIN", "the fen guide");
+					.materialize(op(), campaign, "Scout", "Maude Brenn", null, null, null, null, false)
+					.get("character");
+			Map<String, Object> joined = engine.party().updateMembership(op(), campaign, maude, "JOIN",
+					"the fen guide");
 			assertNotNull(joined.get("joined_at_party_experience"));
-			assertEquals(900L, ((Number) m(engine.characters().characterSheet(campaign, maude, "PLAY")).get("xp"))
-					.longValue());
+			assertEquals(900L,
+					((Number) m(engine.characters().characterSheet(campaign, maude, "PLAY")).get("xp")).longValue());
 		}
 	}
 
 	/**
-	 * A stat-block companion has no class, so their first level-up is the class choice; from there the engine advances
-	 * them on its own.
+	 * A stat-block companion has no class, so their first level-up is the class choice; from there
+	 * the engine advances them on its own.
 	 */
 	@Test
 	void aStatBlockCompanionTakesAClassAndThenLevelsItself() throws Exception {
@@ -146,10 +152,9 @@ class CompanionTest {
 					.materialize(op(), campaign, "Scout", "Vess", null, null, null, null, false).get("character");
 			engine.party().updateMembership(op(), campaign, vess, "JOIN", "recruited");
 			// Enough for level 3 (2 700 XP is level 4).
-			Map<String, Object> award = engine.runtime()
-					.awardXp(op(), campaign, null, 2450, "MILESTONE", "the covenant plates");
-			List<Map<String, Object>> waiting =
-					(List<Map<String, Object>>) award.get("companions_awaiting_level_up");
+			Map<String, Object> award = engine.runtime().awardXp(op(), campaign, null, 2450, "MILESTONE",
+					"the covenant plates");
+			List<Map<String, Object>> waiting = (List<Map<String, Object>>) award.get("companions_awaiting_level_up");
 			assertEquals(1, waiting.size());
 			assertEquals("NEEDS_CLASS", waiting.get(0).get("reason"));
 
@@ -159,8 +164,8 @@ class CompanionTest {
 			assertTrue(((List<?>) pick.get("options")).size() >= 12, "every SRD class is offered");
 			String transaction = (String) m(begun.get("transaction")).get("ref");
 			// The class may be recorded on its own; the concrete skill list arrives once it is known.
-			Map<String, Object> withClass =
-					engine.levelUps().update(op(), campaign, transaction, null, map("class", "Rogue"));
+			Map<String, Object> withClass = engine.levelUps().update(op(), campaign, transaction, null,
+					map("class", "Rogue"));
 			assertEquals(4, m(withClass.get("skill_choice")).get("choose"), "the Rogue chooses four skills");
 			engine.levelUps().update(op(), campaign, transaction, null,
 					map("skills", List.of("Stealth", "Perception", "Deception", "Acrobatics")));
@@ -176,8 +181,8 @@ class CompanionTest {
 			// The stat block is still there for actions and senses.
 			assertNotNull(sheet.get("creature"));
 			// But checks are hers now: DEX 14 + proficiency 2, not the Scout's listed Stealth +6.
-			Map<String, Object> stealth = engine.checks()
-					.resolveCheck(op(), campaign, vess, "SKILL_CHECK", null, "Stealth", 10, null, "over the wall");
+			Map<String, Object> stealth = engine.checks().resolveCheck(op(), campaign, vess, "SKILL_CHECK", null,
+					"Stealth", 10, null, "over the wall");
 			assertEquals(4, stealth.get("modifier"));
 			assertNull(stealth.get("modifier_source"), "a classed character is no longer a stat block");
 
@@ -191,8 +196,9 @@ class CompanionTest {
 	}
 
 	/**
-	 * A companion recruited as a stat block can be promoted all the way to a character a player could inherit: class,
-	 * species, background and the origin feats they carry, through the same code the creation draft uses.
+	 * A companion recruited as a stat block can be promoted all the way to a character a player
+	 * could inherit: class, species, background and the origin feats they carry, through the same
+	 * code the creation draft uses.
 	 */
 	@Test
 	void aPromotedCompanionIsIndistinguishableFromAPlayerCharacter() throws Exception {
@@ -206,9 +212,10 @@ class CompanionTest {
 			engine.party().updateMembership(op(), campaign, vess, "JOIN", "recruited");
 
 			// The party view says what is still missing before that inheritance would be safe.
-			List<Map<String, Object>> members =
-					(List<Map<String, Object>>) engine.sessions().party(campaign, "SUMMARY").get("members");
-			Map<String, Object> before = members.stream().filter(x -> vess.equals(x.get("ref"))).findFirst().orElseThrow();
+			List<Map<String, Object>> members = (List<Map<String, Object>>) engine.sessions().party(campaign, "SUMMARY")
+					.get("members");
+			Map<String, Object> before = members.stream().filter(x -> vess.equals(x.get("ref"))).findFirst()
+					.orElseThrow();
 			List<String> gaps = (List<String>) before.get("sheet_gaps");
 			assertTrue(gaps.containsAll(List.of("class", "species", "background")), "gaps were " + gaps);
 			assertFalse(gaps.contains("alignment"), "materialize recorded it");
@@ -220,9 +227,10 @@ class CompanionTest {
 			engine.levelUps().update(op(), campaign, transaction, null, map("class", "Rogue"));
 			engine.levelUps().update(op(), campaign, transaction, null,
 					map("species", "Human", "species_skill", "Perception", "origin_feat",
-							map("feat", "Skilled", "proficiencies", List.of("Athletics", "Investigation", "Persuasion")),
-							"background", "Criminal", "skills", List.of("Deception", "Insight", "Acrobatics",
-									"Intimidation")));
+							map("feat", "Skilled", "proficiencies",
+									List.of("Athletics", "Investigation", "Persuasion")),
+							"background", "Criminal", "skills",
+							List.of("Deception", "Insight", "Acrobatics", "Intimidation")));
 			engine.levelUps().commit(op(), campaign, transaction, null);
 
 			Map<String, Object> sheet = engine.characters().characterSheet(campaign, vess, "FULL");
@@ -248,12 +256,13 @@ class CompanionTest {
 
 			// Nothing is left to flag except the gear she has not been given yet.
 			members = (List<Map<String, Object>>) engine.sessions().party(campaign, "SUMMARY").get("members");
-			Map<String, Object> after = members.stream().filter(x -> vess.equals(x.get("ref"))).findFirst().orElseThrow();
+			Map<String, Object> after = members.stream().filter(x -> vess.equals(x.get("ref"))).findFirst()
+					.orElseThrow();
 			assertEquals(List.of("inventory"), after.get("sheet_gaps"));
 
 			// And she can be handed the player's chair.
-			Map<String, Object> transferred = engine.runtime()
-					.transferControl(op(), campaign, vess, "the player character died at the wharf");
+			Map<String, Object> transferred = engine.runtime().transferControl(op(), campaign, vess,
+					"the player character died at the wharf");
 			assertEquals(vess, transferred.get("player_character"));
 		}
 	}
@@ -270,14 +279,13 @@ class CompanionTest {
 			engine.party().updateMembership(op(), campaign, vess, "JOIN", "recruited");
 			Map<String, Object> begun = engine.levelUps().begin(op(), campaign, vess);
 			String transaction = (String) m(begun.get("transaction")).get("ref");
-			engine.levelUps().update(op(), campaign, transaction, null, map("class", "Rogue", "skills",
-					List.of("Stealth", "Perception", "Deception", "Acrobatics")));
+			engine.levelUps().update(op(), campaign, transaction, null,
+					map("class", "Rogue", "skills", List.of("Stealth", "Perception", "Deception", "Acrobatics")));
 			engine.levelUps().commit(op(), campaign, transaction, null);
 
 			Map<String, Object> award = engine.runtime().awardXp(op(), campaign, null, 900, "QUEST", "the wharf");
 			assertNull(award.get("companion_level_ups"), "nothing is levelled automatically");
-			List<Map<String, Object>> waiting =
-					(List<Map<String, Object>>) award.get("companions_awaiting_level_up");
+			List<Map<String, Object>> waiting = (List<Map<String, Object>>) award.get("companions_awaiting_level_up");
 			assertEquals("AWAITING_PLAYER", waiting.get(0).get("reason"));
 			// PLAYER mode still does the arithmetic: the player is offered a complete proposal to accept or change.
 			Map<String, Object> proposal = m(waiting.get(0).get("proposal"));
@@ -304,7 +312,10 @@ class CompanionTest {
 		}
 	}
 
-	/** A committed campaign may retune its house rules; the change is audited like any other override. */
+	/**
+	 * A committed campaign may retune its house rules; the change is audited like any other
+	 * override.
+	 */
 	@Test
 	void campaignRulesCanBeRetunedAfterCommit() throws Exception {
 		Path db = tempDb("companion-retune");
@@ -323,9 +334,8 @@ class CompanionTest {
 			assertEquals("SHARED", award.get("xp_policy"));
 			assertEquals(2, ((List<?>) award.get("awarded")).size(), "both members earn under SHARED");
 
-			assertThrows(se.hirt.mcp.rpg.protocol.RpgException.class,
-					() -> engine.rest().override(op(), campaign, "SET_CAMPAIGN_RULE", null,
-							map("rule", "xp_policy", "value", "NONSENSE"), "typo", null));
+			assertThrows(se.hirt.mcp.rpg.protocol.RpgException.class, () -> engine.rest().override(op(), campaign,
+					"SET_CAMPAIGN_RULE", null, map("rule", "xp_policy", "value", "NONSENSE"), "typo", null));
 		}
 	}
 }

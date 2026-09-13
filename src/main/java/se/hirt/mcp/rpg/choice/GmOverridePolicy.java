@@ -33,9 +33,8 @@ package se.hirt.mcp.rpg.choice;
  */
 public enum GmOverridePolicy implements Described {
 
-	EXPLICIT_AUDITED("Allowed, audited",
-			"The GM may make explicit, logged overrides in exceptional cases; the engine never pretends an override was a normal rules result.",
-			true), DISABLED("Disabled", "No GM overrides at all; the rules engine's outcome is always final.");
+	EXPLICIT_AUDITED("Allowed, audited", "The GM may make explicit, logged overrides in exceptional cases; the engine never pretends an override was a normal rules result.", true),
+	DISABLED("Disabled", "No GM overrides at all; the rules engine's outcome is always final.");
 
 	private final String label;
 	private final String description;

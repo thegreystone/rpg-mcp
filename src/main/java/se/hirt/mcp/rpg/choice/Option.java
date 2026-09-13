@@ -32,8 +32,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * One presentable alternative of a {@link Decision}: the value to send back, a label, a description and optional
- * structured details (speed, level, cost …) the GM may quote.
+ * One presentable alternative of a {@link Decision}: the value to send back, a label, a description
+ * and optional structured details (speed, level, cost …) the GM may quote.
  */
 public record Option(String value, String label, String description, boolean recommended, Map<String, Object> details) {
 

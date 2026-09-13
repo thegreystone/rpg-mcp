@@ -45,14 +45,16 @@ import se.hirt.mcp.rpg.rules.Rules;
 import java.util.*;
 
 /**
- * The level-up transaction (DESIGN.md §17.1, MCP_PROTOCOL.md §16, DOMAIN_MODEL.md I-55..I-57): a pending transaction
- * owns the choices; nothing touches the live character until commit, which is atomic.
+ * The level-up transaction (DESIGN.md §17.1, MCP_PROTOCOL.md §16, DOMAIN_MODEL.md I-55..I-57): a
+ * pending transaction owns the choices; nothing touches the live character until commit, which is
+ * atomic.
  * <p>
- * Rules encoded (SRD 5.2.1 "Level Advancement" — [verify]): one level at a time; HP gain = hit die roll or the fixed
- * value (half the die + 1) plus the Constitution modifier, minimum 1, plus species bonuses such as Dwarven Toughness;
- * at the class's ASI levels either an Ability Score Improvement (+2 to one score or +1 to two, never above 20) or a
- * seeded feat whose prerequisites are met. Species lineage spells (Elven Lineage, Fiendish Legacy) are granted when
- * their level threshold is reached. Subclass features are not seeded yet and are reported as unavailable.
+ * Rules encoded (SRD 5.2.1 "Level Advancement" — [verify]): one level at a time; HP gain = hit die
+ * roll or the fixed value (half the die + 1) plus the Constitution modifier, minimum 1, plus
+ * species bonuses such as Dwarven Toughness; at the class's ASI levels either an Ability Score
+ * Improvement (+2 to one score or +1 to two, never above 20) or a seeded feat whose prerequisites
+ * are met. Species lineage spells (Elven Lineage, Fiendish Legacy) are granted when their level
+ * threshold is reached. Subclass features are not seeded yet and are reported as unavailable.
  */
 public final class LevelUpService {
 
@@ -96,8 +98,8 @@ public final class LevelUpService {
 			}
 			// A companion recruited as a stat block has no class. Their first level-up is the class choice itself
 			// (RULES_ENGINE.md §6): the engine never picks a class, but everything after that is ordinary.
-			Optional<Row> existing = tx.queryOne(
-					"SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1", c.id());
+			Optional<Row> existing = tx
+					.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1", c.id());
 			int level = existing.map(r -> r.intOr("level", 1)).orElse(0);
 			int next = level + 1;
 			if (next > 20) {
@@ -127,9 +129,8 @@ public final class LevelUpService {
 			// Hit points are governed by campaign rules.hp_progression (RULES_ENGINE.md §6): FIRST_3_MAX
 			// (full die through level 3, rolled after), AVERAGE, or ROLL — plus CON and species bonuses.
 			Map<String, Object> prefs = campaign.map("preferences_json");
-			String policy =
-					prefs.get("rules") instanceof Map<?, ?> rc && rc.get("hp_progression") != null ? String.valueOf(
-							rc.get("hp_progression")) : "FIRST_3_MAX";
+			String policy = prefs.get("rules") instanceof Map<?, ?> rc && rc.get("hp_progression") != null
+					? String.valueOf(rc.get("hp_progression")) : "FIRST_3_MAX";
 			int conMod = Rules.modifier(c.intOr("con_score", 10));
 			int speciesHp = se.hirt.mcp.rpg.character.Origins.hpPerLevel(rules, c);
 			var chosen = new LinkedHashMap<String, Object>();
@@ -155,7 +156,7 @@ public final class LevelUpService {
 
 	/** Opens the LEVEL_UP transaction and returns its choices. */
 	private Map<String, Object> openTransaction(
-			Tx tx, Row campaign, long campaignId, Row c, Map<String, Object> payload) {
+		Tx tx, Row campaign, long campaignId, Row c, Map<String, Object> payload) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("kind", "LEVEL_UP");
@@ -173,8 +174,9 @@ public final class LevelUpService {
 	}
 
 	/**
-	 * The Metamagic options a sorcerer owes at the new level: the class feature's count for that level minus the
-	 * options already known (SRD 5.2.1 "Sorcerer": two at level 2, one more at 10 and 17). Empty when nothing is owed.
+	 * The Metamagic options a sorcerer owes at the new level: the class feature's count for that
+	 * level minus the options already known (SRD 5.2.1 "Sorcerer": two at level 2, one more at 10
+	 * and 17). Empty when nothing is owed.
 	 */
 	private Optional<Map<String, Object>> metamagicChoice(Tx tx, Map<String, Object> payload, Row c) {
 		if (!(payload.get("class_ref") instanceof String classRef)) {
@@ -203,8 +205,9 @@ public final class LevelUpService {
 		m.put("allowed_at_level", allowed);
 		m.put("options", options.stream().filter(o -> !known.contains(o.id()))
 				.map(se.hirt.mcp.rpg.magic.Metamagic.Option::toMap).toList());
-		m.put("rule", "Required: pass choices.metamagic = [\"Empowered Spell\", \"Quickened Spell\"] (" + owed
-				+ " option" + (owed == 1 ? "" : "s") + "). One option shapes a spell; Empowered and Seeking may join it.");
+		m.put("rule",
+				"Required: pass choices.metamagic = [\"Empowered Spell\", \"Quickened Spell\"] (" + owed + " option"
+						+ (owed == 1 ? "" : "s") + "). One option shapes a spell; Empowered and Seeking may join it.");
 		return Optional.of(m);
 	}
 
@@ -240,8 +243,9 @@ public final class LevelUpService {
 		result.put("class", payload.get("class_name"));
 		result.put("from_level", payload.get("from_level"));
 		result.put("to_level", payload.get("to_level"));
-		@SuppressWarnings("unchecked") Map<String, Object> chosenSoFar =
-				payload.get("choices") instanceof Map<?, ?> ch ? (Map<String, Object>) ch : Map.of();
+		@SuppressWarnings("unchecked")
+		Map<String, Object> chosenSoFar = payload.get("choices") instanceof Map<?, ?> ch ? (Map<String, Object>) ch
+				: Map.of();
 		var hp = new LinkedHashMap<String, Object>();
 		hp.put("policy", payload.getOrDefault("hp_progression", "FIRST_3_MAX"));
 		hp.put("method", chosenSoFar.get("hp_method"));
@@ -287,10 +291,11 @@ public final class LevelUpService {
 			});
 			var origin = new LinkedHashMap<String, Object>();
 			origin.put("choice", "species and background");
-			origin.put("rule", "Optional, but a companion without them is not a character a player could inherit: "
-					+ "pass choices.species and choices.background, plus whatever they ask for in turn "
-					+ "(species_skill, species_choice, origin_feat, background_tool, feat_choices). "
-					+ "get_character_choices lists the options for each.");
+			origin.put("rule",
+					"Optional, but a companion without them is not a character a player could inherit: "
+							+ "pass choices.species and choices.background, plus whatever they ask for in turn "
+							+ "(species_skill, species_choice, origin_feat, background_tool, feat_choices). "
+							+ "get_character_choices lists the options for each.");
 			origin.put("species", c.isNull("species_ref") ? rules.ofKind("SPECIES").stream().map(d -> {
 				var o = new LinkedHashMap<String, Object>();
 				o.put("value", d.id());
@@ -298,16 +303,22 @@ public final class LevelUpService {
 				o.put("description", d.payload().getOrDefault("summary", ""));
 				return o;
 			}).toList() : "already set: " + c.str("species_ref"));
-			origin.put("background", c.isNull("background_ref") ? java.util.stream.Stream.concat(
-					rules.ofKind("BACKGROUND").stream(),
-					se.hirt.mcp.rpg.character.Origins.customBackgrounds(tx, c.lng("campaign_id")).stream()).map(d -> {
-				var o = new LinkedHashMap<String, Object>();
-				o.put("value", d.id());
-				o.put("label", d.name());
-				o.put("feat", d.payload().get("feat"));
-				o.put("skills", d.payload().get("skills"));
-				return o;
-			}).toList() : "already set: " + c.str("background_ref"));
+			origin.put("background",
+					c.isNull(
+							"background_ref")
+									? java.util.stream.Stream
+											.concat(rules.ofKind("BACKGROUND").stream(),
+													se.hirt.mcp.rpg.character.Origins
+															.customBackgrounds(tx, c.lng("campaign_id")).stream())
+											.map(d -> {
+												var o = new LinkedHashMap<String, Object>();
+												o.put("value", d.id());
+												o.put("label", d.name());
+												o.put("feat", d.payload().get("feat"));
+												o.put("skills", d.payload().get("skills"));
+												return o;
+											}).toList()
+									: "already set: " + c.str("background_ref"));
 			origin.put("ability_scores",
 					"NOT applied. A background's ability-score increase belongs to character creation; a companion "
 							+ "being promoted already has the scores they have been played with. Use apply_gm_override "
@@ -318,15 +329,14 @@ public final class LevelUpService {
 			var asi = new LinkedHashMap<String, Object>();
 			asi.put("choice", "ability_score_improvement");
 			asi.put("rule", "+2 to one ability or +1 to two different abilities; no score above 20.");
-			rules.find((String) payload.get("class_ref")).ifPresent(
-					d -> asi.put("recommended", autoAsi(c, d)));
+			rules.find((String) payload.get("class_ref")).ifPresent(d -> asi.put("recommended", autoAsi(c, d)));
 			var scores = new LinkedHashMap<String, Object>();
 			for (Ability a : Ability.values()) {
 				scores.put(a.name(), c.integer(a.column()));
 			}
 			asi.put("current_scores", scores);
-			asi.put("or_a_feat",
-					"Instead of the improvement, take a feat whose prerequisites are met " + "(get_character_choices scope FEAT lists them): pass choices.feat = {feat, ...its choices}.");
+			asi.put("or_a_feat", "Instead of the improvement, take a feat whose prerequisites are met "
+					+ "(get_character_choices scope FEAT lists them): pass choices.feat = {feat, ...its choices}.");
 			result.put("ability_score_improvement", asi);
 		}
 		var pendingFeats = new ArrayList<Map<String, Object>>();
@@ -346,21 +356,23 @@ public final class LevelUpService {
 			result.put("pending_feat_choices", pendingFeats);
 		}
 		metamagicChoice(tx, payload, c).ifPresent(choice -> result.put("metamagic_choice", choice));
-		result.put("automatic",
-				Map.of("proficiency_bonus", rules.proficiencyBonus(((Number) payload.get("to_level")).intValue()),
-						"note",
-						"Spell slots resize and ENGINE class features (Sneak Attack, Font of Magic, Metamagic) apply at commit; subclass choices and GM-adjudicated features are narrated from the SRD and recorded with record_memory."));
+		result.put("automatic", Map.of("proficiency_bonus",
+				rules.proficiencyBonus(((Number) payload.get("to_level")).intValue()), "note",
+				"Spell slots resize and ENGINE class features (Sneak Attack, Font of Magic, Metamagic) apply at commit; subclass choices and GM-adjudicated features are narrated from the SRD and recorded with record_memory."));
 		result.put("chosen", payload.get("choices"));
 		result.put("preview", preview(tx, t, c));
 		rules.find((String) payload.get("class_ref")).map(d -> d.payload().get("spellcasting"))
 				.filter(sc -> sc instanceof Map<?, ?>).ifPresent(sc -> {
-					@SuppressWarnings("unchecked") Map<String, Object> s = (Map<String, Object>) sc;
+					@SuppressWarnings("unchecked")
+					Map<String, Object> s = (Map<String, Object>) sc;
 					int to = ((Number) payload.get("to_level")).intValue();
-					@SuppressWarnings("unchecked") List<Object> cantrips = (List<Object>) s.get("cantrips_known");
-					@SuppressWarnings("unchecked") List<Object> prepared = (List<Object>) s.get("prepared");
-					result.put("spellcasting_at_new_level",
-							Map.of("cantrips_known", cantrips.get(to - 1), "prepared_spells", prepared.get(to - 1), "note",
-									"Spell slots are resized automatically at commit; adjust the prepared list with prepare_spells afterwards."));
+					@SuppressWarnings("unchecked")
+					List<Object> cantrips = (List<Object>) s.get("cantrips_known");
+					@SuppressWarnings("unchecked")
+					List<Object> prepared = (List<Object>) s.get("prepared");
+					result.put("spellcasting_at_new_level", Map.of("cantrips_known", cantrips.get(to - 1),
+							"prepared_spells", prepared.get(to - 1), "note",
+							"Spell slots are resized automatically at commit; adjust the prepared list with prepare_spells afterwards."));
 				});
 		return result;
 	}
@@ -375,20 +387,23 @@ public final class LevelUpService {
 		return m;
 	}
 
-	/** Feat prerequisites: category availability, level, ability minimums, repeatability (SRD 5.2.1 "Parts of a Feat"). */
+	/**
+	 * Feat prerequisites: category availability, level, ability minimums, repeatability (SRD 5.2.1
+	 * "Parts of a Feat").
+	 */
 	@SuppressWarnings("unchecked")
 	private void validateFeatPrerequisites(Tx tx, Row c, RulesData.Definition feat, int toLevel) {
 		String category = String.valueOf(feat.payload().get("category"));
 		if ("FIGHTING_STYLE".equals(category)) {
-			throw RpgException.validation(List.of(new Violation("feat", "PREREQUISITE",
-					feat.name() + " requires the Fighting Style class feature, which is not yet data-driven; choose another feat.")));
+			throw RpgException.validation(List.of(new Violation("feat", "PREREQUISITE", feat.name()
+					+ " requires the Fighting Style class feature, which is not yet data-driven; choose another feat.")));
 		}
 		if (feat.payload().get("prerequisite_level") instanceof Number lvl && toLevel < lvl.intValue()) {
 			throw RpgException.validation(List.of(new Violation("feat", "PREREQUISITE",
 					feat.name() + " requires level " + lvl + "+ (" + feat.payload().get("prerequisite") + ").")));
 		}
-		if (feat.payload().get("prerequisite_abilities") instanceof Map<?, ?> pre && ((Map<String, Object>) pre).get(
-				"any_of") instanceof Map<?, ?> anyOf) {
+		if (feat.payload().get("prerequisite_abilities") instanceof Map<?, ?> pre
+				&& ((Map<String, Object>) pre).get("any_of") instanceof Map<?, ?> anyOf) {
 			boolean met = false;
 			for (var e : ((Map<String, Object>) anyOf).entrySet()) {
 				if (c.intOr(Ability.parse(e.getKey()).column(), 10) >= ((Number) e.getValue()).intValue()) {
@@ -404,8 +419,8 @@ public final class LevelUpService {
 				"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'FEAT' AND content_ref = ?",
 				c.id(), feat.id()) > 0;
 		if (taken && feat.payload().get("repeatable") == null) {
-			throw RpgException.validation(List.of(new Violation("feat", "ALREADY_TAKEN",
-					c.str("name") + " already has " + feat.name() + ".")));
+			throw RpgException.validation(List
+					.of(new Violation("feat", "ALREADY_TAKEN", c.str("name") + " already has " + feat.name() + ".")));
 		}
 	}
 
@@ -414,8 +429,9 @@ public final class LevelUpService {
 		if (transactionRef == null || transactionRef.isBlank()) {
 			t = tx.queryOne(
 					"SELECT * FROM pending_transaction WHERE campaign_id = ? AND kind = 'LEVEL_UP' AND status = 'OPEN' ORDER BY id DESC LIMIT 1",
-					campaignId).orElseThrow(() -> new RpgException(ErrorCode.TRANSACTION_REQUIRED,
-					"No level-up transaction is open; call begin_level_up first."));
+					campaignId)
+					.orElseThrow(() -> new RpgException(ErrorCode.TRANSACTION_REQUIRED,
+							"No level-up transaction is open; call begin_level_up first."));
 		} else {
 			t = tx.find("pending_transaction", Ref.id(transactionRef, Ref.TRANSACTION))
 					.orElseThrow(() -> RpgException.notFound("Transaction " + transactionRef));
@@ -424,8 +440,8 @@ public final class LevelUpService {
 			}
 		}
 		if (!"LEVEL_UP".equals(t.str("kind"))) {
-			throw RpgException.invalidArgument(
-					Ref.of(Ref.TRANSACTION, t.id()) + " is a " + t.str("kind") + " transaction.");
+			throw RpgException
+					.invalidArgument(Ref.of(Ref.TRANSACTION, t.id()) + " is a " + t.str("kind") + " transaction.");
 		}
 		return t;
 	}
@@ -444,8 +460,8 @@ public final class LevelUpService {
 
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> update(
-			String operationId, String campaignRef, String transactionRef, Long expectedRevision,
-			Map<String, Object> choices) {
+		String operationId, String campaignRef, String transactionRef, Long expectedRevision,
+		Map<String, Object> choices) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -469,17 +485,16 @@ public final class LevelUpService {
 			choices.forEach((k2, v2) -> ordered.putIfAbsent(k2, v2));
 			for (var e : ordered.entrySet()) {
 				switch (e.getKey()) {
-				case "hp_method" -> throw RpgException.invalidArgument(
-						"Hit points are governed by campaign rules.hp_progression (" + payload.getOrDefault(
-								"hp_progression",
-								"FIRST_3_MAX") + ") and were fixed when the level-up began; there is nothing to choose.");
+				case "hp_method" ->
+					throw RpgException.invalidArgument("Hit points are governed by campaign rules.hp_progression ("
+							+ payload.getOrDefault("hp_progression", "FIRST_3_MAX")
+							+ ") and were fixed when the level-up began; there is nothing to choose.");
 				case "ability_score_improvement" -> {
 					if (!Boolean.TRUE.equals(payload.get("asi_required"))) {
-						throw RpgException.validation(
-								List.of(new Violation("ability_score_improvement", "NOT_AVAILABLE",
-										"Level " + payload.get(
-												"to_level") + " grants no Ability Score Improvement for " + payload.get(
-												"class_name") + ".")));
+						throw RpgException
+								.validation(List.of(new Violation("ability_score_improvement", "NOT_AVAILABLE",
+										"Level " + payload.get("to_level") + " grants no Ability Score Improvement for "
+												+ payload.get("class_name") + ".")));
 					}
 					if (!(e.getValue() instanceof Map<?, ?> m)) {
 						throw RpgException.invalidArgument(
@@ -490,20 +505,18 @@ public final class LevelUpService {
 					for (var s : m.entrySet()) {
 						Ability a = Ability.parse(String.valueOf(s.getKey()));
 						if (!(s.getValue() instanceof Number n) || n.intValue() < 1 || n.intValue() > 2) {
-							throw RpgException.validation(
-									List.of(new Violation("ability_score_improvement." + a.name(), "RANGE",
-											"Increases are +1 or +2.")));
+							throw RpgException.validation(List.of(new Violation("ability_score_improvement." + a.name(),
+									"RANGE", "Increases are +1 or +2.")));
 						}
 						if (c.intOr(a.column(), 10) + n.intValue() > Rules.MAX_SCORE) {
-							throw RpgException.validation(
-									List.of(new Violation("ability_score_improvement." + a.name(), "CAP",
-											a.fullName() + " cannot exceed 20.")));
+							throw RpgException.validation(List.of(new Violation("ability_score_improvement." + a.name(),
+									"CAP", a.fullName() + " cannot exceed 20.")));
 						}
 						asi.put(a.name(), n.intValue());
 						total += n.intValue();
 					}
-					if (total != 2 || (asi.size() == 2 && asi.values().stream()
-							.anyMatch(v -> ((Number) v).intValue() != 1))) {
+					if (total != 2
+							|| (asi.size() == 2 && asi.values().stream().anyMatch(v -> ((Number) v).intValue() != 1))) {
 						throw RpgException.validation(List.of(new Violation("ability_score_improvement", "TOTAL",
 								"Choose +2 to one ability or +1 to two.")));
 					}
@@ -513,13 +526,13 @@ public final class LevelUpService {
 				case "feat" -> {
 					// A feat may be taken instead of the Ability Score Improvement (SRD 5.2.1 "Feats").
 					if (!Boolean.TRUE.equals(payload.get("asi_required"))) {
-						throw RpgException.validation(List.of(new Violation("feat", "NOT_AVAILABLE",
-								"Level " + payload.get("to_level") + " grants no feat choice for " + payload.get(
-										"class_name") + ".")));
+						throw RpgException.validation(
+								List.of(new Violation("feat", "NOT_AVAILABLE", "Level " + payload.get("to_level")
+										+ " grants no feat choice for " + payload.get("class_name") + ".")));
 					}
 					Object featValue = e.getValue() instanceof Map<?, ?> fm ? fm.get("feat") : e.getValue();
-					RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(featValue)).orElseThrow(
-							() -> RpgException.invalidArgument(
+					RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(featValue))
+							.orElseThrow(() -> RpgException.invalidArgument(
 									"Unknown feat '" + featValue + "'; see get_character_choices FEAT."));
 					int toLevel = ((Number) payload.get("to_level")).intValue();
 					validateFeatPrerequisites(tx, c, feat, toLevel);
@@ -534,10 +547,10 @@ public final class LevelUpService {
 					// Every choice the feat requires must be settled inside the transaction.
 					if (feat.payload().get("choices") instanceof Map<?, ?> spec) {
 						var missing = new ArrayList<String>();
-						for (String kk : se.hirt.mcp.rpg.character.Origins.pendingOrder(
-								((Map<String, Object>) spec).keySet())) {
-							boolean provided = featChoices.containsKey(kk) || ("spells".equals(
-									kk) && featChoices.containsKey("spell"));
+						for (String kk : se.hirt.mcp.rpg.character.Origins
+								.pendingOrder(((Map<String, Object>) spec).keySet())) {
+							boolean provided = featChoices.containsKey(kk)
+									|| ("spells".equals(kk) && featChoices.containsKey("spell"));
 							if (!provided) {
 								missing.add(kk);
 							}
@@ -549,8 +562,8 @@ public final class LevelUpService {
 					}
 					if (feat.payload().get("asi") instanceof Map<?, ?> asiSpec) {
 						Object inc = featChoices.get("ability_increase");
-						List<String> allowed = ((List<Object>) ((Map<String, Object>) asiSpec).get(
-								"choose_one")).stream().map(Object::toString).toList();
+						List<String> allowed = ((List<Object>) ((Map<String, Object>) asiSpec).get("choose_one"))
+								.stream().map(Object::toString).toList();
 						if (inc == null || !allowed.contains(String.valueOf(inc).toUpperCase())) {
 							throw RpgException.validation(List.of(new Violation("feat.ability_increase", "REQUIRED",
 									feat.name() + " increases one of " + allowed + " by 1; pass ability_increase.")));
@@ -567,8 +580,8 @@ public final class LevelUpService {
 				case "metamagic" -> {
 					Map<String, Object> choice = metamagicChoice(tx, payload, c).orElseThrow(
 							() -> RpgException.validation(List.of(new Violation("metamagic", "NOT_AVAILABLE",
-									"Level " + payload.get("to_level") + " grants no new Metamagic option for " + payload.get(
-											"class_name") + "."))));
+									"Level " + payload.get("to_level") + " grants no new Metamagic option for "
+											+ payload.get("class_name") + "."))));
 					RulesData.Definition cls = rules.require((String) payload.get("class_ref"), "CLASS");
 					int toLevel = ((Number) payload.get("to_level")).intValue();
 					Map<String, Object> spec = se.hirt.mcp.rpg.magic.Metamagic.featureSpec(cls, toLevel).orElseThrow();
@@ -583,8 +596,8 @@ public final class LevelUpService {
 						throw RpgException.validation(List.of(new Violation("class", "NOT_AVAILABLE",
 								c.str("name") + " already has a class; multiclassing is not implemented.")));
 					}
-					RulesData.Definition picked = rules.resolve("CLASS", String.valueOf(e.getValue())).orElseThrow(
-							() -> RpgException.invalidArgument(
+					RulesData.Definition picked = rules.resolve("CLASS", String.valueOf(e.getValue()))
+							.orElseThrow(() -> RpgException.invalidArgument(
 									"Unknown class '" + e.getValue() + "'; see the class_choice options."));
 					payload.put("class_ref", picked.id());
 					payload.put("class_name", picked.name());
@@ -599,24 +612,26 @@ public final class LevelUpService {
 						// A feat that still owes choices (Magic Initiate's spells) may be completed at any level.
 						boolean pendingFeat = e.getKey().equals("feat_choices")
 								&& se.hirt.mcp.rpg.character.Origins.featRows(tx, c).stream().anyMatch(
-								f -> f.map("payload_json").get("pending") instanceof List<?> p && !p.isEmpty());
+										f -> f.map("payload_json").get("pending") instanceof List<?> p && !p.isEmpty());
 						if (!pendingFeat) {
 							throw RpgException.validation(List.of(new Violation(e.getKey(), "NOT_AVAILABLE",
 									"Species and background are settled at character creation, or with a companion's first class level"
 											+ (e.getKey().equals("feat_choices")
-											? "; feat_choices later on only completes a feat with pending choices, and none is pending."
-											: "."))));
+													? "; feat_choices later on only completes a feat with pending choices, and none is pending."
+													: "."))));
 						}
 					}
 					if (e.getKey().equals("species")) {
-						chosen.put("species", rules.resolve("SPECIES", String.valueOf(e.getValue())).orElseThrow(
-								() -> RpgException.invalidArgument(
-										"Unknown species '" + e.getValue() + "'; see the origin_choice options.")).id());
+						chosen.put("species", rules.resolve("SPECIES", String.valueOf(e.getValue()))
+								.orElseThrow(() -> RpgException.invalidArgument(
+										"Unknown species '" + e.getValue() + "'; see the origin_choice options."))
+								.id());
 					} else if (e.getKey().equals("background")) {
-						chosen.put("background", se.hirt.mcp.rpg.character.Origins.resolveBackground(tx, rules,
-										c.lng("campaign_id"), String.valueOf(e.getValue()))
-								.orElseThrow(() -> RpgException.invalidArgument("Unknown background '" + e.getValue()
-										+ "'; see the origin_choice options.")).id());
+						chosen.put("background", se.hirt.mcp.rpg.character.Origins
+								.resolveBackground(tx, rules, c.lng("campaign_id"), String.valueOf(e.getValue()))
+								.orElseThrow(() -> RpgException.invalidArgument(
+										"Unknown background '" + e.getValue() + "'; see the origin_choice options."))
+								.id());
 					} else {
 						chosen.put(e.getKey(), e.getValue());
 					}
@@ -637,8 +652,8 @@ public final class LevelUpService {
 					var held = se.hirt.mcp.rpg.character.Origins.heldSkills(tx, c.id());
 					var picked = new ArrayList<String>();
 					for (Object o : list) {
-						RulesData.Definition skill = rules.resolve("SKILL", String.valueOf(o)).orElseThrow(
-								() -> RpgException.invalidArgument("Unknown skill '" + o + "'."));
+						RulesData.Definition skill = rules.resolve("SKILL", String.valueOf(o))
+								.orElseThrow(() -> RpgException.invalidArgument("Unknown skill '" + o + "'."));
 						if (!options.contains(skill.id())) {
 							throw RpgException.validation(List.of(new Violation("skills", "CLASS_SKILL_LIST",
 									skill.name() + " is not on the " + cls.name() + " skill list: " + options)));
@@ -712,10 +727,10 @@ public final class LevelUpService {
 			v.add(new Violation("hp_gain", "REQUIRED",
 					"The hit-point gain was not computed; abandon this transaction and begin the level-up again."));
 		}
-		if (Boolean.TRUE.equals(payload.get("asi_required")) && chosen.get(
-				"ability_score_improvement") == null && chosen.get("feat") == null) {
-			v.add(new Violation("ability_score_improvement", "REQUIRED", "Level " + payload.get(
-					"to_level") + " requires an Ability Score Improvement — or a feat (choices.feat)."));
+		if (Boolean.TRUE.equals(payload.get("asi_required")) && chosen.get("ability_score_improvement") == null
+				&& chosen.get("feat") == null) {
+			v.add(new Violation("ability_score_improvement", "REQUIRED", "Level " + payload.get("to_level")
+					+ " requires an Ability Score Improvement — or a feat (choices.feat)."));
 		}
 		if (c.lng("xp") < rules.xpThreshold(((Number) payload.get("to_level")).intValue())) {
 			v.add(new Violation("xp", "THRESHOLD",
@@ -740,8 +755,8 @@ public final class LevelUpService {
 		after.put("proficiency_bonus", rules.proficiencyBonus(toLevel));
 		var scoresBefore = new LinkedHashMap<String, Object>();
 		var scoresAfter = new LinkedHashMap<String, Object>();
-		Map<String, Object> asi =
-				chosen.get("ability_score_improvement") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+		Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
+				? (Map<String, Object>) m : Map.of();
 		for (Ability a : Ability.values()) {
 			int score = c.intOr(a.column(), 10);
 			scoresBefore.put(a.name(), score);
@@ -759,8 +774,7 @@ public final class LevelUpService {
 
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> commit(
-			String operationId, String campaignRef, String transactionRef,
-			Long expectedRevision) {
+		String operationId, String campaignRef, String transactionRef, Long expectedRevision) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -789,8 +803,7 @@ public final class LevelUpService {
 				Row withOrigin = tx.get("character", c.id());
 				// Taking a first class replaces the stat block's hit points with the class's own (RULES_ENGINE.md §6).
 				gain = firstLevelHp(rules, withOrigin, classDef);
-				tx.insert("character_class",
-						Map.of("character_id", c.id(), "class_ref", classDef.id(), "level", 1));
+				tx.insert("character_class", Map.of("character_id", c.id(), "class_ref", classDef.id(), "level", 1));
 				grantClassSaves(tx, withOrigin, classDef);
 				for (Object skill : (List<Object>) chosen.getOrDefault("skills", List.of())) {
 					if (tx.count(
@@ -821,8 +834,8 @@ public final class LevelUpService {
 			if (chosen.get("metamagic") instanceof List<?> ids) {
 				long characterId = c.id();
 				se.hirt.mcp.rpg.magic.Metamagic.featureSpec(classDef, toLevel).ifPresent(spec -> {
-					List<se.hirt.mcp.rpg.magic.Metamagic.Option> options =
-							se.hirt.mcp.rpg.magic.Metamagic.options(spec);
+					List<se.hirt.mcp.rpg.magic.Metamagic.Option> options = se.hirt.mcp.rpg.magic.Metamagic
+							.options(spec);
 					List<String> chosenIds = ids.stream().map(String::valueOf).toList();
 					se.hirt.mcp.rpg.magic.Metamagic.addKnown(tx, characterId, chosenIds, options);
 					for (String id : chosenIds) {
@@ -831,22 +844,21 @@ public final class LevelUpService {
 					}
 				});
 			}
-			Map<String, Object> asi =
-					chosen.get("ability_score_improvement") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+			Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
+					? (Map<String, Object>) m : Map.of();
 			for (var e : asi.entrySet()) {
 				Ability a = Ability.parse(e.getKey());
 				cols.put(a.column(), c.intOr(a.column(), 10) + ((Number) e.getValue()).intValue());
 			}
 			// A feat taken instead of the ASI (SRD 5.2.1): granted with its choices; a feat ability increase applies now.
-			Map<String, Object> featRecord =
-					chosen.get("feat") instanceof Map<?, ?> fm ? (Map<String, Object>) fm : null;
+			Map<String, Object> featRecord = chosen.get("feat") instanceof Map<?, ?> fm ? (Map<String, Object>) fm
+					: null;
 			String featName = null;
 			if (featRecord != null) {
 				RulesData.Definition feat = rules.require(String.valueOf(featRecord.get("feat")), "FEAT");
 				featName = feat.name();
-				Map<String, Object> featChoices =
-						featRecord.get("choices") instanceof Map<?, ?> fc ? new LinkedHashMap<>(
-								(Map<String, Object>) fc) : new LinkedHashMap<>();
+				Map<String, Object> featChoices = featRecord.get("choices") instanceof Map<?, ?> fc
+						? new LinkedHashMap<>((Map<String, Object>) fc) : new LinkedHashMap<>();
 				Object increase = featChoices.remove("ability_increase");
 				if (increase != null) {
 					Ability a = Ability.parse(String.valueOf(increase));
@@ -861,14 +873,15 @@ public final class LevelUpService {
 					tx.get("character", c.id()));
 			se.hirt.mcp.rpg.character.Origins.initializeResources(tx, rules, tx.get("character", c.id()));
 			tx.update("pending_transaction", t.id(), Map.of("status", "COMMITTED", "revision", t.lng("revision") + 1));
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("LEVEL_UP",
-					c.str("name") + " reached level " + toLevel + " (" + payload.get(
-							"class_name") + "): +" + gain + " HP" + (asi.isEmpty() ? ""
-							: ", ability improvement " + asi) + (featName == null ? "" : ", feat " + featName) + (
-							lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells) + (
-							metamagicNames.isEmpty() ? "" : ", Metamagic " + metamagicNames) + ".", List.of(c.id()),
-					"MAJOR", "PARTY_KNOWN", "PLAYER", null, c.lng("location_id"), null,
-					Map.of("level", toLevel, "hp_gain", gain, "choices", chosen)));
+			LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("LEVEL_UP",
+							c.str("name") + " reached level " + toLevel + " (" + payload.get("class_name") + "): +"
+									+ gain + " HP" + (asi.isEmpty() ? "" : ", ability improvement " + asi)
+									+ (featName == null ? "" : ", feat " + featName)
+									+ (lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells)
+									+ (metamagicNames.isEmpty() ? "" : ", Metamagic " + metamagicNames) + ".",
+							List.of(c.id()), "MAJOR", "PARTY_KNOWN", "PLAYER", null, c.lng("location_id"), null,
+							Map.of("level", toLevel, "hp_gain", gain, "choices", chosen)));
 			tx.update("campaign", campaignId,
 					Map.of("harness_state", HarnessState.EXPLORATION.name(), "revision", campaign.lng("revision") + 1));
 			Row after = tx.get("character", c.id());
@@ -898,12 +911,13 @@ public final class LevelUpService {
 	// ── companion advancement ──────────────────────────────────────────
 
 	/**
-	 * Advances every companion the campaign's {@code rules.companion_level_up} lets the engine handle, and reports the
-	 * rest. Called from every operation that grants experience, so a companion never quietly sits on enough XP for
-	 * three levels. A companion with no class is only ever flagged: the engine does not invent one.
+	 * Advances every companion the campaign's {@code rules.companion_level_up} lets the engine
+	 * handle, and reports the rest. Called from every operation that grants experience, so a
+	 * companion never quietly sits on enough XP for three levels. A companion with no class is only
+	 * ever flagged: the engine does not invent one.
 	 */
 	public static void companionAdvancement(
-			Tx tx, RulesData rules, RollService roller, Row campaign, Map<String, Object> result) {
+		Tx tx, RulesData rules, RollService roller, Row campaign, Map<String, Object> result) {
 		long campaignId = campaign.id();
 		boolean engine = "ENGINE".equals(PartyXp.companionLevelUp(campaign));
 		var levelled = new ArrayList<Map<String, Object>>();
@@ -949,8 +963,9 @@ public final class LevelUpService {
 			}
 			while (true) {
 				Row live = tx.get("character", c.id());
-				Row row = tx.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1",
-						live.id()).orElseThrow();
+				Row row = tx
+						.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1", live.id())
+						.orElseThrow();
 				int from = row.intOr("level", 1);
 				if (from >= 20 || rules.levelForXp(live.lng("xp")) <= from) {
 					break;
@@ -966,9 +981,12 @@ public final class LevelUpService {
 		}
 	}
 
-	/** One engine-made companion level: hit points by campaign policy, any ASI into the class's primary ability. */
+	/**
+	 * One engine-made companion level: hit points by campaign policy, any ASI into the class's
+	 * primary ability.
+	 */
 	private static Map<String, Object> levelCompanion(
-			Tx tx, RulesData rules, RollService roller, Row campaign, Row c, Row classRow) {
+		Tx tx, RulesData rules, RollService roller, Row campaign, Row c, Row classRow) {
 		long campaignId = campaign.id();
 		RulesData.Definition def = rules.require(classRow.str("class_ref"), "CLASS");
 		int to = classRow.intOr("level", 1) + 1;
@@ -986,8 +1004,8 @@ public final class LevelUpService {
 			gain = Math.max(1, hitDie / 2 + 1 + conMod) + speciesHp;
 		} else {
 			Roll roll = roller.roll("1d" + hitDie);
-			CharacterService.recordRoll(tx, campaignId,
-					"hit points level " + to + " " + Ref.of(Ref.CHARACTER, c.id()), roll);
+			CharacterService.recordRoll(tx, campaignId, "hit points level " + to + " " + Ref.of(Ref.CHARACTER, c.id()),
+					roll);
 			method = "ROLL";
 			gain = Math.max(1, roll.total() + conMod) + speciesHp;
 		}
@@ -1007,11 +1025,12 @@ public final class LevelUpService {
 		se.hirt.mcp.rpg.character.Origins.grantSpeciesSpells(tx, rules, after);
 		se.hirt.mcp.rpg.character.Origins.initializeResources(tx, rules, after);
 		tx.touched(Ref.of(Ref.CHARACTER, c.id()), after.lng("revision"));
-		LedgerService.append(tx, campaignId, new LedgerService.EventSpec("LEVEL_UP",
-				c.str("name") + " reached level " + to + " (" + def.name() + "): +" + gain + " HP"
-						+ (asi.isEmpty() ? "" : ", ability improvement " + asi) + ", levelled by the engine.",
-				List.of(c.id()), "NOTABLE", "PARTY_KNOWN", "GM", null, c.lng("location_id"), null,
-				Map.of("level", to, "hp_gain", gain, "companion", true)));
+		LedgerService.append(tx, campaignId,
+				new LedgerService.EventSpec("LEVEL_UP",
+						c.str("name") + " reached level " + to + " (" + def.name() + "): +" + gain + " HP"
+								+ (asi.isEmpty() ? "" : ", ability improvement " + asi) + ", levelled by the engine.",
+						List.of(c.id()), "NOTABLE", "PARTY_KNOWN", "GM", null, c.lng("location_id"), null,
+						Map.of("level", to, "hp_gain", gain, "companion", true)));
 		var m = new LinkedHashMap<String, Object>();
 		m.put("character", Ref.of(Ref.CHARACTER, c.id()));
 		m.put("name", c.str("name"));
@@ -1028,9 +1047,9 @@ public final class LevelUpService {
 	}
 
 	/**
-	 * What the engine would do at this level, without doing any of it and without rolling: the hit points the
-	 * campaign's policy dictates and the ability improvement it would pick. Offered to the player so that accepting is
-	 * one word and changing it is still open (RULES_ENGINE.md §6).
+	 * What the engine would do at this level, without doing any of it and without rolling: the hit
+	 * points the campaign's policy dictates and the ability improvement it would pick. Offered to
+	 * the player so that accepting is one word and changing it is still open (RULES_ENGINE.md §6).
 	 */
 	static Map<String, Object> proposal(RulesData rules, Row campaign, Row c, RulesData.Definition def, int to) {
 		int hitDie = ((Number) def.payload().get("hit_die")).intValue();
@@ -1061,7 +1080,10 @@ public final class LevelUpService {
 		return m;
 	}
 
-	/** +2 into the class's primary ability, falling back to +1/+1 and then Constitution when scores are capped. */
+	/**
+	 * +2 into the class's primary ability, falling back to +1/+1 and then Constitution when scores
+	 * are capped.
+	 */
 	@SuppressWarnings("unchecked")
 	static Map<String, Object> autoAsi(Row c, RulesData.Definition def) {
 		var order = new ArrayList<String>();
@@ -1089,13 +1111,14 @@ public final class LevelUpService {
 	}
 
 	/**
-	 * Turns a companion recruited as a stat block into a character with an origin: species, background and the origin
-	 * feats they carry, applied through exactly the same {@link se.hirt.mcp.rpg.character.Origins} code the character
-	 * creation draft uses, so a promoted companion is indistinguishable from a player character afterwards.
+	 * Turns a companion recruited as a stat block into a character with an origin: species,
+	 * background and the origin feats they carry, applied through exactly the same
+	 * {@link se.hirt.mcp.rpg.character.Origins} code the character creation draft uses, so a
+	 * promoted companion is indistinguishable from a player character afterwards.
 	 * <p>
-	 * The one deliberate omission is the background's ability-score increase. That belongs to creation; a companion
-	 * being promoted has already been played with the scores they have, and silently adding +3 to them would rewrite
-	 * a character the player already knows.
+	 * The one deliberate omission is the background's ability-score increase. That belongs to
+	 * creation; a companion being promoted has already been played with the scores they have, and
+	 * silently adding +3 to them would rewrite a character the player already knows.
 	 */
 	@SuppressWarnings("unchecked")
 	private static void applyOrigin(Tx tx, RulesData rules, Row character, Map<String, Object> chosen) {
@@ -1104,8 +1127,8 @@ public final class LevelUpService {
 		}
 		Row c = character;
 		var cols = new LinkedHashMap<String, Object>();
-		Map<String, Object> creation =
-				c.isNull("creation_json") ? new LinkedHashMap<>() : new LinkedHashMap<>(c.map("creation_json"));
+		Map<String, Object> creation = c.isNull("creation_json") ? new LinkedHashMap<>()
+				: new LinkedHashMap<>(c.map("creation_json"));
 		RulesData.Definition species = null;
 		if (chosen.get("species") != null) {
 			species = rules.require(String.valueOf(chosen.get("species")), "SPECIES");
@@ -1130,8 +1153,9 @@ public final class LevelUpService {
 					chosen.get("origin_feat"));
 		}
 		if (chosen.get("background_tool") != null) {
-			RulesData.Definition bg = se.hirt.mcp.rpg.character.Origins.resolveBackground(tx, rules,
-							c.lng("campaign_id"), chosen.get("background") != null ? String.valueOf(chosen.get("background"))
+			RulesData.Definition bg = se.hirt.mcp.rpg.character.Origins
+					.resolveBackground(tx, rules, c.lng("campaign_id"),
+							chosen.get("background") != null ? String.valueOf(chosen.get("background"))
 									: c.str("background_ref"))
 					.orElseThrow(() -> RpgException.invalidArgument("Choose a background first."));
 			se.hirt.mcp.rpg.character.Origins.applyBackgroundTool(tx, rules, bg, c, chosen.get("background_tool"));
@@ -1167,7 +1191,10 @@ public final class LevelUpService {
 		return ((Number) ((Map<String, Object>) cls.payload().get("skill_choices")).get("count")).intValue();
 	}
 
-	/** Hit points at a first class level: the full hit die plus CON and species bonuses (SRD 5.2.1 "Hit Points"). */
+	/**
+	 * Hit points at a first class level: the full hit die plus CON and species bonuses (SRD 5.2.1
+	 * "Hit Points").
+	 */
 	static int firstLevelHp(RulesData rules, Row c, RulesData.Definition def) {
 		int hitDie = ((Number) def.payload().get("hit_die")).intValue();
 		return Math.max(1, hitDie + Rules.modifier(c.intOr("con_score", 10)))
@@ -1178,7 +1205,8 @@ public final class LevelUpService {
 	@SuppressWarnings("unchecked")
 	static void grantClassSaves(Tx tx, Row c, RulesData.Definition def) {
 		for (Object save : (List<Object>) def.payload().get("saving_throws")) {
-			if (tx.count("SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SAVE' AND content_ref = ?",
+			if (tx.count(
+					"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SAVE' AND content_ref = ?",
 					c.id(), save.toString()) == 0) {
 				tx.insert("character_trait",
 						Map.of("character_id", c.id(), "kind", "SAVE", "content_ref", save.toString()));
@@ -1201,8 +1229,8 @@ public final class LevelUpService {
 					campaignId) : tx.find("pending_transaction", Ref.id(transactionRef, Ref.TRANSACTION));
 			Row t = open.orElseThrow(() -> RpgException.notFound("An open transaction"));
 			if (t.lng("campaign_id") != campaignId || !"OPEN".equals(t.str("status"))) {
-				throw RpgException.notAllowed(
-						Ref.of(Ref.TRANSACTION, t.id()) + " is not an open transaction of this campaign.");
+				throw RpgException
+						.notAllowed(Ref.of(Ref.TRANSACTION, t.id()) + " is not an open transaction of this campaign.");
 			}
 			tx.update("pending_transaction", t.id(), Map.of("status", "ABANDONED", "revision", t.lng("revision") + 1));
 			HarnessState back = tx.count(

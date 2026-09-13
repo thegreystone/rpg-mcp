@@ -43,8 +43,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * The continuity milestone: no explicit suspend is needed, "since you last played" is derived from the ledger, house
- * rules travel with the campaign, former members say where they are, and a relationship carries a profile.
+ * The continuity milestone: no explicit suspend is needed, "since you last played" is derived from
+ * the ledger, house rules travel with the campaign, former members say where they are, and a
+ * relationship carries a profile.
  */
 class ContinuityTest {
 
@@ -82,10 +83,10 @@ class ContinuityTest {
 						"GM", null, null, null, null);
 			}
 			// Events are stamped with the session they were written in.
-			long stamped = engine.db().read(tx -> tx.count(
-					"SELECT COUNT(*) FROM event WHERE campaign_id = ? AND session_id = ?",
-					Long.parseLong(campaign.substring(campaign.indexOf(':') + 1)),
-					Long.parseLong(session.substring(session.indexOf(':') + 1))));
+			long stamped = engine.db()
+					.read(tx -> tx.count("SELECT COUNT(*) FROM event WHERE campaign_id = ? AND session_id = ?",
+							Long.parseLong(campaign.substring(campaign.indexOf(':') + 1)),
+							Long.parseLong(session.substring(session.indexOf(':') + 1))));
 			assertEquals(6L, stamped);
 
 			// A quick reconnect resumes the same session…
@@ -104,11 +105,14 @@ class ContinuityTest {
 			assertEquals(1, list(recap.get("critical")).size());
 			assertTrue(String.valueOf(list(recap.get("critical")).get(0).get("detail")).contains("ash tree"),
 					"critical events keep their episodic detail");
-			assertTrue(list(recap.get("major")).stream().anyMatch(e -> String.valueOf(e.get("summary")).contains("Treasury Bell")));
-			assertTrue(((List<?>) recap.get("notable")).stream().anyMatch(n -> n.toString().contains("sergeant a map")));
+			assertTrue(list(recap.get("major")).stream()
+					.anyMatch(e -> String.valueOf(e.get("summary")).contains("Treasury Bell")));
+			assertTrue(
+					((List<?>) recap.get("notable")).stream().anyMatch(n -> n.toString().contains("sergeant a map")));
 			assertEquals(3, m(recap.get("minor_by_type")).get("NOTE"));
 			assertNull(next.get("previous_session_summary"), "the pinned session summary is gone; chapters replace it");
-			assertEquals(false, m(m(next.get("chronicle")).get("due")).get("chapter"), "six events are not a chapter's worth");
+			assertEquals(false, m(m(next.get("chronicle")).get("due")).get("chapter"),
+					"six events are not a chapter's worth");
 		} finally {
 			SessionService.SESSION_GAP = gap;
 		}
@@ -120,13 +124,16 @@ class ContinuityTest {
 		try (Engine engine = TestCampaigns.engine(db)) {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
-			Map<String, Object> added = engine.sessions()
-					.updateHouseRules(op(), campaign, List.of("No firearms in this world.", "Monsters are outside the never-kill rule."), null);
+			Map<String, Object> added = engine.sessions().updateHouseRules(op(), campaign,
+					List.of("No firearms in this world.", "Monsters are outside the never-kill rule."), null);
 			assertEquals(2, ((List<?>) added.get("house_rules")).size());
 			assertTrue(String.valueOf(added.get("event")).startsWith("event:"), "audited");
 			engine.sessions().updateHouseRules(op(), campaign, List.of("No firearms in this world."), "ADD");
-			assertEquals(2, ((List<?>) engine.sessions().updateHouseRules(op(), campaign,
-					List.of("Probationers are asked daily."), "REMOVE").get("house_rules")).size(), "no duplicates, removing an unknown rule is harmless");
+			assertEquals(2,
+					((List<?>) engine.sessions()
+							.updateHouseRules(op(), campaign, List.of("Probationers are asked daily."), "REMOVE")
+							.get("house_rules")).size(),
+					"no duplicates, removing an unknown rule is harmless");
 			Map<String, Object> context = engine.sessions().bootstrap(op(), campaign, null);
 			assertEquals(List.of("No firearms in this world.", "Monsters are outside the never-kill rule."),
 					m(context.get("campaign")).get("house_rules"));
@@ -149,21 +156,21 @@ class ContinuityTest {
 					.get("character");
 			engine.party().updateMembership(op(), campaign, vess, "JOIN", null);
 
-			Map<String, Object> first = engine.party()
-					.updateRelationship(op(), campaign, pc, vess, map("affection", 5), "Married.", null, "the wedding",
-							true, null, map("milestones", List.of(map("kind", "WEDDING", "note", "Under the ash tree.")),
-									"terms", List.of("Tell me before I ask."), "preferences",
-									map("likes", List.of("being held first"))), null);
+			Map<String, Object> first = engine.party().updateRelationship(op(), campaign, pc, vess, map("affection", 5),
+					"Married.", null, "the wedding", true, null,
+					map("milestones", List.of(map("kind", "WEDDING", "note", "Under the ash tree.")), "terms",
+							List.of("Tell me before I ask."), "preferences", map("likes", List.of("being held first"))),
+					null);
 			Map<String, Object> profile = m(list(first.get("relationships")).get(0).get("profile"));
 			assertNotNull(m(list(profile.get("milestones")).get(0)).get("game_time"), "milestones are dated");
 			assertEquals("WEDDING", list(profile.get("milestones")).get(0).get("kind"));
 
-			Map<String, Object> second = engine.party()
-					.updateRelationship(op(), campaign, pc, vess, null, null, null, "a promise on the road", false,
-							null, map("milestones", List.of(map("kind", "OATH", "note", "Never a life that can be avoided.")),
-									"terms", List.of("Tell me before I ask.", "Not again till the summer."),
-									"preferences", map("dislikes", List.of("being lied to")), "hard_lines",
-									List.of("No secrets from Maren.")), "MERGE");
+			Map<String, Object> second = engine.party().updateRelationship(op(), campaign, pc, vess, null, null, null,
+					"a promise on the road", false, null,
+					map("milestones", List.of(map("kind", "OATH", "note", "Never a life that can be avoided.")),
+							"terms", List.of("Tell me before I ask.", "Not again till the summer."), "preferences",
+							map("dislikes", List.of("being lied to")), "hard_lines", List.of("No secrets from Maren.")),
+					"MERGE");
 			profile = m(list(second.get("relationships")).get(0).get("profile"));
 			assertEquals(2, list(profile.get("milestones")).size(), "milestones append");
 			assertEquals(2, ((List<?>) profile.get("terms")).size(), "terms append without duplicates");
@@ -182,9 +189,8 @@ class ContinuityTest {
 			assertEquals(2, m(list(context.get("relationships")).get(0).get("profile_available")).get("milestones"));
 
 			// REPLACE starts over.
-			Map<String, Object> replaced = engine.party()
-					.updateRelationship(op(), campaign, pc, vess, null, null, null, "starting over", false, null,
-							map("wants", List.of("a child")), "REPLACE");
+			Map<String, Object> replaced = engine.party().updateRelationship(op(), campaign, pc, vess, null, null, null,
+					"starting over", false, null, map("wants", List.of("a child")), "REPLACE");
 			profile = m(list(replaced.get("relationships")).get(0).get("profile"));
 			assertNull(profile.get("milestones"));
 			assertEquals(List.of("a child"), profile.get("wants"));

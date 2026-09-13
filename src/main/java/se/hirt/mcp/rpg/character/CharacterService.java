@@ -53,8 +53,8 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Character drafts, ability generation, validation, finalization, and character sheets (MCP_PROTOCOL.md §10, §13.1;
- * DOMAIN_MODEL.md §5).
+ * Character drafts, ability generation, validation, finalization, and character sheets
+ * (MCP_PROTOCOL.md §10, §13.1; DOMAIN_MODEL.md §5).
  */
 public final class CharacterService {
 
@@ -84,7 +84,7 @@ public final class CharacterService {
 	// ── create_character_draft ─────────────────────────────────────────
 
 	public Map<String, Object> createDraft(
-			String operationId, String campaignRef, Map<String, Object> initial, boolean playerControlled) {
+		String operationId, String campaignRef, Map<String, Object> initial, boolean playerControlled) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -106,14 +106,13 @@ public final class CharacterService {
 					if (playerControlled) {
 						if (draft.playerCharacterId() != null && tx.find("character", draft.playerCharacterId())
 								.map(r -> !"ARCHIVED".equals(r.str("lifecycle"))).orElse(false)) {
-							throw RpgException.notAllowed(
-									"The setup already has a player character (" + Ref.of(Ref.CHARACTER,
-											draft.playerCharacterId()) + "); set player_controlled=false for companions or change player_character via update_campaign_setup.");
+							throw RpgException.notAllowed("The setup already has a player character ("
+									+ Ref.of(Ref.CHARACTER, draft.playerCharacterId())
+									+ "); set player_controlled=false for companions or change player_character via update_campaign_setup.");
 						}
 						draft.payload().put("player_character", Ref.of(Ref.CHARACTER, id));
-						tx.update("campaign_setup_draft", draftRow.id(),
-								Map.of("payload_json", Json.write(draft.payload()), "revision",
-										draftRow.lng("revision") + 1));
+						tx.update("campaign_setup_draft", draftRow.id(), Map.of("payload_json",
+								Json.write(draft.payload()), "revision", draftRow.lng("revision") + 1));
 					}
 					if (initial != null && !initial.isEmpty()) {
 						applyChanges(tx, draft, tx.get("character", id), initial);
@@ -146,17 +145,16 @@ public final class CharacterService {
 			result.put("scope", s);
 			if (!Set.of("ALL", "ABILITY_GENERATION", "SPECIES", "CLASS", "BACKGROUND", "FEAT", "SKILLS", "ALIGNMENT",
 					"SPELLS", "EQUIPMENT").contains(s)) {
-				throw RpgException.invalidArgument(
-						"Unknown choice scope '" + scope + "'. Supported: ALL, ABILITY_GENERATION, SPECIES, CLASS, BACKGROUND, FEAT, SKILLS, ALIGNMENT, SPELLS, EQUIPMENT.");
+				throw RpgException.invalidArgument("Unknown choice scope '" + scope
+						+ "'. Supported: ALL, ABILITY_GENERATION, SPECIES, CLASS, BACKGROUND, FEAT, SKILLS, ALIGNMENT, SPELLS, EQUIPMENT.");
 			}
 			Row c = characterRef == null || characterRef.isBlank() ? null : character(tx, campaign.id(), characterRef);
 			Optional<RulesData.Definition> cls = c == null ? Optional.empty() : classOf(tx, c);
 			if (s.equals("ALL") || s.equals("ABILITY_GENERATION")) {
 				var gen = new LinkedHashMap<String, Object>();
 				gen.put("campaign_method", draft.abilityGeneration());
-				gen.put("methods",
-						Described.options(se.hirt.mcp.rpg.choice.AbilityGeneration.class).stream().map(Option::toMap)
-								.toList());
+				gen.put("methods", Described.options(se.hirt.mcp.rpg.choice.AbilityGeneration.class).stream()
+						.map(Option::toMap).toList());
 				gen.put("standard_array", Rules.STANDARD_ARRAY);
 				gen.put("point_buy", Map.of("budget", Rules.POINT_BUY_BUDGET, "min", Rules.POINT_BUY_MIN, "max",
 						Rules.POINT_BUY_MAX));
@@ -167,8 +165,7 @@ public final class CharacterService {
 				result.put("species", choices.species().stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("BACKGROUND")) {
-				result.put("backgrounds",
-						choices.backgrounds(tx, campaign.id()).stream().map(Option::toMap).toList());
+				result.put("backgrounds", choices.backgrounds(tx, campaign.id()).stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("FEAT")) {
 				result.put("feats", choices.feats(null).stream().map(Option::toMap).toList());
@@ -200,8 +197,8 @@ public final class CharacterService {
 			}
 			if (s.equals("SPELLS") || (s.equals("ALL") && c != null)) {
 				var spells = new LinkedHashMap<String, Object>();
-				Optional<se.hirt.mcp.rpg.magic.SpellService.Casting> casting =
-						c == null ? Optional.empty() : se.hirt.mcp.rpg.magic.SpellService.castingOf(tx, rules, c);
+				Optional<se.hirt.mcp.rpg.magic.SpellService.Casting> casting = c == null ? Optional.empty()
+						: se.hirt.mcp.rpg.magic.SpellService.castingOf(tx, rules, c);
 				if (casting.isEmpty()) {
 					spells.put("note", c == null ? "Pass a character with a class to list its spells."
 							: c.str("name") + " has no spellcasting.");
@@ -213,8 +210,8 @@ public final class CharacterService {
 				result.put("spells", spells);
 			}
 			if (s.equals("EQUIPMENT") || (s.equals("ALL") && c != null)) {
-				result.put("equipment", cls.map(k -> choices.equipmentDecision(k).toMap()).orElse(Map.of("note",
-						"Pass a character with a class to list its starting equipment options.")));
+				result.put("equipment", cls.map(k -> choices.equipmentDecision(k).toMap()).orElse(
+						Map.of("note", "Pass a character with a class to list its starting equipment options.")));
 			}
 			if (c != null && "DRAFT".equals(c.str("lifecycle"))) {
 				result.put("decisions", Decision.render(choices.decisionsFor(tx, c, draft.abilityGeneration())));
@@ -227,7 +224,7 @@ public final class CharacterService {
 	// ── generate_ability_scores ────────────────────────────────────────
 
 	public Map<String, Object> generateAbilityScores(
-			String operationId, String campaignRef, String characterRef, String method) {
+		String operationId, String campaignRef, String characterRef, String method) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -244,8 +241,8 @@ public final class CharacterService {
 						throw RpgException.invalidArgument("method must be one of " + SetupDraft.ABILITY_METHODS + ".");
 					}
 					if (!m.equals(campaignMethod)) {
-						throw RpgException.policyDenied(
-								"The campaign rules use " + campaignMethod + "; change rules.ability_generation first.");
+						throw RpgException.policyDenied("The campaign rules use " + campaignMethod
+								+ "; change rules.ability_generation first.");
 					}
 					Map<String, Object> creation = c.map("creation_json");
 					var result = new LinkedHashMap<String, Object>();
@@ -268,8 +265,8 @@ public final class CharacterService {
 					}
 					default -> {
 						if (creation.get("available_scores") != null && !draft.allowReroll()) {
-							throw RpgException.conflict(
-									"Ability scores were already rolled for " + characterRef + " and campaign rules do not allow rerolls (rules.allow_reroll).");
+							throw RpgException.conflict("Ability scores were already rolled for " + characterRef
+									+ " and campaign rules do not allow rerolls (rules.allow_reroll).");
 						}
 						var rolls = new ArrayList<Map<String, Object>>();
 						var available = new ArrayList<Integer>();
@@ -319,8 +316,8 @@ public final class CharacterService {
 	// ── update_character_draft ─────────────────────────────────────────
 
 	public Map<String, Object> updateDraft(
-			String operationId, String campaignRef, String characterRef,
-			Long expectedRevision, Map<String, Object> changes) {
+		String operationId, String campaignRef, String characterRef, Long expectedRevision,
+		Map<String, Object> changes) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -344,8 +341,10 @@ public final class CharacterService {
 					result.put("revision", updated.lng("revision"));
 					result.put("sheet", sheet(tx, updated, "PLAY"));
 					result.put("next_steps", nextSteps(tx, updated));
-					result.put("decisions", "DRAFT".equals(updated.str("lifecycle")) ? Decision.render(
-							choices.decisionsFor(tx, updated, draft.abilityGeneration())) : List.of());
+					result.put("decisions",
+							"DRAFT".equals(updated.str("lifecycle"))
+									? Decision.render(choices.decisionsFor(tx, updated, draft.abilityGeneration()))
+									: List.of());
 					result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 					return result;
 				});
@@ -360,12 +359,12 @@ public final class CharacterService {
 			String key = e.getKey();
 			Object value = e.getValue();
 			if (!DRAFT_FIELDS.contains(key)) {
-				throw RpgException.invalidArgument(
-						"Unknown character field '" + key + "'. Known: " + DRAFT_FIELDS + ".");
+				throw RpgException
+						.invalidArgument("Unknown character field '" + key + "'. Known: " + DRAFT_FIELDS + ".");
 			}
 			switch (key) {
 			case "name", "description", "appearance", "personality", "backstory", "presentation" ->
-					cols.put(key, value == null ? null : value.toString().trim());
+				cols.put(key, value == null ? null : value.toString().trim());
 			case "goals" -> cols.put("goals_json",
 					value == null ? null : Json.write(value instanceof List<?> l ? l : List.of(value.toString())));
 			case "alignment" -> {
@@ -382,16 +381,15 @@ public final class CharacterService {
 				cols.put("age", value == null ? null : ((Number) value).intValue());
 			}
 			case "species" -> {
-				RulesData.Definition species = rules.resolve("SPECIES", String.valueOf(value)).orElseThrow(
-						() -> RpgException.invalidArgument(
+				RulesData.Definition species = rules.resolve("SPECIES", String.valueOf(value))
+						.orElseThrow(() -> RpgException.invalidArgument(
 								"Unknown species '" + value + "'; see get_character_choices SPECIES."));
 				cols.put("species_ref", species.id());
 				Origins.onSpeciesSet(tx, rules, species, c, cols);
 			}
 			case "class" -> {
-				RulesData.Definition cls = rules.resolve("CLASS", String.valueOf(value)).orElseThrow(
-						() -> RpgException.invalidArgument(
-								"Unknown class '" + value + "'; see get_character_choices CLASS."));
+				RulesData.Definition cls = rules.resolve("CLASS", String.valueOf(value)).orElseThrow(() -> RpgException
+						.invalidArgument("Unknown class '" + value + "'; see get_character_choices CLASS."));
 				for (Row existing : tx.query("SELECT id FROM character_class WHERE character_id = ?", c.id())) {
 					tx.delete("character_class", existing.id());
 				}
@@ -412,13 +410,14 @@ public final class CharacterService {
 			}
 			case "ability_scores" -> {
 				if (!(value instanceof Map<?, ?> m)) {
-					throw RpgException.invalidArgument(
-							"ability_scores must be an object like {\"STR\": 9, \"DEX\": 14, ...}.");
+					throw RpgException
+							.invalidArgument("ability_scores must be an object like {\"STR\": 9, \"DEX\": 14, ...}.");
 				}
 				var scores = new EnumMap<Ability, Integer>(Ability.class);
 				for (var s : m.entrySet()) {
 					Ability a = Ability.parse(String.valueOf(s.getKey()));
-					if (!(s.getValue() instanceof Number n) || n.intValue() < Rules.MIN_SCORE || n.intValue() > Rules.MAX_SCORE) {
+					if (!(s.getValue() instanceof Number n) || n.intValue() < Rules.MIN_SCORE
+							|| n.intValue() > Rules.MAX_SCORE) {
 						throw RpgException.invalidArgument(a.fullName() + " must be an integer between 1 and 20.");
 					}
 					scores.put(a, n.intValue());
@@ -468,8 +467,8 @@ public final class CharacterService {
 				if (!(value instanceof List<?> list)) {
 					throw RpgException.invalidArgument("skills must be a list of skill names or ids.");
 				}
-				RulesData.Definition cls = classOf(tx, c).orElseThrow(
-						() -> RpgException.invalidArgument("Choose a class before choosing skills."));
+				RulesData.Definition cls = classOf(tx, c)
+						.orElseThrow(() -> RpgException.invalidArgument("Choose a class before choosing skills."));
 				List<String> options = skillOptions(cls);
 				int count = skillChoiceCount(cls);
 				var granted = new java.util.HashSet<String>();
@@ -488,8 +487,9 @@ public final class CharacterService {
 								skill.name() + " is not on the " + cls.name() + " skill list: " + options)));
 					}
 					if (granted.contains(skill.id())) {
-						throw RpgException.validation(List.of(new Violation("skills", "DUPLICATE_PROFICIENCY",
-								skill.name() + " is already granted by the background or species; choose a different skill (SRD 5.2.1: duplicate proficiencies are re-chosen).")));
+						throw RpgException.validation(List.of(new Violation("skills", "DUPLICATE_PROFICIENCY", skill
+								.name()
+								+ " is already granted by the background or species; choose a different skill (SRD 5.2.1: duplicate proficiencies are re-chosen).")));
 					}
 					if (!chosen.contains(skill.id())) {
 						chosen.add(skill.id());
@@ -510,11 +510,11 @@ public final class CharacterService {
 				}
 			}
 			case "cantrips", "spells" -> {
-				se.hirt.mcp.rpg.magic.SpellService.Casting casting = se.hirt.mcp.rpg.magic.SpellService.castingOf(tx,
-						rules, c).orElseThrow(() -> RpgException.validation(List.of(new Violation(key, "NOT_A_CASTER",
-						"Choose a spellcasting class before choosing spells."))));
-				List<Object> list =
-						value instanceof List<?> l ? new ArrayList<Object>(l) : List.of(String.valueOf(value));
+				se.hirt.mcp.rpg.magic.SpellService.Casting casting = se.hirt.mcp.rpg.magic.SpellService
+						.castingOf(tx, rules, c).orElseThrow(() -> RpgException.validation(List.of(new Violation(key,
+								"NOT_A_CASTER", "Choose a spellcasting class before choosing spells."))));
+				List<Object> list = value instanceof List<?> l ? new ArrayList<Object>(l)
+						: List.of(String.valueOf(value));
 				List<Violation> spellViolations = se.hirt.mcp.rpg.magic.SpellService.setSpells(tx, rules, c, casting,
 						key.equals("cantrips") ? list : null, key.equals("spells") ? list : null);
 				if (!spellViolations.isEmpty()) {
@@ -524,16 +524,14 @@ public final class CharacterService {
 			case "starting_equipment" -> {
 				RulesData.Definition cls = classOf(tx, c).orElseThrow(
 						() -> RpgException.invalidArgument("Choose a class before choosing starting equipment."));
-				creation.put("starting_equipment",
-						equipmentChoice(cls.name(), (Map<String, Object>) cls.payload().get("starting_equipment"),
-								value));
+				creation.put("starting_equipment", equipmentChoice(cls.name(),
+						(Map<String, Object>) cls.payload().get("starting_equipment"), value));
 				creationDirty = true;
 			}
 			case "background_equipment" -> {
 				RulesData.Definition bg = requireBackground(tx, c, cols);
-				creation.put("background_equipment",
-						equipmentChoice(bg.name(), (Map<String, Object>) bg.payload().get("starting_equipment"),
-								value));
+				creation.put("background_equipment", equipmentChoice(bg.name(),
+						(Map<String, Object>) bg.payload().get("starting_equipment"), value));
 				creationDirty = true;
 			}
 			default -> throw RpgException.invalidArgument("Unhandled field " + key);
@@ -542,9 +540,8 @@ public final class CharacterService {
 		// Final ability columns = base scores + the background increase (SRD 5.2.1 "Ability Scores" under Backgrounds).
 		if (creation.get("base_scores") instanceof Map<?, ?> baseRaw) {
 			Map<String, Object> base = (Map<String, Object>) baseRaw;
-			Map<String, Object> asi =
-					creation.get("background_ability_scores") instanceof Map<?, ?> a ? (Map<String, Object>) a
-							: Map.of();
+			Map<String, Object> asi = creation.get("background_ability_scores") instanceof Map<?, ?> a
+					? (Map<String, Object>) a : Map.of();
 			for (Ability a : Ability.values()) {
 				if (base.get(a.name()) instanceof Number n) {
 					int bonus = asi.get(a.name()) instanceof Number x ? x.intValue() : 0;
@@ -569,7 +566,9 @@ public final class CharacterService {
 		tx.update("character", c.id(), cols);
 	}
 
-	/** Parses an equipment option answer ("A", or {option, choices}) against the offered options. */
+	/**
+	 * Parses an equipment option answer ("A", or {option, choices}) against the offered options.
+	 */
 	private Map<String, Object> equipmentChoice(String ownerName, Map<String, Object> options, Object value) {
 		String option;
 		Map<String, Object> choices = new LinkedHashMap<>();
@@ -577,8 +576,8 @@ public final class CharacterService {
 			option = String.valueOf(m.get("option")).toUpperCase();
 			if (m.get("choices") instanceof Map<?, ?> cm) {
 				for (var ce : cm.entrySet()) {
-					RulesData.Definition chosen = rules.resolve("ITEM", String.valueOf(ce.getValue())).orElseThrow(
-							() -> RpgException.invalidArgument(
+					RulesData.Definition chosen = rules.resolve("ITEM", String.valueOf(ce.getValue()))
+							.orElseThrow(() -> RpgException.invalidArgument(
 									"Unknown item '" + ce.getValue() + "' for choice " + ce.getKey() + "."));
 					choices.put(String.valueOf(ce.getKey()), chosen.id());
 				}
@@ -588,8 +587,8 @@ public final class CharacterService {
 		}
 		if (options == null || !options.containsKey(option)) {
 			throw RpgException.validation(List.of(new Violation("starting_equipment.option", "UNKNOWN_OPTION",
-					ownerName + " offers starting equipment options " + (options == null ? "[]"
-							: options.keySet()) + "; got '" + option + "'.")));
+					ownerName + " offers starting equipment options " + (options == null ? "[]" : options.keySet())
+							+ "; got '" + option + "'.")));
 		}
 		var se = new LinkedHashMap<String, Object>();
 		se.put("option", option);
@@ -605,9 +604,8 @@ public final class CharacterService {
 
 	private RulesData.Definition requireBackground(Tx tx, Row c, Map<String, Object> cols) {
 		String ref = cols.get("background_ref") instanceof String s ? s : c.str("background_ref");
-		return Optional.ofNullable(ref)
-				.flatMap(r -> r.startsWith("content:") ? Origins.customBackground(tx, c.lng("campaign_id"), r)
-						: rules.find(r))
+		return Optional.ofNullable(ref).flatMap(
+				r -> r.startsWith("content:") ? Origins.customBackground(tx, c.lng("campaign_id"), r) : rules.find(r))
 				.orElseThrow(() -> RpgException.invalidArgument("Choose a background first."));
 	}
 
@@ -668,9 +666,10 @@ public final class CharacterService {
 		if (scores.size() < 6) {
 			v.add(new Violation("ability_scores", "REQUIRED", "All six ability scores must be assigned."));
 		} else {
-			@SuppressWarnings("unchecked") List<Object> rolledRaw = (List<Object>) creation.get("available_scores");
-			List<Integer> rolled =
-					rolledRaw == null ? null : rolledRaw.stream().map(o -> ((Number) o).intValue()).toList();
+			@SuppressWarnings("unchecked")
+			List<Object> rolledRaw = (List<Object>) creation.get("available_scores");
+			List<Integer> rolled = rolledRaw == null ? null
+					: rolledRaw.stream().map(o -> ((Number) o).intValue()).toList();
 			v.addAll(Rules.validateScores(scores, draft.abilityGeneration(),
 					"ROLL_4D6_DROP_LOWEST".equals(draft.abilityGeneration()) ? rolled : null));
 		}
@@ -705,7 +704,7 @@ public final class CharacterService {
 	}
 
 	public Map<String, Object> commitDraft(
-			String operationId, String campaignRef, String characterRef, Long expectedRevision) {
+		String operationId, String campaignRef, String characterRef, Long expectedRevision) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -738,19 +737,23 @@ public final class CharacterService {
 
 	// ── update_character (canonical narrative identity) ────────────────
 
-	/** Narrative/identity fields that may be changed on a committed character (MCP_PROTOCOL.md §10.9). */
+	/**
+	 * Narrative/identity fields that may be changed on a committed character (MCP_PROTOCOL.md
+	 * §10.9).
+	 */
 	private static final Set<String> NARRATIVE_FIELDS = Set.of("name", "description", "appearance", "personality",
 			"backstory", "goals", "age", "presentation", "alignment", "biography", "intimacy");
 
 	/**
-	 * Applies canonical narrative changes to a non-draft character: name, appearance, personality, backstory, goals,
-	 * age and presentation, plus the merged aggregates {@code biography} (timeline, voice, state, marks) and, under
-	 * PEGI_18 only, {@code intimacy} (see {@link Biography}). Mechanical state is never touched here — that belongs to
-	 * rules-governed transactions or an audited override.
+	 * Applies canonical narrative changes to a non-draft character: name, appearance, personality,
+	 * backstory, goals, age and presentation, plus the merged aggregates {@code biography}
+	 * (timeline, voice, state, marks) and, under PEGI_18 only, {@code intimacy} (see
+	 * {@link Biography}). Mechanical state is never touched here — that belongs to rules-governed
+	 * transactions or an audited override.
 	 */
 	public Map<String, Object> updateCharacter(
-			String operationId, String campaignRef, String characterRef,
-			Long expectedRevision, Map<String, Object> changes) {
+		String operationId, String campaignRef, String characterRef, Long expectedRevision,
+		Map<String, Object> changes) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -764,16 +767,17 @@ public final class CharacterService {
 			}
 			Harness.requireRevision(c, characterRef, expectedRevision);
 			if (changes == null || changes.isEmpty()) {
-				throw RpgException.invalidArgument(
-						"changes must contain at least one field. Known: " + NARRATIVE_FIELDS + ".");
+				throw RpgException
+						.invalidArgument("changes must contain at least one field. Known: " + NARRATIVE_FIELDS + ".");
 			}
 			var cols = new LinkedHashMap<String, Object>();
 			for (var e : changes.entrySet()) {
 				String key = e.getKey();
 				Object value = e.getValue();
 				if (!NARRATIVE_FIELDS.contains(key)) {
-					throw RpgException.invalidArgument(
-							"'" + key + "' is not a narrative field. Known: " + NARRATIVE_FIELDS + ". Mechanical state changes go through their own operations or an audited override.");
+					throw RpgException.invalidArgument("'" + key + "' is not a narrative field. Known: "
+							+ NARRATIVE_FIELDS
+							+ ". Mechanical state changes go through their own operations or an audited override.");
 				}
 				switch (key) {
 				case "goals" -> cols.put("goals_json",
@@ -786,12 +790,12 @@ public final class CharacterService {
 				}
 				case "biography" -> {
 					if (value != null && !(value instanceof Map<?, ?>)) {
-						throw RpgException.invalidArgument(
-								"biography must be a map of " + Biography.BIOGRAPHY_KEYS.stream().sorted().toList() + " (or null to clear).");
+						throw RpgException.invalidArgument("biography must be a map of "
+								+ Biography.BIOGRAPHY_KEYS.stream().sorted().toList() + " (or null to clear).");
 					}
-					@SuppressWarnings("unchecked") Map<String, Object> merged = value == null ? Map.of()
-							: Biography.merge(tx, campaignId, Biography.biography(c), (Map<String, Object>) value,
-									Biography.BIOGRAPHY_KEYS, "biography");
+					@SuppressWarnings("unchecked")
+					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId,
+							Biography.biography(c), (Map<String, Object>) value, Biography.BIOGRAPHY_KEYS, "biography");
 					cols.put("biography_json", merged.isEmpty() ? null : Json.write(merged));
 				}
 				case "intimacy" -> {
@@ -800,12 +804,12 @@ public final class CharacterService {
 								"An intimate profile is recorded only under the PEGI_18 content profile.");
 					}
 					if (value != null && !(value instanceof Map<?, ?>)) {
-						throw RpgException.invalidArgument(
-								"intimacy must be a map of " + Biography.INTIMACY_KEYS.stream().sorted().toList() + " (or null to clear).");
+						throw RpgException.invalidArgument("intimacy must be a map of "
+								+ Biography.INTIMACY_KEYS.stream().sorted().toList() + " (or null to clear).");
 					}
-					@SuppressWarnings("unchecked") Map<String, Object> merged = value == null ? Map.of()
-							: Biography.merge(tx, campaignId, Biography.intimacy(c), (Map<String, Object>) value,
-									Biography.INTIMACY_KEYS, "intimacy");
+					@SuppressWarnings("unchecked")
+					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId,
+							Biography.intimacy(c), (Map<String, Object>) value, Biography.INTIMACY_KEYS, "intimacy");
 					cols.put("intimacy_json", merged.isEmpty() ? null : Json.write(merged));
 				}
 				case "alignment" -> {
@@ -833,10 +837,11 @@ public final class CharacterService {
 	}
 
 	/**
-	 * What a party member still lacks before they are a character a player could inherit. A companion recruited from a
-	 * creature definition starts as a stat block; until they are promoted, {@code transfer_player_control} would hand
-	 * the player a sheet with no class, no proficiencies and no origin. Reported so the gap is visible before it
-	 * matters rather than at the moment a player character dies (RULES_ENGINE.md §6).
+	 * What a party member still lacks before they are a character a player could inherit. A
+	 * companion recruited from a creature definition starts as a stat block; until they are
+	 * promoted, {@code transfer_player_control} would hand the player a sheet with no class, no
+	 * proficiencies and no origin. Reported so the gap is visible before it matters rather than at
+	 * the moment a player character dies (RULES_ENGINE.md §6).
 	 */
 	public static List<String> sheetGaps(Tx tx, Row c) {
 		var gaps = new java.util.ArrayList<String>();
@@ -884,8 +889,11 @@ public final class CharacterService {
 		rules.find(c.str("species_ref") == null ? "" : c.str("species_ref")).ifPresent(s -> m.put("species", s.name()));
 		List<Row> classes = tx.query("SELECT * FROM character_class WHERE character_id = ? ORDER BY id", c.id());
 		int level = classes.stream().mapToInt(r -> r.intOr("level", 1)).sum();
-		m.put("classes", classes.stream().map(r -> rules.find(r.str("class_ref")).map(RulesData.Definition::name)
-				.orElse(r.str("class_ref")) + " " + r.lng("level")).toList());
+		m.put("classes",
+				classes.stream().map(
+						r -> rules.find(r.str("class_ref")).map(RulesData.Definition::name).orElse(r.str("class_ref"))
+								+ " " + r.lng("level"))
+						.toList());
 		m.put("level", classes.isEmpty() ? null : level);
 		Map<String, Object> hp = RuntimeService.hpView(tx, c);
 		if (c.isNull("max_hp")) {
@@ -943,8 +951,7 @@ public final class CharacterService {
 				m.put("creature", creature);
 			});
 		}
-		List<Map<String, Object>> classFeatures =
-				se.hirt.mcp.rpg.progression.ClassFeatures.featuresOf(tx, rules, c);
+		List<Map<String, Object>> classFeatures = se.hirt.mcp.rpg.progression.ClassFeatures.featuresOf(tx, rules, c);
 		if (!classFeatures.isEmpty()) {
 			m.put("class_features", classFeatures.stream().map(f -> {
 				var e = new LinkedHashMap<String, Object>();
@@ -953,8 +960,8 @@ public final class CharacterService {
 				e.put("level", f.get("level"));
 				e.put("summary", f.get("summary"));
 				e.put("adjudication", "ENGINE".equals(f.get("enforcement")) ? "engine" : "GM");
-				if (f.get("mechanic") instanceof Map<?, ?> mech && "SNEAK_ATTACK".equals(
-						((Map<String, Object>) mech).get("kind"))) {
+				if (f.get("mechanic") instanceof Map<?, ?> mech
+						&& "SNEAK_ATTACK".equals(((Map<String, Object>) mech).get("kind"))) {
 					se.hirt.mcp.rpg.progression.ClassFeatures.mechanic(tx, rules, c, "SNEAK_ATTACK")
 							.ifPresent(x -> e.put("dice", x.scaledDice()));
 				}
@@ -964,9 +971,10 @@ public final class CharacterService {
 		Origins.appendSheet(tx, rules, c, m, detail);
 		m.put("money", money(c.lng("money_cp")));
 		if ("ACTIVE".equals(c.str("lifecycle"))) {
-			m.put("armor_class", RuntimeService.usesStatBlock(tx, c)
-					? Map.of("value", RuntimeService.armorClass(tx, rules, c), "basis", "stat block")
-					: InventoryService.armorClass(tx, rules, c));
+			m.put("armor_class",
+					RuntimeService.usesStatBlock(tx, c)
+							? Map.of("value", RuntimeService.armorClass(tx, rules, c), "basis", "stat block")
+							: InventoryService.armorClass(tx, rules, c));
 			m.put("carrying", InventoryService.carrying(tx, rules, c));
 			m.put("inventory", InventoryService.entries(tx, rules, c.id()));
 		} else {
@@ -990,8 +998,8 @@ public final class CharacterService {
 			m.put("biography", biography);
 		}
 		if (!c.isNull("intimacy_json") && Biography.intimacyAllowed(tx, c.lng("campaign_id"))) {
-			m.put("intimacy", Map.of("visibility", "GM_ONLY", "content_profile", "PEGI_18", "profile",
-					Biography.intimacy(c)));
+			m.put("intimacy",
+					Map.of("visibility", "GM_ONLY", "content_profile", "PEGI_18", "profile", Biography.intimacy(c)));
 		}
 		m.put("creation", c.map("creation_json"));
 		if (!c.isNull("agenda_json")) {
@@ -1005,7 +1013,10 @@ public final class CharacterService {
 		return Money.render(cp);
 	}
 
-	/** What the draft will receive at commit: the chosen (or default gold-only) starting equipment option. */
+	/**
+	 * What the draft will receive at commit: the chosen (or default gold-only) starting equipment
+	 * option.
+	 */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> startingEquipmentPreview(Tx tx, Row c) {
 		Optional<RulesData.Definition> cls = classOf(tx, c);
@@ -1013,9 +1024,8 @@ public final class CharacterService {
 			return null;
 		}
 		Map<String, Object> options = (Map<String, Object>) cls.get().payload().get("starting_equipment");
-		Map<String, Object> chosen =
-				c.map("creation_json").get("starting_equipment") instanceof Map<?, ?> m ? (Map<String, Object>) m
-						: null;
+		Map<String, Object> chosen = c.map("creation_json").get("starting_equipment") instanceof Map<?, ?> m
+				? (Map<String, Object>) m : null;
 		String key = chosen == null ? InventoryService.goldOnlyOption(options) : String.valueOf(chosen.get("option"));
 		var preview = new LinkedHashMap<String, Object>();
 		preview.put("option", key);
@@ -1047,12 +1057,12 @@ public final class CharacterService {
 			steps.add("name the character");
 		}
 		if (se.hirt.mcp.rpg.magic.SpellService.castingOf(tx, rules, c).isPresent()) {
-			boolean classCantrips = tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_KNOWN'", c.id()).stream()
-					.anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
-			boolean classSpells = tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'", c.id()).stream()
-					.anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
+			boolean classCantrips = tx
+					.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_KNOWN'", c.id())
+					.stream().anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
+			boolean classSpells = tx
+					.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'", c.id())
+					.stream().anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
 			if (!classCantrips || !classSpells) {
 				steps.add("choose cantrips and prepared spells (get_content_definitions kind SPELL)");
 			}

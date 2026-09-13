@@ -46,14 +46,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Fires cash flows whose due point the clock has crossed (MCP_PROTOCOL.md §14.7). Called by every operation that
- * moves the clock — {@code advance_time}, {@code move_party}, {@code perform_rest} — after the clock is updated.
+ * Fires cash flows whose due point the clock has crossed (MCP_PROTOCOL.md §14.7). Called by every
+ * operation that moves the clock — {@code advance_time}, {@code move_party}, {@code perform_rest} —
+ * after the clock is updated.
  * <p>
- * Due flows are processed one due point at a time, earliest first; within one due point fixed amounts go first, then
- * shares of another rule's payout, then shares of a bag's inflows, so a stipend that is "a tenth of the House's
- * takings this week" sees the market money that arrived the same morning. Each firing inserts a {@code cash_flow_run},
- * writes a ledger event dated at the due point (not at the end of the advance) and moves the rule's next due point
- * forward, so the loop always terminates.
+ * Due flows are processed one due point at a time, earliest first; within one due point fixed
+ * amounts go first, then shares of another rule's payout, then shares of a bag's inflows, so a
+ * stipend that is "a tenth of the House's takings this week" sees the market money that arrived the
+ * same morning. Each firing inserts a {@code cash_flow_run}, writes a ledger event dated at the due
+ * point (not at the end of the advance) and moves the rule's next due point forward, so the loop
+ * always terminates.
  */
 public final class Scheduler {
 
@@ -66,7 +68,8 @@ public final class Scheduler {
 		if (toSeq <= fromSeq) {
 			return runs;
 		}
-		if (tx.count("SELECT COUNT(*) FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND next_due_seq <= ?",
+		if (tx.count(
+				"SELECT COUNT(*) FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND next_due_seq <= ?",
 				campaignId, toSeq) == 0) {
 			return runs;
 		}
@@ -74,7 +77,8 @@ public final class Scheduler {
 		int guard = 0;
 		while (true) {
 			List<Row> due = tx.query(
-					"SELECT * FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND next_due_seq <= ? " + "ORDER BY next_due_seq, id",
+					"SELECT * FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND next_due_seq <= ? "
+							+ "ORDER BY next_due_seq, id",
 					campaignId, toSeq);
 			if (due.isEmpty()) {
 				return runs;
@@ -147,9 +151,8 @@ public final class Scheduler {
 		} else if ("EVENT".equals(flow.str("kind"))) {
 			status = "FIRED";
 			payload.put("status", status);
-			eventId = LedgerService.append(tx, campaignId,
-					new LedgerService.EventSpec("WORLD_EVENT", flow.str("description"), null, "NOTABLE", "PARTY_KNOWN",
-							"GM", dueSeq, null, null, payload));
+			eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("WORLD_EVENT",
+					flow.str("description"), null, "NOTABLE", "PARTY_KNOWN", "GM", dueSeq, null, null, payload));
 			consequence.put("description", flow.str("description"));
 		} else {
 			MoneyRef from = MoneyRef.parse(flow.str("from_ref"));
@@ -189,17 +192,18 @@ public final class Scheduler {
 					payload.put("status", status);
 					payload.put("held_cp", have);
 					eventId = AccountService.moneyFlowEvent(tx, campaignId, from, to, amountCp,
-							"Unpaid: " + name + " — " + Money.format(amountCp) + " due from " + fromName + " to " + toName
-									+ ", but " + fromName + " holds only " + Money.format(have) + ".", "NOTABLE", dueSeq,
-							null, payload);
+							"Unpaid: " + name + " — " + Money.format(amountCp) + " due from " + fromName + " to "
+									+ toName + ", but " + fromName + " holds only " + Money.format(have) + ".",
+							"NOTABLE", dueSeq, null, payload);
 				} else {
 					status = "PAID";
 					from.adjust(tx, campaignId, -amountCp);
 					to.adjust(tx, campaignId, amountCp);
 					payload.put("status", status);
-					String summary = name + ": " + Money.format(amountCp) + (from.isWorld() ? " to " + toName
-							: to.isWorld() ? " paid out of " + fromName : " from " + fromName + " to " + toName) + " ("
-							+ date.get("display") + ")";
+					String summary = name + ": " + Money.format(amountCp)
+							+ (from.isWorld() ? " to " + toName
+									: to.isWorld() ? " paid out of " + fromName : " from " + fromName + " to " + toName)
+							+ " (" + date.get("display") + ")";
 					if (capCp != null) {
 						long paidNow = paidBefore + amountCp;
 						payload.put("paid_cp", paidNow);
@@ -209,12 +213,13 @@ public final class Scheduler {
 							note = "cleared: " + Money.format(paidNow) + " of " + Money.format(capCp) + " paid";
 							summary += "; cleared: " + Money.format(paidNow) + " of " + Money.format(capCp) + " paid";
 						} else {
-							summary += "; " + Money.format(capCp - paidNow) + " of " + Money.format(capCp) + " still owed";
+							summary += "; " + Money.format(capCp - paidNow) + " of " + Money.format(capCp)
+									+ " still owed";
 						}
 					}
 					summary += ".";
-					eventId = AccountService.moneyFlowEvent(tx, campaignId, from, to, amountCp,
-							summary, amountCp >= 10 * Money.GP ? "NOTABLE" : "MINOR", dueSeq, null, payload);
+					eventId = AccountService.moneyFlowEvent(tx, campaignId, from, to, amountCp, summary,
+							amountCp >= 10 * Money.GP ? "NOTABLE" : "MINOR", dueSeq, null, payload);
 				}
 			}
 			consequence.put("amount", Money.render(amountCp));
@@ -254,7 +259,10 @@ public final class Scheduler {
 		return consequence;
 	}
 
-	/** The sum of everything a flow has paid so far (PAID runs only; UNPAID and SKIPPED runs owe nothing). */
+	/**
+	 * The sum of everything a flow has paid so far (PAID runs only; UNPAID and SKIPPED runs owe
+	 * nothing).
+	 */
 	static long paidSoFar(Tx tx, long flowId) {
 		return tx.queryOne(
 				"SELECT COALESCE(SUM(amount_cp), 0) AS s FROM cash_flow_run WHERE cash_flow_id = ? AND status = 'PAID'",
@@ -279,7 +287,8 @@ public final class Scheduler {
 	private record Amount(long cp, String basis) {
 	}
 
-	private static Amount amount(Tx tx, long campaignId, Calendar cal, Row flow, long dueSeq, Map<String, Object> date) {
+	private static Amount amount(
+		Tx tx, long campaignId, Calendar cal, Row flow, long dueSeq, Map<String, Object> date) {
 		Map<String, Object> amount = flow.map("amount_json");
 		double multiplier = 1.0;
 		String season = String.valueOf(date.get("season"));
@@ -293,9 +302,10 @@ public final class Scheduler {
 		}
 		double percent = ((Number) amount.get("percent")).doubleValue();
 		if (amount.get("of_rule") instanceof Number n) {
-			Row paid = tx.queryOne(
-					"SELECT * FROM cash_flow_run WHERE cash_flow_id = ? AND due_seq = ? AND status = 'PAID'",
-					n.longValue(), dueSeq).orElse(null);
+			Row paid = tx
+					.queryOne("SELECT * FROM cash_flow_run WHERE cash_flow_id = ? AND due_seq = ? AND status = 'PAID'",
+							n.longValue(), dueSeq)
+					.orElse(null);
 			String ruleName = tx.find(AccountService.CASH_FLOW, n.longValue()).map(r -> r.str("name"))
 					.orElse("cash_flow:" + n);
 			if (paid == null) {
@@ -322,12 +332,18 @@ public final class Scheduler {
 		return p == Math.floor(p) ? String.valueOf((long) p) : String.valueOf(p);
 	}
 
-	/** Coin that arrived in a bag in {@code (fromSeq, toSeq]}: MONEY_FLOW and MONEY_GIVEN to it, loot it acquired. */
+	/**
+	 * Coin that arrived in a bag in {@code (fromSeq, toSeq]}: MONEY_FLOW and MONEY_GIVEN to it,
+	 * loot it acquired.
+	 */
 	static long inflows(Tx tx, long campaignId, MoneyRef ref, long fromSeq, long toSeq) {
 		return inflows(tx, campaignId, ref, fromSeq, toSeq, 0);
 	}
 
-	/** As above, ignoring events written before {@code afterEventId} (the rule's own creation event on its first run). */
+	/**
+	 * As above, ignoring events written before {@code afterEventId} (the rule's own creation event
+	 * on its first run).
+	 */
 	static long inflows(Tx tx, long campaignId, MoneyRef ref, long fromSeq, long toSeq, long afterEventId) {
 		long total = 0;
 		String target = ref.toString();
@@ -342,7 +358,8 @@ public final class Scheduler {
 		}
 		if (ref.kind() == MoneyRef.Kind.CHARACTER) {
 			for (Row e : tx.query(
-					"SELECT e.payload_json FROM event e JOIN event_actor a ON a.event_id = e.id WHERE e.campaign_id = ? AND e.type = 'LOOT_ACQUIRED' " + "AND a.character_id = ? AND e.fictional_seq > ? AND e.fictional_seq <= ?",
+					"SELECT e.payload_json FROM event e JOIN event_actor a ON a.event_id = e.id WHERE e.campaign_id = ? AND e.type = 'LOOT_ACQUIRED' "
+							+ "AND a.character_id = ? AND e.fictional_seq > ? AND e.fictional_seq <= ?",
 					campaignId, ref.id(), fromSeq, toSeq)) {
 				Map<String, Object> p = Json.readMap(e.str("payload_json"));
 				if (p.get("money_cp") instanceof Number n) {

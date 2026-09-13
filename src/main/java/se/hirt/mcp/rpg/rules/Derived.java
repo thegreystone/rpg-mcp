@@ -33,9 +33,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Derived values computed on read from base values + equipment (DOMAIN_MODEL.md §5.5): Armor Class and carrying
- * capacity. Citations: SRD 5.2.1 Equipment "Armor" table (AC formulas) and Rules Glossary "Carrying Capacity" — encoded
- * from the 2024 rules, marked [verify] per RULES_ENGINE.md §1.
+ * Derived values computed on read from base values + equipment (DOMAIN_MODEL.md §5.5): Armor Class
+ * and carrying capacity. Citations: SRD 5.2.1 Equipment "Armor" table (AC formulas) and Rules
+ * Glossary "Carrying Capacity" — encoded from the 2024 rules, marked [verify] per RULES_ENGINE.md
+ * §1.
  */
 public final class Derived {
 
@@ -59,13 +60,13 @@ public final class Derived {
 	}
 
 	/**
-	 * Armor Class from the equipped body armor and shield: unarmored 10 + DEX; light = base + DEX; medium = base +
-	 * min(DEX, 2); heavy = base; shield +2 (SRD 5.2.1 Armor table).
+	 * Armor Class from the equipped body armor and shield: unarmored 10 + DEX; light = base + DEX;
+	 * medium = base + min(DEX, 2); heavy = base; shield +2 (SRD 5.2.1 Armor table).
 	 *
 	 * @param dexScore
-	 * 		the Dexterity score (null → 10)
+	 *            the Dexterity score (null → 10)
 	 * @param equipped
-	 * 		payloads of every equipped item
+	 *            payloads of every equipped item
 	 */
 	public static Map<String, Object> armorClass(Integer dexScore, List<Map<String, Object>> equipped) {
 		return armorClass(dexScore, equipped, null, 0, null);
@@ -73,15 +74,16 @@ public final class Derived {
 
 	/**
 	 * @param unarmoredBase
-	 * 		an effect-granted base AC used instead of 10 + DEX when no body armor is worn (Mage Armor)
+	 *            an effect-granted base AC used instead of 10 + DEX when no body armor is worn
+	 *            (Mage Armor)
 	 * @param bonus
-	 * 		sum of effect AC bonuses (Shield of Faith, Haste, …)
+	 *            sum of effect AC bonuses (Shield of Faith, Haste, …)
 	 * @param floor
-	 * 		an effect-granted minimum AC (Barkskin)
+	 *            an effect-granted minimum AC (Barkskin)
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> armorClass(
-			Integer dexScore, List<Map<String, Object>> equipped, Integer unarmoredBase, int bonus, Integer floor) {
+		Integer dexScore, List<Map<String, Object>> equipped, Integer unarmoredBase, int bonus, Integer floor) {
 		int dexMod = Rules.modifier(dexScore == null ? 10 : dexScore);
 		int ac = 10 + dexMod;
 		String basis = "Unarmored (10 + DEX)";
@@ -108,13 +110,13 @@ public final class Derived {
 			int base = ((Number) armor.get("base_ac")).intValue();
 			String dexRule = String.valueOf(armor.getOrDefault("dex_bonus", "FULL"));
 			int dexPart = switch (dexRule) {
-				case "NONE" -> 0;
-				case "MAX_2" -> Math.min(dexMod, 2);
-				default -> dexMod;
+			case "NONE" -> 0;
+			case "MAX_2" -> Math.min(dexMod, 2);
+			default -> dexMod;
 			};
 			ac = base + dexPart;
-			basis = item.getOrDefault("name", category) + " (" + base + (dexRule.equals("NONE") ? ""
-					: " + DEX" + (dexRule.equals("MAX_2") ? " max 2" : "")) + ")";
+			basis = item.getOrDefault("name", category) + " (" + base
+					+ (dexRule.equals("NONE") ? "" : " + DEX" + (dexRule.equals("MAX_2") ? " max 2" : "")) + ")";
 		}
 		int value = ac + shieldBonus + bonus;
 		if (floor != null && value < floor) {

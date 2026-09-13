@@ -41,14 +41,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JSON helpers. All protocol payloads are plain maps/lists so that no reflection registration is needed in a native
- * image.
+ * JSON helpers. All protocol payloads are plain maps/lists so that no reflection registration is
+ * needed in a native image.
  */
 public final class Json {
 
 	private static final ObjectMapper MAPPER = new ObjectMapper();
-	private static final ObjectMapper CANONICAL = new ObjectMapper().enable(
-			SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+	private static final ObjectMapper CANONICAL = new ObjectMapper()
+			.enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
 	private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {
 	};
 	private static final TypeReference<List<Object>> LIST = new TypeReference<>() {

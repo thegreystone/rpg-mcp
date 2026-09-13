@@ -47,8 +47,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
 /**
- * The Sorcerer's Font of Magic and Metamagic (SRD 5.2.1 "Sorcerer") as data-driven class features (RULES_ENGINE.md
- * §2.2): sorcery points as a tracked pool, options chosen at level-up, and the casting core shaped by them.
+ * The Sorcerer's Font of Magic and Metamagic (SRD 5.2.1 "Sorcerer") as data-driven class features
+ * (RULES_ENGINE.md §2.2): sorcery points as a tracked pool, options chosen at level-up, and the
+ * casting core shaped by them.
  */
 class SorcererTest {
 
@@ -62,28 +63,39 @@ class SorcererTest {
 		return (List<Map<String, Object>>) o;
 	}
 
-	/** A committed campaign with a CHA 15 human sorcerer (standard array) who prepares Burning Hands and Chromatic Orb; returns {campaign, pc}. */
+	/**
+	 * A committed campaign with a CHA 15 human sorcerer (standard array) who prepares Burning Hands
+	 * and Chromatic Orb; returns {campaign, pc}.
+	 */
 	private static String[] sorcerer(Engine engine) {
 		String campaign = (String) engine.campaigns().create(op(), null, null).get("campaign");
 		engine.campaigns().updateSetup(op(), campaign, null,
 				map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules",
 						map("gm_override_policy", "EXPLICIT_AUDITED"), "continuation", "CHECKPOINT", "party",
-						"SURPRISE_ME", "adventure", map("premise", "x", "opening_location", "Tower", "immediate_goal", "y")));
-		String pc = (String) engine.characters().createDraft(op(), campaign,
-				map("name", "Lucien", "species", "Human", "class", "Sorcerer", "ability_scores",
-						map("CHA", 15, "DEX", 14, "CON", 13, "INT", 12, "WIS", 10, "STR", 8), "skills",
-						List.of("Arcana", "Persuasion"), "personality", "x", "background", "Criminal",
-						"background_ability_scores", map("CON", 2, "DEX", 1), "species_skill", "Animal Handling",
-						"origin_feat", map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")),
-						"cantrips", List.of("Fire Bolt", "Light", "Mage Hand", "Prestidigitation"), "spells",
-						List.of("Burning Hands", "Chromatic Orb")), true).get("character");
+						"SURPRISE_ME", "adventure",
+						map("premise", "x", "opening_location", "Tower", "immediate_goal", "y")));
+		String pc = (String) engine.characters()
+				.createDraft(op(), campaign,
+						map("name", "Lucien", "species", "Human", "class", "Sorcerer", "ability_scores",
+								map("CHA", 15, "DEX", 14, "CON", 13, "INT", 12, "WIS", 10, "STR", 8), "skills",
+								List.of("Arcana", "Persuasion"), "personality", "x", "background", "Criminal",
+								"background_ability_scores", map("CON", 2, "DEX", 1), "species_skill",
+								"Animal Handling", "origin_feat",
+								map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")),
+								"cantrips", List.of("Fire Bolt", "Light", "Mage Hand", "Prestidigitation"), "spells",
+								List.of("Burning Hands", "Chromatic Orb")),
+						true)
+				.get("character");
 		engine.characters().commitDraft(op(), campaign, pc, null);
 		engine.campaigns().commitSetup(op(), campaign, null);
 		engine.sessions().bootstrap(op(), campaign, null);
 		return new String[] {campaign, pc};
 	}
 
-	/** Levels the sorcerer to the given level, choosing the Metamagic options at level 2 and CHA at level 4. */
+	/**
+	 * Levels the sorcerer to the given level, choosing the Metamagic options at level 2 and CHA at
+	 * level 4.
+	 */
 	private static void levelTo(Engine engine, String campaign, String pc, int level, List<String> metamagic) {
 		int[] xp = {0, 0, 300, 900, 2700, 6500, 14000, 23000};
 		engine.runtime().awardXp(op(), campaign, List.of(pc), xp[level], "MILESTONE", "test");
@@ -105,7 +117,8 @@ class SorcererTest {
 		try (Engine engine = engine(tempDb("sorc-level"))) {
 			String[] ids = sorcerer(engine);
 			String campaign = ids[0], pc = ids[1];
-			Map<String, Object> before = m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"));
+			Map<String, Object> before = m(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"));
 			assertNull(before.get("sorcery_points"), "no Font of Magic at level 1");
 
 			engine.runtime().awardXp(op(), campaign, List.of(pc), 300, "MILESTONE", "test");
@@ -120,10 +133,12 @@ class SorcererTest {
 			assertEquals(ErrorCode.VALIDATION_FAILED,
 					assertThrows(RpgException.class, () -> engine.levelUps().commit(op(), campaign, t, null)).code());
 			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.levelUps()
-					.update(op(), campaign, t, null, map("metamagic", List.of("Empowered Spell")))).code(), "one is too few");
+					.update(op(), campaign, t, null, map("metamagic", List.of("Empowered Spell")))).code(),
+					"one is too few");
 			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.levelUps()
 					.update(op(), campaign, t, null, map("metamagic", List.of("Empowered", "Loud Spell")))).code());
-			engine.levelUps().update(op(), campaign, t, null, map("metamagic", List.of("Empowered", "Quickened Spell")));
+			engine.levelUps().update(op(), campaign, t, null,
+					map("metamagic", List.of("Empowered", "Quickened Spell")));
 			Map<String, Object> committed = engine.levelUps().commit(op(), campaign, t, null);
 			assertEquals(List.of("Empowered Spell", "Quickened Spell"), committed.get("metamagic"));
 
@@ -135,8 +150,9 @@ class SorcererTest {
 			assertNull(m(sc.get("metamagic")).get("unchosen"));
 			assertTrue(list(sheet.get("class_features")).stream()
 					.anyMatch(f -> "Font of Magic".equals(f.get("name")) && "engine".equals(f.get("adjudication"))));
-			assertTrue(list(sheet.get("resources")).stream()
-					.anyMatch(r -> "innate_sorcery".equals(r.get("ref")) && Integer.valueOf(2).equals(r.get("max"))),
+			assertTrue(
+					list(sheet.get("resources")).stream().anyMatch(
+							r -> "innate_sorcery".equals(r.get("ref")) && Integer.valueOf(2).equals(r.get("max"))),
 					"Innate Sorcery uses are tracked");
 
 			// Level 3 owes nothing more; the next increase is at 10.
@@ -174,17 +190,21 @@ class SorcererTest {
 			assertEquals("cold", list(hit.get("breakdown")).get(0).get("type"));
 
 			// No points left: the same casting is refused before anything is spent.
-			int slotsBefore = (Integer) m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY")
-					.get("spellcasting")).get("slots")).get("1")).get("current");
-			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), campaign, pc, "Chromatic Orb", null, List.of(bandit),
-							map("metamagic", "Quickened Spell"))).code());
-			assertEquals(slotsBefore, m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY")
-					.get("spellcasting")).get("slots")).get("1")).get("current"), "the slot was not spent");
+			int slotsBefore = (Integer) m(
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"))
+							.get("1"))
+					.get("current");
+			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE,
+					assertThrows(RpgException.class, () -> engine.spells().cast(op(), campaign, pc, "Chromatic Orb",
+							null, List.of(bandit), map("metamagic", "Quickened Spell"))).code());
+			assertEquals(slotsBefore,
+					m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"))
+							.get("1")).get("current"),
+					"the slot was not spent");
 			// An option that is not known, and two shaping options at once, are refused.
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), campaign, pc, "Chromatic Orb", null, List.of(bandit),
-							map("metamagic", List.of("Seeking Spell")))).code());
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class, () -> engine.spells().cast(op(), campaign, pc, "Chromatic Orb",
+							null, List.of(bandit), map("metamagic", List.of("Seeking Spell")))).code());
 			// After a Long Rest the points are back; naming an option twice counts once.
 			engine.rest().rest(op(), campaign, "LONG", null, null);
 			dice.queue(15, 4, 4, 4);
@@ -235,13 +255,12 @@ class SorcererTest {
 			assertEquals(0, m(m(careful.get("metamagic")).get("sorcery_points")).get("current"));
 			// Careful needs the protected creatures named.
 			engine.rest().rest(op(), campaign, "LONG", null, null);
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), campaign, pc, "Burning Hands", null, List.of(second),
-							map("metamagic", "Careful Spell"))).code());
+			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.spells().cast(op(),
+					campaign, pc, "Burning Hands", null, List.of(second), map("metamagic", "Careful Spell"))).code());
 			// Heightened is for saving throws only.
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), campaign, pc, "Chromatic Orb", null, List.of(second),
-							map("metamagic", "Heightened Spell"))).code());
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class, () -> engine.spells().cast(op(), campaign, pc, "Chromatic Orb",
+							null, List.of(second), map("metamagic", "Heightened Spell"))).code());
 		}
 	}
 
@@ -258,20 +277,21 @@ class SorcererTest {
 			assertEquals(2, created.get("points_spent"));
 			assertEquals(1, m(created.get("sorcery_points")).get("current"));
 			assertEquals(5, m(created.get("slot")).get("current"), "4 + 1 created");
-			assertEquals(5, m(created.get("slot")).get("max"), "the pool grows with the created slot until the Long Rest");
+			assertEquals(5, m(created.get("slot")).get("max"),
+					"the pool grows with the created slot until the Long Rest");
 			Map<String, Object> converted = engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "CONVERT_SPELL_SLOT", "slot_level", 2, "reason", "test"));
 			assertEquals(2, converted.get("points_gained"));
 			assertEquals(3, m(converted.get("sorcery_points")).get("current"));
 			assertEquals(1, m(converted.get("slot")).get("current"));
 			// Only slot levels the character can cast; only what the points allow.
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.runtime()
-					.applyRuntimeChange(op(), campaign, pc,
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class, () -> engine.runtime().applyRuntimeChange(op(), campaign, pc,
 							map("kind", "CREATE_SPELL_SLOT", "slot_level", 3, "reason", "test"))).code());
 			engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "CREATE_SPELL_SLOT", "slot_level", 2, "reason", "test"));
-			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class, () -> engine.runtime()
-					.applyRuntimeChange(op(), campaign, pc,
+			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE,
+					assertThrows(RpgException.class, () -> engine.runtime().applyRuntimeChange(op(), campaign, pc,
 							map("kind", "CREATE_SPELL_SLOT", "slot_level", 1, "reason", "test"))).code());
 			// A Long Rest refills the points and returns the slots to their maxima: created slots vanish.
 			engine.rest().rest(op(), campaign, "LONG", null, null);
@@ -291,8 +311,8 @@ class SorcererTest {
 			engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "USE_RESOURCE", "resource", "sorcery_points", "amount", 4, "reason", "test"));
 			Map<String, Object> rest = engine.rest().rest(op(), campaign, "SHORT", null, null);
-			Map<String, Object> me = list(rest.get("characters")).stream()
-					.filter(c -> pc.equals(c.get("character"))).findFirst().orElseThrow();
+			Map<String, Object> me = list(rest.get("characters")).stream().filter(c -> pc.equals(c.get("character")))
+					.findFirst().orElseThrow();
 			assertEquals(2, m(me.get("sorcerous_restoration")).get("points_regained"), "half of level 5, rounded down");
 			assertEquals(3, m(m(me.get("sorcerous_restoration")).get("sorcery_points")).get("current"));
 			Map<String, Object> again = engine.rest().rest(op(), campaign, "SHORT", null, null);
@@ -308,15 +328,21 @@ class SorcererTest {
 			String campaign = ids[0], pc = ids[1];
 			levelTo(engine, campaign, pc, 3, List.of("Empowered Spell", "Quickened Spell"));
 			Map<String, Object> set = engine.rest().override(op(), campaign, "SET_METAMAGIC", pc,
-					map("options", List.of("Subtle Spell", "Transmuted Spell")), "levelled before the feature existed", null);
-			assertEquals(List.of("subtle", "transmuted"), set.get("after") instanceof Map<?, ?> a ? a.get("metamagic") : null);
-			List<Map<String, Object>> known = list(m(m(engine.characters().characterSheet(campaign, pc, "PLAY")
-					.get("spellcasting")).get("metamagic")).get("known"));
+					map("options", List.of("Subtle Spell", "Transmuted Spell")), "levelled before the feature existed",
+					null);
+			assertEquals(List.of("subtle", "transmuted"),
+					set.get("after") instanceof Map<?, ?> a ? a.get("metamagic") : null);
+			List<Map<String, Object>> known = list(
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("metamagic"))
+							.get("known"));
 			assertEquals(List.of("Subtle Spell", "Transmuted Spell"), known.stream().map(k -> k.get("name")).toList());
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.rest()
-					.override(op(), campaign, "SET_METAMAGIC", pc,
-							map("options", List.of("Subtle Spell", "Transmuted Spell", "Distant Spell")), "too many",
-							null)).code(), "three options at level 3");
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class,
+							() -> engine.rest().override(op(), campaign, "SET_METAMAGIC", pc,
+									map("options", List.of("Subtle Spell", "Transmuted Spell", "Distant Spell")),
+									"too many", null))
+							.code(),
+					"three options at level 3");
 		}
 	}
 }

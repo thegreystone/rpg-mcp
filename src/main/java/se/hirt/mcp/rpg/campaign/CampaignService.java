@@ -50,8 +50,8 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Campaign lifecycle: discovery, creation, resumable setup, validation, the atomic commit boundary, and termination
- * (MCP_PROTOCOL.md §8, §9, §19.5).
+ * Campaign lifecycle: discovery, creation, resumable setup, validation, the atomic commit boundary,
+ * and termination (MCP_PROTOCOL.md §8, §9, §19.5).
  */
 public final class CampaignService {
 
@@ -141,10 +141,12 @@ public final class CampaignService {
 	}
 
 	static String playerCharacterName(Tx tx, long campaignId) {
-		return tx.queryOne(
-				"SELECT c.name FROM player_control_assignment p JOIN character c ON c.id = p.character_id " + "WHERE p.campaign_id = ? AND p.active = 1",
-				campaignId).map(r -> r.str("name")).orElseGet(
-				() -> tx.queryOne("SELECT payload_json FROM campaign_setup_draft WHERE campaign_id = ?", campaignId)
+		return tx
+				.queryOne("SELECT c.name FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
+						+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId)
+				.map(r -> r.str("name"))
+				.orElseGet(() -> tx
+						.queryOne("SELECT payload_json FROM campaign_setup_draft WHERE campaign_id = ?", campaignId)
 						.map(r -> new SetupDraft(r.map("payload_json")).playerCharacterId())
 						.flatMap(id -> id == null ? Optional.empty() : tx.find("character", id)).map(r -> r.str("name"))
 						.orElse(null));
@@ -153,13 +155,13 @@ public final class CampaignService {
 	static Map<String, Object> pendingTransaction(Tx tx, long campaignId) {
 		return tx.queryOne("SELECT * FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN' ORDER BY id",
 				campaignId).map(r -> {
-			var m = new LinkedHashMap<String, Object>();
-			m.put("ref", Ref.of(Ref.TRANSACTION, r.id()));
-			m.put("kind", r.str("kind"));
-			m.put("revision", r.lng("revision"));
-			m.put("status", r.str("status"));
-			return (Map<String, Object>) m;
-		}).orElse(null);
+					var m = new LinkedHashMap<String, Object>();
+					m.put("ref", Ref.of(Ref.TRANSACTION, r.id()));
+					m.put("kind", r.str("kind"));
+					m.put("revision", r.lng("revision"));
+					m.put("status", r.str("status"));
+					return (Map<String, Object>) m;
+				}).orElse(null);
 	}
 
 	private static Map<String, Object> policySummary(Tx tx, Row campaign) {
@@ -183,8 +185,8 @@ public final class CampaignService {
 		var args = new LinkedHashMap<String, Object>();
 		args.put("title", title);
 		args.put("ruleset", ruleset);
-		Map<String, Object> result = db.mutate(
-				Database.Mutation.of("create_campaign", null, operationId, "PLAYER", args), tx -> {
+		Map<String, Object> result = db
+				.mutate(Database.Mutation.of("create_campaign", null, operationId, "PLAYER", args), tx -> {
 					String[] ns = resolveRuleset(ruleset);
 					var cols = new LinkedHashMap<String, Object>();
 					cols.put("title", title == null || title.isBlank() ? null : title.trim());
@@ -222,9 +224,8 @@ public final class CampaignService {
 				return new String[] {ns, (String) r.get("version")};
 			}
 		}
-		throw RpgException.invalidArgument(
-				"Ruleset '" + requested + "' is not installed. Installed: " + rules.rulesets().stream()
-						.map(r -> r.get("namespace") + ":" + r.get("version")).toList());
+		throw RpgException.invalidArgument("Ruleset '" + requested + "' is not installed. Installed: "
+				+ rules.rulesets().stream().map(r -> r.get("namespace") + ":" + r.get("version")).toList());
 	}
 
 	// ── open_campaign ──────────────────────────────────────────────────
@@ -236,10 +237,10 @@ public final class CampaignService {
 			var m = new LinkedHashMap<String, Object>();
 			m.put("campaign", summary(tx, campaign));
 			String resume = switch (campaign.str("status")) {
-				case "SETUP" -> "RESUME_SETUP";
-				case "READY_TO_PLAY", "ACTIVE", "SUSPENDED" ->
-						state == HarnessState.CHECKPOINT_DECISION ? "RESOLVE_CHECKPOINT_DECISION" : "BOOTSTRAP_SESSION";
-				default -> "CAMPAIGN_ENDED";
+			case "SETUP" -> "RESUME_SETUP";
+			case "READY_TO_PLAY", "ACTIVE", "SUSPENDED" ->
+				state == HarnessState.CHECKPOINT_DECISION ? "RESOLVE_CHECKPOINT_DECISION" : "BOOTSTRAP_SESSION";
+			default -> "CAMPAIGN_ENDED";
 			};
 			m.put("resume", resume);
 			m.put("pending_transaction", pendingTransaction(tx, campaign.id()));
@@ -274,12 +275,12 @@ public final class CampaignService {
 		m.put("characters", tx.query(
 				"SELECT id, name, lifecycle FROM character WHERE campaign_id = ? AND lifecycle <> 'ARCHIVED' ORDER BY id",
 				campaign.id()).stream().map(c -> {
-			var cm = new LinkedHashMap<String, Object>();
-			cm.put("ref", Ref.of(Ref.CHARACTER, c.id()));
-			cm.put("name", c.str("name"));
-			cm.put("lifecycle", c.str("lifecycle"));
-			return cm;
-		}).toList());
+					var cm = new LinkedHashMap<String, Object>();
+					cm.put("ref", Ref.of(Ref.CHARACTER, c.id()));
+					cm.put("name", c.str("name"));
+					cm.put("lifecycle", c.str("lifecycle"));
+					return cm;
+				}).toList());
 		var constraints = new LinkedHashMap<String, Object>();
 		constraints.put("profiles",
 				SetupDraft.PROFILES.stream().filter(p -> !SetupDraft.exceedsCap(p, draft.maxProfile())).toList());
@@ -291,8 +292,8 @@ public final class CampaignService {
 		constraints.put("fantasy_style", SetupDraft.FANTASY_STYLES);
 		constraints.put("surprise_me", "Any creative field may hold the value SURPRISE_ME to delegate it to the GM.");
 		m.put("constraints", constraints);
-		m.put("interview",
-				"Ask decisions[0] only: put its question to the player with every option and description, " + "numbered, plus a custom answer where allow_custom is true; record the answer; read the decisions again.");
+		m.put("interview", "Ask decisions[0] only: put its question to the player with every option and description, "
+				+ "numbered, plus a custom answer where allow_custom is true; record the answer; read the decisions again.");
 		m.put("meta", Harness.meta(campaign, null));
 		return m;
 	}
@@ -303,7 +304,7 @@ public final class CampaignService {
 	}
 
 	public Map<String, Object> updateSetup(
-			String operationId, String campaignRef, Long expectedRevision, Map<String, Object> changes) {
+		String operationId, String campaignRef, Long expectedRevision, Map<String, Object> changes) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -330,7 +331,8 @@ public final class CampaignService {
 			tx.touched(Ref.of(Ref.CAMPAIGN, campaignId), campaign.lng("revision") + 1);
 			Map<String, Object> state = setupStateOf(tx, tx.get("campaign", campaignId));
 			if (!warnings.isEmpty()) {
-				@SuppressWarnings("unchecked") Map<String, Object> meta = (Map<String, Object>) state.get("meta");
+				@SuppressWarnings("unchecked")
+				Map<String, Object> meta = (Map<String, Object>) state.get("meta");
 				meta.put("warnings", warnings);
 			}
 			return state;
@@ -339,8 +341,8 @@ public final class CampaignService {
 
 	@SuppressWarnings("unchecked")
 	private void applyChange(
-			Tx tx, long campaignId, SetupDraft draft, String key, Object value, Map<String, Object> campaignCols,
-			List<String> warnings) {
+		Tx tx, long campaignId, SetupDraft draft, String key, Object value, Map<String, Object> campaignCols,
+		List<String> warnings) {
 		if (!SetupDraft.SECTIONS.contains(key)) {
 			throw RpgException.invalidArgument(
 					"Unknown setup section '" + key + "'. Known sections: " + SetupDraft.SECTIONS + ".");
@@ -355,8 +357,8 @@ public final class CampaignService {
 			Map<String, Object> cp = draft.sectionOrCreate("content_profile");
 			cp.put("player_constraints", new LinkedHashMap<>(Map.of("max_profile", cap)));
 			if (draft.profile() != null && SetupDraft.exceedsCap(draft.profile(), cap)) {
-				throw RpgException.policyDenied(
-						"The selected profile " + draft.profile() + " exceeds the cap " + cap + " derived from the player's age; choose a lower profile.");
+				throw RpgException.policyDenied("The selected profile " + draft.profile() + " exceeds the cap " + cap
+						+ " derived from the player's age; choose a lower profile.");
 			}
 		}
 		case "content_profile" -> {
@@ -367,13 +369,13 @@ public final class CampaignService {
 				profile = value == null ? null : value.toString();
 			}
 			if (profile == null || !SetupDraft.PROFILES.contains(profile.toUpperCase())) {
-				throw RpgException.invalidArgument(
-						"content_profile.profile must be one of " + SetupDraft.PROFILES + ".");
+				throw RpgException
+						.invalidArgument("content_profile.profile must be one of " + SetupDraft.PROFILES + ".");
 			}
 			profile = profile.toUpperCase();
 			if (SetupDraft.exceedsCap(profile, draft.maxProfile())) {
-				throw RpgException.policyDenied(
-						"Profile " + profile + " exceeds the player's cap " + draft.maxProfile() + ".");
+				throw RpgException
+						.policyDenied("Profile " + profile + " exceeds the player's cap " + draft.maxProfile() + ".");
 			}
 			draft.sectionOrCreate("content_profile").put("profile", profile);
 		}
@@ -392,8 +394,7 @@ public final class CampaignService {
 				case "gm_override_policy" -> requireOneOf(v, SetupDraft.OVERRIDE_POLICIES, "rules.gm_override_policy");
 				case "hp_progression" -> requireOneOf(v, SetupDraft.HP_PROGRESSIONS, "rules.hp_progression");
 				case "xp_policy" -> requireOneOf(v, SetupDraft.XP_POLICIES, "rules.xp_policy");
-				case "companion_level_up" ->
-						requireOneOf(v, SetupDraft.COMPANION_LEVEL_UP, "rules.companion_level_up");
+				case "companion_level_up" -> requireOneOf(v, SetupDraft.COMPANION_LEVEL_UP, "rules.companion_level_up");
 				case "starting_wealth" -> {
 					if (!"FIXED".equals(v)) {
 						throw RpgException.capabilityUnavailable(
@@ -410,8 +411,9 @@ public final class CampaignService {
 				rulesSection.put(e.getKey(), e.getValue() instanceof Boolean b ? b
 						: e.getValue() == null ? null : e.getValue().toString().toUpperCase());
 			}
-			if (!before.equals(draft.abilityGeneration()) && tx.count(
-					"SELECT COUNT(*) FROM character WHERE campaign_id = ? AND str_score IS NOT NULL", campaignId) > 0) {
+			if (!before.equals(draft.abilityGeneration())
+					&& tx.count("SELECT COUNT(*) FROM character WHERE campaign_id = ? AND str_score IS NOT NULL",
+							campaignId) > 0) {
 				warnings.add(
 						"The ability generation method changed after scores were assigned; re-validate character drafts.");
 			}
@@ -459,8 +461,8 @@ public final class CampaignService {
 			return m;
 		}
 		if (!(value instanceof Map<?, ?>)) {
-			throw RpgException.invalidArgument(
-					"Setup section '" + key + "' must be an object (or the value SURPRISE_ME).");
+			throw RpgException
+					.invalidArgument("Setup section '" + key + "' must be an object (or the value SURPRISE_ME).");
 		}
 		return new LinkedHashMap<>((Map<String, Object>) value);
 	}
@@ -488,8 +490,8 @@ public final class CampaignService {
 			long campaignId = campaign.id();
 			Row draftRow = draftRow(tx, campaignId);
 			SetupDraft draft = new SetupDraft(draftRow.map("payload_json"));
-			List<Violation> violations =
-					"OPEN".equals(draftRow.str("status")) ? draft.validate(tx, campaignId) : List.of();
+			List<Violation> violations = "OPEN".equals(draftRow.str("status")) ? draft.validate(tx, campaignId)
+					: List.of();
 			var m = new LinkedHashMap<String, Object>();
 			m.put("valid", violations.isEmpty());
 			m.put("violations", violations.stream().map(Violation::toMap).toList());
@@ -503,8 +505,8 @@ public final class CampaignService {
 
 	private static List<String> setupWarnings(SetupDraft draft) {
 		var w = new ArrayList<String>();
-		if (draft.section("adventure") != null && SetupDraft.isBlank(
-				draft.section("adventure").get("background_truth"))) {
+		if (draft.section("adventure") != null
+				&& SetupDraft.isBlank(draft.section("adventure").get("background_truth"))) {
 			w.add("adventure.background_truth is empty; GM-only background truth helps continuity across sessions.");
 		}
 		if ("IRONMAN".equals(draft.continuationPolicy())) {
@@ -531,8 +533,8 @@ public final class CampaignService {
 			Map<String, Object> adventure = draft.section("adventure");
 
 			// Clock
-			long startSeq =
-					adventure.get("start_time") instanceof String s && !s.isBlank() ? GameTime.parse(s) : 8 * 60;
+			long startSeq = adventure.get("start_time") instanceof String s && !s.isBlank() ? GameTime.parse(s)
+					: 8 * 60;
 			var clock = new LinkedHashMap<String, Object>();
 			clock.put("campaign_id", campaignId);
 			clock.put("calendar_json", Json.write(Map.of("type", "SIMPLE_DAY_CLOCK", "ref", GameTime.CALENDAR)));
@@ -545,9 +547,8 @@ public final class CampaignService {
 			var locCols = new LinkedHashMap<String, Object>();
 			locCols.put("campaign_id", campaignId);
 			String kind = loc.get("kind") == null ? "SETTLEMENT" : loc.get("kind").toString().toUpperCase();
-			locCols.put("kind",
-					List.of("REGION", "SETTLEMENT", "DISTRICT", "SITE", "BUILDING", "AREA").contains(kind) ? kind
-							: "SETTLEMENT");
+			locCols.put("kind", List.of("REGION", "SETTLEMENT", "DISTRICT", "SITE", "BUILDING", "AREA").contains(kind)
+					? kind : "SETTLEMENT");
 			locCols.put("name", loc.get("name"));
 			locCols.put("description", loc.get("description"));
 			locCols.put("materialization", "SEMANTIC");
@@ -591,10 +592,13 @@ public final class CampaignService {
 			if (title == null || title.isBlank()) {
 				title = generateTitle(pc.str("name"), adventure);
 			}
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CAMPAIGN_STARTED",
-					pc.str("name") + " begins the campaign \"" + title + "\" at " + loc.get("name") + ".",
-					List.of(pcId), "MAJOR", "PARTY_KNOWN", "GM", null, locationId, null,
-					Map.of("immediate_goal", adventure.get("immediate_goal"))));
+			long eventId = LedgerService
+					.append(tx, campaignId,
+							new LedgerService.EventSpec("CAMPAIGN_STARTED",
+									pc.str("name") + " begins the campaign \"" + title + "\" at " + loc.get("name")
+											+ ".",
+									List.of(pcId), "MAJOR", "PARTY_KNOWN", "GM", null, locationId, null,
+									Map.of("immediate_goal", adventure.get("immediate_goal"))));
 
 			var membership = new LinkedHashMap<String, Object>();
 			membership.put("campaign_id", campaignId);
@@ -700,10 +704,13 @@ public final class CampaignService {
 		return out;
 	}
 
-	/** Semantic map nodes authored during setup: siblings/children of the opening location, connected to it. */
+	/**
+	 * Semantic map nodes authored during setup: siblings/children of the opening location,
+	 * connected to it.
+	 */
 	@SuppressWarnings("unchecked")
 	private static List<Map<String, Object>> initialLocations(
-			Tx tx, long campaignId, long openingId, Map<String, Object> adventure) {
+		Tx tx, long campaignId, long openingId, Map<String, Object> adventure) {
 		var out = new ArrayList<Map<String, Object>>();
 		if (!(adventure.get("locations") instanceof List<?> list)) {
 			return out;
@@ -728,8 +735,8 @@ public final class CampaignService {
 			List<Object> targets = connectTo instanceof List<?> t ? (List<Object>) t
 					: connectTo == null ? List.of("__opening__") : List.of(connectTo);
 			for (Object target : targets) {
-				Long other =
-						"__opening__".equals(target) ? openingId : byName.get(String.valueOf(target).toLowerCase());
+				Long other = "__opening__".equals(target) ? openingId
+						: byName.get(String.valueOf(target).toLowerCase());
 				if (other == null || other == id) {
 					continue;
 				}
@@ -759,7 +766,7 @@ public final class CampaignService {
 	// ── complete_campaign ──────────────────────────────────────────────
 
 	public Map<String, Object> complete(
-			String operationId, String campaignRef, String outcome, String reason, String summary) {
+		String operationId, String campaignRef, String outcome, String reason, String summary) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -785,10 +792,9 @@ public final class CampaignService {
 				tx.update("campaign_setup_draft", draftRow.id(),
 						Map.of("status", "ABANDONED", "revision", draftRow.lng("revision") + 1));
 			} else {
-				tx.queryOne("SELECT * FROM session WHERE campaign_id = ? AND ended_at IS NULL", campaignId).ifPresent(
-						s -> tx.rawUpdate("session", s.id(),
-								Map.of("ended_at", Instant.now().toString(), "end_journal_id", tx.journalId(),
-										"summary", summary == null ? reason : summary)));
+				tx.queryOne("SELECT * FROM session WHERE campaign_id = ? AND ended_at IS NULL", campaignId)
+						.ifPresent(s -> tx.rawUpdate("session", s.id(), Map.of("ended_at", Instant.now().toString(),
+								"end_journal_id", tx.journalId(), "summary", summary == null ? reason : summary)));
 				LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CAMPAIGN_" + status,
 						summary == null || summary.isBlank() ? reason : summary, List.of(), "CRITICAL", "PARTY_KNOWN",
 						"GM", null, campaign.lng("current_location_id"), null, Map.of("reason", reason)));

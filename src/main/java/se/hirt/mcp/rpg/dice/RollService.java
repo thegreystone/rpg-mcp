@@ -33,8 +33,8 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * The roller (RULES_ENGINE.md §4). One interface, two implementations: production randomness and a scripted test
- * roller. Only the die source differs; the arithmetic is shared and deterministic.
+ * The roller (RULES_ENGINE.md §4). One interface, two implementations: production randomness and a
+ * scripted test roller. Only the die source differs; the arithmetic is shared and deterministic.
  */
 public abstract class RollService {
 
@@ -74,11 +74,11 @@ public abstract class RollService {
 	private static List<Integer> selectKept(List<Integer> values, DiceExpression.Term term) {
 		int n = term.keepCount();
 		return switch (term.keep()) {
-			case ALL -> values;
-			case HIGHEST -> values.stream().sorted(Comparator.reverseOrder()).limit(n).toList();
-			case LOWEST -> values.stream().sorted().limit(n).toList();
-			case DROP_LOWEST -> values.stream().sorted(Comparator.reverseOrder()).limit(values.size() - n).toList();
-			case DROP_HIGHEST -> values.stream().sorted().limit(values.size() - n).toList();
+		case ALL -> values;
+		case HIGHEST -> values.stream().sorted(Comparator.reverseOrder()).limit(n).toList();
+		case LOWEST -> values.stream().sorted().limit(n).toList();
+		case DROP_LOWEST -> values.stream().sorted(Comparator.reverseOrder()).limit(values.size() - n).toList();
+		case DROP_HIGHEST -> values.stream().sorted().limit(values.size() - n).toList();
 		};
 	}
 

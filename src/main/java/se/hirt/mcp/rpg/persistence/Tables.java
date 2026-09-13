@@ -34,12 +34,15 @@ import java.util.Set;
 /**
  * Table classification for the change journal (DATABASE.md §4).
  * <p>
- * Every campaign-owned mutable canonical aggregate is rewindable. Immutable audit lineage, the journal itself,
- * checkpoint metadata, sessions (audit history), installed content and schema history are not.
+ * Every campaign-owned mutable canonical aggregate is rewindable. Immutable audit lineage, the
+ * journal itself, checkpoint metadata, sessions (audit history), installed content and schema
+ * history are not.
  */
 public final class Tables {
 
-	/** Rewindable tables, in a dependency-friendly order (parents first). Used by snapshot dumps. */
+	/**
+	 * Rewindable tables, in a dependency-friendly order (parents first). Used by snapshot dumps.
+	 */
 	public static final List<String> REWINDABLE = List.of("campaign", "policy_state", "game_clock",
 			"campaign_setup_draft", "location", "location_connection", "custom_content", "director_seed", "character",
 			"character_class", "character_trait", "player_control_assignment", "event", "event_actor", "event_causal",

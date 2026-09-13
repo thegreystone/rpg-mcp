@@ -49,9 +49,9 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Canonical narrative state and the Narrative Director (DESIGN.md §6, §19; DOMAIN_MODEL.md §11; MCP_PROTOCOL.md §12.1,
- * §12.4, §18). Director output constrains the world, never the player (I-37); diegetic queries only read committed
- * world events (I-38).
+ * Canonical narrative state and the Narrative Director (DESIGN.md §6, §19; DOMAIN_MODEL.md §11;
+ * MCP_PROTOCOL.md §12.1, §12.4, §18). Director output constrains the world, never the player
+ * (I-37); diegetic queries only read committed world events (I-38).
  */
 public final class NarrativeService {
 
@@ -65,7 +65,9 @@ public final class NarrativeService {
 	public static final Set<String> CHANNELS = Set.of("NEWSPAPER", "TOWN_CRIER", "RUMOR", "TAVERN", "REFUGEES",
 			"TRAVELERS", "MERCHANT", "PRICES", "SOLDIERS", "LETTER", "WITNESS", "ENVIRONMENT", "FACTION_BEHAVIOR",
 			"ANY");
-	/** Keys that would let planning state dictate player choices or relationship outcomes (I-37). */
+	/**
+	 * Keys that would let planning state dictate player choices or relationship outcomes (I-37).
+	 */
 	private static final Set<String> FORBIDDEN_KEYS = Set.of("required_player_choice", "player_must", "forced_scene",
 			"predetermined_outcome", "relationship_outcome", "must_accept", "unavoidable");
 
@@ -82,8 +84,8 @@ public final class NarrativeService {
 	// ── upsert_narrative_state ─────────────────────────────────────────
 
 	public Map<String, Object> upsert(
-			String operationId, String campaignRef, String kind, String ref,
-			Map<String, Object> changes, String provenance) {
+		String operationId, String campaignRef, String kind, String ref, Map<String, Object> changes,
+		String provenance) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -100,11 +102,11 @@ public final class NarrativeService {
 	}
 
 	/**
-	 * Applies one typed narrative change; shared by upsert_narrative_state, commit_director_changes and campaign
-	 * commit.
+	 * Applies one typed narrative change; shared by upsert_narrative_state, commit_director_changes
+	 * and campaign commit.
 	 */
 	public static Map<String, Object> applyOne(
-			Tx tx, long campaignId, String kind, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String kind, String ref, Map<String, Object> changes, String provenance) {
 		String k = kind == null ? "" : kind.toUpperCase();
 		if (!KINDS.contains(k)) {
 			throw RpgException.invalidArgument("kind must be one of " + KINDS.stream().sorted().toList() + ".");
@@ -119,14 +121,14 @@ public final class NarrativeService {
 			}
 		}
 		return switch (k) {
-			case "QUEST" -> quest(tx, campaignId, ref, changes, provenance);
-			case "STORY_BEAT" -> beat(tx, campaignId, ref, changes, provenance);
-			case "STORY_SEED" -> seed(tx, campaignId, ref, changes, provenance);
-			case "FACTION_STATE" -> faction(tx, campaignId, ref, changes, provenance);
-			case "WORLD_EVENT" -> worldEvent(tx, campaignId, ref, changes, provenance);
-			case "LOCATION_DETAIL" -> locationDetail(tx, campaignId, ref, changes);
-			case "NPC_AGENDA" -> agenda(tx, campaignId, ref, changes);
-			default -> throw RpgException.invalidArgument("Unhandled kind " + k);
+		case "QUEST" -> quest(tx, campaignId, ref, changes, provenance);
+		case "STORY_BEAT" -> beat(tx, campaignId, ref, changes, provenance);
+		case "STORY_SEED" -> seed(tx, campaignId, ref, changes, provenance);
+		case "FACTION_STATE" -> faction(tx, campaignId, ref, changes, provenance);
+		case "WORLD_EVENT" -> worldEvent(tx, campaignId, ref, changes, provenance);
+		case "LOCATION_DETAIL" -> locationDetail(tx, campaignId, ref, changes);
+		case "NPC_AGENDA" -> agenda(tx, campaignId, ref, changes);
+		default -> throw RpgException.invalidArgument("Unhandled kind " + k);
 		};
 	}
 
@@ -140,7 +142,7 @@ public final class NarrativeService {
 	}
 
 	private static Map<String, Object> mergedPayload(
-			Row existing, Map<String, Object> changes, Set<String> columnKeys) {
+		Row existing, Map<String, Object> changes, Set<String> columnKeys) {
 		Map<String, Object> payload = existing == null || existing.isNull("payload_json") ? new LinkedHashMap<>()
 				: existing.map("payload_json");
 		for (var e : changes.entrySet()) {
@@ -163,8 +165,8 @@ public final class NarrativeService {
 	}
 
 	private static Map<String, Object> common(
-			Tx tx, long campaignId, String provenance, Map<String, Object> changes,
-			String defaultVisibility, Row existing) {
+		Tx tx, long campaignId, String provenance, Map<String, Object> changes, String defaultVisibility,
+		Row existing) {
 		var cols = new LinkedHashMap<String, Object>();
 		if (existing == null) {
 			cols.put("campaign_id", campaignId);
@@ -190,7 +192,7 @@ public final class NarrativeService {
 	// QUEST ------------------------------------------------------------------
 
 	private static Map<String, Object> quest(
-			Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
 		Row existing = existing(tx, campaignId, "quest", ref, "quest");
 		var cols = common(tx, campaignId, provenance, changes, "PLAYER_KNOWN", existing);
 		String status = changes.get("status") == null ? (existing == null ? "OFFERED" : existing.str("status"))
@@ -201,10 +203,10 @@ public final class NarrativeService {
 		if (existing == null && changes.get("title") == null) {
 			throw RpgException.invalidArgument("A new quest needs a title.");
 		}
-		if (existing != null && Set.of("COMPLETED", "FAILED", "ABANDONED")
-				.contains(existing.str("status")) && !status.equals(existing.str("status"))) {
-			throw RpgException.notAllowed(
-					"Quest " + ref + " is " + existing.str("status") + " and cannot change status.");
+		if (existing != null && Set.of("COMPLETED", "FAILED", "ABANDONED").contains(existing.str("status"))
+				&& !status.equals(existing.str("status"))) {
+			throw RpgException
+					.notAllowed("Quest " + ref + " is " + existing.str("status") + " and cannot change status.");
 		}
 		if (changes.get("title") != null) {
 			cols.put("title", changes.get("title").toString());
@@ -262,7 +264,7 @@ public final class NarrativeService {
 	// STORY_BEAT ---------------------------------------------------------------
 
 	private static Map<String, Object> beat(
-			Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
 		Row existing = existing(tx, campaignId, "story_beat", ref, Ref.STORY_BEAT);
 		var cols = common(tx, campaignId, provenance, changes, "GM_ONLY", existing);
 		String state = changes.get("state") == null ? (existing == null ? "PLANNED" : existing.str("state"))
@@ -312,7 +314,7 @@ public final class NarrativeService {
 	// STORY_SEED (Director planning) --------------------------------------------
 
 	private static Map<String, Object> seed(
-			Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
 		Row existing = existing(tx, campaignId, "director_seed", ref, Ref.SEED);
 		var cols = common(tx, campaignId, provenance, changes, "DIRECTOR_ONLY", existing);
 		String seedKind = changes.get("seed_kind") == null ? (existing == null ? "STORY_SEED" : existing.str("kind"))
@@ -326,8 +328,8 @@ public final class NarrativeService {
 			throw RpgException.invalidArgument("Seed state must be one of " + SEED_STATES + ".");
 		}
 		if (existing == null && changes.get("intention") == null && changes.get("title") == null) {
-			throw RpgException.invalidArgument(
-					"A new seed needs an intention (what the Director wants to become possible).");
+			throw RpgException
+					.invalidArgument("A new seed needs an intention (what the Director wants to become possible).");
 		}
 		cols.put("kind", seedKind);
 		cols.put("state", state);
@@ -344,9 +346,8 @@ public final class NarrativeService {
 					CharacterService.character(tx, campaignId, changes.get("materialized_character").toString()).id());
 			cols.put("state", "MATERIALIZED");
 		}
-		cols.put("payload_json", Json.write(mergedPayload(existing, changes,
-				Set.of("seed_kind", "state", "superseded_by", "materialized_character", "visibility",
-						"visibility_targets"))));
+		cols.put("payload_json", Json.write(mergedPayload(existing, changes, Set.of("seed_kind", "state",
+				"superseded_by", "materialized_character", "visibility", "visibility_targets"))));
 		long id = existing == null ? tx.insert("director_seed", cols) : upd(tx, "director_seed", existing.id(), cols);
 		Row s = tx.get("director_seed", id);
 		tx.touched(Ref.of(Ref.SEED, id), s.lng("revision"));
@@ -370,7 +371,7 @@ public final class NarrativeService {
 	// FACTION_STATE ----------------------------------------------------------------
 
 	private static Map<String, Object> faction(
-			Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
 		Row existing = existing(tx, campaignId, "faction", ref, "faction");
 		var cols = common(tx, campaignId, provenance, changes, "GM_ONLY", existing);
 		if (existing == null && changes.get("name") == null) {
@@ -419,7 +420,7 @@ public final class NarrativeService {
 	// WORLD_EVENT -----------------------------------------------------------------
 
 	private static Map<String, Object> worldEvent(
-			Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
 		Row existing = existing(tx, campaignId, "world_event", ref, "world_event");
 		var cols = common(tx, campaignId, provenance, changes, "GM_ONLY", existing);
 		if (existing == null && changes.get("title") == null) {
@@ -458,9 +459,8 @@ public final class NarrativeService {
 			cols.put("game_time", GameTime.render(seq));
 			cols.put("game_seq", seq);
 		}
-		cols.put("payload_json", Json.write(mergedPayload(existing, changes,
-				Set.of("title", "channels", "locations", "affected", "game_time", "visibility",
-						"visibility_targets"))));
+		cols.put("payload_json", Json.write(mergedPayload(existing, changes, Set.of("title", "channels", "locations",
+				"affected", "game_time", "visibility", "visibility_targets"))));
 		long id = existing == null ? tx.insert("world_event", cols) : upd(tx, "world_event", existing.id(), cols);
 		Row w = tx.get("world_event", id);
 		if (existing == null) {
@@ -518,8 +518,9 @@ public final class NarrativeService {
 						match.get().put("visibility", f.get("visibility").toString().toUpperCase());
 					}
 					if (f.get("description") != null && !f.get("description").equals(match.get().get("description"))) {
-						throw RpgException.validation(List.of(new Violation("features", "CONTRADICTION",
-								"Feature '" + name + "' already exists; only its visibility may change without an override (I-41).")));
+						throw RpgException.validation(List.of(new Violation("features", "CONTRADICTION", "Feature '"
+								+ name
+								+ "' already exists; only its visibility may change without an override (I-41).")));
 					}
 				} else {
 					var feature = new LinkedHashMap<String, Object>(f);
@@ -561,15 +562,17 @@ public final class NarrativeService {
 
 	// ── get_diegetic_information ───────────────────────────────────────
 
-	/** Committed world events reachable through a channel at a location, at or before now (I-38). */
+	/**
+	 * Committed world events reachable through a channel at a location, at or before now (I-38).
+	 */
 	public Map<String, Object> diegetic(String campaignRef, String channel, String locationRef, int limit) {
 		return db.read(tx -> {
 			Row campaign = Harness.campaign(tx, campaignRef);
 			long campaignId = campaign.id();
 			String ch = channel == null || channel.isBlank() ? "ANY" : channel.toUpperCase();
 			if (!CHANNELS.contains(ch)) {
-				throw RpgException.invalidArgument(
-						"channel must be one of " + CHANNELS.stream().sorted().toList() + ".");
+				throw RpgException
+						.invalidArgument("channel must be one of " + CHANNELS.stream().sorted().toList() + ".");
 			}
 			Long locationId = locationRef == null || locationRef.isBlank() ? campaign.lng("current_location_id")
 					: WorldService.location(tx, campaignId, locationRef).id();
@@ -589,9 +592,8 @@ public final class NarrativeService {
 					continue;
 				}
 				List<Object> affected = w.isNull("affected_refs_json") ? List.of() : w.list("affected_refs_json");
-				boolean local = affected.stream()
-						.noneMatch(a -> a.toString().startsWith(Ref.LOCATION + ":")) || affected.stream()
-						.anyMatch(a -> here.contains(a.toString()));
+				boolean local = affected.stream().noneMatch(a -> a.toString().startsWith(Ref.LOCATION + ":"))
+						|| affected.stream().anyMatch(a -> here.contains(a.toString()));
 				if (!local) {
 					continue;
 				}
@@ -664,10 +666,11 @@ public final class NarrativeService {
 		ctx.put("party", sessions.partyMembers(tx, campaignId, "SUMMARY"));
 		ctx.put("relationships", pc.map(r -> PartyService.compact(tx, campaignId, r.id(), 20)).orElse(List.of()));
 		ctx.put("npc_agendas", tx.query(
-						"SELECT id, name, agenda_json FROM character WHERE campaign_id = ? AND agenda_json IS NOT NULL AND lifecycle = 'ACTIVE' ORDER BY id",
-						campaignId).stream()
+				"SELECT id, name, agenda_json FROM character WHERE campaign_id = ? AND agenda_json IS NOT NULL AND lifecycle = 'ACTIVE' ORDER BY id",
+				campaignId).stream()
 				.map(c -> Map.of("character", Ref.of(Ref.CHARACTER, c.id()), "name", c.str("name"), "agenda",
-						c.map("agenda_json"))).toList());
+						c.map("agenda_json")))
+				.toList());
 		ctx.put("recent_major_events", tx.query(
 				"SELECT * FROM event WHERE campaign_id = ? AND importance IN ('MAJOR','CRITICAL') ORDER BY id DESC LIMIT 15",
 				campaignId).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
@@ -677,33 +680,36 @@ public final class NarrativeService {
 			String t = e.str("type");
 			String family = t.startsWith("ENCOUNTER") || t.equals("CHARACTER_DIED") ? "combat"
 					: t.contains("RELATIONSHIP") || t.contains("PARTY_MEMBER") || t.contains("MEETING")
-					  ? "relationships" : t.startsWith("QUEST") || t.contains("STORY_BEAT") ? "quests_and_story"
-							: t.contains("MOVED") || t.contains("LOCATION") ? "travel_and_exploration"
-									: t.contains("PURCHASED") || t.contains("SOLD") || t.contains("LOOT")
-									  ? "commerce_and_loot" : "other";
+							? "relationships"
+							: t.startsWith("QUEST") || t.contains("STORY_BEAT") ? "quests_and_story"
+									: t.contains("MOVED") || t.contains("LOCATION") ? "travel_and_exploration"
+											: t.contains("PURCHASED") || t.contains("SOLD") || t.contains("LOOT")
+													? "commerce_and_loot" : "other";
 			pacing.merge(family, 1, Integer::sum);
 		}
 		ctx.put("pacing_last_30_events", pacing);
 		Optional<Row> lastReview = tx.queryOne(
 				"SELECT * FROM journal_entry WHERE campaign_id = ? AND operation = 'commit_director_changes' ORDER BY id DESC LIMIT 1",
 				campaignId);
-		ctx.put("last_director_review", lastReview.map(
-				r -> Map.of("journal_id", r.id(), "game_seq", r.lng("game_seq") == null ? 0 : r.lng("game_seq"),
-						"recorded_at", r.str("recorded_at"))).orElse(null));
-		ctx.put("guidance",
-				List.of("Create seeds, pressures and world facts — never scenes the player must play or outcomes the player must feel.",
-						"A review may legitimately change nothing.",
-						"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally."));
+		ctx.put("last_director_review",
+				lastReview
+						.map(r -> Map.of("journal_id", r.id(), "game_seq",
+								r.lng("game_seq") == null ? 0 : r.lng("game_seq"), "recorded_at", r.str("recorded_at")))
+						.orElse(null));
+		ctx.put("guidance", List.of(
+				"Create seeds, pressures and world facts — never scenes the player must play or outcomes the player must feel.",
+				"A review may legitimately change nothing.",
+				"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally."));
 		return ctx;
 	}
 
 	/**
-	 * Validates and atomically commits a set of typed Director proposals; records that a review occurred even if
-	 * empty.
+	 * Validates and atomically commits a set of typed Director proposals; records that a review
+	 * occurred even if empty.
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> commitDirectorChanges(
-			String operationId, String campaignRef, List<Map<String, Object>> changes, String reviewNote) {
+		String operationId, String campaignRef, List<Map<String, Object>> changes, String reviewNote) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -720,9 +726,9 @@ public final class NarrativeService {
 							throw RpgException.invalidArgument("changes[" + index + "].kind is required.");
 						}
 						kind = switch (kind) {
-							case "PRESSURE", "PACING_INTENT", "COMPANION_INTRO", "SEED" -> "STORY_SEED";
-							case "FACTION" -> "FACTION_STATE";
-							default -> kind;
+						case "PRESSURE", "PACING_INTENT", "COMPANION_INTRO", "SEED" -> "STORY_SEED";
+						case "FACTION" -> "FACTION_STATE";
+						default -> kind;
 						};
 						var body = new LinkedHashMap<String, Object>(
 								change.get("changes") instanceof Map<?, ?> m ? (Map<String, Object>) m : change);
@@ -736,11 +742,12 @@ public final class NarrativeService {
 								change.get("ref") == null ? null : change.get("ref").toString(), body, "DIRECTOR"));
 						index++;
 					}
-					LedgerService.append(tx, campaignId, new LedgerService.EventSpec("DIRECTOR_REVIEW",
-							"Director review: " + applied.size() + " change(s)" + (
-									reviewNote == null || reviewNote.isBlank() ? "." : " — " + reviewNote), List.of(),
-							"MINOR", "DIRECTOR_ONLY", "DIRECTOR", null, campaign.lng("current_location_id"), null,
-							Map.of("changes", applied.size())));
+					LedgerService.append(tx, campaignId,
+							new LedgerService.EventSpec("DIRECTOR_REVIEW",
+									"Director review: " + applied.size() + " change(s)"
+											+ (reviewNote == null || reviewNote.isBlank() ? "." : " — " + reviewNote),
+									List.of(), "MINOR", "DIRECTOR_ONLY", "DIRECTOR", null,
+									campaign.lng("current_location_id"), null, Map.of("changes", applied.size())));
 					var result = new LinkedHashMap<String, Object>();
 					result.put("applied", applied);
 					result.put("review_recorded", true);
@@ -752,7 +759,7 @@ public final class NarrativeService {
 	// ── get_context ────────────────────────────────────────────────────
 
 	public Map<String, Object> context(
-			String campaignRef, String scope, String ref, String secondRef, String focus, Integer budget) {
+		String campaignRef, String scope, String ref, String secondRef, String focus, Integer budget) {
 		return db.read(tx -> {
 			Row campaign = Harness.campaign(tx, campaignRef);
 			long campaignId = campaign.id();
@@ -779,7 +786,8 @@ public final class NarrativeService {
 			case "INTIMACY" -> ctx = intimacy(tx, campaign,
 					CharacterService.character(tx, campaignId, required(ref, "ref (character)")),
 					secondRef == null || secondRef.isBlank() ? null
-							: CharacterService.character(tx, campaignId, secondRef), b);
+							: CharacterService.character(tx, campaignId, secondRef),
+					b);
 			case "RELATIONSHIP" -> {
 				Row a = CharacterService.character(tx, campaignId, required(ref, "ref (character)"));
 				Row other = CharacterService.character(tx, campaignId, required(secondRef, "second_ref (character)"));
@@ -788,25 +796,27 @@ public final class NarrativeService {
 				ctx.put("b", Map.of("ref", Ref.of(Ref.CHARACTER, other.id()), "name", other.str("name")));
 				ctx.put("relationship", db == null ? null : relationshipPair(tx, campaignId, a, other));
 				ctx.put("shared_events", tx.query(
-								"SELECT DISTINCT e.* FROM event e JOIN event_actor x ON x.event_id = e.id AND x.character_id = ? " + "JOIN event_actor y ON y.event_id = e.id AND y.character_id = ? WHERE e.campaign_id = ? ORDER BY e.fictional_seq DESC LIMIT 15",
-								a.id(), other.id(), campaignId).stream()
+						"SELECT DISTINCT e.* FROM event e JOIN event_actor x ON x.event_id = e.id AND x.character_id = ? "
+								+ "JOIN event_actor y ON y.event_id = e.id AND y.character_id = ? WHERE e.campaign_id = ? ORDER BY e.fictional_seq DESC LIMIT 15",
+						a.id(), other.id(), campaignId).stream()
 						.map(e -> LedgerService.eventSummary(tx, e, focus != null)).toList());
 			}
 			case "LOCATION" -> {
-				Row l = ref == null || ref.isBlank() ? tx.get("location",
-						Optional.ofNullable(campaign.lng("current_location_id"))
-								.orElseThrow(() -> RpgException.notFound("A current location")))
+				Row l = ref == null || ref.isBlank()
+						? tx.get("location",
+								Optional.ofNullable(campaign.lng("current_location_id"))
+										.orElseThrow(() -> RpgException.notFound("A current location")))
 						: WorldService.location(tx, campaignId, ref);
 				ctx = new LinkedHashMap<>(WorldService.detail(tx, l));
 				var here = new java.util.HashSet<String>();
 				for (Long id : WorldService.lineage(tx, l.id())) {
 					here.add(Ref.of(Ref.LOCATION, id));
 				}
-				ctx.put("world_events_here",
-						tx.query("SELECT * FROM world_event WHERE campaign_id = ? ORDER BY id DESC LIMIT 20",
-										campaignId).stream().map(NarrativeService::worldEventView)
-								.filter(w -> ((List<?>) w.get("affected")).stream()
-										.anyMatch(a -> here.contains(a.toString()))).toList());
+				ctx.put("world_events_here", tx
+						.query("SELECT * FROM world_event WHERE campaign_id = ? ORDER BY id DESC LIMIT 20", campaignId)
+						.stream().map(NarrativeService::worldEventView)
+						.filter(w -> ((List<?>) w.get("affected")).stream().anyMatch(a -> here.contains(a.toString())))
+						.toList());
 				ctx.put("events_here", tx.query(
 						"SELECT * FROM event WHERE campaign_id = ? AND location_id = ? ORDER BY id DESC LIMIT 10",
 						campaignId, l.id()).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
@@ -842,18 +852,22 @@ public final class NarrativeService {
 		});
 	}
 
-	/** Ledger event types that record what happened between people in a bed or on the way to one. */
+	/**
+	 * Ledger event types that record what happened between people in a bed or on the way to one.
+	 */
 	private static final Set<String> INTIMATE_EVENT_TYPES = Set.of("RELATIONSHIP_MILESTONE", "INTIMACY", "ROMANCE",
 			"FIRST_KISS", "FIRST_NIGHT", "PROPOSAL", "WEDDING", "WEDDING_NIGHT");
 
 	/**
-	 * The INTIMACY scope (MCP_PROTOCOL.md §11.2): everything needed to play one character believably in an intimate
-	 * scene, gathered in one call. The focal character's biography and (PEGI_18) intimate profile; every partner
-	 * (the second character, or everyone with mapped preferences, attraction of 3 or more, an open want naming them,
-	 * or a household term naming them) with both directions of the pairwise profile, their own profile, where they
-	 * are and what state they are in; the household terms that bind them; the intimate ledger events, newest first,
-	 * with their detail; and the content-profile guidance. Below PEGI_18 the romance layer only is returned:
-	 * milestones, terms, wants and hard lines, never preferences or the intimate profile.
+	 * The INTIMACY scope (MCP_PROTOCOL.md §11.2): everything needed to play one character
+	 * believably in an intimate scene, gathered in one call. The focal character's biography and
+	 * (PEGI_18) intimate profile; every partner (the second character, or everyone with mapped
+	 * preferences, attraction of 3 or more, an open want naming them, or a household term naming
+	 * them) with both directions of the pairwise profile, their own profile, where they are and
+	 * what state they are in; the household terms that bind them; the intimate ledger events,
+	 * newest first, with their detail; and the content-profile guidance. Below PEGI_18 the romance
+	 * layer only is returned: milestones, terms, wants and hard lines, never preferences or the
+	 * intimate profile.
 	 */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> intimacy(Tx tx, Row campaign, Row focal, Row second, int budget) {
@@ -927,10 +941,13 @@ public final class NarrativeService {
 		var events = new ArrayList<Map<String, Object>>();
 		int chars = 0;
 		int cap = Math.max(3_000, budget * 3 / 2);
-		String types = INTIMATE_EVENT_TYPES.stream().map(t -> "'" + t + "'").collect(java.util.stream.Collectors.joining(","));
+		String types = INTIMATE_EVENT_TYPES.stream().map(t -> "'" + t + "'")
+				.collect(java.util.stream.Collectors.joining(","));
 		String sql = second == null
-				? "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? AND e.type IN (" + types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25"
-				: "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? JOIN event_actor b ON b.event_id = e.id AND b.character_id = ? WHERE e.campaign_id = ? AND e.type IN (" + types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25";
+				? "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? AND e.type IN ("
+						+ types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25"
+				: "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? JOIN event_actor b ON b.event_id = e.id AND b.character_id = ? WHERE e.campaign_id = ? AND e.type IN ("
+						+ types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25";
 		List<Row> rows = second == null ? tx.query(sql, focal.id(), campaignId)
 				: tx.query(sql, focal.id(), second.id(), campaignId);
 		for (Row e : rows) {
@@ -975,7 +992,10 @@ public final class NarrativeService {
 		}
 	}
 
-	/** One person for the intimate context: identity, body, voice, state, whereabouts, and (PEGI_18) their own profile. */
+	/**
+	 * One person for the intimate context: identity, body, voice, state, whereabouts, and (PEGI_18)
+	 * their own profile.
+	 */
 	private static Map<String, Object> person(Tx tx, Row c, Long partyLocation, boolean explicit, boolean focal) {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("ref", Ref.of(Ref.CHARACTER, c.id()));
@@ -999,8 +1019,8 @@ public final class NarrativeService {
 		m.put("hp", se.hirt.mcp.rpg.character.RuntimeService.hpView(tx, c));
 		m.put("conditions", se.hirt.mcp.rpg.character.RuntimeService.conditions(tx, c.id()));
 		if (!c.isNull("location_id")) {
-			tx.find("location", c.lng("location_id")).ifPresent(l -> m.put("location",
-					Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
+			tx.find("location", c.lng("location_id"))
+					.ifPresent(l -> m.put("location", Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
 			m.put("with_party", partyLocation == null || c.lng("location_id") == partyLocation);
 		}
 		if (explicit) {
@@ -1020,8 +1040,8 @@ public final class NarrativeService {
 	/** One direction of a pair for the intimate context; preferences only under PEGI_18. */
 	private static Map<String, Object> direction(Tx tx, long campaignId, long from, long to, boolean explicit) {
 		return tx.queryOne(
-						"SELECT * FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
-						campaignId, from, to).map(r -> {
+				"SELECT * FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
+				campaignId, from, to).map(r -> {
 					var m = new LinkedHashMap<String, Object>();
 					m.put("summary", r.str("summary"));
 					m.put("dimensions", r.map("dimensions_json"));
@@ -1039,15 +1059,17 @@ public final class NarrativeService {
 	private static Map<String, Object> relationshipPair(Tx tx, long campaignId, Row a, Row b) {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("a_to_b", tx.queryOne(
-						"SELECT summary, dimensions_json FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
-						campaignId, a.id(), b.id())
+				"SELECT summary, dimensions_json FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
+				campaignId, a.id(), b.id())
 				.map(r -> Map.<String, Object> of("summary", r.str("summary") == null ? "" : r.str("summary"),
-						"dimensions", PartyService.rendered(r.map("dimensions_json")))).orElse(null));
+						"dimensions", PartyService.rendered(r.map("dimensions_json"))))
+				.orElse(null));
 		m.put("b_to_a", tx.queryOne(
-						"SELECT summary, dimensions_json FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
-						campaignId, b.id(), a.id())
+				"SELECT summary, dimensions_json FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
+				campaignId, b.id(), a.id())
 				.map(r -> Map.<String, Object> of("summary", r.str("summary") == null ? "" : r.str("summary"),
-						"dimensions", PartyService.rendered(r.map("dimensions_json")))).orElse(null));
+						"dimensions", PartyService.rendered(r.map("dimensions_json"))))
+				.orElse(null));
 		return m;
 	}
 

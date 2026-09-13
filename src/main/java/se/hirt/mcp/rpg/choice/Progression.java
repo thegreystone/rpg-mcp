@@ -33,10 +33,8 @@ package se.hirt.mcp.rpg.choice;
  */
 public enum Progression implements Described {
 
-	XP("Experience points",
-			"Characters earn experience from encounters and quests and level up when they reach the threshold.", true),
-	MILESTONE("Milestone",
-			"Characters level up at story milestones decided by the GM; no experience points are tracked.");
+	XP("Experience points", "Characters earn experience from encounters and quests and level up when they reach the threshold.", true),
+	MILESTONE("Milestone", "Characters level up at story milestones decided by the GM; no experience points are tracked.");
 
 	private final String label;
 	private final String description;

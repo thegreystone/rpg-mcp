@@ -36,13 +36,16 @@ import java.util.Map;
 
 /**
  * A money bag reference (MCP_PROTOCOL.md §14.6): {@code account:n} (an estate or faction treasury),
- * {@code character:n} (a character's purse, {@code character.money_cp}) or {@code WORLD} (the bottomless outside
- * world: a lease paid out to a distant lord, stallage paid in by nameless traders). Parsing is case-insensitive
- * ({@code ACCOUNT:3} works); the canonical rendering is lower-case for typed refs and {@code WORLD}.
+ * {@code character:n} (a character's purse, {@code character.money_cp}) or {@code WORLD} (the
+ * bottomless outside world: a lease paid out to a distant lord, stallage paid in by nameless
+ * traders). Parsing is case-insensitive ({@code ACCOUNT:3} works); the canonical rendering is
+ * lower-case for typed refs and {@code WORLD}.
  */
 public record MoneyRef(Kind kind, Long id) {
 
-	public enum Kind {ACCOUNT, CHARACTER, WORLD}
+	public enum Kind {
+		ACCOUNT, CHARACTER, WORLD
+	}
 
 	public static final MoneyRef WORLD = new MoneyRef(Kind.WORLD, null);
 
@@ -68,16 +71,18 @@ public record MoneyRef(Kind kind, Long id) {
 				}
 			}
 		}
-		throw RpgException.invalidArgument(
-				"Money references look like 'account:3', 'character:4' or 'WORLD'; got '" + s + "'.");
+		throw RpgException
+				.invalidArgument("Money references look like 'account:3', 'character:4' or 'WORLD'; got '" + s + "'.");
 	}
 
 	/** Parses a reference, or resolves an account by name within the campaign. */
 	public static MoneyRef resolve(Tx tx, long campaignId, Object value) {
 		if (value != null && !value.toString().equalsIgnoreCase("WORLD") && value.toString().indexOf(':') < 0) {
-			Row account = tx.queryOne("SELECT * FROM account WHERE campaign_id = ? AND name = ?", campaignId,
-					value.toString().trim()).orElseThrow(() -> RpgException.notFound(
-					"Account '" + value + "' (use 'account:n', 'character:n', 'WORLD' or an existing account name)"));
+			Row account = tx
+					.queryOne("SELECT * FROM account WHERE campaign_id = ? AND name = ?", campaignId,
+							value.toString().trim())
+					.orElseThrow(() -> RpgException.notFound("Account '" + value
+							+ "' (use 'account:n', 'character:n', 'WORLD' or an existing account name)"));
 			return new MoneyRef(Kind.ACCOUNT, account.id());
 		}
 		MoneyRef ref = parse(value);
@@ -92,30 +97,30 @@ public record MoneyRef(Kind kind, Long id) {
 	@Override
 	public String toString() {
 		return switch (kind) {
-			case WORLD -> "WORLD";
-			case ACCOUNT -> "account:" + id;
-			case CHARACTER -> "character:" + id;
+		case WORLD -> "WORLD";
+		case ACCOUNT -> "account:" + id;
+		case CHARACTER -> "character:" + id;
 		};
 	}
 
 	/** The account or character row, verified to belong to the campaign; null for WORLD. */
 	public Row row(Tx tx, long campaignId) {
 		return switch (kind) {
-			case WORLD -> null;
-			case ACCOUNT -> {
-				Row a = tx.find("account", id).orElseThrow(() -> RpgException.notFound("Account " + this));
-				if (a.lng("campaign_id") != campaignId) {
-					throw RpgException.invalidArgument(this + " belongs to another campaign.");
-				}
-				yield a;
+		case WORLD -> null;
+		case ACCOUNT -> {
+			Row a = tx.find("account", id).orElseThrow(() -> RpgException.notFound("Account " + this));
+			if (a.lng("campaign_id") != campaignId) {
+				throw RpgException.invalidArgument(this + " belongs to another campaign.");
 			}
-			case CHARACTER -> {
-				Row c = tx.find("character", id).orElseThrow(() -> RpgException.notFound("Character " + this));
-				if (c.lng("campaign_id") != campaignId) {
-					throw RpgException.invalidArgument(this + " belongs to another campaign.");
-				}
-				yield c;
+			yield a;
+		}
+		case CHARACTER -> {
+			Row c = tx.find("character", id).orElseThrow(() -> RpgException.notFound("Character " + this));
+			if (c.lng("campaign_id") != campaignId) {
+				throw RpgException.invalidArgument(this + " belongs to another campaign.");
 			}
+			yield c;
+		}
 		};
 	}
 
@@ -130,7 +135,9 @@ public record MoneyRef(Kind kind, Long id) {
 		return r == null ? Long.MAX_VALUE : r.lng("money_cp") == null ? 0 : r.lng("money_cp");
 	}
 
-	/** Adds {@code deltaCp} (negative to withdraw); no-op for WORLD. The caller checks sufficiency. */
+	/**
+	 * Adds {@code deltaCp} (negative to withdraw); no-op for WORLD. The caller checks sufficiency.
+	 */
 	public void adjust(Tx tx, long campaignId, long deltaCp) {
 		Row r = row(tx, campaignId);
 		if (r == null || deltaCp == 0) {

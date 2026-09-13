@@ -52,8 +52,9 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Character runtime outside the encounter loop: materializing creatures into characters, named rules-aware runtime
- * changes, XP awards, and player-control transfer (MCP_PROTOCOL.md §10.8, §13.3, §13.5, §19.4).
+ * Character runtime outside the encounter loop: materializing creatures into characters, named
+ * rules-aware runtime changes, XP awards, and player-control transfer (MCP_PROTOCOL.md §10.8,
+ * §13.3, §13.5, §19.4).
  */
 public final class RuntimeService {
 
@@ -79,8 +80,8 @@ public final class RuntimeService {
 	// ── materialize_character ──────────────────────────────────────────
 
 	public Map<String, Object> materialize(
-			String operationId, String campaignRef, String source, String name,
-			String description, String personality, String alignment, String locationRef, boolean rollHp) {
+		String operationId, String campaignRef, String source, String name, String description, String personality,
+		String alignment, String locationRef, boolean rollHp) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -105,7 +106,8 @@ public final class RuntimeService {
 				}
 				locationId = loc.id();
 			}
-			@SuppressWarnings("unchecked") Map<String, Object> hp = (Map<String, Object>) p.get("hp");
+			@SuppressWarnings("unchecked")
+			Map<String, Object> hp = (Map<String, Object>) p.get("hp");
 			int maxHp;
 			Roll hpRoll = null;
 			if (rollHp && hp.get("dice") != null) {
@@ -114,7 +116,8 @@ public final class RuntimeService {
 			} else {
 				maxHp = ((Number) hp.get("average")).intValue();
 			}
-			@SuppressWarnings("unchecked") Map<String, Object> abilities = (Map<String, Object>) p.get("abilities");
+			@SuppressWarnings("unchecked")
+			Map<String, Object> abilities = (Map<String, Object>) p.get("abilities");
 			var cols = new LinkedHashMap<String, Object>();
 			cols.put("campaign_id", campaignId);
 			cols.put("lifecycle", "ACTIVE");
@@ -127,8 +130,7 @@ public final class RuntimeService {
 			if (alignment != null && !alignment.isBlank()) {
 				String a = alignment.trim().toUpperCase().replace(' ', '_');
 				if (!CharacterService.ALIGNMENTS.contains(a)) {
-					throw RpgException.invalidArgument(
-							"alignment must be one of " + CharacterService.ALIGNMENTS + ".");
+					throw RpgException.invalidArgument("alignment must be one of " + CharacterService.ALIGNMENTS + ".");
 				}
 				cols.put("alignment", a);
 			}
@@ -137,8 +139,8 @@ public final class RuntimeService {
 			}
 			cols.put("max_hp", maxHp);
 			cols.put("current_hp", maxHp);
-			@SuppressWarnings("unchecked") Map<String, Object> speed = (Map<String, Object>) p.getOrDefault("speed",
-					Map.of("walk", 30));
+			@SuppressWarnings("unchecked")
+			Map<String, Object> speed = (Map<String, Object>) p.getOrDefault("speed", Map.of("walk", 30));
 			cols.put("speed", ((Number) speed.getOrDefault("walk", 30)).intValue());
 			cols.put("senses_json", p.get("senses") == null ? null : Json.write(p.get("senses")));
 			cols.put("origin_content_ref", def.id());
@@ -165,7 +167,7 @@ public final class RuntimeService {
 	// ── apply_runtime_change ───────────────────────────────────────────
 
 	public Map<String, Object> applyRuntimeChange(
-			String operationId, String campaignRef, String characterRef, Map<String, Object> change) {
+		String operationId, String campaignRef, String characterRef, Map<String, Object> change) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -224,8 +226,8 @@ public final class RuntimeService {
 			case "RESTORE_MAX_HP" -> {
 				// Lifts every reduction of the maximum (bonuses stay), whatever it was waiting for.
 				int lifted = 0;
-				for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL",
-						c.id())) {
+				for (Row e : tx.query(
+						"SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL", c.id())) {
 					if (e.map("modifier_json").get("max_hp") instanceof Number n && n.intValue() < 0) {
 						se.hirt.mcp.rpg.rules.Effects.end(tx, e);
 						lifted++;
@@ -278,10 +280,11 @@ public final class RuntimeService {
 				// Species-trait and feat uses (Breath Weapon, Heroic Inspiration, ...) — tracked by the
 				// engine, triggered by the GM; the sheet's `resources` block lists the refs.
 				String ref = change.get("resource") == null ? "" : change.get("resource").toString();
-				Row res = tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
-						c.id(), ref).orElseThrow(() -> RpgException.invalidArgument(
-						"Unknown resource '" + ref + "' for " + c.str(
-								"name") + "; the character sheet's resources block lists the legal refs."));
+				Row res = tx
+						.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(),
+								ref)
+						.orElseThrow(() -> RpgException.invalidArgument("Unknown resource '" + ref + "' for "
+								+ c.str("name") + "; the character sheet's resources block lists the legal refs."));
 				int current = res.intOr("current", 0);
 				int max = res.intOr("max", 0);
 				int n = change.get("amount") instanceof Number a ? Math.max(1, a.intValue()) : 1;
@@ -301,7 +304,7 @@ public final class RuntimeService {
 			}
 			case "CREATE_SPELL_SLOT", "CONVERT_SPELL_SLOT" ->
 				// Font of Magic (Sorcerer): sorcery points into a slot, or a slot into points; a Bonus Action.
-					result.putAll(se.hirt.mcp.rpg.magic.Metamagic.fontOfMagic(tx, rules, c, kind, change));
+				result.putAll(se.hirt.mcp.rpg.magic.Metamagic.fontOfMagic(tx, rules, c, kind, change));
 			default -> throw RpgException.invalidArgument("Unknown change kind '" + kind + "'.");
 			}
 			Row after = tx.get("character", c.id());
@@ -314,7 +317,9 @@ public final class RuntimeService {
 		});
 	}
 
-	/** {current, max, temp}, plus the unadjusted maximum and the adjustments when any are in force. */
+	/**
+	 * {current, max, temp}, plus the unadjusted maximum and the adjustments when any are in force.
+	 */
 	public static Map<String, Object> hpView(Tx tx, Row c) {
 		var hp = new LinkedHashMap<String, Object>();
 		hp.put("current", c.intOr("current_hp", 0));
@@ -332,7 +337,8 @@ public final class RuntimeService {
 	/** The active effects that change the hit point maximum: {amount, source, until}. */
 	public static List<Map<String, Object>> maxHpAdjustments(Tx tx, long characterId) {
 		var out = new ArrayList<Map<String, Object>>();
-		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL ORDER BY id",
+		for (Row e : tx.query(
+				"SELECT * FROM active_effect WHERE character_id = ? AND modifier_json IS NOT NULL ORDER BY id",
 				characterId)) {
 			if (e.map("modifier_json").get("max_hp") instanceof Number n && n.intValue() != 0) {
 				var m = new LinkedHashMap<String, Object>();
@@ -348,21 +354,22 @@ public final class RuntimeService {
 	}
 
 	/**
-	 * The hit point maximum in force. Temporary changes (Aid, a Life Drain) are applied to the stored maximum when
-	 * their effect begins and taken back when it ends ({@link se.hirt.mcp.rpg.rules.Effects#end}), so the column is
-	 * always the number that counts and I-13 holds in the database; the effects list says what is temporary.
+	 * The hit point maximum in force. Temporary changes (Aid, a Life Drain) are applied to the
+	 * stored maximum when their effect begins and taken back when it ends
+	 * ({@link se.hirt.mcp.rpg.rules.Effects#end}), so the column is always the number that counts
+	 * and I-13 holds in the database; the effects list says what is temporary.
 	 */
 	public static int effectiveMaxHp(Tx tx, Row c) {
 		return Math.max(0, c.intOr("max_hp", 0));
 	}
 
 	/**
-	 * Adds a signed max_hp effect and applies it to the maximum. A bonus raises the maximum (current HP is unchanged:
-	 * Aid also heals, separately); a reduction clamps current HP to the new maximum, and a maximum of 0 kills
-	 * (SRD 5.2.1 "Hit Point Maximum").
+	 * Adds a signed max_hp effect and applies it to the maximum. A bonus raises the maximum
+	 * (current HP is unchanged: Aid also heals, separately); a reduction clamps current HP to the
+	 * new maximum, and a maximum of 0 kills (SRD 5.2.1 "Hit Point Maximum").
 	 */
 	public static Map<String, Object> adjustMaxHp(
-			Tx tx, long campaignId, Row c, int amount, Map<String, Object> change, String reason) {
+		Tx tx, long campaignId, Row c, int amount, Map<String, Object> change, String reason) {
 		Map<String, Object> duration;
 		String until = change.get("until") == null ? null : change.get("until").toString().trim().toUpperCase();
 		if (change.get("minutes") instanceof Number mins && mins.longValue() > 0) {
@@ -373,7 +380,8 @@ public final class RuntimeService {
 		} else if ("RESTORED".equals(until)) {
 			duration = Map.of("kind", "UNTIL", "until", "RESTORED", "label", "until restored");
 		} else {
-			throw RpgException.invalidArgument("change.until must be LONG_REST (default) or RESTORED, or give minutes.");
+			throw RpgException
+					.invalidArgument("change.until must be LONG_REST (default) or RESTORED, or give minutes.");
 		}
 		String source = reason == null || reason.isBlank()
 				? (amount < 0 ? "hit point maximum reduced" : "hit point maximum raised") : reason;
@@ -398,7 +406,8 @@ public final class RuntimeService {
 			cols.put("death_saves_json", null);
 			endMemberships(tx, campaignId, c.id(), "DEAD");
 			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
-					c.str("name") + " died: hit point maximum reduced to 0" + (reason == null ? "" : " (" + reason + ")") + ".",
+					c.str("name") + " died: hit point maximum reduced to 0"
+							+ (reason == null ? "" : " (" + reason + ")") + ".",
 					List.of(c.id()), isPartyMember(tx, campaignId, c.id()) ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN",
 					"MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null, Map.of("max_hp_adjustment", amount)));
 			out.put("died", true);
@@ -418,8 +427,8 @@ public final class RuntimeService {
 	private static String condition(Map<String, Object> change) {
 		String condition = change.get("condition") == null ? "" : change.get("condition").toString().toUpperCase();
 		if (!CONDITIONS.contains(condition)) {
-			throw RpgException.invalidArgument(
-					"condition must be one of " + CONDITIONS.stream().sorted().toList() + ".");
+			throw RpgException
+					.invalidArgument("condition must be one of " + CONDITIONS.stream().sorted().toList() + ".");
 		}
 		return condition;
 	}
@@ -429,8 +438,7 @@ public final class RuntimeService {
 	}
 
 	public static long addCondition(
-			Tx tx, long campaignId, long characterId, String condition, Object duration,
-			String reason, String provenance) {
+		Tx tx, long campaignId, long characterId, String condition, Object duration, String reason, String provenance) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("character_id", characterId);
@@ -459,7 +467,10 @@ public final class RuntimeService {
 		return out;
 	}
 
-	/** Healing (SRD 5.2.1 "Healing"): HP can't exceed max; a creature at 0 HP that regains HP is no longer dying. */
+	/**
+	 * Healing (SRD 5.2.1 "Healing"): HP can't exceed max; a creature at 0 HP that regains HP is no
+	 * longer dying.
+	 */
 	public static Map<String, Object> heal(Tx tx, Row c, int amount, String reason) {
 		int max = effectiveMaxHp(tx, c);
 		int before = c.intOr("current_hp", 0);
@@ -493,7 +504,8 @@ public final class RuntimeService {
 			return rules.find(c.str("origin_content_ref"))
 					.map(d -> new Combat.Defenses(lower(d.payload().get("damage_resistances")),
 							lower(d.payload().get("damage_vulnerabilities")),
-							lower(d.payload().get("damage_immunities")))).orElse(Combat.Defenses.NONE);
+							lower(d.payload().get("damage_immunities"))))
+					.orElse(Combat.Defenses.NONE);
 		}
 		// Built characters: resistances from species traits and the chosen lineage/ancestry (SRD 5.2.1).
 		Set<String> resistances = Origins.speciesResistances(tx, rules, c);
@@ -512,12 +524,13 @@ public final class RuntimeService {
 	}
 
 	/**
-	 * Commits a damage result to the character: HP/temp HP, dropping to 0 (party members start dying, others die),
-	 * death-save failures while already at 0, massive damage. Returns the state changes for narration.
+	 * Commits a damage result to the character: HP/temp HP, dropping to 0 (party members start
+	 * dying, others die), death-save failures while already at 0, massive damage. Returns the state
+	 * changes for narration.
 	 */
 	public static Map<String, Object> applyDamageResult(
-			Tx tx, RulesData rules, RollService roller, Row c, Combat.DamageResult dr, boolean critical, Long sourceId,
-			String reason) {
+		Tx tx, RulesData rules, RollService roller, Row c, Combat.DamageResult dr, boolean critical, Long sourceId,
+		String reason) {
 		long campaignId = c.lng("campaign_id");
 		var out = new LinkedHashMap<String, Object>();
 		// Death Ward: the first drop to 0 becomes 1 HP instead and the ward is spent (SRD 5.2.1 "Death Ward").
@@ -568,8 +581,8 @@ public final class RuntimeService {
 		}
 		if ("DYING".equals(life) && dr.totalDealt() > 0) {
 			// Damage at 0 HP: one death-save failure, two on a critical hit; massive damage kills (SRD 5.2.1).
-			Map<String, Object> saves =
-					c.isNull("death_saves_json") ? Combat.freshDeathSaves() : c.map("death_saves_json");
+			Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
+					: c.map("death_saves_json");
 			int failures = ((Number) saves.getOrDefault("failures", 0)).intValue() + (critical ? 2 : 1);
 			saves.put("failures", Math.min(3, failures));
 			saves.put("stable", false);
@@ -594,11 +607,12 @@ public final class RuntimeService {
 			se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
 			cols.put("death_saves_json", null);
 			endMemberships(tx, campaignId, c.id(), "DEAD");
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
-					c.str("name") + " died" + (reason == null ? "" : " (" + reason + ")") + ".",
-					sourceId == null ? List.of(c.id()) : List.of(c.id(), sourceId),
-					partyMember ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
-					c.lng("location_id"), null, Map.of("massive_damage", dr.massiveDamage())));
+			LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("CHARACTER_DIED",
+							c.str("name") + " died" + (reason == null ? "" : " (" + reason + ")") + ".",
+							sourceId == null ? List.of(c.id()) : List.of(c.id(), sourceId),
+							partyMember ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
+							c.lng("location_id"), null, Map.of("massive_damage", dr.massiveDamage())));
 		}
 		cols.put("life_state", life);
 		tx.update("character", c.id(), cols);
@@ -612,9 +626,10 @@ public final class RuntimeService {
 	public static boolean isPartyMember(Tx tx, long campaignId, long characterId) {
 		return tx.count(
 				"SELECT COUNT(*) FROM party_membership WHERE campaign_id = ? AND character_id = ? AND state IN ('ACTIVE','SEPARATED','GUEST')",
-				campaignId, characterId) > 0 || tx.count(
-				"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id = ? AND character_id = ? AND active = 1",
-				campaignId, characterId) > 0;
+				campaignId, characterId) > 0
+				|| tx.count(
+						"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id = ? AND character_id = ? AND active = 1",
+						campaignId, characterId) > 0;
 	}
 
 	public static void endMemberships(Tx tx, long campaignId, long characterId, String state) {
@@ -630,8 +645,7 @@ public final class RuntimeService {
 	// ── award_xp ───────────────────────────────────────────────────────
 
 	public Map<String, Object> awardXp(
-			String operationId, String campaignRef, List<String> characterRefs, int amount,
-			String source, String reason) {
+		String operationId, String campaignRef, List<String> characterRefs, int amount, String source, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -643,8 +657,8 @@ public final class RuntimeService {
 		return db.mutate(Database.Mutation.of("award_xp", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "award_xp");
 			if (!XP_SOURCES.contains(src)) {
-				throw RpgException.invalidArgument(
-						"source must be one of " + XP_SOURCES.stream().sorted().toList() + ".");
+				throw RpgException
+						.invalidArgument("source must be one of " + XP_SOURCES.stream().sorted().toList() + ".");
 			}
 			if (amount <= 0) {
 				throw RpgException.invalidArgument("amount must be positive.");
@@ -653,11 +667,11 @@ public final class RuntimeService {
 				throw RpgException.invalidArgument("A reason is required for XP awards.");
 			}
 			if (src.equals("DISCRETIONARY")) {
-				Map<String, Object> policy =
-						campaign.isNull("gm_override_policy_json") ? Map.of() : campaign.map("gm_override_policy_json");
+				Map<String, Object> policy = campaign.isNull("gm_override_policy_json") ? Map.of()
+						: campaign.map("gm_override_policy_json");
 				if ("DISABLED".equals(policy.get("policy"))) {
-					throw RpgException.policyDenied(
-							"Discretionary XP is disabled by this campaign's GM override policy.");
+					throw RpgException
+							.policyDenied("Discretionary XP is disabled by this campaign's GM override policy.");
 				}
 			}
 			// With no explicit list the award follows the campaign's xp_policy, so party experience cannot drift
@@ -666,8 +680,8 @@ public final class RuntimeService {
 			if (characterRefs == null || characterRefs.isEmpty()) {
 				targets.addAll(PartyXp.recipients(tx, campaign, null));
 				if (targets.isEmpty()) {
-					throw RpgException.invalidArgument(
-							"There is no party to award experience to; name at least one character.");
+					throw RpgException
+							.invalidArgument("There is no party to award experience to; name at least one character.");
 				}
 			} else {
 				for (String ref : characterRefs) {
@@ -743,8 +757,8 @@ public final class RuntimeService {
 						throw RpgException.notAllowed(toRef + " is not a living, active character.");
 					}
 					if (!isPartyMember(tx, campaignId, target.id())) {
-						throw RpgException.notAllowed(target.str(
-								"name") + " is not a party member; only companions can become the player character.");
+						throw RpgException.notAllowed(target.str("name")
+								+ " is not a party member; only companions can become the player character.");
 					}
 					Optional<Row> current = tx.queryOne(
 							"SELECT * FROM player_control_assignment WHERE campaign_id = ? AND seat = 'player-1' AND active = 1",
@@ -767,19 +781,23 @@ public final class RuntimeService {
 					if (previousId != null) {
 						actors.add(previousId);
 					}
-					LedgerService.append(tx, campaignId, new LedgerService.EventSpec("PLAYER_CONTROL_TRANSFERRED",
-							"The player now controls " + target.str("name") + (previousName == null ? ""
-									: " (formerly " + previousName + ")") + (reason == null ? "" : ": " + reason) + ".",
-							actors, "MAJOR", "PARTY_KNOWN", "PLAYER", null, campaign.lng("current_location_id"), null,
-							null));
+					LedgerService.append(tx, campaignId,
+							new LedgerService.EventSpec("PLAYER_CONTROL_TRANSFERRED",
+									"The player now controls " + target.str("name")
+											+ (previousName == null ? "" : " (formerly " + previousName + ")")
+											+ (reason == null ? "" : ": " + reason) + ".",
+									actors, "MAJOR", "PARTY_KNOWN", "PLAYER", null, campaign.lng("current_location_id"),
+									null, null));
 					HarnessState state = Harness.state(campaign);
 					if (state == HarnessState.PLAYER_CHARACTER_TRANSFER || state == HarnessState.CHECKPOINT_DECISION) {
 						boolean encounterRunning = tx.count(
 								"SELECT COUNT(*) FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE')",
 								campaignId) > 0;
-						tx.update("campaign", campaignId, Map.of("harness_state",
-								encounterRunning ? HarnessState.ENCOUNTER.name() : HarnessState.EXPLORATION.name(),
-								"revision", campaign.lng("revision") + 1));
+						tx.update("campaign", campaignId,
+								Map.of("harness_state",
+										encounterRunning ? HarnessState.ENCOUNTER.name()
+												: HarnessState.EXPLORATION.name(),
+										"revision", campaign.lng("revision") + 1));
 					}
 					Row after = tx.get("campaign", campaignId);
 					var result = new LinkedHashMap<String, Object>();
@@ -787,13 +805,15 @@ public final class RuntimeService {
 					result.put("name", target.str("name"));
 					result.put("previous", Ref.ofNullable(Ref.CHARACTER, previousId));
 					result.put("sheet", characters.sheet(tx, target, "PLAY"));
-					result.put("meta", Harness.meta(after, List.of("Identity is unchanged: " + target.str(
-							"name") + " keeps every relationship, memory and item.")));
+					result.put("meta", Harness.meta(after, List.of("Identity is unchanged: " + target.str("name")
+							+ " keeps every relationship, memory and item.")));
 					return result;
 				});
 	}
 
-	/** Proficiency bonus for any character: by level for classed characters, by CR for creatures. */
+	/**
+	 * Proficiency bonus for any character: by level for classed characters, by CR for creatures.
+	 */
 	public static int proficiencyBonus(Tx tx, RulesData rules, Row c) {
 		int level = tx.query("SELECT level FROM character_class WHERE character_id = ?", c.id()).stream()
 				.mapToInt(r -> r.intOr("level", 1)).sum();
@@ -808,18 +828,22 @@ public final class RuntimeService {
 	}
 
 	/**
-	 * Whether a character's numbers still come from the creature definition it was materialized from. True only while
-	 * it has no class levels: taking a class turns a stat block into a character, whose Armor Class, skills, saves and
-	 * attacks are all derived from its own abilities, proficiencies and equipment (RULES_ENGINE.md §3). Anything that
-	 * would otherwise read a value straight off the stat block must ask this first, or a promoted companion silently
-	 * keeps rolling the monster's numbers and every point of the build is thrown away.
+	 * Whether a character's numbers still come from the creature definition it was materialized
+	 * from. True only while it has no class levels: taking a class turns a stat block into a
+	 * character, whose Armor Class, skills, saves and attacks are all derived from its own
+	 * abilities, proficiencies and equipment (RULES_ENGINE.md §3). Anything that would otherwise
+	 * read a value straight off the stat block must ask this first, or a promoted companion
+	 * silently keeps rolling the monster's numbers and every point of the build is thrown away.
 	 */
 	public static boolean usesStatBlock(Tx tx, Row c) {
 		return !c.isNull("origin_content_ref")
 				&& tx.count("SELECT COUNT(*) FROM character_class WHERE character_id = ?", c.id()) == 0;
 	}
 
-	/** Armor Class: creature stat block value for materialized creatures, derived from equipment otherwise. */
+	/**
+	 * Armor Class: creature stat block value for materialized creatures, derived from equipment
+	 * otherwise.
+	 */
 	public static int armorClass(Tx tx, RulesData rules, Row c) {
 		if (!c.isNull("armor_class_override")) {
 			// apply_gm_override SET_ARMOR_CLASS: fixed by fiat, effect bonuses and floors still apply.

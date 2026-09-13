@@ -44,11 +44,13 @@ import se.hirt.mcp.rpg.session.GameTime;
 import java.util.*;
 
 /**
- * Party membership as history (DOMAIN_MODEL.md §6, I-17..I-19) and relationships as compact state plus references to
- * the ledger events that shaped them (DESIGN.md §11, DOMAIN_MODEL.md §7, I-20..I-22).
+ * Party membership as history (DOMAIN_MODEL.md §6, I-17..I-19) and relationships as compact state
+ * plus references to the ledger events that shaped them (DESIGN.md §11, DOMAIN_MODEL.md §7,
+ * I-20..I-22).
  * <p>
- * Relationship dimensions are integers from -5 to +5 (RULES_ENGINE.md open item, decided here): affection, trust,
- * respect, attraction, fear, resentment, loyalty. Values are rendered with qualitative labels for the GM.
+ * Relationship dimensions are integers from -5 to +5 (RULES_ENGINE.md open item, decided here):
+ * affection, trust, respect, attraction, fear, resentment, loyalty. Values are rendered with
+ * qualitative labels for the GM.
  */
 public final class PartyService {
 
@@ -63,8 +65,7 @@ public final class PartyService {
 	private final se.hirt.mcp.rpg.content.RulesData rules;
 	private final se.hirt.mcp.rpg.session.SessionService sessions;
 
-	public PartyService(
-			Database db, se.hirt.mcp.rpg.content.RulesData rules,
+	public PartyService(Database db, se.hirt.mcp.rpg.content.RulesData rules,
 			se.hirt.mcp.rpg.session.SessionService sessions) {
 		this.db = db;
 		this.rules = rules;
@@ -74,7 +75,7 @@ public final class PartyService {
 	// ── update_party_membership ────────────────────────────────────────
 
 	public Map<String, Object> updateMembership(
-			String operationId, String campaignRef, String characterRef, String change, String reason) {
+		String operationId, String campaignRef, String characterRef, String change, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -95,8 +96,8 @@ public final class PartyService {
 					"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id = ? AND character_id = ? AND active = 1",
 					campaignId, c.id()) > 0;
 			if (playerControlled && !k.equals("JOIN") && !k.equals("REJOIN")) {
-				throw RpgException.notAllowed(
-						"The player character cannot leave the party; transfer_player_control first.");
+				throw RpgException
+						.notAllowed("The player character cannot leave the party; transfer_player_control first.");
 			}
 			Optional<Row> open = tx.queryOne(
 					"SELECT * FROM party_membership WHERE campaign_id = ? AND character_id = ? AND state IN ('ACTIVE','SEPARATED','GUEST')",
@@ -166,10 +167,12 @@ public final class PartyService {
 			}
 			boolean major = Set.of("PARTY_MEMBER_JOINED", "PARTY_MEMBER_LEFT", "PARTY_MEMBER_DISMISSED")
 					.contains(eventType);
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec(eventType,
-					c.str("name") + " " + describe(k) + (reason == null || reason.isBlank() ? "." : ": " + reason),
-					List.of(c.id()), major ? "MAJOR" : "NOTABLE", "PARTY_KNOWN", "GM", null, c.lng("location_id"), null,
-					Map.of("change", k)));
+			long eventId = LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec(eventType,
+							c.str("name") + " " + describe(k)
+									+ (reason == null || reason.isBlank() ? "." : ": " + reason),
+							List.of(c.id()), major ? "MAJOR" : "NOTABLE", "PARTY_KNOWN", "GM", null,
+							c.lng("location_id"), null, Map.of("change", k)));
 			long membershipId;
 			if (newRow) {
 				var cols = new LinkedHashMap<String, Object>();
@@ -202,12 +205,13 @@ public final class PartyService {
 				Row live = tx.get("character", c.id());
 				long target = PartyXp.joiningXp(tx, campaign);
 				if (target > live.lng("xp")) {
-					joined = se.hirt.mcp.rpg.character.RuntimeService.grantXp(tx, rules, live,
-							target - live.lng("xp"));
-					LedgerService.append(tx, campaignId, new LedgerService.EventSpec("XP_AWARDED",
-							live.str("name") + " joined the party at its current experience (" + target + " XP).",
-							List.of(live.id()), "MINOR", "GM_ONLY", "GM", null, live.lng("location_id"), null,
-							Map.of("amount", target - live.lng("xp"), "source", "PARTY_JOIN")));
+					joined = se.hirt.mcp.rpg.character.RuntimeService.grantXp(tx, rules, live, target - live.lng("xp"));
+					LedgerService.append(tx, campaignId,
+							new LedgerService.EventSpec("XP_AWARDED",
+									live.str("name") + " joined the party at its current experience (" + target
+											+ " XP).",
+									List.of(live.id()), "MINOR", "GM_ONLY", "GM", null, live.lng("location_id"), null,
+									Map.of("amount", target - live.lng("xp"), "source", "PARTY_JOIN")));
 				}
 			}
 			var result = new LinkedHashMap<String, Object>();
@@ -228,20 +232,19 @@ public final class PartyService {
 
 	private static String describe(String change) {
 		return switch (change) {
-			case "JOIN" -> "joined the party";
-			case "REJOIN" -> "rejoined the party";
-			case "SEPARATE" -> "temporarily separated from the party";
-			case "LEAVE" -> "left the party";
-			case "DISMISS" -> "was dismissed from the party";
-			case "GUEST_ADD" -> "is travelling with the party as a guest";
-			default -> "is no longer travelling with the party";
+		case "JOIN" -> "joined the party";
+		case "REJOIN" -> "rejoined the party";
+		case "SEPARATE" -> "temporarily separated from the party";
+		case "LEAVE" -> "left the party";
+		case "DISMISS" -> "was dismissed from the party";
+		case "GUEST_ADD" -> "is travelling with the party as a guest";
+		default -> "is no longer travelling with the party";
 		};
 	}
 
 	private static RpgException transition(String change, String state, String why) {
-		return RpgException.validation(List.of(new Violation("change", "ILLEGAL_TRANSITION",
-				change + " is not legal from membership state " + (state == null ? "NONE"
-						: state) + ": " + why + ".")));
+		return RpgException.validation(List.of(new Violation("change", "ILLEGAL_TRANSITION", change
+				+ " is not legal from membership state " + (state == null ? "NONE" : state) + ": " + why + ".")));
 	}
 
 	// ── relationships ──────────────────────────────────────────────────
@@ -325,11 +328,11 @@ public final class PartyService {
 	}
 
 	/**
-	 * With {@code includeProfile} false (bootstrap) the profile stays out and only its keys and sizes are listed, so
-	 * the reader knows to fetch it with the RELATIONSHIP or INTIMACY scope.
+	 * With {@code includeProfile} false (bootstrap) the profile stays out and only its keys and
+	 * sizes are listed, so the reader knows to fetch it with the RELATIONSHIP or INTIMACY scope.
 	 */
 	public static List<Map<String, Object>> compact(
-			Tx tx, long campaignId, long characterId, int limit, boolean includeProfile) {
+		Tx tx, long campaignId, long characterId, int limit, boolean includeProfile) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row r : tx.query(
 				"SELECT r.*, c.name AS to_name FROM relationship r JOIN character c ON c.id = r.to_character_id WHERE r.campaign_id = ? AND r.from_character_id = ? ORDER BY r.revision DESC, r.id LIMIT ?",
@@ -357,23 +360,24 @@ public final class PartyService {
 	}
 
 	public Map<String, Object> updateRelationship(
-			String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
-			String summary, String causeEventRef, String reason, boolean mutual, String provenance) {
+		String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
+		String summary, String causeEventRef, String reason, boolean mutual, String provenance) {
 		return updateRelationship(operationId, campaignRef, fromRef, toRef, dimensions, summary, causeEventRef, reason,
 				mutual, provenance, null, null);
 	}
 
 	/**
-	 * The profile is the part of a relationship that drives a story: {@code milestones} (dated: FIRST_MEETING,
-	 * PROPOSAL, WEDDING, FIRST_NIGHT, PREGNANCY, PARTING, OATH…; the game time is stamped when missing),
-	 * {@code terms} (standing agreements between the two), {@code preferences} (likes, dislikes and limits mapped in
-	 * play; intimate detail only under a PEGI-18 profile), {@code wants} and {@code hard_lines}. MERGE (default)
-	 * appends to lists without duplicates and overlays maps; a null value removes a key; REPLACE starts over.
+	 * The profile is the part of a relationship that drives a story: {@code milestones} (dated:
+	 * FIRST_MEETING, PROPOSAL, WEDDING, FIRST_NIGHT, PREGNANCY, PARTING, OATH…; the game time is
+	 * stamped when missing), {@code terms} (standing agreements between the two),
+	 * {@code preferences} (likes, dislikes and limits mapped in play; intimate detail only under a
+	 * PEGI-18 profile), {@code wants} and {@code hard_lines}. MERGE (default) appends to lists
+	 * without duplicates and overlays maps; a null value removes a key; REPLACE starts over.
 	 */
 	public Map<String, Object> updateRelationship(
-			String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
-			String summary, String causeEventRef, String reason, boolean mutual, String provenance,
-			Map<String, Object> profile, String profileMode) {
+		String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
+		String summary, String causeEventRef, String reason, boolean mutual, String provenance,
+		Map<String, Object> profile, String profileMode) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -403,8 +407,10 @@ public final class PartyService {
 				throw RpgException.invalidArgument(
 						"A relationship change needs a cause: cause_event (event:N) or a reason (I-20).");
 			}
-			if ((summary == null || summary.isBlank()) && (dimensions == null || dimensions.isEmpty()) && (causeEventRef == null || causeEventRef.isBlank()) && (profile == null || profile.isEmpty())) {
-				throw RpgException.invalidArgument("Provide a summary, dimensions, a profile, or a cause_event to link.");
+			if ((summary == null || summary.isBlank()) && (dimensions == null || dimensions.isEmpty())
+					&& (causeEventRef == null || causeEventRef.isBlank()) && (profile == null || profile.isEmpty())) {
+				throw RpgException
+						.invalidArgument("Provide a summary, dimensions, a profile, or a cause_event to link.");
 			}
 			String pm = profileMode == null || profileMode.isBlank() ? "MERGE" : profileMode.trim().toUpperCase();
 			if (!List.of("MERGE", "REPLACE").contains(pm)) {
@@ -432,12 +438,13 @@ public final class PartyService {
 				updated.add(upsert(tx, campaignId, to, from, dimensions, summary, eventId, profile, pm));
 			}
 			if (eventId == null) {
-				eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("RELATIONSHIP_CHANGED",
-						from.str("name") + " → " + to.str("name") + (mutual ? " (mutual)" : "") + ": " + (
-								summary == null ? reason : summary) + " (" + reason + ")", List.of(from.id(), to.id()),
-						"NOTABLE", "GM_ONLY", prov, null, from.lng("location_id"), null,
-						Map.of("dimensions", dimensions == null ? Map.of() : dimensions, "profile",
-								profile == null ? Map.of() : profile)));
+				eventId = LedgerService.append(tx, campaignId,
+						new LedgerService.EventSpec("RELATIONSHIP_CHANGED",
+								from.str("name") + " → " + to.str("name") + (mutual ? " (mutual)" : "") + ": "
+										+ (summary == null ? reason : summary) + " (" + reason + ")",
+								List.of(from.id(), to.id()), "NOTABLE", "GM_ONLY", prov, null, from.lng("location_id"),
+								null, Map.of("dimensions", dimensions == null ? Map.of() : dimensions, "profile",
+										profile == null ? Map.of() : profile)));
 			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("relationships", updated);
@@ -448,8 +455,8 @@ public final class PartyService {
 	}
 
 	private static Map<String, Object> upsert(
-			Tx tx, long campaignId, Row from, Row to, Map<String, Object> dimensions, String summary, Long eventId,
-			Map<String, Object> givenProfile, String profileMode) {
+		Tx tx, long campaignId, Row from, Row to, Map<String, Object> dimensions, String summary, Long eventId,
+		Map<String, Object> givenProfile, String profileMode) {
 		Optional<Row> existing = tx.queryOne(
 				"SELECT * FROM relationship WHERE campaign_id = ? AND from_character_id = ? AND to_character_id = ?",
 				campaignId, from.id(), to.id());
@@ -503,9 +510,9 @@ public final class PartyService {
 			cols.put("revision", 0);
 			id = tx.insert("relationship", cols);
 		}
-		if (eventId != null && tx.count(
-				"SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ? AND event_id = ?", id,
-				eventId) == 0) {
+		if (eventId != null
+				&& tx.count("SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ? AND event_id = ?", id,
+						eventId) == 0) {
 			tx.insert("relationship_event", Map.of("relationship_id", id, "event_id", eventId));
 		}
 		Row rel = tx.get("relationship", id);
@@ -530,9 +537,12 @@ public final class PartyService {
 		return new LinkedHashMap<>(relationship.map("profile_json"));
 	}
 
-	/** Milestones and other list keys append without duplicates, map keys overlay, a null removes; REPLACE starts over. */
+	/**
+	 * Milestones and other list keys append without duplicates, map keys overlay, a null removes;
+	 * REPLACE starts over.
+	 */
 	static Map<String, Object> mergeProfile(
-			Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, boolean replace) {
+		Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, boolean replace) {
 		if (given == null) {
 			return current;
 		}
@@ -574,7 +584,10 @@ public final class PartyService {
 		return out;
 	}
 
-	/** A milestone is a map with at least a kind or note; the game time is stamped when the caller gave none. */
+	/**
+	 * A milestone is a map with at least a kind or note; the game time is stamped when the caller
+	 * gave none.
+	 */
 	private static Object milestone(Tx tx, long campaignId, Object item) {
 		var out = new LinkedHashMap<String, Object>();
 		if (item instanceof Map<?, ?> m) {

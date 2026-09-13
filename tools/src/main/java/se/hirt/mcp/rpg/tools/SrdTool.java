@@ -32,8 +32,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * Command-line entry point for the srd5e seed tooling. The SRD 5.2.1 PDF is published by Wizards of the Coast under
- * CC-BY-4.0 and downloads from {@code https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf}.
+ * Command-line entry point for the srd5e seed tooling. The SRD 5.2.1 PDF is published by Wizards of
+ * the Coast under CC-BY-4.0 and downloads from
+ * {@code https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf}.
  *
  * <pre>
  * extract     &lt;pdf&gt;        write srd.txt next to the PDF
@@ -61,7 +62,10 @@ public final class SrdTool {
 		}
 	}
 
-	/** {@code src/main/resources/seed/srd5e}, located relative to this project's directory, not the working directory. */
+	/**
+	 * {@code src/main/resources/seed/srd5e}, located relative to this project's directory, not the
+	 * working directory.
+	 */
 	static Path seedDir() {
 		Path here = Paths.get(System.getProperty("rpg.tools.dir", System.getProperty("user.dir"))).toAbsolutePath();
 		// Invoked either from the repository root (mvn -f tools/pom.xml) or from tools/ itself.
@@ -70,7 +74,8 @@ public final class SrdTool {
 	}
 
 	private static void usage() {
-		System.err.println("usage: SrdTool extract <pdf> | verify <pdf|srd.txt> | build-rules <pdf|srd.txt> | build-creatures <pdf|srd.txt>");
+		System.err.println(
+				"usage: SrdTool extract <pdf> | verify <pdf|srd.txt> | build-rules <pdf|srd.txt> | build-creatures <pdf|srd.txt>");
 		System.exit(2);
 	}
 }

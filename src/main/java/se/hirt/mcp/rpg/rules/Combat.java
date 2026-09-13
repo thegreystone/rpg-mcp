@@ -36,10 +36,10 @@ import se.hirt.mcp.rpg.persistence.Row;
 import java.util.*;
 
 /**
- * Combat arithmetic (RULES_ENGINE.md §3): attack profiles, the damage pipeline, death saving throws. Citations — SRD
- * 5.2.1 "Combat" (attack rolls, critical hits, unarmed strikes), "Damage and Healing"
- * (resistance/vulnerability/immunity, temporary Hit Points, dropping to 0, death saves). Encoded from the 2024 rules
- * and marked [verify] per RULES_ENGINE.md §1.
+ * Combat arithmetic (RULES_ENGINE.md §3): attack profiles, the damage pipeline, death saving
+ * throws. Citations — SRD 5.2.1 "Combat" (attack rolls, critical hits, unarmed strikes), "Damage
+ * and Healing" (resistance/vulnerability/immunity, temporary Hit Points, dropping to 0, death
+ * saves). Encoded from the 2024 rules and marked [verify] per RULES_ENGINE.md §1.
  */
 public final class Combat {
 
@@ -51,10 +51,12 @@ public final class Combat {
 
 	/** One attack option: weapon, unarmed strike or creature action. */
 	public record AttackProfile(String name, boolean ranged, int attackBonus, List<DamagePart> damage,
-	                            boolean usesAmmunition, String ammunitionRef, Map<String, Object> range,
-	                            String source, boolean finesse) {
+			boolean usesAmmunition, String ammunitionRef, Map<String, Object> range, String source, boolean finesse) {
 
-		/** Sneak Attack and similar features ask only whether the weapon qualifies (SRD 5.2.1 "Rogue"). */
+		/**
+		 * Sneak Attack and similar features ask only whether the weapon qualifies (SRD 5.2.1
+		 * "Rogue").
+		 */
 		public boolean finesseOrRanged() {
 			return finesse || ranged;
 		}
@@ -64,10 +66,13 @@ public final class Combat {
 	public record DamagePart(String dice, int modifier, String type) {
 	}
 
-	/** A weapon attack for a character wielding an item definition (SRD 5.2.1 "Attack Rolls", "Damage Rolls"). */
+	/**
+	 * A weapon attack for a character wielding an item definition (SRD 5.2.1 "Attack Rolls",
+	 * "Damage Rolls").
+	 */
 	@SuppressWarnings("unchecked")
 	public static AttackProfile weapon(
-			Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded) {
+		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded) {
 		List<Object> props = payload.get("properties") instanceof List<?> l ? (List<Object>) l : List.of();
 		boolean rangedCategory = String.valueOf(payload.get("category")).endsWith("RANGED");
 		boolean finesse = props.contains("finesse");
@@ -87,7 +92,10 @@ public final class Combat {
 				payload.get("range") instanceof Map<?, ?> r ? (Map<String, Object>) r : null, "weapon", finesse);
 	}
 
-	/** Unarmed Strike: 1 + Strength modifier Bludgeoning (SRD 5.2.1 Rules Glossary "Unarmed Strike"). */
+	/**
+	 * Unarmed Strike: 1 + Strength modifier Bludgeoning (SRD 5.2.1 Rules Glossary "Unarmed
+	 * Strike").
+	 */
 	public static AttackProfile unarmed(Row character, int proficiencyBonus) {
 		int str = Rules.modifier(character.intOr("str_score", 10));
 		return new AttackProfile("Unarmed Strike", false, str + proficiencyBonus,
@@ -152,16 +160,17 @@ public final class Combat {
 
 	/** Result of applying damage to a creature's HP pools. */
 	public record DamageResult(int totalDealt, List<Map<String, Object>> breakdown, int tempHpBefore, int tempHpAfter,
-	                           int hpBefore, int hpAfter, boolean droppedToZero, boolean massiveDamage) {
+			int hpBefore, int hpAfter, boolean droppedToZero, boolean massiveDamage) {
 	}
 
 	/**
-	 * Damage pipeline (SRD 5.2.1 "Damage and Healing"): per type apply immunity (0), resistance (halve, round down) or
-	 * vulnerability (double); temporary HP absorbs first; then current HP, never below 0. Massive damage: if the
-	 * remaining damage after reaching 0 equals or exceeds the creature's HP maximum, it dies outright.
+	 * Damage pipeline (SRD 5.2.1 "Damage and Healing"): per type apply immunity (0), resistance
+	 * (halve, round down) or vulnerability (double); temporary HP absorbs first; then current HP,
+	 * never below 0. Massive damage: if the remaining damage after reaching 0 equals or exceeds the
+	 * creature's HP maximum, it dies outright.
 	 */
 	public static DamageResult applyDamage(
-			int currentHp, int tempHp, int maxHp, List<RolledDamage> damages, Defenses defenses) {
+		int currentHp, int tempHp, int maxHp, List<RolledDamage> damages, Defenses defenses) {
 		var breakdown = new ArrayList<Map<String, Object>>();
 		int total = 0;
 		for (RolledDamage d : damages) {

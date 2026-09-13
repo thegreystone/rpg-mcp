@@ -52,10 +52,10 @@ import java.util.stream.Collectors;
 /**
  * Build {@code seed/srd5e/rules.json} from the SRD 5.2.1 text.
  * <p>
- * The Rules Glossary is an alphabetical list of procedural rules: conditions, actions, hazards, areas of effect and
- * the general glossary. Everything here is lifted from the SRD text itself rather than paraphrased, so the entries
- * carry {@code text_is_paraphrase: false}. Re-run after any SRD revision; the output is checked back against the SRD
- * by the verifier.
+ * The Rules Glossary is an alphabetical list of procedural rules: conditions, actions, hazards,
+ * areas of effect and the general glossary. Everything here is lifted from the SRD text itself
+ * rather than paraphrased, so the entries carry {@code text_is_paraphrase: false}. Re-run after any
+ * SRD revision; the output is checked back against the SRD by the verifier.
  */
 final class BuildRules {
 	private static final Pattern HEAD = Py.re("^([A-Z][A-Za-z'/ ]{1,40}?)(\\s\\[([A-Za-z ]+)\\])?$");
@@ -66,7 +66,10 @@ final class BuildRules {
 	private static final String EN_DASH = Character.toString(0x2013);
 	private static final String ELLIPSIS = Character.toString(0x2026);
 
-	/** The raw extracted text: this builder does its own character repairs so the glossary stays verbatim. */
+	/**
+	 * The raw extracted text: this builder does its own character repairs so the glossary stays
+	 * verbatim.
+	 */
 	private final String txt;
 
 	BuildRules(String txt) {
@@ -154,7 +157,8 @@ final class BuildRules {
 			ObjectNode payload = mapper.createObjectNode();
 			String first200 = Py.head(e.body(), 200);
 			int cut = first200.lastIndexOf(' ');
-			payload.put("summary", (cut >= 0 ? first200.substring(0, cut) : first200) + (e.body().length() > 200 ? ELLIPSIS : ""));
+			payload.put("summary",
+					(cut >= 0 ? first200.substring(0, cut) : first200) + (e.body().length() > 200 ? ELLIPSIS : ""));
 			payload.put("text", e.body());
 			payload.put("text_is_paraphrase", false);
 			if (e.tag() != null) {
@@ -197,15 +201,17 @@ final class BuildRules {
 		return true;
 	}
 
-	/** Matches Python's {@code json.dumps(indent=2, ensure_ascii=False)} so regenerating gives a clean diff. */
+	/**
+	 * Matches Python's {@code json.dumps(indent=2, ensure_ascii=False)} so regenerating gives a
+	 * clean diff.
+	 */
 	private static DefaultPrettyPrinter pythonStyle() {
 		DefaultPrettyPrinter pp = new DefaultPrettyPrinter();
 		DefaultIndenter indent = new DefaultIndenter("  ", "\n");
 		pp.indentObjectsWith(indent);
 		pp.indentArraysWith(indent);
-		return pp.withSeparators(Separators.createDefaultInstance()
-				.withObjectFieldValueSpacing(Separators.Spacing.AFTER)
-				.withObjectEmptySeparator("")
-				.withArrayEmptySeparator(""));
+		return pp
+				.withSeparators(Separators.createDefaultInstance().withObjectFieldValueSpacing(Separators.Spacing.AFTER)
+						.withObjectEmptySeparator("").withArrayEmptySeparator(""));
 	}
 }

@@ -34,8 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * The data directory may arrive as {@code ~/.rpg-mcp} from the MCP Bundle manifest; the server expands the tilde
- * itself because the host does not, and a {@code ${HOME}} placeholder would fail on Windows.
+ * The data directory may arrive as {@code ~/.rpg-mcp} from the MCP Bundle manifest; the server
+ * expands the tilde itself because the host does not, and a {@code ${HOME}} placeholder would fail
+ * on Windows.
  */
 class RpgConfigTest {
 

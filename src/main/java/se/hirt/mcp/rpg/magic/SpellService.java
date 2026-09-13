@@ -49,16 +49,19 @@ import se.hirt.mcp.rpg.rules.Rules;
 import java.util.*;
 
 /**
- * Spellcasting (DESIGN.md §13): spell slots as resources, prepared spells as traits, and a casting core shared by
- * {@code cast_spell} and the encounter {@code CAST} action. Structured mechanics are executed; everything else is text
- * the GM adjudicates. Citations: SRD 5.2.1 "Spells" chapter and class tables — [verify].
+ * Spellcasting (DESIGN.md §13): spell slots as resources, prepared spells as traits, and a casting
+ * core shared by {@code cast_spell} and the encounter {@code CAST} action. Structured mechanics are
+ * executed; everything else is text the GM adjudicates. Citations: SRD 5.2.1 "Spells" chapter and
+ * class tables — [verify].
  */
 public final class SpellService {
 
 	public static final String SLOT_PREFIX = "slot:";
 	public static final String PACT_SLOT = "pact_slot";
 
-	/** Full-caster slots per spell level, indexed by character level 1..20 (SRD 5.2.1 class tables). */
+	/**
+	 * Full-caster slots per spell level, indexed by character level 1..20 (SRD 5.2.1 class tables).
+	 */
 	private static final int[][] FULL = {{2}, {3}, {4, 2}, {4, 3}, {4, 3, 2}, {4, 3, 3}, {4, 3, 3, 1}, {4, 3, 3, 2},
 			{4, 3, 3, 3, 1}, {4, 3, 3, 3, 2}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1, 1},
 			{4, 3, 3, 3, 2, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1, 1},
@@ -69,7 +72,7 @@ public final class SpellService {
 
 	/** A character's spellcasting profile. */
 	public record Casting(String classRef, String classSlug, Ability ability, String progression, int level,
-	                      int cantripsKnown, int preparedCount, boolean ritual) {
+			int cantripsKnown, int preparedCount, boolean ritual) {
 
 		public boolean pact() {
 			return "PACT".equals(progression);
@@ -145,7 +148,10 @@ public final class SpellService {
 		return RuntimeService.proficiencyBonus(tx, rules, c) + abilityModifier(c, casting);
 	}
 
-	/** Creates or resizes spell-slot resources for the character's current level (activation and level-up). */
+	/**
+	 * Creates or resizes spell-slot resources for the character's current level (activation and
+	 * level-up).
+	 */
 	public static void initializeSlots(Tx tx, RulesData rules, Row c) {
 		Optional<Casting> casting = castingOf(tx, rules, c);
 		if (casting.isEmpty()) {
@@ -200,9 +206,8 @@ public final class SpellService {
 		m.put("ritual_casting", cast.ritual());
 		if (cast.pact()) {
 			tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(), PACT_SLOT)
-					.ifPresent(r -> m.put("pact_slots",
-							Map.of("current", r.intOr("current", 0), "max", r.intOr("max", 0), "level",
-									cast.pactSlotLevel())));
+					.ifPresent(r -> m.put("pact_slots", Map.of("current", r.intOr("current", 0), "max",
+							r.intOr("max", 0), "level", cast.pactSlotLevel())));
 		} else {
 			var slots = new LinkedHashMap<String, Object>();
 			for (Row r : tx.query(
@@ -223,16 +228,20 @@ public final class SpellService {
 	}
 
 	private static List<String> spellNames(Tx tx, RulesData rules, long characterId, String kind) {
-		return tx.query("SELECT content_ref FROM character_trait WHERE character_id = ? AND kind = ? ORDER BY id",
-				characterId, kind).stream().map(r -> rules.find(r.str("content_ref"))
-				.map(d -> d.name() + (kind.equals("SPELL_PREPARED") ? " (" + d.payload().get("level") + ")" : ""))
-				.orElse(r.str("content_ref"))).toList();
+		return tx
+				.query("SELECT content_ref FROM character_trait WHERE character_id = ? AND kind = ? ORDER BY id",
+						characterId, kind)
+				.stream()
+				.map(r -> rules.find(r.str("content_ref")).map(
+						d -> d.name() + (kind.equals("SPELL_PREPARED") ? " (" + d.payload().get("level") + ")" : ""))
+						.orElse(r.str("content_ref")))
+				.toList();
 	}
 
 	/** Validates and stores a spell selection as traits (used by drafts and prepare_spells). */
 	@SuppressWarnings("unchecked")
 	public static List<Violation> setSpells(
-			Tx tx, RulesData rules, Row c, Casting cast, List<Object> cantrips, List<Object> spells) {
+		Tx tx, RulesData rules, Row c, Casting cast, List<Object> cantrips, List<Object> spells) {
 		var v = new ArrayList<Violation>();
 		if (cantrips != null) {
 			var ids = new ArrayList<String>();
@@ -248,18 +257,20 @@ public final class SpellService {
 				}
 				if (tx.queryOne(
 						"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_KNOWN' AND content_ref = ?",
-						c.id(), d.id()).filter(t -> !se.hirt.mcp.rpg.character.Origins.SOURCE_CLASS.equals(
-						se.hirt.mcp.rpg.character.Origins.sourceOf(t))).isPresent()) {
-					v.add(new Violation("cantrips", "ALREADY_KNOWN",
-							d.name() + " is already granted by a species trait or feat; choose a different cantrip (duplicates are re-chosen, SRD 5.2.1)."));
+						c.id(), d.id())
+						.filter(t -> !se.hirt.mcp.rpg.character.Origins.SOURCE_CLASS
+								.equals(se.hirt.mcp.rpg.character.Origins.sourceOf(t)))
+						.isPresent()) {
+					v.add(new Violation("cantrips", "ALREADY_KNOWN", d.name()
+							+ " is already granted by a species trait or feat; choose a different cantrip (duplicates are re-chosen, SRD 5.2.1)."));
 				}
 				if (!ids.contains(d.id())) {
 					ids.add(d.id());
 				}
 			}
 			if (ids.size() > cast.cantripsKnown()) {
-				v.add(new Violation("cantrips", "COUNT",
-						"A level " + cast.level() + " " + cast.classSlug() + " knows at most " + cast.cantripsKnown() + " cantrips."));
+				v.add(new Violation("cantrips", "COUNT", "A level " + cast.level() + " " + cast.classSlug()
+						+ " knows at most " + cast.cantripsKnown() + " cantrips."));
 			}
 			if (v.isEmpty()) {
 				replaceTraits(tx, c.id(), "SPELL_KNOWN", ids, Map.of("cantrip", true));
@@ -275,8 +286,8 @@ public final class SpellService {
 					v.add(new Violation("spells", "CANTRIP", d.name() + " is a cantrip; list it under cantrips."));
 				}
 				if (level > cast.maxSpellLevel()) {
-					v.add(new Violation("spells", "LEVEL",
-							d.name() + " is level " + level + "; the highest slot is level " + cast.maxSpellLevel() + "."));
+					v.add(new Violation("spells", "LEVEL", d.name() + " is level " + level
+							+ "; the highest slot is level " + cast.maxSpellLevel() + "."));
 				}
 				if (!((List<Object>) d.payload().get("classes")).contains(cast.classSlug())) {
 					v.add(new Violation("spells", "CLASS_LIST",
@@ -284,18 +295,20 @@ public final class SpellService {
 				}
 				if (tx.queryOne(
 						"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED' AND content_ref = ?",
-						c.id(), d.id()).filter(t -> !se.hirt.mcp.rpg.character.Origins.SOURCE_CLASS.equals(
-						se.hirt.mcp.rpg.character.Origins.sourceOf(t))).isPresent()) {
-					v.add(new Violation("spells", "ALREADY_PREPARED",
-							d.name() + " is already always prepared from a species trait or feat; choose a different spell."));
+						c.id(), d.id())
+						.filter(t -> !se.hirt.mcp.rpg.character.Origins.SOURCE_CLASS
+								.equals(se.hirt.mcp.rpg.character.Origins.sourceOf(t)))
+						.isPresent()) {
+					v.add(new Violation("spells", "ALREADY_PREPARED", d.name()
+							+ " is already always prepared from a species trait or feat; choose a different spell."));
 				}
 				if (!ids.contains(d.id())) {
 					ids.add(d.id());
 				}
 			}
 			if (ids.size() > cast.preparedCount()) {
-				v.add(new Violation("spells", "COUNT",
-						"A level " + cast.level() + " " + cast.classSlug() + " prepares at most " + cast.preparedCount() + " spells."));
+				v.add(new Violation("spells", "COUNT", "A level " + cast.level() + " " + cast.classSlug()
+						+ " prepares at most " + cast.preparedCount() + " spells."));
 			}
 			if (v.isEmpty()) {
 				replaceTraits(tx, c.id(), "SPELL_PREPARED", ids, null);
@@ -305,7 +318,7 @@ public final class SpellService {
 	}
 
 	private static void replaceTraits(
-			Tx tx, long characterId, String kind, List<String> ids, Map<String, Object> payload) {
+		Tx tx, long characterId, String kind, List<String> ids, Map<String, Object> payload) {
 		// Only the class-chosen list is replaced; species- and feat-granted spells stay.
 		for (Row t : tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = ?", characterId, kind)) {
 			if (se.hirt.mcp.rpg.character.Origins.SOURCE_CLASS.equals(se.hirt.mcp.rpg.character.Origins.sourceOf(t))) {
@@ -325,7 +338,7 @@ public final class SpellService {
 	// ── prepare_spells ─────────────────────────────────────────────────
 
 	public Map<String, Object> prepare(
-			String operationId, String campaignRef, String characterRef, List<Object> cantrips, List<Object> spells) {
+		String operationId, String campaignRef, String characterRef, List<Object> cantrips, List<Object> spells) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -339,8 +352,8 @@ public final class SpellService {
 				throw RpgException.notAllowed(
 						characterRef + " is not an active character (edit drafts with update_character_draft).");
 			}
-			Casting cast = castingOf(tx, rules, c).orElseThrow(
-					() -> RpgException.notAllowed(c.str("name") + " has no spellcasting."));
+			Casting cast = castingOf(tx, rules, c)
+					.orElseThrow(() -> RpgException.notAllowed(c.str("name") + " has no spellcasting."));
 			if (cantrips == null && spells == null) {
 				throw RpgException.invalidArgument("Provide cantrips and/or spells.");
 			}
@@ -363,8 +376,8 @@ public final class SpellService {
 	// ── cast_spell (outside encounters) ────────────────────────────────
 
 	public Map<String, Object> cast(
-			String operationId, String campaignRef, String casterRef, String spell,
-			Integer slotLevel, List<String> targets, Map<String, Object> options) {
+		String operationId, String campaignRef, String casterRef, String spell, Integer slotLevel, List<String> targets,
+		Map<String, Object> options) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -389,25 +402,26 @@ public final class SpellService {
 	// ── the casting core ───────────────────────────────────────────────
 
 	/**
-	 * Validates preparation and slots, spends the slot, resolves the spell's structured mechanics against the targets,
-	 * applies effects and concentration, and records every roll. Shared with encounters.
+	 * Validates preparation and slots, spends the slot, resolves the spell's structured mechanics
+	 * against the targets, applies effects and concentration, and records every roll. Shared with
+	 * encounters.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> castCore(
-			Tx tx, RulesData rules, RollService roller, long campaignId, Row caster,
-			String spellText, Integer slotLevel, List<String> targetRefs, Map<String, Object> options, Long encounterId,
-			long round) {
-		RulesData.Definition def = rules.resolve("SPELL", spellText).orElseThrow(() -> RpgException.invalidArgument(
-				"Unknown spell '" + spellText + "'; see get_content_definitions with kind SPELL."));
+		Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, String spellText, Integer slotLevel,
+		List<String> targetRefs, Map<String, Object> options, Long encounterId, long round) {
+		RulesData.Definition def = rules.resolve("SPELL", spellText).orElseThrow(() -> RpgException
+				.invalidArgument("Unknown spell '" + spellText + "'; see get_content_definitions with kind SPELL."));
 		Map<String, Object> p = def.payload();
 		int level = ((Number) p.get("level")).intValue();
 		Optional<Casting> castingOpt = castingOf(tx, rules, caster);
 		String traitKind = level == 0 ? "SPELL_KNOWN" : "SPELL_PREPARED";
-		Row trait = tx.queryOne("SELECT * FROM character_trait WHERE character_id = ? AND kind = ? AND content_ref = ?",
-				caster.id(), traitKind, def.id()).orElseThrow(() -> RpgException.validation(
-				List.of(new Violation("spell", level == 0 ? "NOT_KNOWN" : "NOT_PREPARED",
-						caster.str("name") + (level == 0 ? " does not know "
-								: " has not prepared ") + def.name() + "."))));
+		Row trait = tx
+				.queryOne("SELECT * FROM character_trait WHERE character_id = ? AND kind = ? AND content_ref = ?",
+						caster.id(), traitKind, def.id())
+				.orElseThrow(() -> RpgException.validation(
+						List.of(new Violation("spell", level == 0 ? "NOT_KNOWN" : "NOT_PREPARED", caster.str("name")
+								+ (level == 0 ? " does not know " : " has not prepared ") + def.name() + "."))));
 		Map<String, Object> traitPayload = trait.isNull("payload_json") ? Map.of() : trait.map("payload_json");
 		// Species- and feat-granted spells use their recorded ability (Magic Initiate, lineages; SRD 5.2.1).
 		Ability grantedAbility = traitPayload.get("ability") instanceof String ga ? Ability.parse(ga) : null;
@@ -418,8 +432,8 @@ public final class SpellService {
 		// Slot — or a free cast granted by the species trait or feat that taught the spell.
 		int used = 0;
 		Map<String, Object> slotInfo = null;
-		boolean ritual = Boolean.TRUE.equals(opts.get("ritual")) || "true".equalsIgnoreCase(
-				String.valueOf(opts.get("ritual")));
+		boolean ritual = Boolean.TRUE.equals(opts.get("ritual"))
+				|| "true".equalsIgnoreCase(String.valueOf(opts.get("ritual")));
 		if (ritual) {
 			// SRD 5.2.1 Rituals: a spell with the Ritual tag, cast by a class with Ritual Casting, takes ten minutes
 			// longer and spends no spell slot. Encounter turns never reach here (the CAST action has no ritual option).
@@ -443,8 +457,9 @@ public final class SpellService {
 			slotInfo = Map.of("ritual", true, "level", level, "note",
 					"cast as a ritual: ten minutes longer than the casting time, no spell slot spent");
 		} else if (level > 0) {
-			Optional<Row> free = traitPayload.get("free_cast_resource") instanceof String fr ? tx.queryOne(
-					"SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", caster.id(), fr)
+			Optional<Row> free = traitPayload.get("free_cast_resource") instanceof String fr
+					? tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
+							caster.id(), fr)
 					: Optional.empty();
 			if (free.isPresent() && free.get().intOr("current", 0) > 0 && (slotLevel == null || slotLevel == level)) {
 				used = level;
@@ -453,8 +468,8 @@ public final class SpellService {
 						free.get().intOr("current", 0) - 1, "note",
 						"cast without a spell slot; the use returns on a Long Rest");
 			} else if (castingOpt.isEmpty()) {
-				throw RpgException.insufficientResource(caster.str(
-						"name") + " has no free cast of " + def.name() + " left (it returns on a Long Rest) and no spell slots to cast it with.");
+				throw RpgException.insufficientResource(caster.str("name") + " has no free cast of " + def.name()
+						+ " left (it returns on a Long Rest) and no spell slots to cast it with.");
 			} else if (castingOpt.get().pact()) {
 				Casting cast = castingOpt.get();
 				used = cast.pactSlotLevel();
@@ -462,9 +477,11 @@ public final class SpellService {
 					throw RpgException.validation(List.of(new Violation("spell", "LEVEL",
 							def.name() + " is level " + level + "; pact slots are level " + used + ".")));
 				}
-				Row res = tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
-						caster.id(), PACT_SLOT).orElseThrow(
-						() -> RpgException.insufficientResource(caster.str("name") + " has no pact slots."));
+				Row res = tx
+						.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
+								caster.id(), PACT_SLOT)
+						.orElseThrow(
+								() -> RpgException.insufficientResource(caster.str("name") + " has no pact slots."));
 				if (res.intOr("current", 0) <= 0) {
 					throw RpgException.insufficientResource(
 							caster.str("name") + " has no pact slots left (they return on a Short Rest).");
@@ -485,16 +502,16 @@ public final class SpellService {
 							caster.str("name") + " has no level " + used + " spell slots.")));
 				}
 				if (res.get().intOr("current", 0) <= 0) {
-					throw RpgException.insufficientResource(
-							caster.str("name") + " has no level " + used + " spell slots left.");
+					throw RpgException
+							.insufficientResource(caster.str("name") + " has no level " + used + " spell slots left.");
 				}
 				tx.update("resource_state", res.get().id(), Map.of("current", res.get().intOr("current", 0) - 1));
 				slotInfo = Map.of("slot_level", used, "remaining", res.get().intOr("current", 0) - 1);
 			}
 		}
 		int upcast = level == 0 ? 0 : Math.max(0, used - level);
-		Map<String, Object> mech =
-				p.get("mechanics") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of("kind", "UTILITY");
+		Map<String, Object> mech = p.get("mechanics") instanceof Map<?, ?> m ? (Map<String, Object>) m
+				: Map.of("kind", "UTILITY");
 		String kind = String.valueOf(mech.getOrDefault("kind", "UTILITY"));
 		int prof = RuntimeService.proficiencyBonus(tx, rules, caster);
 		int mod = grantedAbility != null ? Rules.modifier(caster.intOr(grantedAbility.column(), 10))
@@ -532,9 +549,8 @@ public final class SpellService {
 			if (targets.isEmpty()) {
 				throw RpgException.invalidArgument(def.name() + " needs at least one target.");
 			}
-			int shots =
-					mech.get("rays") instanceof Number r ? r.intValue() + upcastCount(mech, "per_level_rays", upcast)
-							: 1;
+			int shots = mech.get("rays") instanceof Number r
+					? r.intValue() + upcastCount(mech, "per_level_rays", upcast) : 1;
 			if (mech.get("beams_scaling") instanceof Map<?, ?> bs) {
 				shots = scaledInt((Map<String, Object>) bs, casterLevel, 1);
 			}
@@ -552,13 +568,12 @@ public final class SpellService {
 		}
 		case "SAVE" -> {
 			if (targets.isEmpty() && !selfCentred(p, mech)) {
-				throw RpgException.invalidArgument(
-						def.name() + " needs at least one target (the creatures in the area).");
+				throw RpgException
+						.invalidArgument(def.name() + " needs at least one target (the creatures in the area).");
 			}
 			for (Row target : targets) {
-				perTarget.add(
-						savingThrow(tx, rules, roller, campaignId, caster, target, def, mech, dc, upcast, casterLevel,
-								encounterId, round, concentrator, source, effectsCreated, opts, mm));
+				perTarget.add(savingThrow(tx, rules, roller, campaignId, caster, target, def, mech, dc, upcast,
+						casterLevel, encounterId, round, concentrator, source, effectsCreated, opts, mm));
 			}
 			if (targets.isEmpty()) {
 				// An emanation or area centred on the caster (Spirit Guardians, Thunderwave) with nobody in it yet:
@@ -645,13 +660,12 @@ public final class SpellService {
 		}
 		case "BUFF" -> {
 			String scope = String.valueOf(mech.getOrDefault("targets", "ONE"));
-			if (targets.isEmpty() && (scope.equals("SELF") || scope.equals("ONE") || scope.startsWith(
-					"UP_TO") || scope.startsWith("PARTY"))) {
+			if (targets.isEmpty() && (scope.equals("SELF") || scope.equals("ONE") || scope.startsWith("UP_TO")
+					|| scope.startsWith("PARTY"))) {
 				targets.add(caster);
 			}
-			Map<String, Object> modifiers =
-					mech.get("modifiers") instanceof Map<?, ?> given ? new LinkedHashMap<>((Map<String, Object>) given)
-							: new LinkedHashMap<>();
+			Map<String, Object> modifiers = mech.get("modifiers") instanceof Map<?, ?> given
+					? new LinkedHashMap<>((Map<String, Object>) given) : new LinkedHashMap<>();
 			String condition = mech.get("condition") == null ? null : mech.get("condition").toString();
 			for (Row target : targets) {
 				var mods = new LinkedHashMap<>(modifiers);
@@ -662,9 +676,10 @@ public final class SpellService {
 				Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name(),
 						mm);
 				long id = Effects.add(tx, campaignId, target.id(), caster.id(), def.id(), source,
-						condition == null ? "srd5e:effect/" + String.valueOf(mech.getOrDefault("effect", def.id()))
-								.toLowerCase() : RuntimeService.conditionRef(condition), mods, duration, concentrator,
-						def.id(), "PLAYER");
+						condition == null
+								? "srd5e:effect/" + String.valueOf(mech.getOrDefault("effect", def.id())).toLowerCase()
+								: RuntimeService.conditionRef(condition),
+						mods, duration, concentrator, def.id(), "PLAYER");
 				effectsCreated.add(Ref.of("effect", id));
 				var t = targetView(target);
 				t.put("effect", mech.getOrDefault("effect", condition));
@@ -715,10 +730,10 @@ public final class SpellService {
 				tx.update("character", target.id(), cols);
 				se.hirt.mcp.rpg.ledger.LedgerService.append(tx, campaignId,
 						new se.hirt.mcp.rpg.ledger.LedgerService.EventSpec("CHARACTER_REVIVED",
-								target.str("name") + " was returned to life by " + caster.str(
-										"name") + "'s " + def.name() + ".", List.of(target.id(), caster.id()),
-								"CRITICAL", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null, target.lng("location_id"),
-								null, Map.of("spell", def.id())));
+								target.str("name") + " was returned to life by " + caster.str("name") + "'s "
+										+ def.name() + ".",
+								List.of(target.id(), caster.id()), "CRITICAL", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE",
+								null, target.lng("location_id"), null, Map.of("spell", def.id())));
 				var t = targetView(target);
 				t.put("revived", true);
 				t.put("hp", Math.min(effectiveMax, hp));
@@ -767,15 +782,18 @@ public final class SpellService {
 			log.put("round", round);
 			log.put("actor_character_id", caster.id());
 			log.put("kind", "CAST");
-			log.put("summary",
-					caster.str("name") + " casts " + def.name() + (used > level ? " (level " + used + " slot)"
-							: "") + (mm == null ? "" : " " + mm.summary()) + ": " + perTarget.stream()
-							.map(t -> t.get("name") + (t.get("hit") != null ? (Boolean.TRUE.equals(t.get("hit"))
-																			   ? " hit" : " missed")
-									: t.get("saved") != null ? (Boolean.TRUE.equals(t.get("saved")) ? " saved"
-											: " failed") : "") + (t.get("damage") != null ? " " + t.get(
-									"damage") + " dmg" : "") + (t.get("healed") != null ? " +" + t.get("healed") + " HP"
-									: "")).toList());
+			log.put("summary", caster.str("name") + " casts " + def.name()
+					+ (used > level ? " (level " + used + " slot)" : "") + (mm == null ? "" : " " + mm.summary()) + ": "
+					+ perTarget
+							.stream().map(
+									t -> t.get("name")
+											+ (t.get("hit") != null
+													? (Boolean.TRUE.equals(t.get("hit")) ? " hit" : " missed")
+													: t.get("saved") != null ? (Boolean.TRUE.equals(t.get("saved"))
+															? " saved" : " failed") : "")
+											+ (t.get("damage") != null ? " " + t.get("damage") + " dmg" : "")
+											+ (t.get("healed") != null ? " +" + t.get("healed") + " HP" : ""))
+							.toList());
 			log.put("payload_json", null);
 			log.put("journal_id", tx.journalId());
 			tx.insert("encounter_log", log);
@@ -809,15 +827,15 @@ public final class SpellService {
 				}
 			}
 		}
-		if (upcast > 0 && mech.get("upcast") instanceof Map<?, ?> u && ((Map<String, Object>) u).get(
-				"per_level_dice") instanceof String per) {
+		if (upcast > 0 && mech.get("upcast") instanceof Map<?, ?> u
+				&& ((Map<String, Object>) u).get("per_level_dice") instanceof String per) {
 			int step = ((Map<String, Object>) u).get("step") instanceof Number s ? s.intValue() : 1;
 			int times = upcast / step;
 			var m = java.util.regex.Pattern.compile("^(\\d+)d(\\d+)(.*)$").matcher(per);
 			var b = java.util.regex.Pattern.compile("^(\\d+)d(\\d+)(.*)$").matcher(dice);
 			if (times > 0 && m.matches() && b.matches() && m.group(2).equals(b.group(2))) {
-				dice = (Integer.parseInt(b.group(1)) + times * Integer.parseInt(m.group(1))) + "d" + b.group(
-						2) + b.group(3);
+				dice = (Integer.parseInt(b.group(1)) + times * Integer.parseInt(m.group(1))) + "d" + b.group(2)
+						+ b.group(3);
 			} else if (times > 0) {
 				dice = dice + "+" + per.replace("d", "d");
 				for (int i = 1; i < times; i++) {
@@ -841,8 +859,8 @@ public final class SpellService {
 
 	@SuppressWarnings("unchecked")
 	private static List<Combat.RolledDamage> rollSpellDamage(
-			Tx tx, RollService roller, long campaignId, RulesData.Definition def, Map<String, Object> mech, int upcast,
-			int casterLevel, boolean critical, int modifierIfAny, Map<String, Object> opts, Metamagic.Plan mm) {
+		Tx tx, RollService roller, long campaignId, RulesData.Definition def, Map<String, Object> mech, int upcast,
+		int casterLevel, boolean critical, int modifierIfAny, Map<String, Object> opts, Metamagic.Plan mm) {
 		var out = new ArrayList<Combat.RolledDamage>();
 		Object dmg = mech.get("damage");
 		if (!(dmg instanceof List<?> parts)) {
@@ -859,8 +877,8 @@ public final class SpellService {
 				dice = dice + (modifierIfAny > 0 ? "+" + modifierIfAny : Integer.toString(modifierIfAny));
 			}
 			String type = String.valueOf(part.get("type"));
-			if (mech.get("choose_type") instanceof List<?> choices && opts.get(
-					"damage_type") != null && choices.contains(opts.get("damage_type").toString().toLowerCase())) {
+			if (mech.get("choose_type") instanceof List<?> choices && opts.get("damage_type") != null
+					&& choices.contains(opts.get("damage_type").toString().toLowerCase())) {
 				type = opts.get("damage_type").toString().toLowerCase();
 			}
 			type = Metamagic.transmute(mm, type);
@@ -875,10 +893,10 @@ public final class SpellService {
 
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> spellAttack(
-			Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
-			RulesData.Definition def, Map<String, Object> mech, int atk, int mod, int upcast, int casterLevel,
-			Long encounterId, long round, Long concentrator, String source, List<String> effectsCreated,
-			Map<String, Object> opts, Metamagic.Plan mm) {
+		Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
+		RulesData.Definition def, Map<String, Object> mech, int atk, int mod, int upcast, int casterLevel,
+		Long encounterId, long round, Long concentrator, String source, List<String> effectsCreated,
+		Map<String, Object> opts, Metamagic.Plan mm) {
 		Row target = tx.get("character", targetRow.id());
 		var t = targetView(target);
 		if ("DEAD".equals(target.str("life_state"))) {
@@ -948,8 +966,8 @@ public final class SpellService {
 					t.put("caster_healed", dr.totalDealt() / 2);
 				}
 			}
-			if (mech.get("on_hit_condition") instanceof String cond && !"DEAD".equals(
-					String.valueOf(t.get("life_state")))) {
+			if (mech.get("on_hit_condition") instanceof String cond
+					&& !"DEAD".equals(String.valueOf(t.get("life_state")))) {
 				long rounds = mech.get("on_hit_condition_duration_rounds") instanceof Number n ? n.longValue() : 1;
 				long id = Effects.add(tx, campaignId, target.id(), caster.id(), def.id(), source,
 						RuntimeService.conditionRef(cond), null,
@@ -964,10 +982,10 @@ public final class SpellService {
 
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> savingThrow(
-			Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
-			RulesData.Definition def, Map<String, Object> mech, int dc, int upcast, int casterLevel, Long encounterId,
-			long round, Long concentrator, String source, List<String> effectsCreated, Map<String, Object> opts,
-			Metamagic.Plan mm) {
+		Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
+		RulesData.Definition def, Map<String, Object> mech, int dc, int upcast, int casterLevel, Long encounterId,
+		long round, Long concentrator, String source, List<String> effectsCreated, Map<String, Object> opts,
+		Metamagic.Plan mm) {
 		Row target = tx.get("character", targetRow.id());
 		var t = targetView(target);
 		if ("DEAD".equals(target.str("life_state"))) {
@@ -978,8 +996,8 @@ public final class SpellService {
 		boolean automatic = Boolean.TRUE.equals(mech.get("automatic")) || "NONE".equals(saveAbility);
 		boolean saved = false;
 		boolean careful = mm != null && mm.carefulFor(target.id());
-		if (mech.get("automatic_if_hp_at_most") instanceof Number threshold && target.intOr("current_hp",
-				0) <= threshold.intValue()) {
+		if (mech.get("automatic_if_hp_at_most") instanceof Number threshold
+				&& target.intOr("current_hp", 0) <= threshold.intValue()) {
 			automatic = true;
 			t.put("automatic", "HP at or below " + threshold);
 		}
@@ -1098,7 +1116,10 @@ public final class SpellService {
 		return t;
 	}
 
-	/** Saving throw bonus: ability modifier plus proficiency for classed characters, stat-block value for creatures. */
+	/**
+	 * Saving throw bonus: ability modifier plus proficiency for classed characters, stat-block
+	 * value for creatures.
+	 */
 	@SuppressWarnings("unchecked")
 	public static int saveBonus(Tx tx, RulesData rules, Row target, Ability ability) {
 		if (RuntimeService.usesStatBlock(tx, target)) {
@@ -1118,8 +1139,8 @@ public final class SpellService {
 	}
 
 	private static Map<String, Object> duration(
-			Tx tx, long campaignId, Map<String, Object> mech, int upcast, Long encounterId, long round, String label,
-			Metamagic.Plan mm) {
+		Tx tx, long campaignId, Map<String, Object> mech, int upcast, Long encounterId, long round, String label,
+		Metamagic.Plan mm) {
 		if (mech.get("duration_rounds") instanceof Number n) {
 			return Effects.rounds(tx, campaignId, encounterId, round, extended(mm, n.longValue(), true), label);
 		}
@@ -1127,7 +1148,10 @@ public final class SpellService {
 		return Effects.minutes(tx, campaignId, extended(mm, minutes, false), label);
 	}
 
-	/** Extended Spell doubles a duration of a minute or more, to at most 24 hours (SRD 5.2.1 "Sorcerer"). */
+	/**
+	 * Extended Spell doubles a duration of a minute or more, to at most 24 hours (SRD 5.2.1
+	 * "Sorcerer").
+	 */
 	private static long extended(Metamagic.Plan mm, long amount, boolean rounds) {
 		if (mm == null || !mm.extended()) {
 			return amount;
@@ -1138,16 +1162,17 @@ public final class SpellService {
 		return Math.min(24 * 60, amount * 2);
 	}
 
-	private static final java.util.regex.Pattern DURATION_TEXT =
-			java.util.regex.Pattern.compile("(\\d+)\\s*(round|minute|hour|day)s?", java.util.regex.Pattern.CASE_INSENSITIVE);
+	private static final java.util.regex.Pattern DURATION_TEXT = java.util.regex.Pattern
+			.compile("(\\d+)\\s*(round|minute|hour|day)s?", java.util.regex.Pattern.CASE_INSENSITIVE);
 
 	/**
-	 * The duration of the spell itself (for the caster's concentration marker): the mechanics' explicit rounds or
-	 * minutes when given, else the printed duration ("10 minutes", "Concentration, up to 1 hour"), else one minute.
+	 * The duration of the spell itself (for the caster's concentration marker): the mechanics'
+	 * explicit rounds or minutes when given, else the printed duration ("10 minutes",
+	 * "Concentration, up to 1 hour"), else one minute.
 	 */
 	private static Map<String, Object> spellDuration(
-			Tx tx, long campaignId, Map<String, Object> payload, Map<String, Object> mech, int upcast, Long encounterId,
-			long round, String label, Metamagic.Plan mm) {
+		Tx tx, long campaignId, Map<String, Object> payload, Map<String, Object> mech, int upcast, Long encounterId,
+		long round, String label, Metamagic.Plan mm) {
 		if (mech.get("duration_rounds") instanceof Number || mech.get("duration_minutes") instanceof Number) {
 			return duration(tx, campaignId, mech, upcast, encounterId, round, label, mm);
 		}
@@ -1155,16 +1180,19 @@ public final class SpellService {
 		if (m.find()) {
 			long n = Long.parseLong(m.group(1));
 			return switch (m.group(2).toLowerCase()) {
-				case "round" -> Effects.rounds(tx, campaignId, encounterId, round, extended(mm, n, true), label);
-				case "hour" -> Effects.minutes(tx, campaignId, extended(mm, n * 60, false), label);
-				case "day" -> Effects.minutes(tx, campaignId, extended(mm, n * 60 * 24, false), label);
-				default -> Effects.minutes(tx, campaignId, extended(mm, n, false), label);
+			case "round" -> Effects.rounds(tx, campaignId, encounterId, round, extended(mm, n, true), label);
+			case "hour" -> Effects.minutes(tx, campaignId, extended(mm, n * 60, false), label);
+			case "day" -> Effects.minutes(tx, campaignId, extended(mm, n * 60 * 24, false), label);
+			default -> Effects.minutes(tx, campaignId, extended(mm, n, false), label);
 			};
 		}
 		return Effects.minutes(tx, campaignId, extended(mm, 1, false), label);
 	}
 
-	/** A spell whose area starts at the caster: range "Self (15-foot emanation)", "Self (15-foot cube)". */
+	/**
+	 * A spell whose area starts at the caster: range "Self (15-foot emanation)", "Self (15-foot
+	 * cube)".
+	 */
 	private static boolean selfCentred(Map<String, Object> payload, Map<String, Object> mech) {
 		String range = String.valueOf(payload.getOrDefault("range", "")).toLowerCase();
 		String area = String.valueOf(mech.getOrDefault("area", "")).toLowerCase();
@@ -1188,12 +1216,15 @@ public final class SpellService {
 		Row c = tx.get("character", characterId);
 		if ("DEAD".equals(c.str("life_state"))) {
 			tx.queryOne("SELECT id FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounterId,
-							characterId)
+					characterId)
 					.ifPresent(p -> tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED")));
 		}
 	}
 
-	/** Whether the character has any slot of at least the given level (pact slots count at their level). */
+	/**
+	 * Whether the character has any slot of at least the given level (pact slots count at their
+	 * level).
+	 */
 	public static boolean hasSlot(Tx tx, long characterId, int minLevel) {
 		for (Row r : tx.query(
 				"SELECT * FROM resource_state WHERE character_id = ? AND (resource_ref LIKE 'slot:%' OR resource_ref = ?)",
@@ -1210,7 +1241,10 @@ public final class SpellService {
 		return false;
 	}
 
-	/** Spends the lowest available slot of at least the given level; returns {slot_level, remaining} or empty. */
+	/**
+	 * Spends the lowest available slot of at least the given level; returns {slot_level, remaining}
+	 * or empty.
+	 */
 	public static Optional<Map<String, Object>> spendLowestSlot(Tx tx, long characterId, int minLevel) {
 		Row best = null;
 		int bestLevel = 99;

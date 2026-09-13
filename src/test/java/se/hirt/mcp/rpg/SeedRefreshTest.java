@@ -38,9 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An already-installed ruleset version is brought up to date with the embedded seed on the next start (a database
- * created before a definition gained its {@code summary} must not keep the stale payload), while an unchanged seed
- * touches nothing.
+ * An already-installed ruleset version is brought up to date with the embedded seed on the next
+ * start (a database created before a definition gained its {@code summary} must not keep the stale
+ * payload), while an unchanged seed touches nothing.
  */
 class SeedRefreshTest {
 

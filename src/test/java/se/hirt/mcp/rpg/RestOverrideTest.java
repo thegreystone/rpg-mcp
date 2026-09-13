@@ -41,7 +41,8 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Rests restore only what the rules allow; overrides are policy-gated, audited and labeled (DOMAIN_MODEL.md I-54).
+ * Rests restore only what the rules allow; overrides are policy-gated, audited and labeled
+ * (DOMAIN_MODEL.md I-54).
  */
 class RestOverrideTest {
 
@@ -64,8 +65,8 @@ class RestOverrideTest {
 			String pc = "character:1";
 			int max = (Integer) m(engine.characters().characterSheet(campaign, pc, "SUMMARY").get("hp")).get("max");
 			int conMod = (Integer) m(
-					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("abilities")).get("CON")).get(
-					"modifier");
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("abilities")).get("CON"))
+					.get("modifier");
 			engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "DAMAGE", "amount", max - 1, "damage_type", "slashing", "reason", "test"));
 			assertEquals(1,
@@ -90,33 +91,34 @@ class RestOverrideTest {
 			assertEquals(480L, longRest.get("elapsed_minutes"));
 
 			// Overrides: audited, labeled, revision-checked.
-			Map<String, Object> override = engine.rest()
-					.override(op(), campaign, "ADJUST_HP", pc, map("set_to", 2), "the story needs him barely standing",
-							null);
+			Map<String, Object> override = engine.rest().override(op(), campaign, "ADJUST_HP", pc, map("set_to", 2),
+					"the story needs him barely standing", null);
 			assertEquals(Boolean.TRUE, override.get("override"));
 			assertEquals(Boolean.TRUE, override.get("audited"));
 			assertEquals(2, m(override.get("after")).get("current_hp"));
 			assertTrue(override.get("label").toString().startsWith("OVERRIDE"));
-			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
-					() -> engine.rest().override(op(), campaign, "SET_XP", pc, map("xp", 5), null, null)).code());
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class,
+							() -> engine.rest().override(op(), campaign, "SET_XP", pc, map("xp", 5), null, null))
+							.code());
 			RpgException stale = assertThrows(RpgException.class,
 					() -> engine.rest().override(op(), campaign, "SET_XP", pc, map("xp", 5), "why", 0L));
 			assertEquals(ErrorCode.CONFLICT, stale.code());
 			// Kill and revive by fiat.
 			engine.rest().override(op(), campaign, "SET_LIFE_STATE", pc, map("life_state", "DEAD"), "a curse", null);
 			assertEquals("DEAD", engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state"));
-			Map<String, Object> revived = engine.rest()
-					.override(op(), campaign, "SET_LIFE_STATE", pc, map("life_state", "ALIVE", "hp", 3),
-							"the curse lifted", null);
+			Map<String, Object> revived = engine.rest().override(op(), campaign, "SET_LIFE_STATE", pc,
+					map("life_state", "ALIVE", "hp", 3), "the curse lifted", null);
 			assertEquals("ALIVE", m(revived.get("after")).get("life_state"));
 			assertEquals(3,
 					(Integer) m(engine.characters().characterSheet(campaign, pc, "SUMMARY").get("hp")).get("current"));
 			long audits = engine.db()
 					.read(tx -> tx.count("SELECT COUNT(*) FROM audit_record WHERE kind = 'GM_OVERRIDE'"));
 			assertEquals(3, audits);
-			assertEquals(3, list(engine.ledger()
-					.queryTimeline(campaign, null, null, null, List.of("GM_OVERRIDE"), null, true, 10)
-					.get("events")).size());
+			assertEquals(3,
+					list(engine.ledger()
+							.queryTimeline(campaign, null, null, null, List.of("GM_OVERRIDE"), null, true, 10)
+							.get("events")).size());
 			// Overrides survive nothing: they are ordinary journaled mutations, and the audit survives a restore.
 			Map<String, Object> checkpoints = engine.checkpoints().options(campaign);
 			String cp = (String) list(list(checkpoints.get("options")).get(0).get("checkpoints")).get(0).get("ref");
@@ -138,23 +140,27 @@ class RestOverrideTest {
 							map("gm_override_policy", "DISABLED"), "continuation", "CHECKPOINT", "party", "SURPRISE_ME",
 							"adventure", map("premise", "x", "opening_location", "Camp", "immediate_goal", "y")));
 			String pc = (String) engine.characters().createDraft(op(), campaign,
-							map("name", "Ash", "species", "Human", "class", "Wizard", "ability_scores",
-									map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
-									List.of("Arcana", "History"), "personality", "x", "background", "Criminal",
-									"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight",
-									"origin_feat",
-									map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))), true)
-					.get("character");
+					map("name", "Ash", "species", "Human", "class", "Wizard", "ability_scores",
+							map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
+							List.of("Arcana", "History"), "personality", "x", "background", "Criminal",
+							"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight",
+							"origin_feat",
+							map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))),
+					true).get("character");
 			engine.characters().commitDraft(op(), campaign, pc, null);
 			engine.campaigns().commitSetup(op(), campaign, null);
 			engine.sessions().bootstrap(op(), campaign, null);
-			RpgException denied = assertThrows(RpgException.class, () -> engine.rest()
-					.override(op(), campaign, "SET_MONEY", pc, map("money", "1000 gp"), "greed", null));
+			RpgException denied = assertThrows(RpgException.class, () -> engine.rest().override(op(), campaign,
+					"SET_MONEY", pc, map("money", "1000 gp"), "greed", null));
 			assertEquals(ErrorCode.POLICY_DENIED, denied.code());
-			assertEquals(ErrorCode.POLICY_DENIED, assertThrows(RpgException.class,
-					() -> engine.inventory().grantLoot(op(), campaign, pc, null, "1 gp", "GM_GRANT", "x")).code());
-			assertEquals(ErrorCode.POLICY_DENIED, assertThrows(RpgException.class,
-					() -> engine.runtime().awardXp(op(), campaign, List.of(pc), 10, "DISCRETIONARY", "x")).code());
+			assertEquals(ErrorCode.POLICY_DENIED,
+					assertThrows(RpgException.class,
+							() -> engine.inventory().grantLoot(op(), campaign, pc, null, "1 gp", "GM_GRANT", "x"))
+							.code());
+			assertEquals(ErrorCode.POLICY_DENIED,
+					assertThrows(RpgException.class,
+							() -> engine.runtime().awardXp(op(), campaign, List.of(pc), 10, "DISCRETIONARY", "x"))
+							.code());
 		}
 	}
 }

@@ -41,9 +41,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Sanity test for the native image binary: starts the executable against a temporary data directory, performs the MCP
- * handshake over STDIO, lists tools, and calls get_server_state (which exercises SQLite, migrations and the seed import
- * inside the native image).
+ * Sanity test for the native image binary: starts the executable against a temporary data
+ * directory, performs the MCP handshake over STDIO, lists tools, and calls get_server_state (which
+ * exercises SQLite, migrations and the seed import inside the native image).
  * <p>
  * Skipped unless {@code native.image.path} is set, e.g.
  * {@code mvn test-compile failsafe:integration-test -Dnative.image.path=target/rpg-mcp-server-0.1.0-runner.exe}.
@@ -65,8 +65,8 @@ class NativeImageSanityIT {
 			OutputStream stdin = process.getOutputStream();
 			InputStream stdout = process.getInputStream();
 
-			send(stdin,
-					"{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{}," + "\"clientInfo\":{\"name\":\"sanity-test\",\"version\":\"1.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}");
+			send(stdin, "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},"
+					+ "\"clientInfo\":{\"name\":\"sanity-test\",\"version\":\"1.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}");
 			String init = readResponse(stdout, 15_000);
 			assertNotNull(init, "No initialize response");
 			assertTrue(init.contains("rpg-mcp-server"), init);

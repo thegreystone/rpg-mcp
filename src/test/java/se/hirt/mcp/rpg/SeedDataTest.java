@@ -40,8 +40,8 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Structural integrity of the embedded SRD 5.2.1 seed data: every reference resolves, every weapon has parseable damage
- * and known properties, every class bundle is grantable.
+ * Structural integrity of the embedded SRD 5.2.1 seed data: every reference resolves, every weapon
+ * has parseable damage and known properties, every class bundle is grantable.
  */
 class SeedDataTest {
 
@@ -92,7 +92,7 @@ class SeedDataTest {
 					}
 				}
 				case "AMMUNITION" ->
-						assertTrue(rules.find(String.valueOf(p.get("container"))).isPresent(), d.id() + " container");
+					assertTrue(rules.find(String.valueOf(p.get("container"))).isPresent(), d.id() + " container");
 				default -> {
 				}
 				}
@@ -121,8 +121,8 @@ class SeedDataTest {
 					assertTrue(((Number) option.get("gold_gp")).intValue() >= 0);
 					for (Map<String, Object> item : (List<Map<String, Object>>) option.getOrDefault("items",
 							List.of())) {
-						String ref =
-								item.containsKey("choice") ? (String) item.get("default") : (String) item.get("item");
+						String ref = item.containsKey("choice") ? (String) item.get("default")
+								: (String) item.get("item");
 						assertTrue(rules.find(ref).isPresent(), cls.id() + " option " + e.getKey() + " item " + ref);
 					}
 				}
@@ -168,7 +168,8 @@ class SeedDataTest {
 				DiceExpression.parse(String.valueOf(hp.get("dice")));
 				assertTrue(((Number) hp.get("average")).intValue() > 0);
 				List<Map<String, Object>> actions = (List<Map<String, Object>>) p.get("actions");
-				assertNotNull(actions, d.id() + " needs an actions list (the Shrieker Fungus's is empty: it only reacts)");
+				assertNotNull(actions,
+						d.id() + " needs an actions list (the Shrieker Fungus's is empty: it only reacts)");
 				for (Map<String, Object> a : actions) {
 					if (String.valueOf(a.get("kind")).endsWith("ATTACK")) {
 						assertNotNull(a.get("attack_bonus"), d.id() + " " + a.get("name"));

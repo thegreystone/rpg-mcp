@@ -54,8 +54,8 @@ import se.hirt.mcp.rpg.world.WorldService;
 import java.nio.file.Path;
 
 /**
- * Wires the engine together over one database. Constructed once per process by CDI, or directly by tests (with a
- * scripted roller) without any container.
+ * Wires the engine together over one database. Constructed once per process by CDI, or directly by
+ * tests (with a scripted roller) without any container.
  */
 public final class Engine implements AutoCloseable {
 

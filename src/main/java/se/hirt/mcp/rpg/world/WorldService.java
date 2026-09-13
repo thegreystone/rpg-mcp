@@ -43,9 +43,10 @@ import se.hirt.mcp.rpg.session.GameTime;
 import java.util.*;
 
 /**
- * Semantic maps and movement (DESIGN.md §20, DOMAIN_MODEL.md §12, MCP_PROTOCOL.md §12.2/§12.5): locations are a
- * containment tree joined by connections; detail is generated when relevant and then persisted (I-39); movement needs a
- * known traversable route or an explicit authorized one (I-40).
+ * Semantic maps and movement (DESIGN.md §20, DOMAIN_MODEL.md §12, MCP_PROTOCOL.md §12.2/§12.5):
+ * locations are a containment tree joined by connections; detail is generated when relevant and
+ * then persisted (I-39); movement needs a known traversable route or an explicit authorized one
+ * (I-40).
  */
 public final class WorldService {
 
@@ -68,12 +69,13 @@ public final class WorldService {
 	// ── materialize_location ───────────────────────────────────────────
 
 	/**
-	 * Creates and/or materializes a location: an existing semantic node (by ref) or a new one under a parent. Features,
-	 * secrets, child areas and connections are persisted; later reads agree (I-39).
+	 * Creates and/or materializes a location: an existing semantic node (by ref) or a new one under
+	 * a parent. Features, secrets, child areas and connections are persisted; later reads agree
+	 * (I-39).
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> materialize(
-			String operationId, String campaignRef, String locationRef, Map<String, Object> spec, String provenance) {
+		String operationId, String campaignRef, String locationRef, Map<String, Object> spec, String provenance) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -88,13 +90,14 @@ public final class WorldService {
 			if (locationRef != null && !locationRef.isBlank()) {
 				location = location(tx, campaignId, locationRef);
 				if ("MATERIALIZED".equals(location.str("materialization")) && !Boolean.TRUE.equals(s.get("extend"))) {
-					throw RpgException.notAllowed(
-							locationRef + " is already materialized; pass extend=true to add detail without contradicting it, " + "or use apply_gm_override to correct committed geography (I-41).");
+					throw RpgException.notAllowed(locationRef
+							+ " is already materialized; pass extend=true to add detail without contradicting it, "
+							+ "or use apply_gm_override to correct committed geography (I-41).");
 				}
 			} else {
 				if (s.get("name") == null) {
-					throw RpgException.invalidArgument(
-							"Provide an existing location reference or a spec with at least a name.");
+					throw RpgException
+							.invalidArgument("Provide an existing location reference or a spec with at least a name.");
 				}
 				Long parentId = null;
 				if (s.get("parent") != null) {
@@ -121,9 +124,9 @@ public final class WorldService {
 				String name = String.valueOf(f.get("name"));
 				if (features.stream()
 						.anyMatch(existing -> name.equalsIgnoreCase(String.valueOf(existing.get("name"))))) {
-					throw RpgException.validation(List.of(new Violation("features", "CONTRADICTION",
-							"Feature '" + name + "' already exists at " + location.str(
-									"name") + "; committed detail cannot be redefined (I-41).")));
+					throw RpgException.validation(List
+							.of(new Violation("features", "CONTRADICTION", "Feature '" + name + "' already exists at "
+									+ location.str("name") + "; committed detail cannot be redefined (I-41).")));
 				}
 				var feature = new LinkedHashMap<String, Object>();
 				feature.put("name", name);
@@ -131,8 +134,8 @@ public final class WorldService {
 				feature.put("visibility",
 						f.get("visibility") == null ? "PARTY_KNOWN" : f.get("visibility").toString().toUpperCase());
 				if (!LedgerService.VISIBILITY.contains(String.valueOf(feature.get("visibility")))) {
-					throw RpgException.invalidArgument(
-							"Feature visibility must be one of " + LedgerService.VISIBILITY + ".");
+					throw RpgException
+							.invalidArgument("Feature visibility must be one of " + LedgerService.VISIBILITY + ".");
 				}
 				features.add(feature);
 				newFeatures.add(feature);
@@ -210,8 +213,8 @@ public final class WorldService {
 	}
 
 	public static long insertLocation(
-			Tx tx, long campaignId, String name, String kind, String description, Long parentId, String materialization,
-			Object tags) {
+		Tx tx, long campaignId, String name, String kind, String description, Long parentId, String materialization,
+		Object tags) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("kind", kind);
@@ -226,8 +229,8 @@ public final class WorldService {
 
 	/** One row per undirected edge (a < b); re-connecting an existing pair updates it. */
 	public static Map<String, Object> connect(
-			Tx tx, long campaignId, long a, long b, String kind, String state,
-			Integer minutes, Object miles, String visibility) {
+		Tx tx, long campaignId, long a, long b, String kind, String state, Integer minutes, Object miles,
+		String visibility) {
 		if (a == b) {
 			throw RpgException.invalidArgument("A location cannot connect to itself.");
 		}
@@ -303,7 +306,10 @@ public final class WorldService {
 		return m;
 	}
 
-	/** Full location view for the GM: features with visibility labels, connections, children, occupants. */
+	/**
+	 * Full location view for the GM: features with visibility labels, connections, children,
+	 * occupants.
+	 */
 	public static Map<String, Object> detail(Tx tx, Row l) {
 		var m = summary(l);
 		m.put("description", l.str("description"));
@@ -324,10 +330,11 @@ public final class WorldService {
 		m.put("children", tx.query("SELECT * FROM location WHERE parent_id = ? ORDER BY id", l.id()).stream()
 				.map(WorldService::summary).toList());
 		m.put("characters_present", tx.query(
-						"SELECT id, name, life_state FROM character WHERE location_id = ? AND lifecycle = 'ACTIVE' ORDER BY id",
-						l.id()).stream()
-				.map(c -> Ref.of(Ref.CHARACTER, c.id()) + " (" + c.str("name") + (!"ALIVE".equals(c.str("life_state"))
-						? ", " + c.str("life_state").toLowerCase() : "") + ")").toList());
+				"SELECT id, name, life_state FROM character WHERE location_id = ? AND lifecycle = 'ACTIVE' ORDER BY id",
+				l.id()).stream()
+				.map(c -> Ref.of(Ref.CHARACTER, c.id()) + " (" + c.str("name")
+						+ (!"ALIVE".equals(c.str("life_state")) ? ", " + c.str("life_state").toLowerCase() : "") + ")")
+				.toList());
 		m.put("items_here", tx.count("SELECT COUNT(*) FROM inventory_entry WHERE location_id = ?", l.id()));
 		m.put("revision", l.lng("revision"));
 		return m;
@@ -336,8 +343,8 @@ public final class WorldService {
 	// ── move_party ─────────────────────────────────────────────────────
 
 	public Map<String, Object> move(
-			String operationId, String campaignRef, String toRef, List<String> characterRefs, boolean authorizedRoute,
-			Integer travelMinutes, String reason) {
+		String operationId, String campaignRef, String toRef, List<String> characterRefs, boolean authorizedRoute,
+		Integer travelMinutes, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -360,7 +367,8 @@ public final class WorldService {
 				// The party is whoever is with it: active members and guests standing where the party stands. A guest
 				// left at the manor, or a member who stayed behind without being separated, does not teleport.
 				for (Row m : tx.query(
-						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
+						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
+								+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
 						campaignId)) {
 					boolean here = from == null || m.isNull("location_id") || m.lng("location_id") == from.id();
 					if (here) {
@@ -392,8 +400,8 @@ public final class WorldService {
 			if (from != null && path.isEmpty()) {
 				if (!authorizedRoute) {
 					throw RpgException.validation(List.of(new Violation("to", "NO_KNOWN_ROUTE",
-							"No known traversable route from " + from.str("name") + " to " + destination.str(
-									"name") + ". Materialize the connection (materialize_location with connections) or pass authorized_route=true with a reason and travel_minutes (I-40).")));
+							"No known traversable route from " + from.str("name") + " to " + destination.str("name")
+									+ ". Materialize the connection (materialize_location with connections) or pass authorized_route=true with a reason and travel_minutes (I-40).")));
 				}
 				if (reason == null || reason.isBlank()) {
 					throw RpgException.invalidArgument("An authorized route needs a reason.");
@@ -405,11 +413,11 @@ public final class WorldService {
 				minutes = 0;
 				long cursor = from == null ? destination.id() : from.id();
 				for (Row edge : path) {
-					long next =
-							edge.lng("location_a_id") == cursor ? edge.lng("location_b_id") : edge.lng("location_a_id");
+					long next = edge.lng("location_a_id") == cursor ? edge.lng("location_b_id")
+							: edge.lng("location_a_id");
 					Map<String, Object> distance = edge.map("distance_json");
-					long hop =
-							distance.get("travel_minutes") instanceof Number n ? n.longValue() : DEFAULT_TRAVEL_MINUTES;
+					long hop = distance.get("travel_minutes") instanceof Number n ? n.longValue()
+							: DEFAULT_TRAVEL_MINUTES;
 					minutes += hop;
 					hops.add(Map.of("to", Ref.of(Ref.LOCATION, next), "name", tx.get("location", next).str("name"),
 							"minutes", hop, "via", edge.str("kind")));
@@ -442,9 +450,9 @@ public final class WorldService {
 			tx.update("campaign", campaignId, ccols);
 			String names = String.join(", ", movers.stream().map(c -> c.str("name")).toList());
 			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("PARTY_MOVED",
-					names + " travelled from " + (from == null ? "nowhere"
-							: from.str("name")) + " to " + destination.str("name") + " (" + GameTime.render(
-							newSeq) + ")" + (reason == null || reason.isBlank() ? "." : ": " + reason),
+					names + " travelled from " + (from == null ? "nowhere" : from.str("name")) + " to "
+							+ destination.str("name") + " (" + GameTime.render(newSeq) + ")"
+							+ (reason == null || reason.isBlank() ? "." : ": " + reason),
 					movers.stream().map(Row::id).toList(), minutes >= GameTime.MINUTES_PER_DAY ? "NOTABLE" : "MINOR",
 					"PARTY_KNOWN", "GM", null, destination.id(), null,
 					Map.of("from", Ref.ofNullable(Ref.LOCATION, from == null ? null : from.id()), "minutes", minutes)));
@@ -464,8 +472,8 @@ public final class WorldService {
 			if (expiredEffects > 0) {
 				consequences.add(expiredEffects + " timed effect(s) expired");
 			}
-			consequences.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"),
-					newSeq));
+			consequences
+					.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"), newSeq));
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			if (due != null) {
 				consequences.add(due);
@@ -493,23 +501,26 @@ public final class WorldService {
 			result.put("director_trigger", trigger);
 			var warnings = new ArrayList<String>();
 			if ("SEMANTIC".equals(destination.str("materialization"))) {
-				warnings.add(destination.str(
-						"name") + " is only a semantic node; materialize_location it now that the party has arrived.");
+				warnings.add(destination.str("name")
+						+ " is only a semantic node; materialize_location it now that the party has arrived.");
 			}
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), warnings));
 			return result;
 		});
 	}
 
-	/** Breadth-first search over traversable, party-known connections; returns the edges of the path (empty = none). */
+	/**
+	 * Breadth-first search over traversable, party-known connections; returns the edges of the path
+	 * (empty = none).
+	 */
 	static List<Row> route(Tx tx, long campaignId, long from, long to) {
 		Map<Long, List<Row>> adjacency = new HashMap<>();
 		for (Row c : tx.query("SELECT * FROM location_connection WHERE campaign_id = ?", campaignId)) {
 			Map<String, Object> state = c.map("state_json");
 			String s = String.valueOf(state.get("state"));
 			String vis = String.valueOf(state.getOrDefault("visibility", "PARTY_KNOWN"));
-			boolean traversable = s.equals("OPEN") || (s.equals("SECRET") && !vis.equals("GM_ONLY") && !vis.equals(
-					"DIRECTOR_ONLY"));
+			boolean traversable = s.equals("OPEN")
+					|| (s.equals("SECRET") && !vis.equals("GM_ONLY") && !vis.equals("DIRECTOR_ONLY"));
 			if (!traversable) {
 				continue;
 			}
@@ -529,14 +540,14 @@ public final class WorldService {
 				while (cursor != from) {
 					Row edge = via.get(cursor);
 					path.add(0, edge);
-					cursor =
-							edge.lng("location_a_id") == cursor ? edge.lng("location_b_id") : edge.lng("location_a_id");
+					cursor = edge.lng("location_a_id") == cursor ? edge.lng("location_b_id")
+							: edge.lng("location_a_id");
 				}
 				return path;
 			}
 			for (Row edge : adjacency.getOrDefault(current, List.of())) {
-				long next =
-						edge.lng("location_a_id") == current ? edge.lng("location_b_id") : edge.lng("location_a_id");
+				long next = edge.lng("location_a_id") == current ? edge.lng("location_b_id")
+						: edge.lng("location_a_id");
 				if (seen.add(next)) {
 					via.put(next, edge);
 					queue.add(next);

@@ -35,8 +35,7 @@ public enum Alignment implements Described {
 
 	LAWFUL_GOOD("Lawful Good", "Honour, duty and compassion; keeps their word even when it costs them."),
 	NEUTRAL_GOOD("Neutral Good", "Does the decent thing without much regard for rules either way."),
-	CHAOTIC_GOOD("Chaotic Good",
-			"Compassionate, suspicious of rigid authority, breaks rules when the outcome justifies it."),
+	CHAOTIC_GOOD("Chaotic Good", "Compassionate, suspicious of rigid authority, breaks rules when the outcome justifies it."),
 	LAWFUL_NEUTRAL("Lawful Neutral", "Order, tradition and procedure above personal feeling."),
 	NEUTRAL("Neutral", "Pragmatic balance; avoids extremes and grand causes."),
 	CHAOTIC_NEUTRAL("Chaotic Neutral", "Personal freedom first; unpredictable."),

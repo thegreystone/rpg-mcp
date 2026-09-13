@@ -36,8 +36,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Parsed dice expression: a sum of terms such as {@code 2d6+1d4+3}, {@code d20-1}, {@code 4d6dl1} (drop lowest),
- * {@code 2d20kh1} (keep highest / advantage) or {@code 2d20kl1} (keep lowest / disadvantage).
+ * Parsed dice expression: a sum of terms such as {@code 2d6+1d4+3}, {@code d20-1}, {@code 4d6dl1}
+ * (drop lowest), {@code 2d20kh1} (keep highest / advantage) or {@code 2d20kl1} (keep lowest /
+ * disadvantage).
  */
 public record DiceExpression(List<Term> terms) {
 
@@ -62,8 +63,7 @@ public record DiceExpression(List<Term> terms) {
 			throw RpgException.invalidArgument("A dice expression is required.");
 		}
 		// Typeset text (the SRD PDF, a model's prose) writes "1d4–1" with an en dash or a minus sign; read them as '-'.
-		String s = text.replace(" ", "").replace('–', '-').replace('—', '-').replace('−', '-')
-				.toLowerCase();
+		String s = text.replace(" ", "").replace('–', '-').replace('—', '-').replace('−', '-').toLowerCase();
 		var terms = new ArrayList<Term>();
 		int i = 0;
 		int sign = 1;
@@ -106,10 +106,10 @@ public record DiceExpression(List<Term> terms) {
 		if (m.group(3) != null) {
 			int n = Integer.parseInt(m.group(4));
 			keep = switch (m.group(3)) {
-				case "kh" -> Keep.HIGHEST;
-				case "kl" -> Keep.LOWEST;
-				case "dl" -> Keep.DROP_LOWEST;
-				default -> Keep.DROP_HIGHEST;
+			case "kh" -> Keep.HIGHEST;
+			case "kl" -> Keep.LOWEST;
+			case "dl" -> Keep.DROP_LOWEST;
+			default -> Keep.DROP_HIGHEST;
 			};
 			if (n < 0 || n > count) {
 				throw RpgException.invalidArgument("Keep/drop count in '" + term + "' exceeds the number of dice.");

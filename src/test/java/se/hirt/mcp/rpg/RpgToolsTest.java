@@ -61,7 +61,8 @@ class RpgToolsTest {
 		ToolResponse response = tools.getServerState(Optional.empty(), Optional.empty(), Optional.empty());
 		assertFalse(response.isError());
 		Map<String, Object> body = json(response);
-		@SuppressWarnings("unchecked") Map<String, Object> result = (Map<String, Object>) body.get("result");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> result = (Map<String, Object>) body.get("result");
 		assertEquals("0.1.0", result.get("protocol_version"));
 		assertNotNull(result.get("harness_state"));
 		assertNotNull(result.get("campaigns"));
@@ -71,12 +72,14 @@ class RpgToolsTest {
 	void structuredErrors() {
 		ToolResponse response = tools.openCampaign("campaign:999999");
 		assertTrue(response.isError());
-		@SuppressWarnings("unchecked") Map<String, Object> error = (Map<String, Object>) json(response).get("error");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> error = (Map<String, Object>) json(response).get("error");
 		assertEquals("NOT_FOUND", error.get("code"));
 
 		ToolResponse malformed = tools.openCampaign("bogus");
 		assertTrue(malformed.isError());
-		@SuppressWarnings("unchecked") Map<String, Object> error2 = (Map<String, Object>) json(malformed).get("error");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> error2 = (Map<String, Object>) json(malformed).get("error");
 		assertEquals("INVALID_ARGUMENT", error2.get("code"));
 	}
 
@@ -84,12 +87,14 @@ class RpgToolsTest {
 	void createAndSetupThroughTools() {
 		ToolResponse created = tools.createCampaign("tools-create-1", Optional.of("Tool Test"), Optional.empty());
 		assertFalse(created.isError(), () -> json(created).toString());
-		@SuppressWarnings("unchecked") Map<String, Object> result = (Map<String, Object>) json(created).get("result");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> result = (Map<String, Object>) json(created).get("result");
 		String campaign = (String) result.get("campaign");
 		ToolResponse updated = tools.updateCampaignSetup("tools-update-1", campaign, Optional.empty(),
 				Map.of("player_age", 40, "content_profile", "PEGI_16"));
 		assertFalse(updated.isError(), () -> json(updated).toString());
-		@SuppressWarnings("unchecked") Map<String, Object> meta = (Map<String, Object>) json(updated).get("meta");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> meta = (Map<String, Object>) json(updated).get("meta");
 		assertEquals("SETUP_EXPERIENCE", meta.get("harness_state"));
 
 		ToolResponse denied = tools.bootstrapSession("tools-boot-1", campaign, Optional.empty());

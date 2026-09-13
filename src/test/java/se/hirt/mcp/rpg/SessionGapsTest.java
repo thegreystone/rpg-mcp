@@ -40,9 +40,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Gaps found in play on 2026-09-04 and closed the same day: checks during an encounter, tool proficiency in checks,
- * feat choices for several feats at once (and completed later), campaign-defined backgrounds, and a fixed Armor Class
- * by audited override.
+ * Gaps found in play on 2026-09-04 and closed the same day: checks during an encounter, tool
+ * proficiency in checks, feat choices for several feats at once (and completed later),
+ * campaign-defined backgrounds, and a fixed Armor Class by audited override.
  */
 class SessionGapsTest {
 
@@ -68,13 +68,12 @@ class SessionGapsTest {
 
 	/** A Criminal wizard (Thieves' Tools, Sleight of Hand, Stealth) committed and in play. */
 	private static String playableCriminal(Engine engine, String campaign) {
-		String pc = (String) engine.characters().createDraft(op(), campaign,
-						map("name", "Ash", "species", "Human", "class", "Wizard", "ability_scores",
-								map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
-								List.of("Arcana", "History"), "personality", "x", "background", "Criminal",
-								"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight",
-								"origin_feat", map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))),
-						true)
+		String pc = (String) engine.characters()
+				.createDraft(op(), campaign, map("name", "Ash", "species", "Human", "class", "Wizard", "ability_scores",
+						map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
+						List.of("Arcana", "History"), "personality", "x", "background", "Criminal",
+						"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight", "origin_feat",
+						map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))), true)
 				.get("character");
 		engine.characters().commitDraft(op(), campaign, pc, null);
 		engine.campaigns().commitSetup(op(), campaign, null);
@@ -91,8 +90,8 @@ class SessionGapsTest {
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
 			engine.encounters().start(op(), campaign, map("party", List.of(pc), "camp", List.of(bandit)), null, null,
 					"A hollow at dusk", List.of("Take the camp"), null);
-			Map<String, Object> parley = engine.checks()
-					.resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Persuasion", 10, null, "offering terms");
+			Map<String, Object> parley = engine.checks().resolveCheck(op(), campaign, pc, "SKILL_CHECK", null,
+					"Persuasion", 10, null, "offering terms");
 			assertNotNull(m(parley.get("roll")).get("roll_ref"));
 			assertEquals("ENCOUNTER", m(parley.get("meta")).get("harness_state"), "the fight is still on");
 			assertTrue(((List<?>) m(parley.get("meta")).get("allowed_operations")).contains("resolve_check"));
@@ -108,8 +107,8 @@ class SessionGapsTest {
 					.contains("Thieves' Tools"), "the Criminal background grants Thieves' Tools");
 
 			// An ability check made with a tool the character is proficient with adds the proficiency bonus.
-			Map<String, Object> pick = engine.checks()
-					.resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "DEX", null, "Thieves' Tools", 12, null, "a lock");
+			Map<String, Object> pick = engine.checks().resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "DEX", null,
+					"Thieves' Tools", 12, null, "a lock");
 			assertEquals("Thieves' Tools", pick.get("tool"));
 			assertEquals(Boolean.TRUE, pick.get("tool_proficient"));
 			assertEquals(Boolean.TRUE, pick.get("proficient"));
@@ -117,26 +116,24 @@ class SessionGapsTest {
 			assertEquals(2 + 2, pick.get("modifier"), "DEX +2 and proficiency +2");
 
 			// Proficiency in both the skill and the tool gives advantage (SRD 5.2.1 "Tools and Skills Together").
-			Map<String, Object> both = engine.checks()
-					.resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Sleight of Hand", "Thieves' Tools", 12, null,
-							"palming the key");
+			Map<String, Object> both = engine.checks().resolveCheck(op(), campaign, pc, "SKILL_CHECK", null,
+					"Sleight of Hand", "Thieves' Tools", 12, null, "palming the key");
 			assertEquals("ADVANTAGE", both.get("advantage"));
 			assertTrue(String.valueOf(both.get("advantage_source")).contains("Thieves' Tools"));
 			assertEquals("2d20kh1+4", m(both.get("roll")).get("expression"));
 
 			// ...and cancels a disadvantage the GM imposed.
-			Map<String, Object> cancelled = engine.checks()
-					.resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Stealth", "Thieves' Tools", 12, "DISADVANTAGE",
-							"in the dark");
+			Map<String, Object> cancelled = engine.checks().resolveCheck(op(), campaign, pc, "SKILL_CHECK", null,
+					"Stealth", "Thieves' Tools", 12, "DISADVANTAGE", "in the dark");
 			assertEquals("NONE", cancelled.get("advantage"));
 
 			// A tool the character is not proficient with adds nothing; an unknown tool is refused.
-			Map<String, Object> smith = engine.checks()
-					.resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "STR", null, "Smith's Tools", 12, null, "a hinge");
+			Map<String, Object> smith = engine.checks().resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "STR", null,
+					"Smith's Tools", 12, null, "a hinge");
 			assertEquals(Boolean.FALSE, smith.get("tool_proficient"));
 			assertEquals(0, smith.get("proficiency_bonus"));
-			RpgException unknown = assertThrows(RpgException.class, () -> engine.checks()
-					.resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "DEX", null, "Lockpick of Doom", 12, null, null));
+			RpgException unknown = assertThrows(RpgException.class, () -> engine.checks().resolveCheck(op(), campaign,
+					pc, "ABILITY_CHECK", "DEX", null, "Lockpick of Doom", 12, null, null));
 			assertEquals(ErrorCode.INVALID_ARGUMENT, unknown.code());
 		}
 	}
@@ -151,16 +148,16 @@ class SessionGapsTest {
 					.materialize(op(), campaign, "Scout", "Maude", null, null, "NEUTRAL_GOOD", null, false)
 					.get("character");
 			engine.levelUps().begin(op(), campaign, maude);
-			engine.levelUps().update(op(), campaign, null, null,
-					map("class", "Ranger", "skills", List.of("Survival", "Perception", "Nature"), "species", "Human",
-							"species_skill", "Stealth", "origin_feat", "Skilled", "background", "Sage", "feat_choices",
-							List.of(map("feat", "Skilled", "proficiencies", List.of("Animal Handling", "Medicine", "Insight")),
-									map("feat", "Magic Initiate", "spell_list", "druid", "ability", "WIS", "cantrips",
-											List.of("Guidance", "Resistance"), "spell", "Goodberry"))));
+			engine.levelUps().update(op(), campaign, null, null, map("class", "Ranger", "skills",
+					List.of("Survival", "Perception", "Nature"), "species", "Human", "species_skill", "Stealth",
+					"origin_feat", "Skilled", "background", "Sage", "feat_choices",
+					List.of(map("feat", "Skilled", "proficiencies", List.of("Animal Handling", "Medicine", "Insight")),
+							map("feat", "Magic Initiate", "spell_list", "druid", "ability", "WIS", "cantrips",
+									List.of("Guidance", "Resistance"), "spell", "Goodberry"))));
 			Map<String, Object> committed = engine.levelUps().commit(op(), campaign, null, null);
 			List<Map<String, Object>> feats = list(m(committed.get("sheet")).get("feats"));
-			Map<String, Object> initiate = feats.stream().filter(f -> "Magic Initiate".equals(f.get("name"))).findFirst()
-					.orElseThrow();
+			Map<String, Object> initiate = feats.stream().filter(f -> "Magic Initiate".equals(f.get("name")))
+					.findFirst().orElseThrow();
 			assertNull(initiate.get("pending"), "both feats resolved in one call");
 			assertEquals("Goodberry", m(initiate.get("choices")).get("spell"));
 			assertEquals("druid", m(initiate.get("choices")).get("spell_list"));
@@ -182,9 +179,9 @@ class SessionGapsTest {
 			Map<String, Object> begun = engine.levelUps().begin(op(), campaign, hob);
 			List<Map<String, Object>> owed = list(begun.get("pending_feat_choices"));
 			assertEquals("Magic Initiate", owed.get(0).get("feat"));
-			engine.levelUps().update(op(), campaign, null, null, map("feat_choices",
-					map("feat", "Magic Initiate", "spell_list", "druid", "ability", "WIS", "cantrips",
-							List.of("Guidance", "Resistance"), "spell", "Goodberry")));
+			engine.levelUps().update(op(), campaign, null, null,
+					map("feat_choices", map("feat", "Magic Initiate", "spell_list", "druid", "ability", "WIS",
+							"cantrips", List.of("Guidance", "Resistance"), "spell", "Goodberry")));
 			Map<String, Object> second = engine.levelUps().commit(op(), campaign, null, null);
 			assertEquals(2, m(second.get("sheet")).get("level"));
 			Map<String, Object> done = list(m(second.get("sheet")).get("feats")).stream()
@@ -195,8 +192,8 @@ class SessionGapsTest {
 			// With nothing pending, feat_choices at a later level is still refused.
 			engine.rest().override(op(), campaign, "SET_XP", hob, map("xp", 900), "test", null);
 			engine.levelUps().begin(op(), campaign, hob);
-			RpgException refused = assertThrows(RpgException.class, () -> engine.levelUps()
-					.update(op(), campaign, null, null, map("feat_choices", map("feat", "Alert"))));
+			RpgException refused = assertThrows(RpgException.class, () -> engine.levelUps().update(op(), campaign, null,
+					null, map("feat_choices", map("feat", "Alert"))));
 			assertEquals(ErrorCode.VALIDATION_FAILED, refused.code());
 		}
 	}
@@ -215,33 +212,36 @@ class SessionGapsTest {
 			assertEquals("Skilled", m(defined.get("definition")).get("feat"));
 
 			// Listed next to the SRD backgrounds, by the choices tool and by get_content_definitions.
-			List<Map<String, Object>> options = list(engine.characters().choices(campaign, "BACKGROUND", null)
-					.get("backgrounds"));
+			List<Map<String, Object>> options = list(
+					engine.characters().choices(campaign, "BACKGROUND", null).get("backgrounds"));
 			assertTrue(options.stream().anyMatch(o -> "Noble".equals(o.get("label")) && ref.equals(o.get("value"))));
 			List<Map<String, Object>> items = list(engine.content()
 					.definitions(campaign, "BACKGROUND", null, "noble", null, null, null, 25, "SUMMARY").get("items"));
 			assertTrue(items.stream().anyMatch(i -> "Noble".equals(i.get("name"))));
 
 			// Validation: three abilities, an Origin feat, two skills, a tool — refused otherwise; names must be new.
-			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class, () -> engine.content()
-					.define(op(), campaign, "BACKGROUND", "Broken", null, null, null, null, null,
-							map("ability_scores", List.of("CHA"), "feat", "Skilled", "skills", List.of("History", "Persuasion"),
-									"tool", map("item", "Calligrapher's Supplies")), null, "GM")).code());
-			assertEquals(ErrorCode.CONFLICT, assertThrows(RpgException.class, () -> engine.content()
-					.define(op(), campaign, "BACKGROUND", "Acolyte", null, null, null, null, null,
+			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
+					() -> engine.content().define(op(), campaign, "BACKGROUND", "Broken", null, null, null, null, null,
+							map("ability_scores", List.of("CHA"), "feat", "Skilled", "skills",
+									List.of("History", "Persuasion"), "tool", map("item", "Calligrapher's Supplies")),
+							null, "GM"))
+					.code());
+			assertEquals(ErrorCode.CONFLICT, assertThrows(RpgException.class,
+					() -> engine.content().define(op(), campaign, "BACKGROUND", "Acolyte", null, null, null, null, null,
 							map("ability_scores", List.of("CHA", "INT", "WIS"), "feat", "Skilled", "skills",
-									List.of("History", "Persuasion"), "tool", map("item", "Calligrapher's Supplies")), null,
-							"GM")).code());
+									List.of("History", "Persuasion"), "tool", map("item", "Calligrapher's Supplies")),
+							null, "GM"))
+					.code());
 
 			// Chosen by name in a draft, it grants exactly what a seeded background grants.
 			String pc = (String) engine.characters().createDraft(op(), campaign,
-							map("name", "Elowen", "species", "Human", "class", "Wizard", "ability_scores",
-									map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
-									List.of("Arcana", "Investigation"), "personality", "x", "background", "Noble",
-									"background_ability_scores", map("CHA", 2, "INT", 1), "species_skill", "Insight",
-									"origin_feat", "Alert", "feat_choices",
-									map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))), true)
-					.get("character");
+					map("name", "Elowen", "species", "Human", "class", "Wizard", "ability_scores",
+							map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8), "skills",
+							List.of("Arcana", "Investigation"), "personality", "x", "background", "Noble",
+							"background_ability_scores", map("CHA", 2, "INT", 1), "species_skill", "Insight",
+							"origin_feat", "Alert", "feat_choices",
+							map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine"))),
+					true).get("character");
 			engine.characters().commitDraft(op(), campaign, pc, null);
 			engine.campaigns().commitSetup(op(), campaign, null);
 			engine.sessions().bootstrap(op(), campaign, null);
@@ -262,10 +262,11 @@ class SessionGapsTest {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("gaps-armor-class"))) {
 			String campaign = setup(engine);
 			String pc = playableCriminal(engine, campaign);
-			assertEquals(12, m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"),
+			assertEquals(12,
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"),
 					"unarmored: 10 + DEX");
-			Map<String, Object> fixed = engine.rest()
-					.override(op(), campaign, "SET_ARMOR_CLASS", pc, map("armor_class", 15), "Draconic Resilience", null);
+			Map<String, Object> fixed = engine.rest().override(op(), campaign, "SET_ARMOR_CLASS", pc,
+					map("armor_class", 15), "Draconic Resilience", null);
 			assertEquals(15, m(fixed.get("after")).get("armor_class_override"));
 			Map<String, Object> ac = m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class"));
 			assertEquals(15, ac.get("value"));
@@ -276,8 +277,8 @@ class SessionGapsTest {
 			assertEquals(12, back.get("value"));
 			assertEquals("Unarmored (10 + DEX)", back.get("basis"));
 
-			RpgException bad = assertThrows(RpgException.class, () -> engine.rest()
-					.override(op(), campaign, "SET_ARMOR_CLASS", pc, map("armor_class", 99), "nope", null));
+			RpgException bad = assertThrows(RpgException.class, () -> engine.rest().override(op(), campaign,
+					"SET_ARMOR_CLASS", pc, map("armor_class", 99), "nope", null));
 			assertEquals(ErrorCode.INVALID_ARGUMENT, bad.code());
 		}
 	}

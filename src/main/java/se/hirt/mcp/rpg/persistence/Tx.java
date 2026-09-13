@@ -37,9 +37,10 @@ import java.util.*;
 /**
  * One tool invocation = one database transaction (DOMAIN_MODEL.md I-69).
  * <p>
- * This is the <em>only</em> write API available to service code. Every write to a rewindable table automatically
- * records its inverse (a full before-image) so that a checkpoint restore can roll the journal back exactly (DATABASE.md
- * §4, I-48). Raw access is reserved for the importer, migrations, and the non-rewindable log tables.
+ * This is the <em>only</em> write API available to service code. Every write to a rewindable table
+ * automatically records its inverse (a full before-image) so that a checkpoint restore can roll the
+ * journal back exactly (DATABASE.md §4, I-48). Raw access is reserved for the importer, migrations,
+ * and the non-rewindable log tables.
  */
 public final class Tx {
 
@@ -102,7 +103,7 @@ public final class Tx {
 
 	// ── reads ──────────────────────────────────────────────────────────
 
-	public List<Row> query(String sql, Object... params) {
+	public List<Row> query(String sql, Object ... params) {
 		try (PreparedStatement ps = c.prepareStatement(sql)) {
 			bind(ps, params);
 			try (ResultSet rs = ps.executeQuery()) {
@@ -117,12 +118,12 @@ public final class Tx {
 		}
 	}
 
-	public Optional<Row> queryOne(String sql, Object... params) {
+	public Optional<Row> queryOne(String sql, Object ... params) {
 		List<Row> rows = query(sql, params);
 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
 	}
 
-	public long count(String sql, Object... params) {
+	public long count(String sql, Object ... params) {
 		return queryOne(sql, params).map(r -> r.lng(r.asMap().keySet().iterator().next())).orElse(0L);
 	}
 
@@ -175,8 +176,8 @@ public final class Tx {
 	public long rawInsert(String table, Map<String, Object> columns) {
 		requireMutable();
 		var cols = new ArrayList<>(columns.keySet());
-		String sql = "INSERT INTO " + table + " (" + String.join(", ", cols) + ") VALUES (" + String.join(", ",
-				java.util.Collections.nCopies(cols.size(), "?")) + ")";
+		String sql = "INSERT INTO " + table + " (" + String.join(", ", cols) + ") VALUES ("
+				+ String.join(", ", java.util.Collections.nCopies(cols.size(), "?")) + ")";
 		try (PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 			int i = 1;
 			for (String col : cols) {
@@ -205,8 +206,8 @@ public final class Tx {
 		if (cols.isEmpty()) {
 			return;
 		}
-		String sql = "UPDATE " + table + " SET " + String.join(", ",
-				cols.stream().map(col -> col + " = ?").toList()) + " WHERE id = ?";
+		String sql = "UPDATE " + table + " SET " + String.join(", ", cols.stream().map(col -> col + " = ?").toList())
+				+ " WHERE id = ?";
 		try (PreparedStatement ps = c.prepareStatement(sql)) {
 			int i = 1;
 			for (String col : cols) {
@@ -233,7 +234,7 @@ public final class Tx {
 		}
 	}
 
-	public int rawExecute(String sql, Object... params) {
+	public int rawExecute(String sql, Object ... params) {
 		requireMutable();
 		try (PreparedStatement ps = c.prepareStatement(sql)) {
 			bind(ps, params);
@@ -249,7 +250,8 @@ public final class Tx {
 		String kind = (String) op.get("op");
 		String table = (String) op.get("table");
 		long pk = ((Number) op.get("pk")).longValue();
-		@SuppressWarnings("unchecked") Map<String, Object> row = (Map<String, Object>) op.get("row");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> row = (Map<String, Object>) op.get("row");
 		switch (kind) {
 		case "delete" -> rawDelete(table, pk);
 		case "restore" -> rawUpdate(table, pk, row);
@@ -277,7 +279,7 @@ public final class Tx {
 		}
 	}
 
-	private static void bind(PreparedStatement ps, Object... params) throws SQLException {
+	private static void bind(PreparedStatement ps, Object ... params) throws SQLException {
 		for (int i = 0; i < params.length; i++) {
 			ps.setObject(i + 1, jdbcValue(params[i]));
 		}

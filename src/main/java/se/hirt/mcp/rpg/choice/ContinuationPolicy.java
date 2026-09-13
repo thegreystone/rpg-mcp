@@ -33,12 +33,9 @@ package se.hirt.mcp.rpg.choice;
  */
 public enum ContinuationPolicy implements Described {
 
-	CHECKPOINT("Checkpoint",
-			"Return to the last major checkpoint after a death — or to undo a decision the player regrets.", true),
-	ENCOUNTER_RETRY("Encounter retry",
-			"Retry an encounter that went badly; nothing outside the encounter can be undone."),
-	IRONMAN("Ironman",
-			"No rollback. If the player character dies and a companion survives, the player may take over the companion; if everyone dies, the campaign ends.");
+	CHECKPOINT("Checkpoint", "Return to the last major checkpoint after a death — or to undo a decision the player regrets.", true),
+	ENCOUNTER_RETRY("Encounter retry", "Retry an encounter that went badly; nothing outside the encounter can be undone."),
+	IRONMAN("Ironman", "No rollback. If the player character dies and a companion survives, the player may take over the companion; if everyone dies, the campaign ends.");
 
 	private final String label;
 	private final String description;

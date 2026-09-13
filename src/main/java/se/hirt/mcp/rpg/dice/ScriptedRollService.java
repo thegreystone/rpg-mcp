@@ -33,8 +33,9 @@ import java.util.Deque;
 import java.util.Random;
 
 /**
- * Test roller: returns queued die values first, then falls back to a seeded generator. A queued value larger than the
- * die is clamped so a script can say "roll high" without knowing the die size.
+ * Test roller: returns queued die values first, then falls back to a seeded generator. A queued
+ * value larger than the die is clamped so a script can say "roll high" without knowing the die
+ * size.
  */
 public final class ScriptedRollService extends RollService {
 
@@ -45,7 +46,7 @@ public final class ScriptedRollService extends RollService {
 		this.fallback = new Random(seed);
 	}
 
-	public ScriptedRollService queue(int... values) {
+	public ScriptedRollService queue(int ... values) {
 		for (int v : values) {
 			script.addLast(v);
 		}

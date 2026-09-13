@@ -74,14 +74,13 @@ class EconomyTest {
 					map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
 							"CHECKPOINT", "party", "SURPRISE_ME", "adventure",
 							map("premise", "x", "opening_location", "Market", "immediate_goal", "shop")));
-			String pc = (String) engine.characters().createDraft(op(), campaign,
-					map("name", "Richard", "species", "Human", "class", "Sorcerer", "ability_scores",
-							map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8), "background",
-							"Criminal", "background_ability_scores", map("CON", 2, "INT", 1), "species_skill",
-							"Insight", "origin_feat",
-							map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")),
-							"skills", List.of("Deception", "Persuasion"), "personality", "Confident.",
-							"starting_equipment", "A"), true).get("character");
+			String pc = (String) engine.characters().createDraft(op(), campaign, map("name", "Richard", "species",
+					"Human", "class", "Sorcerer", "ability_scores",
+					map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8), "background", "Criminal",
+					"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight", "origin_feat",
+					map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")), "skills",
+					List.of("Deception", "Persuasion"), "personality", "Confident.", "starting_equipment", "A"), true)
+					.get("character");
 			Map<String, Object> sheet = engine.characters().characterSheet(campaign, pc, "FULL");
 			assertEquals("A", m(sheet.get("starting_equipment")).get("option"));
 			engine.characters().commitDraft(op(), campaign, pc, null);
@@ -95,7 +94,8 @@ class EconomyTest {
 			assertTrue(inventory.stream().anyMatch(e -> e.get("name").equals("Spear")));
 			assertTrue(inventory.stream()
 					.anyMatch(e -> e.get("name").equals("Dagger") && ((Long) e.get("quantity")) == 2));
-			assertTrue(inventory.stream()
+			assertTrue(
+					inventory.stream()
 							.anyMatch(e -> e.get("name").equals("Rations") && ((Long) e.get("quantity")) == 10),
 					"Dungeoneer's Pack is expanded");
 			assertTrue(inventory.stream().anyMatch(e -> e.get("name").equals("Arcane Focus (Crystal)")));
@@ -115,34 +115,34 @@ class EconomyTest {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = "character:1";
-			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money")).get(
-					"total_cp")).longValue();
+			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money"))
+					.get("total_cp")).longValue();
 			assertEquals(10000, start, "Sorcerer gold-only 50 GP + Sage background gold-only 50 GP");
 
 			// Buy
-			Map<String, Object> buy = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "Leather Armor", null, 1, null, null, null);
+			Map<String, Object> buy = engine.inventory().trade(op(), campaign, pc, "BUY", "Leather Armor", null, 1,
+					null, null, null);
 			assertEquals("10 gp", buy.get("price_paid"));
 			assertEquals(9000L, m(buy.get("money")).get("total_cp"), "100 gp start - 10 gp armor");
 			String armorEntry = (String) buy.get("entry");
-			Map<String, Object> shield = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "srd5e:item/shield", null, 1, null, null, null);
-			Map<String, Object> arrows = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "Arrow", null, 2, null, null, null);
+			Map<String, Object> shield = engine.inventory().trade(op(), campaign, pc, "BUY", "srd5e:item/shield", null,
+					1, null, null, null);
+			Map<String, Object> arrows = engine.inventory().trade(op(), campaign, pc, "BUY", "Arrow", null, 2, null,
+					null, null);
 			assertEquals(40L, arrows.get("quantity"), "two bundles of 20 arrows");
 			assertEquals("2 gp", arrows.get("price_paid"));
 
 			// Insufficient funds
-			RpgException poor = assertThrows(RpgException.class, () -> engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "Plate Armor", null, 1, null, null, null));
+			RpgException poor = assertThrows(RpgException.class, () -> engine.inventory().trade(op(), campaign, pc,
+					"BUY", "Plate Armor", null, 1, null, null, null));
 			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, poor.code());
 
 			// Negotiated price requires a reason, is recorded with GM provenance
 			RpgException noReason = assertThrows(RpgException.class,
 					() -> engine.inventory().trade(op(), campaign, pc, "BUY", "Rope", null, 1, null, "5 sp", null));
 			assertEquals(ErrorCode.INVALID_ARGUMENT, noReason.code());
-			Map<String, Object> haggled = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "Rope", null, 1, null, "5 sp", "won the Persuasion check");
+			Map<String, Object> haggled = engine.inventory().trade(op(), campaign, pc, "BUY", "Rope", null, 1, null,
+					"5 sp", "won the Persuasion check");
 			assertEquals("5 sp", haggled.get("price_paid"));
 			assertEquals("1 gp", haggled.get("list_price"));
 
@@ -154,8 +154,8 @@ class EconomyTest {
 			engine.inventory().equip(op(), campaign, pc, (String) shield.get("entry"), true);
 			assertEquals(13 + dexMod,
 					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"));
-			Map<String, Object> bow = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "Shortbow", null, 1, null, null, null);
+			Map<String, Object> bow = engine.inventory().trade(op(), campaign, pc, "BUY", "Shortbow", null, 1, null,
+					null, null);
 			RpgException hands = assertThrows(RpgException.class,
 					() -> engine.inventory().equip(op(), campaign, pc, (String) bow.get("entry"), true));
 			assertEquals(ErrorCode.VALIDATION_FAILED, hands.code());
@@ -163,50 +163,47 @@ class EconomyTest {
 			engine.inventory().equip(op(), campaign, pc, (String) bow.get("entry"), true);
 
 			// Sell at half price; equipped stack of one is fully removed
-			long before = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money")).get(
-					"total_cp")).longValue();
-			Map<String, Object> sold = engine.inventory()
-					.trade(op(), campaign, pc, "SELL", "Shortbow", null, null, null, null, null);
+			long before = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money"))
+					.get("total_cp")).longValue();
+			Map<String, Object> sold = engine.inventory().trade(op(), campaign, pc, "SELL", "Shortbow", null, null,
+					null, null, null);
 			assertEquals("12 gp 5 sp", sold.get("price_received"));
 			assertEquals(before + 1250, ((Number) m(sold.get("money")).get("total_cp")).longValue());
 			assertFalse(list(engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory")).stream()
 					.anyMatch(e -> e.get("name").equals("Shortbow")));
 
 			// Custom content: define, buy, transfer to a location and back
-			Map<String, Object> defined = engine.content()
-					.define(op(), campaign, "ITEM", "Bellhaven Broadsheet", "custom:item/bellhaven-broadsheet",
-							"The evening paper.", "DOCUMENT", "2 cp", 0.1, Map.of("perishable", true), List.of("news"),
-							"GM");
+			Map<String, Object> defined = engine.content().define(op(), campaign, "ITEM", "Bellhaven Broadsheet",
+					"custom:item/bellhaven-broadsheet", "The evening paper.", "DOCUMENT", "2 cp", 0.1,
+					Map.of("perishable", true), List.of("news"), "GM");
 			String content = (String) defined.get("content");
 			assertTrue(content.startsWith("content:"));
-			Map<String, Object> paper = engine.inventory()
-					.trade(op(), campaign, pc, "BUY", "custom:item/bellhaven-broadsheet", null, 1, null, null, null);
+			Map<String, Object> paper = engine.inventory().trade(op(), campaign, pc, "BUY",
+					"custom:item/bellhaven-broadsheet", null, 1, null, null, null);
 			assertEquals(content, paper.get("item"));
-			Map<String, Object> dropped = engine.inventory()
-					.transfer(op(), campaign, (String) paper.get("entry"), locationOf(engine, campaign), null,
-							"left it on the table");
+			Map<String, Object> dropped = engine.inventory().transfer(op(), campaign, (String) paper.get("entry"),
+					locationOf(engine, campaign), null, "left it on the table");
 			assertEquals(locationOf(engine, campaign), dropped.get("to"));
 			engine.inventory().transfer(op(), campaign, (String) dropped.get("entry"), pc, null, null);
 			assertTrue(list(engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory")).stream()
 					.anyMatch(e -> e.get("name").equals("Bellhaven Broadsheet")));
 
 			// Search
-			Map<String, Object> search = engine.content()
-					.definitions(campaign, "ITEM", "WEAPON", "finesse", null, null, null, 25, "SUMMARY");
+			Map<String, Object> search = engine.content().definitions(campaign, "ITEM", "WEAPON", "finesse", null, null,
+					null, 25, "SUMMARY");
 			List<Map<String, Object>> found = list(search.get("items"));
 			assertTrue(found.stream().anyMatch(i -> i.get("name").equals("Rapier")));
 			assertTrue(found.stream().noneMatch(i -> i.get("name").equals("Longsword")), "Longsword is not finesse");
-			Map<String, Object> customs = engine.content()
-					.definitions(campaign, "ITEM", null, "broadsheet", null, null, null, 25, "SUMMARY");
+			Map<String, Object> customs = engine.content().definitions(campaign, "ITEM", null, "broadsheet", null, null,
+					null, 25, "SUMMARY");
 			assertEquals(1, ((Number) customs.get("total")).intValue());
 
 			// Loot: GM_GRANT is audited; quest loot is not
-			Map<String, Object> loot = engine.inventory()
-					.grantLoot(op(), campaign, pc, List.of(map("item", "Potion of Healing", "quantity", 2)), "25 gp",
-							"QUEST", "reward");
+			Map<String, Object> loot = engine.inventory().grantLoot(op(), campaign, pc,
+					List.of(map("item", "Potion of Healing", "quantity", 2)), "25 gp", "QUEST", "reward");
 			assertEquals(Boolean.FALSE, loot.get("audited"));
-			Map<String, Object> grant = engine.inventory()
-					.grantLoot(op(), campaign, pc, null, "1 gp", "GM_GRANT", "found a coin in the mud");
+			Map<String, Object> grant = engine.inventory().grantLoot(op(), campaign, pc, null, "1 gp", "GM_GRANT",
+					"found a coin in the mud");
 			assertEquals(Boolean.TRUE, grant.get("audited"));
 			RpgException noReason2 = assertThrows(RpgException.class,
 					() -> engine.inventory().grantLoot(op(), campaign, pc, null, "1 gp", "GM_GRANT", null));
@@ -214,16 +211,19 @@ class EconomyTest {
 			long audits = engine.db()
 					.read(tx -> tx.count("SELECT COUNT(*) FROM audit_record WHERE kind = 'DISCRETIONARY_LOOT'"));
 			assertEquals(1, audits);
-			Map<String, Object> memories = engine.ledger()
-					.queryMemories(campaign, List.of(pc), List.of("LOOT_ACQUIRED"), null, null, 10);
+			Map<String, Object> memories = engine.ledger().queryMemories(campaign, List.of(pc),
+					List.of("LOOT_ACQUIRED"), null, null, 10);
 			assertEquals(2, list(memories.get("events")).size());
 		}
 	}
 
 	private static String locationOf(Engine engine, String campaign) {
-		return engine.db()
-				.read(tx -> "location:" + tx.queryOne("SELECT current_location_id AS l FROM campaign WHERE id = ?",
-						Long.parseLong(campaign.substring("campaign:".length()))).orElseThrow().lng("l"));
+		return engine
+				.db().read(
+						tx -> "location:" + tx
+								.queryOne("SELECT current_location_id AS l FROM campaign WHERE id = ?",
+										Long.parseLong(campaign.substring("campaign:".length())))
+								.orElseThrow().lng("l"));
 	}
 
 	@Test
@@ -234,11 +234,11 @@ class EconomyTest {
 			String pc = "character:1";
 			String porter = (String) engine.runtime()
 					.materialize(op(), campaign, "Commoner", "Wat", null, null, null, null, false).get("character");
-			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money")).get(
-					"total_cp")).longValue();
+			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money"))
+					.get("total_cp")).longValue();
 
-			Map<String, Object> given = engine.inventory()
-					.giveMoney(op(), campaign, pc, porter, "1 gp 5 sp", "for the dive");
+			Map<String, Object> given = engine.inventory().giveMoney(op(), campaign, pc, porter, "1 gp 5 sp",
+					"for the dive");
 			assertEquals(150L, m(given.get("given")).get("total_cp"));
 			assertEquals(start - 150, m(given.get("giver_money")).get("total_cp"));
 			assertEquals(150L, m(given.get("receiver_money")).get("total_cp"));

@@ -46,23 +46,31 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The chronicle (MCP_PROTOCOL.md §11.6, DOMAIN_MODEL.md §15): the story so far in two bounded artifacts written by a
- * summarizer the client delegates to, never by the server. A <b>CHAPTER</b> is an immutable prose summary of a span of
- * the ledger, written from the raw events; the <b>SYNOPSIS</b> is the rolling "story so far", rewritten from the
- * previous synopsis and the chapters since it, with closed arcs compressed and the settled facts carried forward.
+ * The chronicle (MCP_PROTOCOL.md §11.6, DOMAIN_MODEL.md §15): the story so far in two bounded
+ * artifacts written by a summarizer the client delegates to, never by the server. A <b>CHAPTER</b>
+ * is an immutable prose summary of a span of the ledger, written from the raw events; the
+ * <b>SYNOPSIS</b> is the rolling "story so far", rewritten from the previous synopsis and the
+ * chapters since it, with closed arcs compressed and the settled facts carried forward.
  * <p>
- * Triggers are sizes, not counts: a chapter is due when the uncovered ledger exceeds {@link #CHAPTER_DUE_CHARS}
- * characters of summary and detail, a synopsis when {@link #SYNOPSIS_DUE_CHAPTERS} chapters have been written since
- * it or a quest closed. Bootstrap shows the synopsis, the chapters since it and a digest of the uncovered tail, so
- * its story section has the same size for a campaign of any length.
+ * Triggers are sizes, not counts: a chapter is due when the uncovered ledger exceeds
+ * {@link #CHAPTER_DUE_CHARS} characters of summary and detail, a synopsis when
+ * {@link #SYNOPSIS_DUE_CHAPTERS} chapters have been written since it or a quest closed. Bootstrap
+ * shows the synopsis, the chapters since it and a digest of the uncovered tail, so its story
+ * section has the same size for a campaign of any length.
  */
 public final class ChronicleService {
 
-	/** A chapter is due when this many characters of non-minor ledger text are not yet covered by one. */
+	/**
+	 * A chapter is due when this many characters of non-minor ledger text are not yet covered by
+	 * one.
+	 */
 	public static final int CHAPTER_DUE_CHARS = 20_000;
 	/** A synopsis rewrite is due when this many chapters have been written since it. */
 	public static final int SYNOPSIS_DUE_CHAPTERS = 4;
-	/** Target and ceiling of a chapter, in characters (about 300 tokens; the ceiling refuses the write). */
+	/**
+	 * Target and ceiling of a chapter, in characters (about 300 tokens; the ceiling refuses the
+	 * write).
+	 */
 	public static final int CHAPTER_TARGET_CHARS = 1_200;
 	public static final int CHAPTER_MAX_CHARS = 3_000;
 	/** Target and ceiling of the synopsis (about 1,500 tokens). */
@@ -71,8 +79,8 @@ public final class ChronicleService {
 	/** Chapter material is paged at this many characters of events. */
 	public static final int MATERIAL_PAGE_CHARS = 40_000;
 
-	private static final String UNCOVERED_EVENTS =
-			"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND importance <> 'MINOR' " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id";
+	private static final String UNCOVERED_EVENTS = "SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND importance <> 'MINOR' "
+			+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id";
 
 	private final Database db;
 
@@ -83,7 +91,8 @@ public final class ChronicleService {
 	// ── reads shared with bootstrap ────────────────────────────────────
 
 	static Optional<Row> latestChapter(Tx tx, long campaignId) {
-		return tx.queryOne("SELECT * FROM chronicle WHERE campaign_id = ? AND kind = 'CHAPTER' ORDER BY id DESC LIMIT 1",
+		return tx.queryOne(
+				"SELECT * FROM chronicle WHERE campaign_id = ? AND kind = 'CHAPTER' ORDER BY id DESC LIMIT 1",
 				campaignId);
 	}
 
@@ -98,7 +107,9 @@ public final class ChronicleService {
 		return latestChapter(tx, campaignId).map(c -> c.lng("to_journal_id")).orElse(0L);
 	}
 
-	/** Chapters written after the current synopsis (all of them when there is none), oldest first. */
+	/**
+	 * Chapters written after the current synopsis (all of them when there is none), oldest first.
+	 */
 	static List<Row> chaptersSinceSynopsis(Tx tx, long campaignId) {
 		long after = synopsis(tx, campaignId).map(ChronicleService::lastCoveredChapter).orElse(0L);
 		return tx.query("SELECT * FROM chronicle WHERE campaign_id = ? AND kind = 'CHAPTER' AND id > ? ORDER BY id",
@@ -120,29 +131,32 @@ public final class ChronicleService {
 			events++;
 			chars += textLength(e);
 		}
-		return new long[] { events, chars };
+		return new long[] {events, chars};
 	}
 
 	private static long textLength(Row e) {
-		return (e.isNull("summary") ? 0 : e.str("summary").length()) + (e.isNull("episodic_detail") ? 0
-				: e.str("episodic_detail").length());
+		return (e.isNull("summary") ? 0 : e.str("summary").length())
+				+ (e.isNull("episodic_detail") ? 0 : e.str("episodic_detail").length());
 	}
 
 	/**
-	 * What is due, if anything: {chapter, synopsis, reasons, how}. Cheap enough to sit in the consequences of every
-	 * clock move and in every record_memory result, so a long session learns of it without a bootstrap.
+	 * What is due, if anything: {chapter, synopsis, reasons, how}. Cheap enough to sit in the
+	 * consequences of every clock move and in every record_memory result, so a long session learns
+	 * of it without a bootstrap.
 	 */
 	public static Map<String, Object> due(Tx tx, long campaignId) {
 		var reasons = new ArrayList<String>();
 		long[] u = uncovered(tx, campaignId);
 		boolean chapter = u[1] > CHAPTER_DUE_CHARS;
 		if (chapter) {
-			reasons.add("CHAPTER_DUE: " + u[1] + " characters of ledger (" + u[0] + " events) since the last chapter; the threshold is " + CHAPTER_DUE_CHARS + ".");
+			reasons.add("CHAPTER_DUE: " + u[1] + " characters of ledger (" + u[0]
+					+ " events) since the last chapter; the threshold is " + CHAPTER_DUE_CHARS + ".");
 		}
 		List<Row> chapters = chaptersSinceSynopsis(tx, campaignId);
 		boolean synopsis = chapters.size() > SYNOPSIS_DUE_CHAPTERS;
 		if (synopsis) {
-			reasons.add("SYNOPSIS_DUE: " + chapters.size() + " chapters since the synopsis; the threshold is " + SYNOPSIS_DUE_CHAPTERS + ".");
+			reasons.add("SYNOPSIS_DUE: " + chapters.size() + " chapters since the synopsis; the threshold is "
+					+ SYNOPSIS_DUE_CHAPTERS + ".");
 		}
 		if (!synopsis && !chapters.isEmpty()) {
 			// A quest that closed since the synopsis was written is an arc that can now be compressed.
@@ -160,8 +174,9 @@ public final class ChronicleService {
 		out.put("synopsis", synopsis);
 		out.put("reasons", reasons);
 		if (chapter || synopsis) {
-			out.put("how",
-					"Delegate: a fresh summarizing agent calls get_chronicle_material (kind " + (chapter ? "CHAPTER" : "SYNOPSIS") + "), writes in the campaign's voice at the target length, and calls write_chronicle with the material's `through` marker. Play continues meanwhile.");
+			out.put("how", "Delegate: a fresh summarizing agent calls get_chronicle_material (kind "
+					+ (chapter ? "CHAPTER" : "SYNOPSIS")
+					+ "), writes in the campaign's voice at the target length, and calls write_chronicle with the material's `through` marker. Play continues meanwhile.");
 		}
 		return out;
 	}
@@ -170,8 +185,8 @@ public final class ChronicleService {
 	public static String dueWarning(Tx tx, long campaignId) {
 		Map<String, Object> d = due(tx, campaignId);
 		if (Boolean.TRUE.equals(d.get("chapter")) || Boolean.TRUE.equals(d.get("synopsis"))) {
-			return String.join(" ", ((List<?>) d.get("reasons")).stream().map(Object::toString).toList()) + " " + d.get(
-					"how");
+			return String.join(" ", ((List<?>) d.get("reasons")).stream().map(Object::toString).toList()) + " "
+					+ d.get("how");
 		}
 		return null;
 	}
@@ -193,8 +208,9 @@ public final class ChronicleService {
 	}
 
 	/**
-	 * The bootstrap story section under a character budget: the synopsis, the chapters since it (newest kept in full,
-	 * older ones shortened to a head when the budget runs out), the digest of the uncovered tail, and what is due.
+	 * The bootstrap story section under a character budget: the synopsis, the chapters since it
+	 * (newest kept in full, older ones shortened to a head when the budget runs out), the digest of
+	 * the uncovered tail, and what is due.
 	 */
 	public static Map<String, Object> view(Tx tx, long campaignId, int charBudget) {
 		var out = new LinkedHashMap<String, Object>();
@@ -223,8 +239,8 @@ public final class ChronicleService {
 		}
 		out.put("chapters_since_synopsis", shown);
 		left = Math.max(2_000, left - used);
-		Map<String, Object> tail = LedgerService.digest(tx, campaignId, coveredThrough(tx, campaignId),
-				tx.journalId(), left);
+		Map<String, Object> tail = LedgerService.digest(tx, campaignId, coveredThrough(tx, campaignId), tx.journalId(),
+				left);
 		tail.put("note", "The ledger since the last chapter, by importance; older detail is one query_memories away.");
 		out.put("since_last_chapter", tail);
 		out.put("due", due(tx, campaignId));
@@ -233,7 +249,10 @@ public final class ChronicleService {
 
 	// ── get_chronicle_material ─────────────────────────────────────────
 
-	/** Everything a summarizer needs and nothing else: the previous text, the new material, the voice, the target. */
+	/**
+	 * Everything a summarizer needs and nothing else: the previous text, the new material, the
+	 * voice, the target.
+	 */
 	public Map<String, Object> material(String campaignRef, String kind, String cursor) {
 		return db.read(tx -> {
 			Row campaign = Harness.campaign(tx, campaignRef);
@@ -263,7 +282,8 @@ public final class ChronicleService {
 						continue;
 					}
 					if (chars > MATERIAL_PAGE_CHARS) {
-						nextCursor = events.isEmpty() ? null : ((Number) events.get(events.size() - 1).get("id")).longValue();
+						nextCursor = events.isEmpty() ? null
+								: ((Number) events.get(events.size() - 1).get("id")).longValue();
 						break;
 					}
 					Map<String, Object> m = LedgerService.eventSummary(tx, e, true);
@@ -280,9 +300,9 @@ public final class ChronicleService {
 				out.put("events", events);
 				out.put("events_uncovered", total);
 				out.put("nothing_to_cover", events.isEmpty() && nextCursor == null);
-				out.put("through", lastJournal == null ? null
-						: Map.of("journal_id", lastJournal, "game_time", lastTime, "note",
-								"Pass through.journal_id to write_chronicle; events recorded after it stay uncovered."));
+				out.put("through", lastJournal == null ? null : Map.of("journal_id", lastJournal, "game_time", lastTime,
+						"note",
+						"Pass through.journal_id to write_chronicle; events recorded after it stay uncovered."));
 				out.put("target", Map.of("chars", CHAPTER_TARGET_CHARS, "max_chars", CHAPTER_MAX_CHARS, "note",
 						"About 300 tokens of prose in the campaign's voice: what happened, what was decided, what changed between people, what is now open. Name people and places; keep the game days. Never invent; omit before you guess."));
 			}
@@ -292,10 +312,10 @@ public final class ChronicleService {
 				List<Row> chapters = chaptersSinceSynopsis(tx, campaignId);
 				out.put("chapters_since", chapters.stream().map(c -> entry(c, true)).toList());
 				out.put("nothing_to_cover", chapters.isEmpty());
-				out.put("through", chapters.isEmpty() ? null
-						: Map.of("chapter_id", chapters.get(chapters.size() - 1).id(), "game_time",
-								chapters.get(chapters.size() - 1).str("to_time"), "note",
-								"Pass through.chapter_id to write_chronicle; chapters written after it wait for the next rewrite."));
+				out.put("through", chapters.isEmpty() ? null : Map.of("chapter_id",
+						chapters.get(chapters.size() - 1).id(), "game_time",
+						chapters.get(chapters.size() - 1).str("to_time"), "note",
+						"Pass through.chapter_id to write_chronicle; chapters written after it wait for the next rewrite."));
 				out.put("target", Map.of("chars", SYNOPSIS_TARGET_CHARS, "max_chars", SYNOPSIS_MAX_CHARS, "note",
 						"About 1,500 tokens: the story so far. Closed arcs compress to a few sentences; the current arc stays detailed; end with a short list of settled facts (who is wed to whom, who is dead, what the House holds, standing promises) carried forward verbatim from the previous synopsis unless a chapter contradicts one. Never invent."));
 			}
@@ -326,7 +346,7 @@ public final class ChronicleService {
 	// ── write_chronicle ────────────────────────────────────────────────
 
 	public Map<String, Object> write(
-			String operationId, String campaignRef, String kind, String title, String summary, Long through) {
+		String operationId, String campaignRef, String kind, String title, String summary, Long through) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -341,9 +361,9 @@ public final class ChronicleService {
 				throw RpgException.invalidArgument("A summary is required.");
 			}
 			Map<String, Object> written = switch (k) {
-				case "CHAPTER" -> writeChapter(tx, campaign, title, summary.trim(), through);
-				case "SYNOPSIS" -> writeSynopsis(tx, campaign, title, summary.trim(), through);
-				default -> throw RpgException.invalidArgument("kind must be CHAPTER or SYNOPSIS.");
+			case "CHAPTER" -> writeChapter(tx, campaign, title, summary.trim(), through);
+			case "SYNOPSIS" -> writeSynopsis(tx, campaign, title, summary.trim(), through);
+			default -> throw RpgException.invalidArgument("kind must be CHAPTER or SYNOPSIS.");
 			};
 			var result = new LinkedHashMap<String, Object>();
 			result.put("chronicle", written);
@@ -366,18 +386,21 @@ public final class ChronicleService {
 		return cols;
 	}
 
-	/** Closes a chapter at {@code through} (a journal position; now when null) over the uncovered ledger. */
+	/**
+	 * Closes a chapter at {@code through} (a journal position; now when null) over the uncovered
+	 * ledger.
+	 */
 	static Map<String, Object> writeChapter(Tx tx, Row campaign, String title, String text, Long through) {
 		long campaignId = campaign.id();
 		if (text.length() > CHAPTER_MAX_CHARS) {
-			throw RpgException.invalidArgument(
-					"A chapter is at most " + CHAPTER_MAX_CHARS + " characters (target " + CHAPTER_TARGET_CHARS + "); this one is " + text.length() + ".");
+			throw RpgException.invalidArgument("A chapter is at most " + CHAPTER_MAX_CHARS + " characters (target "
+					+ CHAPTER_TARGET_CHARS + "); this one is " + text.length() + ".");
 		}
 		long from = coveredThrough(tx, campaignId);
 		long to = through == null ? tx.journalId() : through;
 		if (to <= from || to > tx.journalId()) {
-			throw RpgException.conflict(
-					"through must be a journal position after the last chapter (" + from + ") and not after now (" + tx.journalId() + "); re-read get_chronicle_material.");
+			throw RpgException.conflict("through must be a journal position after the last chapter (" + from
+					+ ") and not after now (" + tx.journalId() + "); re-read get_chronicle_material.");
 		}
 		List<Row> events = tx.query(
 				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? AND importance <> 'MINOR' AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
@@ -399,12 +422,15 @@ public final class ChronicleService {
 		return record(tx, campaignId, cols);
 	}
 
-	/** Replaces the synopsis with one built from the chapters up to {@code through} (a chapter id; the last when null). */
+	/**
+	 * Replaces the synopsis with one built from the chapters up to {@code through} (a chapter id;
+	 * the last when null).
+	 */
 	static Map<String, Object> writeSynopsis(Tx tx, Row campaign, String title, String text, Long through) {
 		long campaignId = campaign.id();
 		if (text.length() > SYNOPSIS_MAX_CHARS) {
-			throw RpgException.invalidArgument(
-					"A synopsis is at most " + SYNOPSIS_MAX_CHARS + " characters (target " + SYNOPSIS_TARGET_CHARS + "); this one is " + text.length() + ".");
+			throw RpgException.invalidArgument("A synopsis is at most " + SYNOPSIS_MAX_CHARS + " characters (target "
+					+ SYNOPSIS_TARGET_CHARS + "); this one is " + text.length() + ".");
 		}
 		List<Row> chapters = chaptersSinceSynopsis(tx, campaignId);
 		if (chapters.isEmpty()) {
@@ -437,11 +463,12 @@ public final class ChronicleService {
 		long id = tx.insert("chronicle", cols);
 		Row written = tx.get("chronicle", id);
 		String k = written.str("kind");
-		LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHRONICLE_WRITTEN",
-				k.charAt(0) + k.substring(1).toLowerCase() + " written: " + (written.isNull("title") ? "(untitled)"
-						: written.str("title")) + ", covering " + written.str("from_time") + " to " + written.str(
-						"to_time") + ".", List.of(), "MINOR", "GM_ONLY", "GM", null, null, null,
-				Map.of("chronicle", id, "kind", k)));
+		LedgerService.append(tx, campaignId,
+				new LedgerService.EventSpec("CHRONICLE_WRITTEN",
+						k.charAt(0) + k.substring(1).toLowerCase() + " written: "
+								+ (written.isNull("title") ? "(untitled)" : written.str("title")) + ", covering "
+								+ written.str("from_time") + " to " + written.str("to_time") + ".",
+						List.of(), "MINOR", "GM_ONLY", "GM", null, null, null, Map.of("chronicle", id, "kind", k)));
 		return entry(written, true);
 	}
 }

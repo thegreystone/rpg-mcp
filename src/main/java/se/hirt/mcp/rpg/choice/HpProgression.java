@@ -29,14 +29,12 @@
 package se.hirt.mcp.rpg.choice;
 
 /**
- * How hit points are gained at each level (campaign house-rule setting; RULES_ENGINE.md §6). The Constitution modifier
- * and species bonuses (Dwarven Toughness) always apply on top.
+ * How hit points are gained at each level (campaign house-rule setting; RULES_ENGINE.md §6). The
+ * Constitution modifier and species bonuses (Dwarven Toughness) always apply on top.
  */
 public enum HpProgression implements Described {
 
-	FIRST_3_MAX("First three levels max",
-			"Levels 2 and 3 gain the full hit die (level 1 always does); from level 4 on, the server rolls the die in the open.",
-			true),
+	FIRST_3_MAX("First three levels max", "Levels 2 and 3 gain the full hit die (level 1 always does); from level 4 on, the server rolls the die in the open.", true),
 	AVERAGE("Average", "Every level gains the fixed average (half the hit die + 1); steady and predictable."),
 	ROLL("Roll", "Every level's hit die is rolled by the server in the open; no rerolls.");
 

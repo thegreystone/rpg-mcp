@@ -36,13 +36,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The small set of hard-coded formulas (RULES_ENGINE.md §3). Everything tabular comes from seed data.
+ * The small set of hard-coded formulas (RULES_ENGINE.md §3). Everything tabular comes from seed
+ * data.
  * <p>
  * Citations: SRD 5.2.1 "Playing the Game" — ability modifiers, D20 Tests, advantage/disadvantage.
  */
 public final class Rules {
 
-	/** Ability score bounds during character creation (SRD 5.2.1: generated scores; 20 is the hard cap in play). */
+	/**
+	 * Ability score bounds during character creation (SRD 5.2.1: generated scores; 20 is the hard
+	 * cap in play).
+	 */
 	public static final int MIN_SCORE = 1;
 	public static final int MAX_SCORE = 20;
 
@@ -62,16 +66,15 @@ public final class Rules {
 	/** SRD 5.2.1 "Point Cost" table — scores 8–15 only. */
 	public static int pointCost(int score) {
 		return switch (score) {
-			case 8 -> 0;
-			case 9 -> 1;
-			case 10 -> 2;
-			case 11 -> 3;
-			case 12 -> 4;
-			case 13 -> 5;
-			case 14 -> 7;
-			case 15 -> 9;
-			default ->
-					throw RpgException.invalidArgument("Point buy scores must be between 8 and 15; got " + score + ".");
+		case 8 -> 0;
+		case 9 -> 1;
+		case 10 -> 2;
+		case 11 -> 3;
+		case 12 -> 4;
+		case 13 -> 5;
+		case 14 -> 7;
+		case 15 -> 9;
+		default -> throw RpgException.invalidArgument("Point buy scores must be between 8 and 15; got " + score + ".");
 		};
 	}
 
@@ -83,14 +86,14 @@ public final class Rules {
 	 * Validates a full six-score assignment against a generation method.
 	 *
 	 * @param scores
-	 * 		map of ability → score (all six required)
+	 *            map of ability → score (all six required)
 	 * @param method
-	 * 		STANDARD_ARRAY | POINT_BUY | ROLL_4D6_DROP_LOWEST
+	 *            STANDARD_ARRAY | POINT_BUY | ROLL_4D6_DROP_LOWEST
 	 * @param rolledScores
-	 * 		the multiset produced by the roller (only for ROLL_4D6_DROP_LOWEST)
+	 *            the multiset produced by the roller (only for ROLL_4D6_DROP_LOWEST)
 	 */
 	public static List<Violation> validateScores(
-			Map<Ability, Integer> scores, String method, List<Integer> rolledScores) {
+		Map<Ability, Integer> scores, String method, List<Integer> rolledScores) {
 		var violations = new ArrayList<Violation>();
 		for (Ability a : Ability.values()) {
 			if (!scores.containsKey(a)) {

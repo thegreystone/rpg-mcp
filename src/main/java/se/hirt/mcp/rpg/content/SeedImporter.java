@@ -40,11 +40,12 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Imports embedded JSON seed data into {@code installed_ruleset}/{@code installed_content} on first run, or whenever a
- * database lacks the ruleset+version (DESIGN.md §25.1, I-66). Idempotent per version: when the version is already
- * installed, entries whose embedded definition changed (a new {@code summary}, a corrected payload) or that are new are
- * refreshed in place — content ids are stable, so nothing that references them moves. Installed content is not
- * rewindable, so the importer uses the raw write path.
+ * Imports embedded JSON seed data into {@code installed_ruleset}/{@code installed_content} on first
+ * run, or whenever a database lacks the ruleset+version (DESIGN.md §25.1, I-66). Idempotent per
+ * version: when the version is already installed, entries whose embedded definition changed (a new
+ * {@code summary}, a corrected payload) or that are new are refreshed in place — content ids are
+ * stable, so nothing that references them moves. Installed content is not rewindable, so the
+ * importer uses the raw write path.
  */
 public final class SeedImporter {
 
@@ -57,9 +58,9 @@ public final class SeedImporter {
 	public static boolean importIfMissing(Database db, String namespace) {
 		Map<String, Object> ruleset = Json.readMap(resource("seed/" + namespace + "/ruleset.json"));
 		String version = (String) ruleset.get("version");
-		boolean present = db.read(
-				tx -> tx.count("SELECT COUNT(*) FROM installed_ruleset WHERE namespace = ? AND version = ?", namespace,
-						version) > 0);
+		boolean present = db
+				.read(tx -> tx.count("SELECT COUNT(*) FROM installed_ruleset WHERE namespace = ? AND version = ?",
+						namespace, version) > 0);
 		if (present) {
 			refresh(db, namespace, ruleset);
 			return false;
@@ -67,7 +68,8 @@ public final class SeedImporter {
 		db.mutate(Database.Mutation.of("import_ruleset", null, null, "ADMINISTRATIVE_OVERRIDE", null), tx -> {
 			long rulesetId = insertRuleset(tx, ruleset);
 			int count = 0;
-			@SuppressWarnings("unchecked") List<String> files = (List<String>) ruleset.get("files");
+			@SuppressWarnings("unchecked")
+			List<String> files = (List<String>) ruleset.get("files");
 			for (String file : files) {
 				count += importFile(tx, rulesetId, "seed/" + namespace + "/" + file);
 			}
@@ -80,7 +82,10 @@ public final class SeedImporter {
 		return true;
 	}
 
-	/** Brings an already-installed version up to date with the embedded seed; a no-op when nothing differs. */
+	/**
+	 * Brings an already-installed version up to date with the embedded seed; a no-op when nothing
+	 * differs.
+	 */
 	@SuppressWarnings("unchecked")
 	private static void refresh(Database db, String namespace, Map<String, Object> ruleset) {
 		String version = (String) ruleset.get("version");
@@ -100,8 +105,8 @@ public final class SeedImporter {
 							entry.get("id"));
 					if (existing.isEmpty()) {
 						out.add(new Object[] {null, cols});
-					} else if (!Objects.equals(existing.get().str("name"), cols.get("name")) || !Objects.equals(
-							existing.get().str("payload_json"), cols.get("payload_json"))) {
+					} else if (!Objects.equals(existing.get().str("name"), cols.get("name"))
+							|| !Objects.equals(existing.get().str("payload_json"), cols.get("payload_json"))) {
 						out.add(new Object[] {existing.get().id(), cols});
 					}
 				}
@@ -146,8 +151,8 @@ public final class SeedImporter {
 	private static int importFile(Tx tx, long rulesetId, String path) {
 		Map<String, Object> file = Json.readMap(resource(path));
 		String kind = (String) file.get("kind");
-		@SuppressWarnings("unchecked") List<Map<String, Object>> entries = (List<Map<String, Object>>) file.get(
-				"entries");
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> entries = (List<Map<String, Object>>) file.get("entries");
 		int count = 0;
 		for (Map<String, Object> entry : entries) {
 			tx.rawInsert("installed_content", columnsFor(entry, kind, rulesetId));
@@ -166,9 +171,10 @@ public final class SeedImporter {
 		cols.put("name", entry.get("name"));
 		cols.put("payload_json", Json.write(payload));
 		cols.put("cost_cp", number(payload.get("cost_cp")));
-		cols.put("weight_g", payload.get("weight_lb") instanceof Number lb ? Long.valueOf(
-				Math.round(lb.doubleValue() * se.hirt.mcp.rpg.rules.Derived.GRAMS_PER_POUND))
-				: number(payload.get("weight_g")));
+		cols.put("weight_g",
+				payload.get("weight_lb") instanceof Number lb
+						? Long.valueOf(Math.round(lb.doubleValue() * se.hirt.mcp.rpg.rules.Derived.GRAMS_PER_POUND))
+						: number(payload.get("weight_g")));
 		cols.put("spell_level", number(payload.get("level")));
 		cols.put("cr_times_8", number(payload.get("cr_times_8")));
 		cols.put("xp_value", number(payload.get("xp_value")));

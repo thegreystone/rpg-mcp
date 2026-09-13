@@ -42,9 +42,10 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Journal-marker checkpoints and restoration (DATABASE.md §5, MCP_PROTOCOL.md §19). A checkpoint is a marker entry in
- * the change journal; restoring applies the inverse of every later journal entry, in reverse order, inside one
- * transaction, and leaves an audit trail that survives the rollback (I-53).
+ * Journal-marker checkpoints and restoration (DATABASE.md §5, MCP_PROTOCOL.md §19). A checkpoint is
+ * a marker entry in the change journal; restoring applies the inverse of every later journal entry,
+ * in reverse order, inside one transaction, and leaves an audit trail that survives the rollback
+ * (I-53).
  */
 public final class CheckpointService {
 
@@ -54,15 +55,19 @@ public final class CheckpointService {
 		this.db = db;
 	}
 
-	/** Creates a checkpoint inside an existing unit of work (used by campaign commit and encounters). */
+	/**
+	 * Creates a checkpoint inside an existing unit of work (used by campaign commit and
+	 * encounters).
+	 */
 	public static String createInTx(Tx tx, long campaignId, String reason) {
 		return createInTx(tx, campaignId, reason, false);
 	}
 
 	/**
 	 * @param includesMarker
-	 * 		when true, restoring also undoes the journal entry that created the checkpoint — used for encounter-retry
-	 * 		checkpoints, which must rewind the encounter's own creation.
+	 *            when true, restoring also undoes the journal entry that created the checkpoint —
+	 *            used for encounter-retry checkpoints, which must rewind the encounter's own
+	 *            creation.
 	 */
 	public static String createInTx(Tx tx, long campaignId, String reason, boolean includesMarker) {
 		tx.markCheckpoint();
@@ -112,9 +117,9 @@ public final class CheckpointService {
 			String policy = campaign.str("continuation_policy");
 			var result = new LinkedHashMap<String, Object>();
 			result.put("continuation_policy", policy);
-			Optional<Row> pc = tx.queryOne(
-					"SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id " + "WHERE p.campaign_id = ? AND p.active = 1",
-					campaignId);
+			Optional<Row> pc = tx
+					.queryOne("SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
+							+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId);
 			pc.ifPresent(c -> {
 				var m = new LinkedHashMap<String, Object>();
 				m.put("ref", Ref.of(Ref.CHARACTER, c.id()));
@@ -124,12 +129,13 @@ public final class CheckpointService {
 			});
 			var options = new ArrayList<Map<String, Object>>();
 			boolean survivors = tx.count(
-					"SELECT COUNT(*) FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','SEPARATED') AND c.life_state <> 'DEAD' AND c.lifecycle = 'ACTIVE' AND c.id <> IFNULL(?, -1)",
+					"SELECT COUNT(*) FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
+							+ "AND m.state IN ('ACTIVE','SEPARATED') AND c.life_state <> 'DEAD' AND c.lifecycle = 'ACTIVE' AND c.id <> IFNULL(?, -1)",
 					campaignId, pc.map(Row::id).orElse(null)) > 0;
 			if (!"IRONMAN".equals(policy)) {
-				List<Row> checkpoints = tx.query(
-						"SELECT * FROM checkpoint WHERE campaign_id = ? AND status IN ('ACTIVE','RESTORED_TO') " + "ORDER BY id DESC",
-						campaignId);
+				List<Row> checkpoints = tx
+						.query("SELECT * FROM checkpoint WHERE campaign_id = ? AND status IN ('ACTIVE','RESTORED_TO') "
+								+ "ORDER BY id DESC", campaignId);
 				var restore = new LinkedHashMap<String, Object>();
 				restore.put("action", "RESTORE_CHECKPOINT");
 				restore.put("operation", "restore_checkpoint");
@@ -140,9 +146,10 @@ public final class CheckpointService {
 			transfer.put("action", "CONTINUE_WITH_SURVIVOR");
 			transfer.put("operation", "transfer_player_control");
 			transfer.put("available", survivors);
-			transfer.put("note", survivors
-					? "A surviving party member can become the player character; identity and history are kept."
-					: "No surviving party member to take over.");
+			transfer.put("note",
+					survivors
+							? "A surviving party member can become the player character; identity and history are kept."
+							: "No surviving party member to take over.");
 			options.add(transfer);
 			var end = new LinkedHashMap<String, Object>();
 			end.put("action", "COMPLETE_CAMPAIGN");
@@ -183,8 +190,8 @@ public final class CheckpointService {
 				throw RpgException.invalidArgument(checkpointRef + " belongs to another campaign.");
 			}
 			if (!List.of("ACTIVE", "RESTORED_TO").contains(checkpoint.str("status"))) {
-				throw RpgException.notAllowed(
-						checkpointRef + " is " + checkpoint.str("status") + " and cannot be restored.");
+				throw RpgException
+						.notAllowed(checkpointRef + " is " + checkpoint.str("status") + " and cannot be restored.");
 			}
 			if (tx.count("SELECT COUNT(*) FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'",
 					campaignId) > 0) {
@@ -205,7 +212,8 @@ public final class CheckpointService {
 				List<Object> ops = entry.list("undo_json");
 				// Inverse operations compose only in reverse order — across entries and within one.
 				for (int i = ops.size() - 1; i >= 0; i--) {
-					@SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) ops.get(i);
+					@SuppressWarnings("unchecked")
+					Map<String, Object> m = (Map<String, Object>) ops.get(i);
 					tx.applyUndo(m);
 				}
 				if (!entry.isNull("game_seq")) {
@@ -272,14 +280,14 @@ public final class CheckpointService {
 			result.put("status", after.str("status"));
 			result.put("requires_context_reset", true);
 			result.put("audit", "restoration recorded; discarded events are no longer canonical");
-			result.put("meta", Harness.meta(after,
-					List.of("Rebuild your context from bootstrap_session; prior narration has no authority over restored state.")));
+			result.put("meta", Harness.meta(after, List.of(
+					"Rebuild your context from bootstrap_session; prior narration has no authority over restored state.")));
 			return result;
 		});
 	}
 
 	private static void audit(
-			Tx tx, long campaignId, String kind, String reason, Map<String, Object> before, Map<String, Object> after) {
+		Tx tx, long campaignId, String kind, String reason, Map<String, Object> before, Map<String, Object> after) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("kind", kind);

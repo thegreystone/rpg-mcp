@@ -38,8 +38,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A database row as an ordered column→value map with typed accessors. SQLite values arrive as {@link Long},
- * {@link Double}, {@link String}, {@code byte[]} or {@code null}.
+ * A database row as an ordered column→value map with typed accessors. SQLite values arrive as
+ * {@link Long}, {@link Double}, {@link String}, {@code byte[]} or {@code null}.
  */
 public final class Row {
 

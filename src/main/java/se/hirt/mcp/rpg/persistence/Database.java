@@ -45,8 +45,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
 /**
- * The one SQLite database file per installation (DATABASE.md §1). Single-writer: all work is serialized through one
- * connection and a lock; SQLite's own locking is only a backstop.
+ * The one SQLite database file per installation (DATABASE.md §1). Single-writer: all work is
+ * serialized through one connection and a lock; SQLite's own locking is only a backstop.
  */
 public final class Database implements AutoCloseable {
 
@@ -84,7 +84,7 @@ public final class Database implements AutoCloseable {
 	public record Mutation(String operation, Long campaignId, String operationId, String provenance, Object args) {
 
 		public static Mutation of(
-				String operation, Long campaignId, String operationId, String provenance, Object args) {
+			String operation, Long campaignId, String operationId, String provenance, Object args) {
 			return new Mutation(operation, campaignId, operationId, provenance, args);
 		}
 	}
@@ -107,9 +107,9 @@ public final class Database implements AutoCloseable {
 	}
 
 	/**
-	 * A mutating unit of work: reserves the journal entry, enforces idempotency (I-60), runs the work, records undo
-	 * information and the result, and commits atomically (I-69). On any failure the transaction is rolled back and
-	 * nothing — not even the journal entry — is observable.
+	 * A mutating unit of work: reserves the journal entry, enforces idempotency (I-60), runs the
+	 * work, records undo information and the result, and commits atomically (I-69). On any failure
+	 * the transaction is rolled back and nothing — not even the journal entry — is observable.
 	 */
 	public Map<String, Object> mutate(Mutation mutation, Function<Tx, Map<String, Object>> work) {
 		lock.lock();
@@ -143,9 +143,9 @@ public final class Database implements AutoCloseable {
 		if (m.operationId() == null || m.operationId().isBlank()) {
 			return Optional.empty();
 		}
-		Optional<Row> existing = m.campaignId() != null ? tx.queryOne(
-				"SELECT * FROM journal_entry WHERE campaign_id = ? AND operation_id = ?", m.campaignId(),
-				m.operationId())
+		Optional<Row> existing = m.campaignId() != null
+				? tx.queryOne("SELECT * FROM journal_entry WHERE campaign_id = ? AND operation_id = ?", m.campaignId(),
+						m.operationId())
 				: tx.queryOne("SELECT * FROM journal_entry WHERE operation = ? AND operation_id = ?", m.operation(),
 						m.operationId());
 		if (existing.isEmpty()) {
@@ -192,19 +192,18 @@ public final class Database implements AutoCloseable {
 	}
 
 	/**
-	 * Dumps every rewindable table for a campaign, ordered by primary key. Used by the checkpoint round-trip test
-	 * (I-51) and available for diagnostics. {@code campaign.active_session_id} is excluded because sessions are audit
-	 * history, not rewindable state.
+	 * Dumps every rewindable table for a campaign, ordered by primary key. Used by the checkpoint
+	 * round-trip test (I-51) and available for diagnostics. {@code campaign.active_session_id} is
+	 * excluded because sessions are audit history, not rewindable state.
 	 */
 	public Map<String, List<Map<String, Object>>> snapshot(long campaignId) {
 		return read(tx -> {
 			var out = new LinkedHashMap<String, List<Map<String, Object>>>();
 			for (String table : Tables.REWINDABLE) {
 				String scope = table.equals("campaign") ? "id" : "campaign_id";
-				List<Row> rows =
-						Tables.WITHOUT_CAMPAIGN_ID.contains(table) ? tx.query("SELECT * FROM " + table + " ORDER BY id")
-								: tx.query("SELECT * FROM " + table + " WHERE " + scope + " = ? ORDER BY id",
-										campaignId);
+				List<Row> rows = Tables.WITHOUT_CAMPAIGN_ID.contains(table)
+						? tx.query("SELECT * FROM " + table + " ORDER BY id")
+						: tx.query("SELECT * FROM " + table + " WHERE " + scope + " = ? ORDER BY id", campaignId);
 				out.put(table, rows.stream().map(r -> {
 					Map<String, Object> m = r.asMap();
 					if (table.equals("campaign")) {

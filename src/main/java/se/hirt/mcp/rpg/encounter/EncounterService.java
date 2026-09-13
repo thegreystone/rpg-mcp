@@ -53,8 +53,9 @@ import se.hirt.mcp.rpg.session.GameTime;
 import java.util.*;
 
 /**
- * The encounter state machine (DESIGN.md §15, DOMAIN_MODEL.md §10, MCP_PROTOCOL.md §15): sides, initiative, rounds and
- * turns owned by the engine; one action resolves atomically (I-32); zone-level positioning.
+ * The encounter state machine (DESIGN.md §15, DOMAIN_MODEL.md §10, MCP_PROTOCOL.md §15): sides,
+ * initiative, rounds and turns owned by the engine; one action resolves atomically (I-32);
+ * zone-level positioning.
  */
 public final class EncounterService {
 
@@ -68,7 +69,9 @@ public final class EncounterService {
 	private static final String DISENGAGING_REF = "srd5e:effect/disengaging";
 	private static final String SHIELD_SPELL_REF = "srd5e:effect/shield-spell";
 	private static final String SHIELD_SPELL = "srd5e:spell/shield";
-	/** Conditions that deny reactions (SRD 5.2.1 Incapacitated and the conditions that include it). */
+	/**
+	 * Conditions that deny reactions (SRD 5.2.1 Incapacitated and the conditions that include it).
+	 */
 	private static final List<String> NO_REACTION_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
 			"UNCONSCIOUS", "PETRIFIED");
 	public static final Set<String> NPC_REACTION_POLICIES = Set.of("AUTO", "ASK");
@@ -89,21 +92,21 @@ public final class EncounterService {
 	// ── start_encounter ────────────────────────────────────────────────
 
 	public Map<String, Object> start(
-			String operationId, String campaignRef, Map<String, Object> sides, Map<String, Object> stances,
-			Map<String, Object> zones, String environment, List<String> objectives, String locationRef) {
+		String operationId, String campaignRef, Map<String, Object> sides, Map<String, Object> stances,
+		Map<String, Object> zones, String environment, List<String> objectives, String locationRef) {
 		return start(operationId, campaignRef, sides, stances, zones, environment, objectives, locationRef, null);
 	}
 
 	/**
 	 * @param options
-	 *        {@code npc_reactions}: AUTO (default; NPC opportunity attacks and Shield are resolved by the engine) or ASK
-	 * 		(every reaction becomes a pending choice)
+	 *            {@code npc_reactions}: AUTO (default; NPC opportunity attacks and Shield are
+	 *            resolved by the engine) or ASK (every reaction becomes a pending choice)
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> start(
-			String operationId, String campaignRef, Map<String, Object> sides, Map<String, Object> stances,
-			Map<String, Object> zones, String environment, List<String> objectives, String locationRef,
-			Map<String, Object> options) {
+		String operationId, String campaignRef, Map<String, Object> sides, Map<String, Object> stances,
+		Map<String, Object> zones, String environment, List<String> objectives, String locationRef,
+		Map<String, Object> options) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		String npcReactions = options == null || options.get("npc_reactions") == null ? "AUTO"
 				: options.get("npc_reactions").toString().toUpperCase();
@@ -129,9 +132,10 @@ public final class EncounterService {
 				throw RpgException.invalidArgument(
 						"sides must map at least two side names to lists of character references, e.g. {\"party\": [\"character:1\"], \"raiders\": [\"character:2\"]}.");
 			}
-			Long pcId = tx.queryOne(
-					"SELECT character_id FROM player_control_assignment WHERE campaign_id = ? AND active = 1",
-					campaignId).map(r -> r.lng("character_id")).orElse(null);
+			Long pcId = tx
+					.queryOne("SELECT character_id FROM player_control_assignment WHERE campaign_id = ? AND active = 1",
+							campaignId)
+					.map(r -> r.lng("character_id")).orElse(null);
 			var participants = new ArrayList<Map<String, Object>>();
 			var seen = new java.util.HashSet<Long>();
 			String partySide = null;
@@ -151,8 +155,8 @@ public final class EncounterService {
 								List.of(new Violation("sides." + side.getKey(), "DEAD", c.str("name") + " is dead.")));
 					}
 					if (!seen.add(c.id())) {
-						throw RpgException.validation(
-								List.of(new Violation("sides", "DUPLICATE", ref + " appears twice.")));
+						throw RpgException
+								.validation(List.of(new Violation("sides", "DUPLICATE", ref + " appears twice.")));
 					}
 					if (pcId != null && c.id() == pcId) {
 						partySide = side.getKey();
@@ -200,8 +204,8 @@ public final class EncounterService {
 			long xpPool = 0;
 			for (Map<String, Object> p : participants) {
 				Row hostileC = (Row) p.get("character");
-				if (hostile(stanceMap, partySide, String.valueOf(p.get("side"))) && !hostileC.isNull(
-						"origin_content_ref")) {
+				if (hostile(stanceMap, partySide, String.valueOf(p.get("side")))
+						&& !hostileC.isNull("origin_content_ref")) {
 					xpPool += rules.find(hostileC.str("origin_content_ref")).map(d -> d.payload().get("xp_value"))
 							.map(v -> ((Number) v).longValue()).orElse(0L);
 				}
@@ -256,12 +260,13 @@ public final class EncounterService {
 			long first = ordered.get(0).id();
 			tx.update("encounter", encounterId, Map.of("turn_participant_id", first, "revision", 1));
 			log(tx, campaignId, encounterId, 1, null, "ENCOUNTER_STARTED",
-					"Encounter begins. Initiative: " + ordered.stream()
-							.map(r -> tx.get("character", r.lng("character_id")).str("name") + " " + r.lng(
-									"initiative")).toList(), null);
+					"Encounter begins. Initiative: " + ordered.stream().map(
+							r -> tx.get("character", r.lng("character_id")).str("name") + " " + r.lng("initiative"))
+							.toList(),
+					null);
 			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("ENCOUNTER_STARTED",
-					"An encounter began between " + String.join(" and ", names) + (environment == null ? ""
-							: " (" + environment + ")") + ".",
+					"An encounter began between " + String.join(" and ", names)
+							+ (environment == null ? "" : " (" + environment + ")") + ".",
 					participants.stream().map(p -> ((Row) p.get("character")).id()).toList(), "NOTABLE", "PARTY_KNOWN",
 					"GM", null, locationId, null, Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounterId))));
 			tx.update("campaign", campaignId,
@@ -351,12 +356,10 @@ public final class EncounterService {
 			participants.add(pm);
 		}
 		m.put("participants", participants);
-		m.put("turn", turnId == null ? null
-				: participants.stream().filter(p -> Boolean.TRUE.equals(p.get("current_turn"))).findFirst()
-						.orElse(null));
-		m.put("recent_log",
-				tx.query("SELECT * FROM encounter_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?", encounter.id(),
-						logLimit).stream().map(EncounterService::logEntry).toList());
+		m.put("turn", turnId == null ? null : participants.stream()
+				.filter(p -> Boolean.TRUE.equals(p.get("current_turn"))).findFirst().orElse(null));
+		m.put("recent_log", tx.query("SELECT * FROM encounter_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?",
+				encounter.id(), logLimit).stream().map(EncounterService::logEntry).toList());
 		List<Map<String, Object>> pending = pendingChoices(tx, encounter.id());
 		m.put("pending_choices", pending);
 		m.put("npc_reactions", encounter.str("npc_reactions"));
@@ -405,14 +408,17 @@ public final class EncounterService {
 		return m;
 	}
 
-	/** What a character can attack with: equipped/carried weapons, creature actions, or an unarmed strike. */
+	/**
+	 * What a character can attack with: equipped/carried weapons, creature actions, or an unarmed
+	 * strike.
+	 */
 	@SuppressWarnings("unchecked")
 	private List<Map<String, Object>> attackOptions(Tx tx, Row c) {
 		var out = new ArrayList<Map<String, Object>>();
 		if (!c.isNull("origin_content_ref")) {
 			rules.find(c.str("origin_content_ref")).ifPresent(d -> {
-				for (Map<String, Object> a : (List<Map<String, Object>>) d.payload()
-						.getOrDefault("actions", List.of())) {
+				for (Map<String, Object> a : (List<Map<String, Object>>) d.payload().getOrDefault("actions",
+						List.of())) {
 					if (String.valueOf(a.get("kind")).endsWith("ATTACK")) {
 						var m = new LinkedHashMap<String, Object>();
 						m.put("name", a.get("name"));
@@ -452,8 +458,8 @@ public final class EncounterService {
 	// ── perform_encounter_action ───────────────────────────────────────
 
 	public Map<String, Object> perform(
-			String operationId, String campaignRef, String encounterRef, String actorRef, Map<String, Object> action,
-			boolean endTurn) {
+		String operationId, String campaignRef, String encounterRef, String actorRef, Map<String, Object> action,
+		boolean endTurn) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -465,18 +471,17 @@ public final class EncounterService {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "perform_encounter_action");
 			Row encounter = encounter(tx, campaignId, encounterRef);
 			if ("WAITING_CHOICE".equals(encounter.str("status"))) {
-				throw RpgException.notAllowed(
-						"A pending choice must be resolved first (resolve_pending_choice): " + pendingChoices(tx,
-								encounter.id()).stream()
+				throw RpgException.notAllowed("A pending choice must be resolved first (resolve_pending_choice): "
+						+ pendingChoices(tx, encounter.id()).stream()
 								.map(c -> c.get("transaction") + " for " + c.get("chooser_name")).toList());
 			}
 			if (!"RUNNING".equals(encounter.str("status"))) {
 				throw RpgException.notAllowed("The encounter is " + encounter.str("status") + ".");
 			}
 			Row actor = CharacterService.character(tx, campaignId, actorRef);
-			Row participant = tx.queryOne(
-							"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounter.id(),
-							actor.id())
+			Row participant = tx
+					.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+							encounter.id(), actor.id())
 					.orElseThrow(() -> RpgException.invalidArgument(actorRef + " is not part of this encounter."));
 			if (action == null || action.get("kind") == null) {
 				throw RpgException.invalidArgument("action.kind is required: " + ACTIONS.stream().sorted().toList());
@@ -490,8 +495,8 @@ public final class EncounterService {
 			if (turnId == null || turnId != participant.id()) {
 				String whose = turnId == null ? "nobody"
 						: tx.get("character", tx.get("encounter_participant", turnId).lng("character_id")).str("name");
-				throw RpgException.notAllowed("It is " + whose + "'s turn, not " + actor.str(
-						"name") + "'s (I-31). Reactions are offered by the engine as pending choices.");
+				throw RpgException.notAllowed("It is " + whose + "'s turn, not " + actor.str("name")
+						+ "'s (I-31). Reactions are offered by the engine as pending choices.");
 			}
 			if (!"ACTIVE".equals(participant.str("status")) || !"ALIVE".equals(actor.str("life_state"))) {
 				throw RpgException.notAllowed(actor.str("name") + " cannot act (" + actor.str("life_state") + ").");
@@ -507,10 +512,10 @@ public final class EncounterService {
 				if (action.get("spell") == null) {
 					throw RpgException.invalidArgument("action.spell is required for CAST.");
 				}
-				@SuppressWarnings("unchecked") List<String> targets =
-						action.get("targets") instanceof List<?> l ? (List<String>) (List<?>) l.stream()
-								.map(Object::toString).toList()
-								: action.get("target") == null ? List.of() : List.of(action.get("target").toString());
+				@SuppressWarnings("unchecked")
+				List<String> targets = action.get("targets") instanceof List<?> l
+						? (List<String>) (List<?>) l.stream().map(Object::toString).toList()
+						: action.get("target") == null ? List.of() : List.of(action.get("target").toString());
 				Integer slot = action.get("slot_level") instanceof Number n ? n.intValue() : null;
 				result.putAll(se.hirt.mcp.rpg.magic.SpellService.castCore(tx, rules, roller, campaignId, actor,
 						action.get("spell").toString(), slot, targets, action, encounter.id(), round));
@@ -530,8 +535,8 @@ public final class EncounterService {
 				tx.insert("active_effect", cols);
 				log(tx, campaignId, encounter.id(), round, actor.id(), "DODGE",
 						actor.str("name") + " takes the Dodge action.", null);
-				result.put("effect", "Attack rolls against " + actor.str(
-						"name") + " have Disadvantage until the start of their next turn; Dexterity saves have Advantage.");
+				result.put("effect", "Attack rolls against " + actor.str("name")
+						+ " have Disadvantage until the start of their next turn; Dexterity saves have Advantage.");
 			}
 			case "MOVE", "DASH" -> {
 				String from = participant.str("position_zone");
@@ -555,9 +560,8 @@ public final class EncounterService {
 				Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 				CharacterService.recordRoll(tx, campaignId, "stealth (hide)", roll);
 				boolean hidden = roll.total() >= 15;
-				log(tx, campaignId, encounter.id(), round, actor.id(), "HIDE",
-						actor.str("name") + " tries to hide: Stealth " + roll.total() + (hidden ? " (hidden)"
-								: " (not hidden)"), null);
+				log(tx, campaignId, encounter.id(), round, actor.id(), "HIDE", actor.str("name")
+						+ " tries to hide: Stealth " + roll.total() + (hidden ? " (hidden)" : " (not hidden)"), null);
 				result.put("roll", roll.toMap());
 				result.put("hidden", hidden);
 				result.put("note", "Hide DC 15 (SRD 5.2.1); the GM decides who can perceive the hidden creature.");
@@ -601,8 +605,8 @@ public final class EncounterService {
 				}
 				result.put("pending_choices", pending);
 				result.put("turn_advanced", false);
-				result.put("next_step", "Ask the chooser(s) and call resolve_pending_choice; the turn " + (advance
-						? "advances afterwards." : "continues afterwards."));
+				result.put("next_step", "Ask the chooser(s) and call resolve_pending_choice; the turn "
+						+ (advance ? "advances afterwards." : "continues afterwards."));
 			} else if (advance) {
 				result.put("turn_advanced", true);
 				result.putAll(advanceTurn(tx, campaignId, tx.get("encounter", encounter.id())));
@@ -617,20 +621,17 @@ public final class EncounterService {
 	}
 
 	/**
-	 * How many attacks the actor still has this turn, counting the one just made. Zero for anyone without a
-	 * Multiattack, so ordinary attackers behave exactly as before.
+	 * How many attacks the actor still has this turn, counting the one just made. Zero for anyone
+	 * without a Multiattack, so ordinary attackers behave exactly as before.
 	 */
 	@SuppressWarnings("unchecked")
 	private int attacksRemaining(Tx tx, Row encounter, Row actor, long round) {
 		if (!RuntimeService.usesStatBlock(tx, actor)) {
 			return 0;
 		}
-		int count = rules.find(actor.str("origin_content_ref"))
-				.map(d -> d.payload().get("multiattack"))
-				.filter(m -> m instanceof Map<?, ?>)
-				.map(m -> ((Map<String, Object>) m).get("count"))
-				.filter(c -> c instanceof Number)
-				.map(c -> ((Number) c).intValue()).orElse(1);
+		int count = rules.find(actor.str("origin_content_ref")).map(d -> d.payload().get("multiattack"))
+				.filter(m -> m instanceof Map<?, ?>).map(m -> ((Map<String, Object>) m).get("count"))
+				.filter(c -> c instanceof Number).map(c -> ((Number) c).intValue()).orElse(1);
 		if (count <= 1) {
 			return 0;
 		}
@@ -656,18 +657,20 @@ public final class EncounterService {
 	}
 
 	/**
-	 * Sneak Attack (SRD 5.2.1 "Rogue"), driven entirely by the class definition's feature block. Applies when the
-	 * attack used a Finesse or Ranged weapon and either the roll had Advantage, or an ally is beside the target and
-	 * the roll did not have Disadvantage. Once per turn, tracked on the participant like Savage Attacker.
+	 * Sneak Attack (SRD 5.2.1 "Rogue"), driven entirely by the class definition's feature block.
+	 * Applies when the attack used a Finesse or Ranged weapon and either the roll had Advantage, or
+	 * an ally is beside the target and the roll did not have Disadvantage. Once per turn, tracked
+	 * on the participant like Savage Attacker.
 	 * <p>
-	 * This engine has zones rather than a grid, so "an ally within 5 feet of the target" is adjudicated as "a living,
-	 * non-incapacitated ally of the attacker shares the target's zone" (RULES_ENGINE.md §6).
+	 * This engine has zones rather than a grid, so "an ally within 5 feet of the target" is
+	 * adjudicated as "a living, non-incapacitated ally of the attacker shares the target's zone"
+	 * (RULES_ENGINE.md §6).
 	 */
 	private Optional<FeatureDamage> sneakAttack(
-			Tx tx, long campaignId, Row encounter, long round, Row actor, Row target,
-			Combat.AttackProfile profile, String advantage, boolean critical) {
-		Optional<se.hirt.mcp.rpg.progression.ClassFeatures.Mechanic> found =
-				se.hirt.mcp.rpg.progression.ClassFeatures.mechanic(tx, rules, actor, "SNEAK_ATTACK");
+		Tx tx, long campaignId, Row encounter, long round, Row actor, Row target, Combat.AttackProfile profile,
+		String advantage, boolean critical) {
+		Optional<se.hirt.mcp.rpg.progression.ClassFeatures.Mechanic> found = se.hirt.mcp.rpg.progression.ClassFeatures
+				.mechanic(tx, rules, actor, "SNEAK_ATTACK");
 		if (found.isEmpty()) {
 			return Optional.empty();
 		}
@@ -675,25 +678,26 @@ public final class EncounterService {
 		if (!mech.requiresWeapon().isEmpty() && !profile.finesseOrRanged()) {
 			return Optional.empty();
 		}
-		Row actorParticipant = tx.queryOne(
-				"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounter.id(),
-				actor.id()).orElse(null);
+		Row actorParticipant = tx
+				.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+						encounter.id(), actor.id())
+				.orElse(null);
 		if (actorParticipant == null) {
 			return Optional.empty();
 		}
 		String turnKey = encounter.lng("turn_participant_id") + ":" + round;
-		Map<String, Object> flags =
-				actorParticipant.isNull("once_per_turn_json") ? new LinkedHashMap<>()
-						: actorParticipant.map("once_per_turn_json");
+		Map<String, Object> flags = actorParticipant.isNull("once_per_turn_json") ? new LinkedHashMap<>()
+				: actorParticipant.map("once_per_turn_json");
 		if (mech.oncePerTurn() && turnKey.equals(flags.get("sneak_attack"))) {
 			return Optional.empty();
 		}
 		boolean qualifies = "ADVANTAGE".equals(advantage);
 		String why = "advantage on the attack";
 		if (!qualifies && !"DISADVANTAGE".equals(advantage)) {
-			Row targetParticipant = tx.queryOne(
-					"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounter.id(),
-					target.id()).orElse(null);
+			Row targetParticipant = tx
+					.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+							encounter.id(), target.id())
+					.orElse(null);
 			if (targetParticipant != null) {
 				for (Row p : tx.query(
 						"SELECT * FROM encounter_participant WHERE encounter_id = ? AND side = ? AND character_id <> ?",
@@ -722,8 +726,7 @@ public final class EncounterService {
 		CharacterService.recordRoll(tx, campaignId, mech.name().toLowerCase() + " " + expression, roll);
 		if (mech.oncePerTurn()) {
 			flags.put("sneak_attack", turnKey);
-			tx.update("encounter_participant", actorParticipant.id(),
-					Map.of("once_per_turn_json", Json.write(flags)));
+			tx.update("encounter_participant", actorParticipant.id(), Map.of("once_per_turn_json", Json.write(flags)));
 		}
 		String type = profile.damage().isEmpty() ? "piercing" : profile.damage().get(0).type();
 		var report = new LinkedHashMap<String, Object>();
@@ -749,7 +752,10 @@ public final class EncounterService {
 
 	// ── attack resolution ──────────────────────────────────────────────
 
-	/** The attack profile resolved from the action: creature action, carried weapon, or unarmed strike. */
+	/**
+	 * The attack profile resolved from the action: creature action, carried weapon, or unarmed
+	 * strike.
+	 */
 	private record Setup(Combat.AttackProfile profile, List<String> warnings) {
 	}
 
@@ -783,19 +789,20 @@ public final class EncounterService {
 	}
 
 	/**
-	 * Rolls the attack, then either resolves it (damage, conditions, log) or — when the target could cast Shield and
-	 * the decision is a player's — parks it as a pending choice. Reaction attacks never offer Shield.
+	 * Rolls the attack, then either resolves it (damage, conditions, log) or — when the target
+	 * could cast Shield and the decision is a player's — parks it as a pending choice. Reaction
+	 * attacks never offer Shield.
 	 */
 	private Map<String, Object> attack(
-			Tx tx, long campaignId, Row encounter, Row actor, Row participant, Map<String, Object> action, long round) {
+		Tx tx, long campaignId, Row encounter, Row actor, Row participant, Map<String, Object> action, long round) {
 		String targetRef = action.get("target") == null ? null : action.get("target").toString();
 		if (targetRef == null) {
 			throw RpgException.invalidArgument("action.target (character reference) is required for ATTACK.");
 		}
 		Row target = CharacterService.character(tx, campaignId, targetRef);
-		Row targetParticipant = tx.queryOne(
-						"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounter.id(),
-						target.id())
+		Row targetParticipant = tx
+				.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+						encounter.id(), target.id())
 				.orElseThrow(() -> RpgException.invalidArgument(targetRef + " is not part of this encounter."));
 		if ("DEAD".equals(target.str("life_state")) || !"ACTIVE".equals(targetParticipant.str("status"))) {
 			throw RpgException.notAllowed(target.str("name") + " is already out of the fight.");
@@ -804,8 +811,8 @@ public final class EncounterService {
 		Setup setup = resolveProfile(tx, actor, action);
 		Combat.AttackProfile profile = setup.profile();
 		if (reaction && profile.ranged()) {
-			throw RpgException.validation(List.of(new Violation("choice.weapon", "NOT_MELEE",
-					"An Opportunity Attack must be a melee attack.")));
+			throw RpgException.validation(List
+					.of(new Violation("choice.weapon", "NOT_MELEE", "An Opportunity Attack must be a melee attack.")));
 		}
 		if (Boolean.TRUE.equals(action.get("nonlethal")) && profile.ranged()) {
 			throw RpgException.validation(List.of(new Violation("action.nonlethal", "NOT_MELEE",
@@ -816,8 +823,8 @@ public final class EncounterService {
 		if (profile.usesAmmunition()) {
 			Row ammo = tx.queryOne(
 					"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id LIMIT 1",
-					actor.id(), profile.ammunitionRef()).orElseThrow(() -> RpgException.validation(
-					List.of(new Violation("action.weapon", "NO_AMMUNITION",
+					actor.id(), profile.ammunitionRef())
+					.orElseThrow(() -> RpgException.validation(List.of(new Violation("action.weapon", "NO_AMMUNITION",
 							actor.str("name") + " has no ammunition for " + profile.name() + "."))));
 			InventoryService.removeQuantity(tx, ammo, 1);
 			ammoUsed = Map.of("item", profile.ammunitionRef(), "remaining", ammo.lng("quantity") - 1);
@@ -834,9 +841,9 @@ public final class EncounterService {
 			disadvantage = true;
 			reasons.add("target is dodging");
 		}
-		boolean targetUnconscious = "DYING".equals(target.str("life_state")) || tx.count(
-				"SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", target.id(),
-				RuntimeService.UNCONSCIOUS_REF) > 0;
+		boolean targetUnconscious = "DYING".equals(target.str("life_state"))
+				|| tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?",
+						target.id(), RuntimeService.UNCONSCIOUS_REF) > 0;
 		if (targetUnconscious) {
 			advantage = true;
 			reasons.add("target is unconscious");
@@ -890,21 +897,22 @@ public final class EncounterService {
 		ctx.put("warnings", setup.warnings());
 
 		// Shield (SRD 5.2.1): a reaction when hit; +5 AC until the start of the caster's next turn, including against the trigger.
-		if (hit && natural != 20 && !reaction && attackTotal < targetAc + 5 && canCastShield(tx, target,
-				targetParticipant)) {
+		if (hit && natural != 20 && !reaction && attackTotal < targetAc + 5
+				&& canCastShield(tx, target, targetParticipant)) {
 			if (asksBeforeReacting(tx, campaignId, encounter, target.id())) {
 				var options = List.of(Map.of("option", "CAST_SHIELD", "description",
-								"Cast Shield as a reaction (spends the lowest available spell slot): AC +5 until the start of " + target.str(
-										"name") + "'s next turn, turning this hit into a miss."),
+						"Cast Shield as a reaction (spends the lowest available spell slot): AC +5 until the start of "
+								+ target.str("name") + "'s next turn, turning this hit into a miss."),
 						Map.of("option", "DECLINE", "description", "Take the hit."));
 				Map<String, Object> view = openChoice(tx, campaignId, encounter, target.id(), "SHIELD_SPELL",
-						actor.str("name") + "'s " + profile.name() + " hits " + target.str(
-								"name") + " (" + attackTotal + " vs AC " + targetAc + "). Cast Shield?", options, ctx);
+						actor.str("name") + "'s " + profile.name() + " hits " + target.str("name") + " (" + attackTotal
+								+ " vs AC " + targetAc + "). Cast Shield?",
+						options, ctx);
 				var out = attackView(ctx, profile);
 				out.put("resolved", false);
 				out.put("pending_choice", view);
-				out.put("summary", actor.str("name") + "'s " + profile.name() + " hits " + target.str(
-						"name") + " — waiting for a Shield decision.");
+				out.put("summary", actor.str("name") + "'s " + profile.name() + " hits " + target.str("name")
+						+ " — waiting for a Shield decision.");
 				return out;
 			}
 			Map<String, Object> shield = castShield(tx, campaignId, encounter, target, targetParticipant, round);
@@ -947,8 +955,8 @@ public final class EncounterService {
 	/** Second half of an attack: damage, knock-out, death, and the log line. */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> finishAttack(
-			Tx tx, long campaignId, Row encounter, Row actor, Row target,
-			Row targetParticipant, Combat.AttackProfile profile, Map<String, Object> ctx, long round) {
+		Tx tx, long campaignId, Row encounter, Row actor, Row target, Row targetParticipant,
+		Combat.AttackProfile profile, Map<String, Object> ctx, long round) {
 		target = tx.get("character", target.id());
 		Map<String, Object> action = (Map<String, Object>) ctx.get("action");
 		boolean hit = Boolean.TRUE.equals(ctx.get("hit"));
@@ -968,9 +976,10 @@ public final class EncounterService {
 			// the better total (SRD 5.2.1 "Feats"); both rolls are recorded.
 			if (se.hirt.mcp.rpg.character.Origins.savageAttacker(tx, rules, actor)) {
 				String turnKey = encounter.lng("turn_participant_id") + ":" + round;
-				Row actorParticipant = tx.queryOne(
-						"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
-						encounter.id(), actor.id()).orElse(null);
+				Row actorParticipant = tx
+						.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+								encounter.id(), actor.id())
+						.orElse(null);
 				Map<String, Object> flags = actorParticipant == null || actorParticipant.isNull("once_per_turn_json")
 						? new LinkedHashMap<>() : actorParticipant.map("once_per_turn_json");
 				if (actorParticipant != null && !turnKey.equals(flags.get("savage_attacker"))) {
@@ -1049,16 +1058,16 @@ public final class EncounterService {
 				}
 			}
 			out.putAll(applied);
-			summary = actor.str("name") + " hits " + target.str("name") + " with " + label + (critical ? " (critical)"
-					: "") + " for " + dr.totalDealt() + " damage (" + dr.hpBefore() + " → " + dr.hpAfter() + " HP)" + (
-					knockOut ? " — " + target.str("name") + " is knocked out."
+			summary = actor.str("name") + " hits " + target.str("name") + " with " + label
+					+ (critical ? " (critical)" : "") + " for " + dr.totalDealt() + " damage (" + dr.hpBefore() + " → "
+					+ dr.hpAfter() + " HP)"
+					+ (knockOut ? " — " + target.str("name") + " is knocked out."
 							: Boolean.TRUE.equals(applied.get("died")) ? " — " + target.str("name") + " dies."
-									: "DYING".equals(applied.get("life_state")) ? " — " + target.str(
-											"name") + " drops to 0 HP." : ".");
+									: "DYING".equals(applied.get("life_state"))
+											? " — " + target.str("name") + " drops to 0 HP." : ".");
 		} else {
-			summary = actor.str("name") + " misses " + target.str(
-					"name") + " with " + label + " (" + attackTotal + " vs AC " + targetAc + (ctx.get("shield") != null
-					? ", Shield" : "") + ").";
+			summary = actor.str("name") + " misses " + target.str("name") + " with " + label + " (" + attackTotal
+					+ " vs AC " + targetAc + (ctx.get("shield") != null ? ", Shield" : "") + ").";
 		}
 		out.put("summary", summary);
 		if (ctx.get("warnings") instanceof List<?> w && !w.isEmpty()) {
@@ -1082,12 +1091,12 @@ public final class EncounterService {
 	}
 
 	/**
-	 * A reaction is available once per round, to conscious, non-incapacitated, active participants (SRD 5.2.1
-	 * "Reactions").
+	 * A reaction is available once per round, to conscious, non-incapacitated, active participants
+	 * (SRD 5.2.1 "Reactions").
 	 */
 	private boolean reactionAvailable(Tx tx, Row participant, Row c) {
-		if (participant.intOr("reaction_used", 0) != 0 || !"ACTIVE".equals(
-				participant.str("status")) || !"ALIVE".equals(c.str("life_state"))) {
+		if (participant.intOr("reaction_used", 0) != 0 || !"ACTIVE".equals(participant.str("status"))
+				|| !"ALIVE".equals(c.str("life_state"))) {
 			return false;
 		}
 		for (String cond : NO_REACTION_CONDITIONS) {
@@ -1106,7 +1115,7 @@ public final class EncounterService {
 	}
 
 	private Map<String, Object> castShield(
-			Tx tx, long campaignId, Row encounter, Row target, Row targetParticipant, long round) {
+		Tx tx, long campaignId, Row encounter, Row target, Row targetParticipant, long round) {
 		Map<String, Object> slot = se.hirt.mcp.rpg.magic.SpellService.spendLowestSlot(tx, target.id(), 1).orElseThrow(
 				() -> RpgException.insufficientResource(target.str("name") + " has no spell slot for Shield."));
 		se.hirt.mcp.rpg.rules.Effects.add(tx, campaignId, target.id(), target.id(), SHIELD_SPELL,
@@ -1124,13 +1133,14 @@ public final class EncounterService {
 	}
 
 	/**
-	 * Opportunity Attacks (SRD 5.2.1): leaving a zone that holds hostile, able creatures lets each of them make one
-	 * melee attack as a reaction unless the mover took the Disengage action. NPCs resolve per the encounter's policy;
-	 * player-controlled reactors decide via a pending choice. The move itself has already happened.
+	 * Opportunity Attacks (SRD 5.2.1): leaving a zone that holds hostile, able creatures lets each
+	 * of them make one melee attack as a reaction unless the mover took the Disengage action. NPCs
+	 * resolve per the encounter's policy; player-controlled reactors decide via a pending choice.
+	 * The move itself has already happened.
 	 */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> opportunityAttacks(
-			Tx tx, long campaignId, Row encounter, Row mover, Row moverParticipant, String fromZone, long round) {
+		Tx tx, long campaignId, Row encounter, Row mover, Row moverParticipant, String fromZone, long round) {
 		var out = new LinkedHashMap<String, Object>();
 		if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", mover.id(),
 				DISENGAGING_REF) > 0) {
@@ -1141,8 +1151,8 @@ public final class EncounterService {
 		Map<String, Object> stances = (Map<String, Object>) sides.get("stances");
 		var reactions = new ArrayList<Map<String, Object>>();
 		for (Row p : turnOrder(tx, encounter.id())) {
-			if (p.id() == moverParticipant.id() || !fromZone.equals(p.str("position_zone")) || !hostile(stances,
-					p.str("side"), moverParticipant.str("side"))) {
+			if (p.id() == moverParticipant.id() || !fromZone.equals(p.str("position_zone"))
+					|| !hostile(stances, p.str("side"), moverParticipant.str("side"))) {
 				continue;
 			}
 			Row reactor = tx.get("character", p.lng("character_id"));
@@ -1154,16 +1164,18 @@ public final class EncounterService {
 				break;
 			}
 			if (asksBeforeReacting(tx, campaignId, encounter, reactor.id())) {
-				var options = List.of(Map.of("option", "TAKE", "description",
-								"Make one melee attack against " + mover.str(
-										"name") + " as a reaction (optionally name the weapon)."),
+				var options = List.of(
+						Map.of("option", "TAKE", "description",
+								"Make one melee attack against " + mover.str("name")
+										+ " as a reaction (optionally name the weapon)."),
 						Map.of("option", "DECLINE", "description", "Let " + mover.str("name") + " go."));
 				var ctx = new LinkedHashMap<String, Object>();
 				ctx.put("mover", mover.id());
 				ctx.put("from_zone", fromZone);
-				reactions.add(openChoice(tx, campaignId, encounter, reactor.id(), "OPPORTUNITY_ATTACK",
-						mover.str("name") + " leaves " + reactor.str(
-								"name") + "'s reach (zone " + fromZone + "). Opportunity Attack?", options, ctx));
+				reactions.add(openChoice(
+						tx, campaignId, encounter, reactor.id(), "OPPORTUNITY_ATTACK", mover.str("name") + " leaves "
+								+ reactor.str("name") + "'s reach (zone " + fromZone + "). Opportunity Attack?",
+						options, ctx));
 			} else {
 				reactions.add(reactionAttack(tx, campaignId, encounter, reactor, p, mover, null, round));
 			}
@@ -1174,8 +1186,8 @@ public final class EncounterService {
 
 	/** Resolves one opportunity attack by the reactor against the mover and spends the reaction. */
 	private Map<String, Object> reactionAttack(
-			Tx tx, long campaignId, Row encounter, Row reactor,
-			Row reactorParticipant, Row mover, String weapon, long round) {
+		Tx tx, long campaignId, Row encounter, Row reactor, Row reactorParticipant, Row mover, String weapon,
+		long round) {
 		var action = new LinkedHashMap<String, Object>();
 		action.put("kind", "ATTACK");
 		action.put("target", Ref.of(Ref.CHARACTER, mover.id()));
@@ -1193,14 +1205,15 @@ public final class EncounterService {
 	}
 
 	/**
-	 * The reactor's default melee weapon: the first equipped melee weapon, else the first carried one; creatures use
-	 * their stat block.
+	 * The reactor's default melee weapon: the first equipped melee weapon, else the first carried
+	 * one; creatures use their stat block.
 	 */
 	private Optional<String> defaultMeleeAttack(Tx tx, Row reactor) {
 		if (RuntimeService.usesStatBlock(tx, reactor)) {
 			return rules.find(reactor.str("origin_content_ref")).flatMap(d -> {
-				@SuppressWarnings("unchecked") List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload()
-						.getOrDefault("actions", List.of());
+				@SuppressWarnings("unchecked")
+				List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload().getOrDefault("actions",
+						List.of());
 				return actions.stream().filter(a -> "MELEE_ATTACK".equals(String.valueOf(a.get("kind"))))
 						.map(a -> String.valueOf(a.get("name"))).findFirst();
 			});
@@ -1216,8 +1229,8 @@ public final class EncounterService {
 	}
 
 	private Map<String, Object> openChoice(
-			Tx tx, long campaignId, Row encounter, long chooserId, String choiceKind,
-			String prompt, List<Map<String, String>> options, Map<String, Object> context) {
+		Tx tx, long campaignId, Row encounter, long chooserId, String choiceKind, String prompt,
+		List<Map<String, String>> options, Map<String, Object> context) {
 		var payload = new LinkedHashMap<String, Object>();
 		payload.put("choice_kind", choiceKind);
 		payload.put("encounter_id", encounter.id());
@@ -1242,8 +1255,7 @@ public final class EncounterService {
 
 	@SuppressWarnings("unchecked")
 	public Map<String, Object> resolveChoice(
-			String operationId, String campaignRef, String transactionRef,
-			Map<String, Object> choice) {
+		String operationId, String campaignRef, String transactionRef, Map<String, Object> choice) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -1272,9 +1284,10 @@ public final class EncounterService {
 						"choice.option must be one of " + options.stream().map(o -> o.get("option")).toList() + ".");
 			}
 			Row chooser = tx.get("character", ((Number) payload.get("chooser")).longValue());
-			Row chooserParticipant = tx.queryOne(
-					"SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?", encounter.id(),
-					chooser.id()).orElseThrow();
+			Row chooserParticipant = tx
+					.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+							encounter.id(), chooser.id())
+					.orElseThrow();
 			Map<String, Object> ctx = (Map<String, Object>) payload.get("context");
 			long round = encounter.lng("round");
 			String kind = String.valueOf(payload.get("choice_kind"));
@@ -1291,9 +1304,8 @@ public final class EncounterService {
 						throw RpgException.notAllowed(chooser.str("name") + " no longer has a reaction available.");
 					}
 					String weapon = choice.get("weapon") == null ? null : choice.get("weapon").toString();
-					result.put("attack",
-							reactionAttack(tx, campaignId, encounter, chooser, chooserParticipant, mover, weapon,
-									round));
+					result.put("attack", reactionAttack(tx, campaignId, encounter, chooser, chooserParticipant, mover,
+							weapon, round));
 				} else {
 					log(tx, campaignId, encounter.id(), round, chooser.id(), "REACTION",
 							chooser.str("name") + " lets " + mover.str("name") + " go.", null);
@@ -1303,23 +1315,22 @@ public final class EncounterService {
 				Row attacker = tx.get("character", ((Number) ctx.get("attacker")).longValue());
 				Row target = tx.get("character", ((Number) ctx.get("target")).longValue());
 				Row targetParticipant = chooserParticipant;
-				Combat.AttackProfile profile = resolveProfile(tx, attacker,
-						(Map<String, Object>) ctx.get("action")).profile();
+				Combat.AttackProfile profile = resolveProfile(tx, attacker, (Map<String, Object>) ctx.get("action"))
+						.profile();
 				var live = new LinkedHashMap<String, Object>(ctx);
 				if (option.equals("CAST_SHIELD")) {
 					if (!canCastShield(tx, target, targetParticipant)) {
-						throw RpgException.notAllowed(
-								target.str("name") + " can no longer cast Shield (no reaction or slot).");
+						throw RpgException
+								.notAllowed(target.str("name") + " can no longer cast Shield (no reaction or slot).");
 					}
 					live.put("shield", castShield(tx, campaignId, encounter, target, targetParticipant, round));
 					int ac = ((Number) ctx.get("target_armor_class")).intValue() + 5;
 					live.put("target_armor_class", ac);
-					live.put("hit", ((Number) ctx.get("natural")).intValue() == 20 || ((Number) ctx.get(
-							"attack_total")).intValue() >= ac);
+					live.put("hit", ((Number) ctx.get("natural")).intValue() == 20
+							|| ((Number) ctx.get("attack_total")).intValue() >= ac);
 				}
-				result.put("attack",
-						finishAttack(tx, campaignId, encounter, attacker, target, targetParticipant, profile, live,
-								round));
+				result.put("attack", finishAttack(tx, campaignId, encounter, attacker, target, targetParticipant,
+						profile, live, round));
 			}
 			default -> throw RpgException.invalidArgument("Unknown choice kind " + kind);
 			}
@@ -1349,11 +1360,11 @@ public final class EncounterService {
 		}
 		// Attacks stay available to a promoted companion only through equipment; see resolveProfile.
 		return rules.find(actor.str("origin_content_ref")).flatMap(d -> {
-			List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload()
-					.getOrDefault("actions", List.of());
-			return actions.stream().filter(a -> String.valueOf(a.get("kind")).endsWith("ATTACK"))
-					.filter(a -> name == null || name.isBlank() || String.valueOf(a.get("name"))
-							.equalsIgnoreCase(name.trim())).findFirst();
+			List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload().getOrDefault("actions",
+					List.of());
+			return actions.stream().filter(a -> String.valueOf(a.get("kind")).endsWith("ATTACK")).filter(
+					a -> name == null || name.isBlank() || String.valueOf(a.get("name")).equalsIgnoreCase(name.trim()))
+					.findFirst();
 		});
 	}
 
@@ -1372,9 +1383,10 @@ public final class EncounterService {
 		}
 		List<Row> rows = item.custom() ? tx.query(
 				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY equipped DESC, id",
-				actor.id(), item.customId()) : tx.query(
-				"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY equipped DESC, id",
-				actor.id(), item.contentRef());
+				actor.id(), item.customId())
+				: tx.query(
+						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY equipped DESC, id",
+						actor.id(), item.contentRef());
 		if (rows.isEmpty()) {
 			throw RpgException.validation(List.of(new Violation("action.weapon", "NOT_CARRIED",
 					actor.str("name") + " does not carry a " + item.name() + ".")));
@@ -1385,7 +1397,7 @@ public final class EncounterService {
 	// ── items in combat ────────────────────────────────────────────────
 
 	private Map<String, Object> useItem(
-			Tx tx, long campaignId, Row encounter, Row actor, Map<String, Object> action, long round) {
+		Tx tx, long campaignId, Row encounter, Row actor, Map<String, Object> action, long round) {
 		String text = action.get("item") == null ? null : action.get("item").toString();
 		if (text == null) {
 			throw RpgException.invalidArgument(
@@ -1400,8 +1412,8 @@ public final class EncounterService {
 		var out = new LinkedHashMap<String, Object>();
 		out.put("item", item.display());
 		out.put("name", item.name());
-		String targetRef =
-				action.get("target") == null ? Ref.of(Ref.CHARACTER, actor.id()) : action.get("target").toString();
+		String targetRef = action.get("target") == null ? Ref.of(Ref.CHARACTER, actor.id())
+				: action.get("target").toString();
 		Row target = CharacterService.character(tx, campaignId, targetRef);
 		if (item.contentRef() != null && item.contentRef().equals("srd5e:item/potion-of-healing")) {
 			Roll roll = roller.roll("2d4+2");
@@ -1410,16 +1422,15 @@ public final class EncounterService {
 			out.putAll(RuntimeService.heal(tx, target, roll.total(), "Potion of Healing"));
 			out.put("roll", roll.toMap());
 			out.put("target", Ref.of(Ref.CHARACTER, target.id()));
-			log(tx, campaignId, encounter.id(), round, actor.id(), "USE_ITEM",
-					actor.str("name") + " uses a Potion of Healing on " + target.str("name") + ": +" + out.get(
-							"healed") + " HP.", null);
+			log(tx, campaignId, encounter.id(), round, actor.id(), "USE_ITEM", actor.str("name")
+					+ " uses a Potion of Healing on " + target.str("name") + ": +" + out.get("healed") + " HP.", null);
 		} else {
 			boolean consume = action.get("consume") == null || Boolean.TRUE.equals(action.get("consume"));
 			if (consume) {
 				InventoryService.removeQuantity(tx, entry, 1);
 			}
-			String desc =
-					action.get("description") == null ? "uses " + item.name() : action.get("description").toString();
+			String desc = action.get("description") == null ? "uses " + item.name()
+					: action.get("description").toString();
 			log(tx, campaignId, encounter.id(), round, actor.id(), "USE_ITEM", actor.str("name") + " " + desc + ".",
 					null);
 			out.put("consumed", consume);
@@ -1430,9 +1441,9 @@ public final class EncounterService {
 
 	private Row carriedAny(Tx tx, Row actor, String text) {
 		ContentService.Item item = ContentService.resolveItem(tx, rules, actor.lng("campaign_id"), text);
-		List<Row> rows = item.custom() ? tx.query(
-				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY id",
-				actor.id(), item.customId())
+		List<Row> rows = item.custom()
+				? tx.query("SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY id",
+						actor.id(), item.customId())
 				: tx.query("SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id",
 						actor.id(), item.contentRef());
 		if (rows.isEmpty()) {
@@ -1443,9 +1454,10 @@ public final class EncounterService {
 	}
 
 	/**
-	 * Spells such as Sleep, Hold Person and Blindness/Deafness let the target try again at the end of each of its
-	 * turns. The instruction rides on the effect (see SpellService), so the engine rolls it here rather than the GM
-	 * remembering to - and a second failure escalates where the spell says it does (SRD 5.2.1 spell descriptions).
+	 * Spells such as Sleep, Hold Person and Blindness/Deafness let the target try again at the end
+	 * of each of its turns. The instruction rides on the effect (see SpellService), so the engine
+	 * rolls it here rather than the GM remembering to - and a second failure escalates where the
+	 * spell says it does (SRD 5.2.1 spell descriptions).
 	 */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> endOfTurnSaves(Tx tx, long campaignId, Row encounter) {
@@ -1465,7 +1477,8 @@ public final class EncounterService {
 				continue;
 			}
 			var spec = new LinkedHashMap<String, Object>((Map<String, Object>) raw);
-			se.hirt.mcp.rpg.rules.Ability ability = se.hirt.mcp.rpg.rules.Ability.parse(String.valueOf(spec.get("ability")));
+			se.hirt.mcp.rpg.rules.Ability ability = se.hirt.mcp.rpg.rules.Ability
+					.parse(String.valueOf(spec.get("ability")));
 			int dc = spec.get("dc") instanceof Number n ? n.intValue() : 10;
 			int bonus = se.hirt.mcp.rpg.magic.SpellService.saveBonus(tx, rules, c, ability);
 			Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
@@ -1484,9 +1497,8 @@ public final class EncounterService {
 			if (saved) {
 				tx.delete("active_effect", e.id());
 				entry.put("effect_ended", true);
-				log(tx, campaignId, encounter.id(), encounter.lng("round"), c.id(), "SAVE",
-						c.str("name") + " shakes off " + spec.get("spell") + " (" + roll.total() + " vs DC " + dc
-								+ ").", null);
+				log(tx, campaignId, encounter.id(), encounter.lng("round"), c.id(), "SAVE", c.str("name")
+						+ " shakes off " + spec.get("spell") + " (" + roll.total() + " vs DC " + dc + ").", null);
 			} else {
 				int failures = (spec.get("failures") instanceof Number n ? n.intValue() : 1) + 1;
 				spec.put("failures", failures);
@@ -1504,7 +1516,8 @@ public final class EncounterService {
 					entry.put("escalated_to", escalation);
 					log(tx, campaignId, encounter.id(), encounter.lng("round"), c.id(), "SAVE",
 							c.str("name") + " fails a second save against " + spec.get("spell") + " and is "
-									+ escalation.toLowerCase() + ".", null);
+									+ escalation.toLowerCase() + ".",
+							null);
 				}
 			}
 			saves.add(entry);
@@ -1515,16 +1528,17 @@ public final class EncounterService {
 	// ── turn advancement ───────────────────────────────────────────────
 
 	/**
-	 * Moves to the next participant who can act, rolling death saves for dying party members whose turn comes up and
-	 * expiring "until start of turn" effects. Returns the new turn (or none if nobody can act).
+	 * Moves to the next participant who can act, rolling death saves for dying party members whose
+	 * turn comes up and expiring "until start of turn" effects. Returns the new turn (or none if
+	 * nobody can act).
 	 */
 	private Map<String, Object> advanceTurn(Tx tx, long campaignId, Row encounter) {
 		Map<String, Object> ending = endOfTurnSaves(tx, campaignId, encounter);
 		List<Row> order = turnOrder(tx, encounter.id());
 		int index = 0;
 		for (int i = 0; i < order.size(); i++) {
-			if (encounter.lng("turn_participant_id") != null && order.get(i).id() == encounter.lng(
-					"turn_participant_id")) {
+			if (encounter.lng("turn_participant_id") != null
+					&& order.get(i).id() == encounter.lng("turn_participant_id")) {
 				index = i;
 			}
 		}
@@ -1547,14 +1561,14 @@ public final class EncounterService {
 			for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
 					c.id())) {
 				Map<String, Object> d = e.map("duration_json");
-				if ("START_OF_TURN".equals(d.get("until")) && d.get(
-						"participant") instanceof Number n && n.longValue() == p.id()) {
+				if ("START_OF_TURN".equals(d.get("until")) && d.get("participant") instanceof Number n
+						&& n.longValue() == p.id()) {
 					tx.delete("active_effect", e.id());
 				}
 			}
 			if ("DYING".equals(c.str("life_state"))) {
-				Map<String, Object> saves =
-						c.isNull("death_saves_json") ? Combat.freshDeathSaves() : c.map("death_saves_json");
+				Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
+						: c.map("death_saves_json");
 				if (!Boolean.TRUE.equals(saves.get("stable"))) {
 					Roll roll = roller.roll("1d20");
 					CharacterService.recordRoll(tx, campaignId, "death saving throw " + Ref.of(Ref.CHARACTER, c.id()),
@@ -1585,10 +1599,11 @@ public final class EncounterService {
 						}
 						RuntimeService.endMemberships(tx, campaignId, c.id(), "DEAD");
 						tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
-						LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
-								c.str("name") + " died of their wounds (three failed death saves).", List.of(c.id()),
-								"CRITICAL", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null,
-								null));
+						LedgerService.append(tx, campaignId,
+								new LedgerService.EventSpec("CHARACTER_DIED",
+										c.str("name") + " died of their wounds (three failed death saves).",
+										List.of(c.id()), "CRITICAL", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
+										c.lng("location_id"), null, null));
 						log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE",
 								c.str("name") + " fails a third death save and dies.", null);
 						continue;
@@ -1596,8 +1611,10 @@ public final class EncounterService {
 						tx.update("character", c.id(),
 								Map.of("death_saves_json", Json.write(after), "revision", c.lng("revision") + 1));
 						log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE",
-								c.str("name") + " death save " + roll.total() + ": " + outcome + " (" + after.get(
-										"successes") + " successes, " + after.get("failures") + " failures).", null);
+								c.str("name") + " death save " + roll.total() + ": " + outcome + " ("
+										+ after.get("successes") + " successes, " + after.get("failures")
+										+ " failures).",
+								null);
 					}
 				}
 				if ("DYING".equals(c.str("life_state"))) {
@@ -1611,9 +1628,8 @@ public final class EncounterService {
 				out.put("repeat_saves", ending.get("saves"));
 			}
 			out.put("round", round);
-			out.put("next_turn",
-					Map.of("participant", p.id(), "character", Ref.of(Ref.CHARACTER, c.id()), "name", c.str("name"),
-							"side", p.str("side")));
+			out.put("next_turn", Map.of("participant", p.id(), "character", Ref.of(Ref.CHARACTER, c.id()), "name",
+					c.str("name"), "side", p.str("side")));
 			if (!events.isEmpty()) {
 				out.put("death_saves", events);
 			}
@@ -1638,7 +1654,7 @@ public final class EncounterService {
 	// ── end_encounter ──────────────────────────────────────────────────
 
 	public Map<String, Object> end(
-			String operationId, String campaignRef, String encounterRef, String outcome, String summary) {
+		String operationId, String campaignRef, String encounterRef, String outcome, String summary) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -1656,12 +1672,13 @@ public final class EncounterService {
 			}
 			String o = outcome == null ? "OTHER" : outcome.toUpperCase();
 			if (!OUTCOMES.contains(o)) {
-				throw RpgException.invalidArgument(
-						"outcome must be one of " + OUTCOMES.stream().sorted().toList() + ".");
+				throw RpgException
+						.invalidArgument("outcome must be one of " + OUTCOMES.stream().sorted().toList() + ".");
 			}
 			Map<String, Object> sides = encounter.map("sides_json");
 			String partySide = String.valueOf(sides.get("party_side"));
-			@SuppressWarnings("unchecked") Map<String, Object> stances = (Map<String, Object>) sides.get("stances");
+			@SuppressWarnings("unchecked")
+			Map<String, Object> stances = (Map<String, Object>) sides.get("stances");
 			List<Row> participants = tx.query("SELECT * FROM encounter_participant WHERE encounter_id = ? ORDER BY id",
 					encounter.id());
 
@@ -1679,9 +1696,8 @@ public final class EncounterService {
 						recipients.add(c);
 					}
 				} else if ("DEFEATED".equals(p.str("status")) && hostile(stances, partySide, p.str("side"))) {
-					long xp = c.isNull("origin_content_ref") ? 0
-							: rules.find(c.str("origin_content_ref")).map(d -> d.payload().get("xp_value"))
-									.map(v -> ((Number) v).longValue()).orElse(0L);
+					long xp = c.isNull("origin_content_ref") ? 0 : rules.find(c.str("origin_content_ref"))
+							.map(d -> d.payload().get("xp_value")).map(v -> ((Number) v).longValue()).orElse(0L);
 					defeatedXp += xp;
 					defeated.add(c.str("name") + " (" + xp + " XP)");
 				}
@@ -1735,7 +1751,8 @@ public final class EncounterService {
 			var continuation = new LinkedHashMap<String, Object>();
 			if (pcDead) {
 				boolean survivors = tx.count(
-						"SELECT COUNT(*) FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','SEPARATED') AND c.life_state <> 'DEAD' AND c.lifecycle = 'ACTIVE'",
+						"SELECT COUNT(*) FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
+								+ "AND m.state IN ('ACTIVE','SEPARATED') AND c.life_state <> 'DEAD' AND c.lifecycle = 'ACTIVE'",
 						campaignId) > 0;
 				if ("IRONMAN".equals(policy)) {
 					if (survivors) {
@@ -1761,13 +1778,15 @@ public final class EncounterService {
 				continuation.put("continuation_policy", policy);
 			}
 			long xpTotal = awards.stream().mapToLong(a -> ((Number) a.get("xp_gained")).longValue()).sum();
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("ENCOUNTER_RESOLVED",
-					"Encounter " + o.toLowerCase().replace('_', ' ') + (summary == null || summary.isBlank() ? ""
-							: ": " + summary) + (defeated.isEmpty() ? ""
-							: " Defeated: " + String.join(", ", defeated) + "."),
-					participants.stream().map(p -> p.lng("character_id")).toList(), pcDead ? "MAJOR" : "NOTABLE",
-					"PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null, encounter.lng("location_id"), null,
-					Map.of("outcome", o, "xp_awarded", xpTotal, "rounds", rounds)));
+			LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("ENCOUNTER_RESOLVED",
+							"Encounter " + o.toLowerCase().replace('_', ' ')
+									+ (summary == null || summary.isBlank() ? "" : ": " + summary)
+									+ (defeated.isEmpty() ? "" : " Defeated: " + String.join(", ", defeated) + "."),
+							participants.stream().map(p -> p.lng("character_id")).toList(),
+							pcDead ? "MAJOR" : "NOTABLE", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
+							encounter.lng("location_id"), null,
+							Map.of("outcome", o, "xp_awarded", xpTotal, "rounds", rounds)));
 			var ccols = new LinkedHashMap<String, Object>();
 			ccols.put("harness_state", next.name());
 			ccols.put("status", campaignStatus);
@@ -1817,8 +1836,8 @@ public final class EncounterService {
 	// ── log ────────────────────────────────────────────────────────────
 
 	static void log(
-			Tx tx, long campaignId, long encounterId, long round, Long actorId, String kind, String summary,
-			Object payload) {
+		Tx tx, long campaignId, long encounterId, long round, Long actorId, String kind, String summary,
+		Object payload) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("encounter_id", encounterId);

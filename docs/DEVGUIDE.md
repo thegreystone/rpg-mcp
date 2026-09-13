@@ -107,6 +107,20 @@ To point an MCP client at a development build, use the same configuration as a r
 the path under `target/`, and set `RPG_DATA_DIR` to a scratch directory so you do not play against your
 real campaign database.
 
+## Code formatting
+
+Formatting is enforced by [Spotless](https://github.com/diffplug/spotless) using the Eclipse formatter
+profile in `config/formatter/rpg-mcp-formatting.xml` (tabs, 120 columns). The `check` goal runs in the
+`validate` phase of both the server pom and `tools/pom.xml`, so a build fails on unformatted code. To fix:
+
+```bash
+mvn spotless:apply                  # server
+mvn -f tools/pom.xml spotless:apply # seed tooling
+```
+
+IntelliJ users can import the same profile via Settings > Editor > Code Style > Java > Import Scheme >
+Eclipse XML Profile; Eclipse users via Preferences > Java > Code Style > Formatter > Import.
+
 ## Cutting a release
 
 Push a `v`-prefixed tag:

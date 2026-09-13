@@ -40,9 +40,10 @@ import se.hirt.mcp.rpg.rules.Rules;
 import java.util.*;
 
 /**
- * The legal options of every character-creation decision, each with a description, derived from the installed rules
- * content and the {@link Described} enums — never authored twice. Serves both {@code get_character_choices} and the
- * ordered {@code decisions} list of a draft (MCP_PROTOCOL.md §9.3.1, §10.2).
+ * The legal options of every character-creation decision, each with a description, derived from the
+ * installed rules content and the {@link Described} enums — never authored twice. Serves both
+ * {@code get_character_choices} and the ordered {@code decisions} list of a draft (MCP_PROTOCOL.md
+ * §9.3.1, §10.2).
  */
 public final class CharacterChoices {
 
@@ -62,8 +63,10 @@ public final class CharacterChoices {
 	}
 
 	public List<Option> classes() {
-		return rules.ofKind("CLASS").stream().map(d -> option(d).details(
-				pick(d.payload(), "hit_die", "primary_abilities", "saving_throws", "starting_gold_gp"))).toList();
+		return rules.ofKind("CLASS").stream()
+				.map(d -> option(d).details(
+						pick(d.payload(), "hit_die", "primary_abilities", "saving_throws", "starting_gold_gp")))
+				.toList();
 	}
 
 	/** All skills, or the given subset (skill ids), each with its ability and description. */
@@ -124,8 +127,8 @@ public final class CharacterChoices {
 					} else {
 						// A bundle choice slot (HOLY_SYMBOL, GAMING_SET, ...) rendered by its default item.
 						name = rules.find(String.valueOf(line.get("default"))).map(RulesData.Definition::name)
-								.orElse(String.valueOf(line.get("choice"))) + " (or another " + String.valueOf(
-								line.get("choice")).toLowerCase().replace('_', ' ') + ")";
+								.orElse(String.valueOf(line.get("choice"))) + " (or another "
+								+ String.valueOf(line.get("choice")).toLowerCase().replace('_', ' ') + ")";
 					}
 					int qty = line.get("quantity") instanceof Number n ? n.intValue() : 1;
 					parts.add(qty > 1 ? name + " ×" + qty : name);
@@ -137,8 +140,8 @@ public final class CharacterChoices {
 			}
 			boolean isGoldOnly = e.getKey().equals(goldOnly);
 			String label = "Option " + e.getKey() + (isGoldOnly ? " — money only" : " — equipment kit");
-			String description =
-					isGoldOnly ? gold + " gp to buy your own equipment in play." : String.join(", ", parts) + ".";
+			String description = isGoldOnly ? gold + " gp to buy your own equipment in play."
+					: String.join(", ", parts) + ".";
 			out.add(new Option(e.getKey(), label, description, false, Map.of("contents", bundle)));
 		}
 		return out;
@@ -146,7 +149,10 @@ public final class CharacterChoices {
 
 	// ── decisions for a draft ──────────────────────────────────────────
 
-	/** Every decision this draft still needs, in creation order; a review decision when nothing is missing. */
+	/**
+	 * Every decision this draft still needs, in creation order; a review decision when nothing is
+	 * missing.
+	 */
 	@SuppressWarnings("unchecked")
 	public List<Decision> decisionsFor(Tx tx, Row c, String abilityMethod) {
 		String ref = Ref.of(Ref.CHARACTER, c.id());
@@ -174,15 +180,16 @@ public final class CharacterChoices {
 			if (backgroundDef.isPresent() && c.map("creation_json").get("background_ability_scores") == null) {
 				out.add(backgroundAsiDecision(backgroundDef.get()));
 			}
-			if (cls.isPresent() && tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'",
-					c.id()).stream().noneMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)))) {
+			if (cls.isPresent()
+					&& tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'", c.id())
+							.stream().noneMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)))) {
 				out.add(skillDecision(tx, c, cls.get()));
 			}
 		}
 		speciesDef.ifPresent(species -> {
-			if (Origins.traitWith(species, "skill_grant").isPresent() && tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'", c.id()).stream()
-					.noneMatch(t -> Origins.SOURCE_SPECIES.equals(Origins.sourceOf(t)))) {
+			if (Origins.traitWith(species, "skill_grant").isPresent()
+					&& tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'", c.id())
+							.stream().noneMatch(t -> Origins.SOURCE_SPECIES.equals(Origins.sourceOf(t)))) {
 				out.add(speciesSkillDecision(tx, c, species));
 			}
 			if (Origins.traitWith(species, "choice").isPresent() && Origins.speciesChoiceRow(tx, c).isEmpty()) {
@@ -200,9 +207,9 @@ public final class CharacterChoices {
 		}
 		backgroundDef.ifPresent(bg -> {
 			Map<String, Object> tool = Origins.castMap(bg.payload().get("tool"));
-			if (tool.get("choice") != null && tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY'", c.id()).stream()
-					.noneMatch(t -> Origins.SOURCE_BACKGROUND.equals(Origins.sourceOf(t)))) {
+			if (tool.get("choice") != null
+					&& tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY'", c.id())
+							.stream().noneMatch(t -> Origins.SOURCE_BACKGROUND.equals(Origins.sourceOf(t)))) {
 				out.add(backgroundToolDecision(bg));
 			}
 		});
@@ -210,11 +217,12 @@ public final class CharacterChoices {
 			Optional<SpellService.Casting> casting = SpellService.castingOf(tx, rules, c);
 			if (casting.isPresent()) {
 				// Cantrips and prepared spells gate independently (species/feat-granted spells don't count).
-				boolean classCantrips = tx.query(
-								"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_KNOWN'", c.id())
+				boolean classCantrips = tx
+						.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_KNOWN'", c.id())
 						.stream().anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
-				boolean classSpells = tx.query(
-								"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'", c.id())
+				boolean classSpells = tx
+						.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'",
+								c.id())
 						.stream().anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
 				for (Decision d : spellDecisions(casting.get())) {
 					if (("cantrips".equals(d.id()) && !classCantrips) || ("spells".equals(d.id()) && !classSpells)) {
@@ -222,9 +230,8 @@ public final class CharacterChoices {
 					}
 				}
 			}
-			Map<String, Object> chosen =
-					c.map("creation_json").get("starting_equipment") instanceof Map<?, ?> m ? (Map<String, Object>) m
-							: null;
+			Map<String, Object> chosen = c.map("creation_json").get("starting_equipment") instanceof Map<?, ?> m
+					? (Map<String, Object>) m : null;
 			if (chosen == null) {
 				out.add(equipmentDecision(cls.get()));
 			}
@@ -240,7 +247,7 @@ public final class CharacterChoices {
 		}
 		if (c.isNull("personality")) {
 			out.add(Decision.of("personality",
-							"Who are they? Personality, backstory, appearance and goals — proposed by the GM, written by the player, or delegated.")
+					"Who are they? Personality, backstory, appearance and goals — proposed by the GM, written by the player, or delegated.")
 					.recordedBy("update_character_draft", "changes.personality")
 					.note("Also record backstory, appearance, goals, age and presentation in the same call when known.")
 					.custom().surpriseMe());
@@ -256,9 +263,12 @@ public final class CharacterChoices {
 					.note("Suggest one from the personality; the player may pick any."));
 		}
 		if (out.isEmpty()) {
-			out.add(Decision.of("character_review",
+			out.add(Decision
+					.of("character_review",
 							"Read the sheet back in prose. Lock the character in, or change something first?")
-					.recordedBy("commit_character_draft", "character").legal(List.of(Option.of("COMMIT", "Lock it in",
+					.recordedBy("commit_character_draft", "character")
+					.legal(List.of(
+							Option.of("COMMIT", "Lock it in",
 									"validate_character_draft, then commit_character_draft " + ref + "."),
 							Option.of("REVISE", "Change something",
 									"Apply the change with update_character_draft, then read it back again."))));
@@ -294,7 +304,10 @@ public final class CharacterChoices {
 				.map(d -> option(d).details(pick(d.payload(), "ability_scores", "skills", "feat"))).toList();
 	}
 
-	/** Installed backgrounds plus the campaign's own (define_content kind BACKGROUND), in that order. */
+	/**
+	 * Installed backgrounds plus the campaign's own (define_content kind BACKGROUND), in that
+	 * order.
+	 */
 	public List<Option> backgrounds(Tx tx, long campaignId) {
 		var out = new ArrayList<>(backgrounds());
 		for (RulesData.Definition d : Origins.customBackgrounds(tx, campaignId)) {
@@ -318,13 +331,15 @@ public final class CharacterChoices {
 	@SuppressWarnings("unchecked")
 	public Decision backgroundAsiDecision(RulesData.Definition bg) {
 		List<Object> abilities = (List<Object>) bg.payload().get("ability_scores");
-		return Decision.of("background_ability_scores",
-						"Apply " + bg.name() + "'s ability increase: +2 to one and +1 to another, or +1 to each of " + abilities + ".")
+		return Decision
+				.of("background_ability_scores",
+						"Apply " + bg.name() + "'s ability increase: +2 to one and +1 to another, or +1 to each of "
+								+ abilities + ".")
 				.recordedBy("update_character_draft", "changes.background_ability_scores").custom()
 				.detail("abilities", abilities)
-				.note("E.g. {\"" + abilities.get(0) + "\": 2, \"" + abilities.get(1) + "\": 1} or {\"" + abilities.get(
-						0) + "\": 1, \"" + abilities.get(1) + "\": 1, \"" + abilities.get(
-						2) + "\": 1}. No score above 20 (SRD 5.2.1 \"Ability Scores\" under Backgrounds).");
+				.note("E.g. {\"" + abilities.get(0) + "\": 2, \"" + abilities.get(1) + "\": 1} or {\""
+						+ abilities.get(0) + "\": 1, \"" + abilities.get(1) + "\": 1, \"" + abilities.get(2)
+						+ "\": 1}. No score above 20 (SRD 5.2.1 \"Ability Scores\" under Backgrounds).");
 	}
 
 	public Decision speciesSkillDecision(Tx tx, Row c, RulesData.Definition species) {
@@ -364,8 +379,10 @@ public final class CharacterChoices {
 		for (Option o : feats(category)) {
 			options.add(o.recommended(o.value().equals(recommended)));
 		}
-		return Decision.of("origin_feat", "Which " + ("ORIGIN".equals(category) ? "Origin feat"
-						: category + " feat") + " does the character gain from their species?")
+		return Decision
+				.of("origin_feat",
+						"Which " + ("ORIGIN".equals(category) ? "Origin feat" : category + " feat")
+								+ " does the character gain from their species?")
 				.recordedBy("update_character_draft", "changes.origin_feat").legal(options)
 				.note("Answer a feat, or a feat with its choices in one call, e.g. {\"feat\": \"Skilled\", \"proficiencies\": [three skills or tools]}.");
 	}
@@ -377,12 +394,12 @@ public final class CharacterChoices {
 		List<Object> pending = payload.get("pending") instanceof List<?> l ? (List<Object>) l : List.of();
 		Map<String, Object> chosen = Origins.castMap(payload.get("choices"));
 		Map<String, Object> spec = Origins.castMap(feat.payload().get("choices"));
-		Decision d = Decision.of("feat_choices",
+		Decision d = Decision
+				.of("feat_choices",
 						feat.name() + " still needs: " + pending + ". " + feat.payload().getOrDefault("summary", ""))
 				.recordedBy("update_character_draft", "changes.feat_choices").detail("feat", feat.id())
-				.detail("pending", pending)
-				.note("Answer with the feat plus one or more choices, e.g. {\"feat\": \"" + feat.name() + "\", \"" + pending.get(
-						0) + "\": ...}.");
+				.detail("pending", pending).note("Answer with the feat plus one or more choices, e.g. {\"feat\": \""
+						+ feat.name() + "\", \"" + pending.get(0) + "\": ...}.");
 		switch (String.valueOf(pending.get(0))) {
 		case "spell_list" -> {
 			var options = new ArrayList<Option>();
@@ -405,7 +422,8 @@ public final class CharacterChoices {
 			d.legal(spells(String.valueOf(chosen.get("spell_list")), 0)).choose(n, n);
 		}
 		case "spells" -> d.legal(spells(String.valueOf(chosen.get("spell_list")), 1)).choose(1, 1)
-				.note("Answer {\"feat\": \"" + feat.name() + "\", \"spell\": ...}: the spell is always prepared, with one free cast per Long Rest.");
+				.note("Answer {\"feat\": \"" + feat.name()
+						+ "\", \"spell\": ...}: the spell is always prepared, with one free cast per Long Rest.");
 		case "proficiencies" -> {
 			int n = ((Number) spec.get("proficiencies")).intValue();
 			d.legal(skillAndToolOptions(tx, c)).choose(n, n);
@@ -425,8 +443,8 @@ public final class CharacterChoices {
 			}
 		}
 		for (RulesData.Definition d : rules.ofKind("ITEM")) {
-			if ("TOOL".equals(String.valueOf(d.payload().get("type"))) && !Origins.hasTrait(tx, c.id(), "PROFICIENCY",
-					d.id())) {
+			if ("TOOL".equals(String.valueOf(d.payload().get("type")))
+					&& !Origins.hasTrait(tx, c.id(), "PROFICIENCY", d.id())) {
 				out.add(Option.of(d.id(), d.name(), "Proficiency with " + d.name() + "."));
 			}
 		}
@@ -440,8 +458,10 @@ public final class CharacterChoices {
 		for (RulesData.Definition d : Origins.toolOptions(rules, kind)) {
 			options.add(Option.of(d.id(), d.name(), "Proficiency with " + d.name() + "."));
 		}
-		return Decision.of("background_tool",
-						bg.name() + " grants proficiency with one " + kind.toLowerCase().replace('_', ' ') + "; which one?")
+		return Decision
+				.of("background_tool",
+						bg.name() + " grants proficiency with one " + kind.toLowerCase().replace('_', ' ')
+								+ "; which one?")
 				.recordedBy("update_character_draft", "changes.background_tool").legal(options);
 	}
 
@@ -490,23 +510,23 @@ public final class CharacterChoices {
 				.recordedBy("update_character_draft", "changes.ability_scores").custom().detail("method", gen.name())
 				.detail("primary_abilities", cls == null ? null : cls.payload().get("primary_abilities"));
 		switch (gen) {
-		case STANDARD_ARRAY -> d.detail("standard_array", Rules.STANDARD_ARRAY)
-				.note("Assign each value of the array to exactly one ability; propose a spread that favours the class's primary abilities.");
+		case STANDARD_ARRAY -> d.detail("standard_array", Rules.STANDARD_ARRAY).note(
+				"Assign each value of the array to exactly one ability; propose a spread that favours the class's primary abilities.");
 		case POINT_BUY -> {
 			var cost = new LinkedHashMap<String, Integer>();
 			for (int s = Rules.POINT_BUY_MIN; s <= Rules.POINT_BUY_MAX; s++) {
 				cost.put(String.valueOf(s), Rules.pointCost(s));
 			}
 			d.detail("point_buy",
-							Map.of("budget", Rules.POINT_BUY_BUDGET, "min", Rules.POINT_BUY_MIN, "max", Rules.POINT_BUY_MAX,
-									"cost", cost))
+					Map.of("budget", Rules.POINT_BUY_BUDGET, "min", Rules.POINT_BUY_MIN, "max", Rules.POINT_BUY_MAX,
+							"cost", cost))
 					.note("Do the arithmetic for the player: offer two or three complete spreads within the budget, plus placing them themselves.");
 		}
 		case ROLL_4D6_DROP_LOWEST -> {
 			Object rolled = c.map("creation_json").get("available_scores");
 			if (rolled == null) {
-				d.recordedBy("generate_ability_scores", "character")
-						.note("Roll first with generate_ability_scores (the server reports every die), then assign the six results.");
+				d.recordedBy("generate_ability_scores", "character").note(
+						"Roll first with generate_ability_scores (the server reports every die), then assign the six results.");
 			} else {
 				d.detail("available_scores", rolled).note("Assign each rolled value to exactly one ability.");
 			}
@@ -536,7 +556,7 @@ public final class CharacterChoices {
 		return Option.of(d.id(), d.name(), String.valueOf(d.payload().getOrDefault("summary", "")));
 	}
 
-	private static Map<String, Object> pick(Map<String, Object> payload, String... keys) {
+	private static Map<String, Object> pick(Map<String, Object> payload, String ... keys) {
 		var m = new LinkedHashMap<String, Object>();
 		for (String k : keys) {
 			if (payload.get(k) != null) {

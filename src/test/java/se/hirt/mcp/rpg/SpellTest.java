@@ -41,8 +41,8 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Spellcasting: selection limits, slots as resources, casting mechanics, concentration, buffs in AC/attacks, rests and
- * level-ups resizing slots (DESIGN.md §13, I-29, I-30).
+ * Spellcasting: selection limits, slots as resources, casting mechanics, concentration, buffs in
+ * AC/attacks, rests and level-ups resizing slots (DESIGN.md §13, I-29, I-30).
  */
 class SpellTest {
 
@@ -58,19 +58,22 @@ class SpellTest {
 
 	/** Returns {campaign, pc}. */
 	private static String[] caster(
-			Engine engine, String cls, Map<String, Object> scores, List<String> skills, List<String> cantrips,
-			List<String> spells) {
+		Engine engine, String cls, Map<String, Object> scores, List<String> skills, List<String> cantrips,
+		List<String> spells) {
 		String campaign = (String) engine.campaigns().create(op(), null, null).get("campaign");
 		engine.campaigns().updateSetup(op(), campaign, null,
 				map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
 						"CHECKPOINT", "party", "SURPRISE_ME", "adventure",
 						map("premise", "x", "opening_location", "Tower", "immediate_goal", "y")));
-		String pc = (String) engine.characters().createDraft(op(), campaign,
-				map("name", "Caster", "species", "Human", "class", cls, "ability_scores", scores, "skills", skills,
-						"personality", "x", "background", "Criminal", "background_ability_scores",
-						map("CON", 2, "DEX", 1), "species_skill", "Animal Handling", "origin_feat",
-						map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")), "cantrips",
-						cantrips, "spells", spells), true).get("character");
+		String pc = (String) engine.characters()
+				.createDraft(op(), campaign,
+						map("name", "Caster", "species", "Human", "class", cls, "ability_scores", scores, "skills",
+								skills, "personality", "x", "background", "Criminal", "background_ability_scores",
+								map("CON", 2, "DEX", 1), "species_skill", "Animal Handling", "origin_feat",
+								map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")),
+								"cantrips", cantrips, "spells", spells),
+						true)
+				.get("character");
 		engine.characters().commitDraft(op(), campaign, pc, null);
 		engine.campaigns().commitSetup(op(), campaign, null);
 		engine.sessions().bootstrap(op(), campaign, null);
@@ -84,26 +87,31 @@ class SpellTest {
 			Map<String, Object> scores = map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8);
 			// Limits: a level-1 wizard knows 3 cantrips and prepares 4 spells from the wizard list.
 			String probe = (String) engine.campaigns().create(op(), null, null).get("campaign");
-			engine.campaigns().updateSetup(op(), probe, null,
-					map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
-							"CHECKPOINT"));
-			String draft = (String) engine.characters().createDraft(op(), probe,
-					map("name", "P", "species", "Human", "class", "Wizard", "ability_scores", scores, "skills",
-							List.of("Arcana", "History"), "personality", "x"), true).get("character");
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.characters()
-							.updateDraft(op(), probe, draft, null,
-									map("cantrips", List.of("Fire Bolt", "Mage Hand", "Light", "Prestidigitation")))).code(),
+			engine.campaigns().updateSetup(op(), probe, null, map("content_profile", "PEGI_16", "experience",
+					"SURPRISE_ME", "rules", Map.of(), "continuation", "CHECKPOINT"));
+			String draft = (String) engine
+					.characters().createDraft(op(), probe, map("name", "P", "species", "Human", "class", "Wizard",
+							"ability_scores", scores, "skills", List.of("Arcana", "History"), "personality", "x"), true)
+					.get("character");
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class,
+							() -> engine.characters().updateDraft(op(), probe, draft, null,
+									map("cantrips", List.of("Fire Bolt", "Mage Hand", "Light", "Prestidigitation"))))
+							.code(),
 					"4 cantrips is too many");
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.characters()
+			assertEquals(
+					ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.characters()
 							.updateDraft(op(), probe, draft, null, map("spells", List.of("Cure Wounds")))).code(),
 					"not a wizard spell");
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.characters()
-							.updateDraft(op(), probe, draft, null, map("spells", List.of("Fireball")))).code(),
-					"level 3 is beyond a level-1 slot");
-			assertTrue(((List<?>) engine.characters().createDraft(op(), probe,
+			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
+					() -> engine.characters().updateDraft(op(), probe, draft, null, map("spells", List.of("Fireball"))))
+					.code(), "level 3 is beyond a level-1 slot");
+			assertTrue(((List<?>) engine.characters()
+					.createDraft(op(), probe,
 							map("name", "F", "species", "Human", "class", "Fighter", "ability_scores", scores), false)
 					.get("next_steps")).stream().noneMatch(s -> s.toString().contains("cantrips")));
-			assertTrue(((List<?>) engine.characters().updateDraft(op(), probe, draft, null, map("age", 30))
+			assertTrue(
+					((List<?>) engine.characters().updateDraft(op(), probe, draft, null, map("age", 30))
 							.get("next_steps")).stream().anyMatch(s -> s.toString().contains("cantrips")),
 					"casters are reminded to choose spells");
 
@@ -135,21 +143,25 @@ class SpellTest {
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
 			dice.queue(2, 3, 4);
-			Map<String, Object> missiles = engine.spells()
-					.cast(op(), campaign, pc, "Magic Missile", null, List.of(bandit), null);
+			Map<String, Object> missiles = engine.spells().cast(op(), campaign, pc, "Magic Missile", null,
+					List.of(bandit), null);
 			assertEquals(3, list(missiles.get("targets")).size());
 			assertEquals(0, m(missiles.get("slot")).get("remaining"));
 			assertEquals(11 - 12 < 0 ? 0 : 11 - 12, list(missiles.get("targets")).get(2).get("hp_after"));
 			assertEquals("DEAD", list(missiles.get("targets")).get(2).get("life_state"),
 					"12 damage kills an 11 HP bandit");
 			// No slots left; cantrips still work.
-			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class,
-					() -> engine.spells().cast(op(), campaign, pc, "Sleep", null, List.of(bandit), null)).code());
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
-							() -> engine.spells().cast(op(), campaign, pc, "Fireball", null, List.of(bandit), null)).code(),
+			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE,
+					assertThrows(RpgException.class,
+							() -> engine.spells().cast(op(), campaign, pc, "Sleep", null, List.of(bandit), null))
+							.code());
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class,
+							() -> engine.spells().cast(op(), campaign, pc, "Fireball", null, List.of(bandit), null))
+							.code(),
 					"not prepared");
-			String wolf = (String) engine.runtime().materialize(op(), campaign, "Wolf", null, null, null, null, null, false)
-					.get("character");
+			String wolf = (String) engine.runtime()
+					.materialize(op(), campaign, "Wolf", null, null, null, null, null, false).get("character");
 			dice.queue(15, 7);
 			Map<String, Object> bolt = engine.spells().cast(op(), campaign, pc, "Fire Bolt", null, List.of(wolf), null);
 			Map<String, Object> hit = list(bolt.get("targets")).get(0);
@@ -169,24 +181,27 @@ class SpellTest {
 
 			// Long rest restores slots; level 2 gives three.
 			engine.rest().rest(op(), campaign, "LONG", null, null);
-			assertEquals(2, m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get(
-					"slots")).get("1")).get("current"));
+			assertEquals(2,
+					m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"))
+							.get("1")).get("current"));
 			engine.runtime().awardXp(op(), campaign, List.of(pc), 300, "QUEST", "x");
 			String t = (String) m(engine.levelUps().begin(op(), campaign, pc).get("transaction")).get("ref");
 			Map<String, Object> choices = engine.levelUps().choices(campaign, t);
 			assertEquals(5, m(choices.get("spellcasting_at_new_level")).get("prepared_spells"));
 			engine.levelUps().commit(op(), campaign, t, null);
-			assertEquals(3, m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get(
-					"slots")).get("1")).get("max"));
+			assertEquals(3,
+					m(m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"))
+							.get("1")).get("max"));
 			engine.spells().prepare(op(), campaign, pc, null,
 					List.of("Magic Missile", "Mage Armor", "Sleep", "Shield", "Thunderwave"));
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class, () -> engine.spells()
-					.prepare(op(), campaign, pc, null,
-							List.of("Magic Missile", "Mage Armor", "Sleep", "Shield", "Thunderwave",
-									"Grease"))).code());
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class,
+							() -> engine.spells().prepare(op(), campaign, pc, null,
+									List.of("Magic Missile", "Mage Armor", "Sleep", "Shield", "Thunderwave", "Grease")))
+							.code());
 			// Search finds spells by class and level.
-			Map<String, Object> found = engine.content()
-					.definitions(campaign, "SPELL", null, "wizard level 1 evocation", null, null, null, 50, "SUMMARY");
+			Map<String, Object> found = engine.content().definitions(campaign, "SPELL", null,
+					"wizard level 1 evocation", null, null, null, 50, "SUMMARY");
 			assertTrue(list(found.get("items")).stream().anyMatch(i -> i.get("name").equals("Magic Missile")));
 		}
 	}
@@ -208,15 +223,15 @@ class SpellTest {
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
 
 			// Bless on self and Mara (concentration), then Shield of Faith (concentration) ends Bless (I-29).
-			Map<String, Object> bless = engine.spells()
-					.cast(op(), campaign, pc, "Bless", null, List.of(pc, mara), null);
+			Map<String, Object> bless = engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc, mara),
+					null);
 			assertEquals(2, list(bless.get("targets")).size());
 			assertEquals(Boolean.TRUE, bless.get("concentration"));
 			assertEquals(List.of("Bless (Caster)"),
-					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"))).get(
-							"concentrating_on"));
-			Map<String, Object> sof = engine.spells()
-					.cast(op(), campaign, pc, "Shield of Faith", null, List.of(mara), null);
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")))
+							.get("concentrating_on"));
+			Map<String, Object> sof = engine.spells().cast(op(), campaign, pc, "Shield of Faith", null, List.of(mara),
+					null);
 			assertEquals(List.of("Bless (Caster)", "Bless (Caster)"), sof.get("concentration_ended"));
 			assertEquals(18,
 					m(engine.characters().characterSheet(campaign, mara, "PLAY").get("armor_class")).get("value"),
@@ -230,20 +245,18 @@ class SpellTest {
 			engine.rest().rest(op(), campaign, "LONG", null, null);
 			engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc), null);
 			dice.queue(20, 50, 1, 50, 1, 50);
-			String enc = (String) engine.encounters()
-					.start(op(), campaign, map("party", List.of(pc, mara), "raiders", List.of(bandit)), null, null,
-							null, null, null).get("encounter");
+			String enc = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(pc, mara), "raiders", List.of(bandit)), null, null, null, null, null)
+					.get("encounter");
 			dice.queue(9, 3);
-			Map<String, Object> swing = engine.encounters()
-					.perform(op(), campaign, enc, pc, map("kind", "ATTACK", "target", bandit, "weapon", "unarmed"),
-							false);
+			Map<String, Object> swing = engine.encounters().perform(op(), campaign, enc, pc,
+					map("kind", "ATTACK", "target", bandit, "weapon", "unarmed"), false);
 			assertEquals(9 + 1 + 2 + 3, swing.get("attack_total"), "d20 9 + STR 1 + prof 2 + Bless d4 3");
 			assertEquals(Boolean.TRUE, swing.get("hit"));
 			// Sacred Flame in the encounter via CAST: DEX save vs DC 8+2+2=12; bandit rolls 5+1 → fails → 1d8 radiant 6.
 			dice.queue(5, 6);
-			Map<String, Object> flame = engine.encounters()
-					.perform(op(), campaign, enc, pc, map("kind", "CAST", "spell", "Sacred Flame", "target", bandit),
-							true);
+			Map<String, Object> flame = engine.encounters().perform(op(), campaign, enc, pc,
+					map("kind", "CAST", "spell", "Sacred Flame", "target", bandit), true);
 			Map<String, Object> ft = list(flame.get("targets")).get(0);
 			assertEquals(Boolean.FALSE, ft.get("saved"));
 			assertEquals(6, ft.get("damage"));
@@ -251,9 +264,8 @@ class SpellTest {
 			// Mara passes; the bandit hits the cleric → concentration save DC 10; scripted 3 → lost.
 			engine.encounters().perform(op(), campaign, enc, mara, map("kind", "END_TURN"), true);
 			dice.queue(18, 4, 3);
-			Map<String, Object> banditTurn = engine.encounters()
-					.perform(op(), campaign, enc, bandit, map("kind", "ATTACK", "target", pc, "attack", "Scimitar"),
-							true);
+			Map<String, Object> banditTurn = engine.encounters().perform(op(), campaign, enc, bandit,
+					map("kind", "ATTACK", "target", pc, "attack", "Scimitar"), true);
 			assertEquals(Boolean.TRUE, banditTurn.get("hit"));
 			assertEquals(Boolean.FALSE, m(banditTurn.get("concentration")).get("kept"));
 			assertTrue(list(engine.characters().characterSheet(campaign, pc, "PLAY").get("effects")).isEmpty(),
@@ -268,18 +280,20 @@ class SpellTest {
 			assertEquals(Boolean.TRUE,
 					m(engine.characters().characterSheet(campaign, mara, "PLAY").get("death_saves")).get("stable"));
 			dice.queue(4, 4);
-			Map<String, Object> cure = engine.spells()
-					.cast(op(), campaign, pc, "Cure Wounds", null, List.of(mara), null);
+			Map<String, Object> cure = engine.spells().cast(op(), campaign, pc, "Cure Wounds", null, List.of(mara),
+					null);
 			assertEquals(8 + 2, list(cure.get("targets")).get(0).get("healed"), "2d8 (4+4) + WIS 2");
 			assertEquals("ALIVE", engine.characters().characterSheet(campaign, mara, "SUMMARY").get("life_state"));
 			// Upcasting Cure Wounds with a level 2 slot is refused at level 1 (no such slot).
-			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
-					() -> engine.spells().cast(op(), campaign, pc, "Cure Wounds", 2, List.of(mara), null)).code());
+			assertEquals(ErrorCode.VALIDATION_FAILED,
+					assertThrows(RpgException.class,
+							() -> engine.spells().cast(op(), campaign, pc, "Cure Wounds", 2, List.of(mara), null))
+							.code());
 			// Guidance adds a d4 to a check.
 			engine.spells().cast(op(), campaign, pc, "Guidance", null, List.of(pc), null);
 			dice.queue(10, 4);
-			Map<String, Object> check = engine.checks()
-					.resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Religion", 15, null, null);
+			Map<String, Object> check = engine.checks().resolveCheck(op(), campaign, pc, "SKILL_CHECK", null,
+					"Religion", 15, null, null);
 			assertEquals(10 - 1 + 2 + 4, check.get("total"), "d20 10 + INT -1 + prof 2 + Guidance 4");
 		}
 	}
@@ -297,32 +311,37 @@ class SpellTest {
 			assertEquals(1, m(sc.get("pact_slots")).get("max"));
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
-			Map<String, Object> hex = engine.spells()
-					.cast(op(), campaign, pc, "Hex", null, List.of(pc), map("against", bandit));
+			Map<String, Object> hex = engine.spells().cast(op(), campaign, pc, "Hex", null, List.of(pc),
+					map("against", bandit));
 			assertEquals(0, m(hex.get("slot")).get("remaining"));
-			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), campaign, pc, "Charm Person", null, List.of(bandit), null)).code());
+			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE,
+					assertThrows(RpgException.class,
+							() -> engine.spells().cast(op(), campaign, pc, "Charm Person", null, List.of(bandit), null))
+							.code());
 			engine.rest().rest(op(), campaign, "SHORT", null, null);
-			assertEquals(1, m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get(
-					"pact_slots")).get("current"), "pact slots return on a short rest");
+			assertEquals(1,
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("pact_slots"))
+							.get("current"),
+					"pact slots return on a short rest");
 			// Charm Person: WIS save vs DC 8 + 2 + 2 = 12; the bandit rolls 2 → Charmed for an hour.
 			((ScriptedRollService) engine.roller()).queue(2);
-			Map<String, Object> charm = engine.spells()
-					.cast(op(), campaign, pc, "Charm Person", null, List.of(bandit), null);
+			Map<String, Object> charm = engine.spells().cast(op(), campaign, pc, "Charm Person", null, List.of(bandit),
+					null);
 			Map<String, Object> ct = list(charm.get("targets")).get(0);
 			assertEquals(Boolean.FALSE, ct.get("saved"));
 			assertEquals(List.of("CHARMED"), ct.get("conditions"));
 			assertTrue(list(engine.characters().characterSheet(campaign, bandit, "PLAY").get("conditions")).stream()
 					.anyMatch(c -> "CHARMED".equals(c.get("condition"))));
-			assertEquals(0, m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get(
-					"pact_slots")).get("current"));
+			assertEquals(0,
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("pact_slots"))
+							.get("current"));
 		}
 	}
 
 	/**
-	 * A spell centred on the caster can be cast with nobody in its area (Spirit Guardians before the enemy closes),
-	 * a damage-only concentration spell is still tracked as concentration, and the free roll / dice damage path
-	 * journals the server's dice.
+	 * A spell centred on the caster can be cast with nobody in its area (Spirit Guardians before
+	 * the enemy closes), a damage-only concentration spell is still tracked as concentration, and
+	 * the free roll / dice damage path journals the server's dice.
 	 */
 	@Test
 	void selfCentredSpellsFreeRollsAndDiceDamage() throws Exception {
@@ -342,17 +361,19 @@ class SpellTest {
 			assertTrue(list(wave.get("targets")).isEmpty());
 			assertTrue(String.valueOf(wave.get("note")).contains("resolve_check"));
 			// A ranged save spell still needs a target.
-			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
-					() -> engine.spells().cast(op(), campaign, pc, "Faerie Fire", null, List.of(), null)).code());
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class,
+							() -> engine.spells().cast(op(), campaign, pc, "Faerie Fire", null, List.of(), null))
+							.code());
 
 			// Faerie Fire on a bandit who saves: nothing lands on the target, but the caster is concentrating.
 			dice.queue(20);
-			Map<String, Object> fire = engine.spells()
-					.cast(op(), campaign, pc, "Faerie Fire", null, List.of(bandit), null);
+			Map<String, Object> fire = engine.spells().cast(op(), campaign, pc, "Faerie Fire", null, List.of(bandit),
+					null);
 			assertEquals(Boolean.TRUE, list(fire.get("targets")).get(0).get("saved"));
 			assertEquals(List.of("Faerie Fire (Caster)"),
-					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"))).get(
-							"concentrating_on"));
+					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")))
+							.get("concentrating_on"));
 
 			// A free roll: 4d6 drop lowest = 6+5+4 (the 1 dropped), journaled with a roll_ref.
 			dice.queue(6, 1, 5, 4);
@@ -366,8 +387,8 @@ class SpellTest {
 			Map<String, Object> fall = engine.runtime().applyRuntimeChange(op(), campaign, bandit,
 					map("kind", "DAMAGE", "dice", "2d6", "damage_type", "bludgeoning", "reason", "fell off a roof"));
 			assertEquals(7, m(fall.get("roll")).get("total"));
-			assertEquals(11 - 7,
-					(Integer) m(engine.characters().characterSheet(campaign, bandit, "SUMMARY").get("hp")).get("current"));
+			assertEquals(11 - 7, (Integer) m(engine.characters().characterSheet(campaign, bandit, "SUMMARY").get("hp"))
+					.get("current"));
 		}
 	}
 
@@ -384,8 +405,8 @@ class SpellTest {
 					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots"));
 
 			// A ritual-tagged spell cast by a class with Ritual Casting spends nothing.
-			Map<String, Object> ritual = engine.spells()
-					.cast(op(), campaign, pc, "Detect Magic", null, null, map("ritual", true));
+			Map<String, Object> ritual = engine.spells().cast(op(), campaign, pc, "Detect Magic", null, null,
+					map("ritual", true));
 			assertEquals(Boolean.TRUE, m(ritual.get("slot")).get("ritual"));
 			assertEquals(slotsBefore,
 					m(m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting")).get("slots")),
@@ -408,8 +429,8 @@ class SpellTest {
 					map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8),
 					List.of("Arcana", "Persuasion"), List.of("Fire Bolt", "Light", "Mage Hand", "Prestidigitation"),
 					List.of("Detect Magic", "Magic Missile"));
-			RpgException refused = assertThrows(RpgException.class, () -> engine.spells()
-					.cast(op(), ids[0], ids[1], "Detect Magic", null, null, map("ritual", true)));
+			RpgException refused = assertThrows(RpgException.class,
+					() -> engine.spells().cast(op(), ids[0], ids[1], "Detect Magic", null, null, map("ritual", true)));
 			assertEquals(ErrorCode.VALIDATION_FAILED, refused.code());
 		}
 	}

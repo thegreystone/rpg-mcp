@@ -29,18 +29,14 @@
 package se.hirt.mcp.rpg.choice;
 
 /**
- * How experience earned by the party is distributed (campaign house-rule setting; RULES_ENGINE.md §6). Experience is
- * always earned by the party as a whole; this decides who it lands on.
+ * How experience earned by the party is distributed (campaign house-rule setting; RULES_ENGINE.md
+ * §6). Experience is always earned by the party as a whole; this decides who it lands on.
  */
 public enum XpPolicy implements Described {
 
-	SHARED("Shared",
-			"Every award is divided evenly among the active party, as the SRD and the classic party RPGs do; a larger party advances more slowly, but everyone advances together.",
-			true),
-	LOCKSTEP("Lockstep",
-			"Player characters receive the full award and companions are kept at the same experience total automatically; party size never changes the player's pace."),
-	PLAYER_ONLY("Player only",
-			"Only player characters earn experience; companions stay exactly as they were recruited and never level.");
+	SHARED("Shared", "Every award is divided evenly among the active party, as the SRD and the classic party RPGs do; a larger party advances more slowly, but everyone advances together.", true),
+	LOCKSTEP("Lockstep", "Player characters receive the full award and companions are kept at the same experience total automatically; party size never changes the player's pace."),
+	PLAYER_ONLY("Player only", "Only player characters earn experience; companions stay exactly as they were recruited and never level.");
 
 	private final String label;
 	private final String description;

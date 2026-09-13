@@ -49,9 +49,8 @@ public class EngineProducer {
 
 	@Produces
 	@Singleton
-	Engine engine(
-			RpgConfig config,
-			@ConfigProperty(name = "quarkus.application.version", defaultValue = "unknown") String version) {
+	Engine engine(RpgConfig config, @ConfigProperty(name = "quarkus.application.version", defaultValue = "unknown")
+	String version) {
 		Path file = config.dataPath().resolve("rpg.db");
 		RollService roller = config.rollSeed().isPresent() ? RandomRollService.seeded(config.rollSeed().getAsLong())
 				: new RandomRollService();
@@ -62,7 +61,8 @@ public class EngineProducer {
 		return new Engine(file, roller, version);
 	}
 
-	void close(@Disposes Engine engine) {
+	void close(@Disposes
+	Engine engine) {
 		engine.close();
 	}
 }

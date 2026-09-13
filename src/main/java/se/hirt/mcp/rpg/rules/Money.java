@@ -36,9 +36,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Money is one non-negative integer in canonical copper (DESIGN.md §12, I-14). Denominations are presentation and
- * exchange metadata: SRD 5.2.1 Coin Values — 1 SP = 10 CP, 1 EP = 50 CP, 1 GP = 100 CP, 1 PP = 1,000 CP; 50 coins weigh
- * 1 lb.
+ * Money is one non-negative integer in canonical copper (DESIGN.md §12, I-14). Denominations are
+ * presentation and exchange metadata: SRD 5.2.1 Coin Values — 1 SP = 10 CP, 1 EP = 50 CP, 1 GP =
+ * 100 CP, 1 PP = 1,000 CP; 50 coins weigh 1 lb.
  */
 public final class Money {
 
@@ -85,20 +85,20 @@ public final class Money {
 			any = true;
 		}
 		if (!any) {
-			throw RpgException.invalidArgument(
-					"Cannot parse money '" + value + "'; use e.g. '15 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in cp.");
+			throw RpgException.invalidArgument("Cannot parse money '" + value
+					+ "'; use e.g. '15 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in cp.");
 		}
 		return total;
 	}
 
 	private static long unit(String code) {
 		return switch (code.toLowerCase()) {
-			case "pp" -> PP;
-			case "gp" -> GP;
-			case "ep" -> EP;
-			case "sp" -> SP;
-			case "cp" -> CP;
-			default -> throw RpgException.invalidArgument("Unknown coin '" + code + "'; use pp, gp, ep, sp or cp.");
+		case "pp" -> PP;
+		case "gp" -> GP;
+		case "ep" -> EP;
+		case "sp" -> SP;
+		case "cp" -> CP;
+		default -> throw RpgException.invalidArgument("Unknown coin '" + code + "'; use pp, gp, ep, sp or cp.");
 		};
 	}
 
@@ -138,7 +138,9 @@ public final class Money {
 		return sb.toString();
 	}
 
-	/** Coins actually carried for a canonical amount, assuming the fewest coins (pp, gp, sp, cp). */
+	/**
+	 * Coins actually carried for a canonical amount, assuming the fewest coins (pp, gp, sp, cp).
+	 */
 	public static long coinCount(long cp) {
 		long remaining = cp;
 		long coins = remaining / PP;

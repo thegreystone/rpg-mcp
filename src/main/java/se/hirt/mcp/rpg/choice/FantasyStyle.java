@@ -31,45 +31,45 @@ package se.hirt.mcp.rpg.choice;
 import java.util.Map;
 
 /**
- * The flavour of fantasy a campaign is played in (DESIGN.md §4.2). Offered as suggestions — the player's own words are
- * equally valid — but with a definite default: {@link #EPIC}, a Baldur's Gate-style fantasy epic, which is what the
- * campaign becomes when the player skips the question or says "surprise me".
+ * The flavour of fantasy a campaign is played in (DESIGN.md §4.2). Offered as suggestions — the
+ * player's own words are equally valid — but with a definite default: {@link #EPIC}, a Baldur's
+ * Gate-style fantasy epic, which is what the campaign becomes when the player skips the question or
+ * says "surprise me".
  */
 public enum FantasyStyle implements Described {
 
-	EPIC("Fantasy epic (the default)",
-			"A Baldur's Gate-style fantasy epic: a world-threatening plot, a party of vivid companions with their own "
-					+ "pasts, secrets and agendas, romance that develops naturally, hard moral choices with lasting "
-					+ "consequences, and a world where almost anyone can die. Written for PEGI 18 (the rating "
-					+ "Baldur's Gate III carries); lower profiles play the same epic with the mature material scaled "
-					+ "down.",
-			true),
+	EPIC("Fantasy epic (the default)", "A Baldur's Gate-style fantasy epic: a world-threatening plot, a party of vivid companions with their own "
+			+ "pasts, secrets and agendas, romance that develops naturally, hard moral choices with lasting "
+			+ "consequences, and a world where almost anyone can die. Written for PEGI 18 (the rating "
+			+ "Baldur's Gate III carries); lower profiles play the same epic with the mature material scaled "
+			+ "down.", true),
 	CLASSIC_HEROIC("Classic heroic", "Dungeons, wilderness and a serious plot with room for humour."),
 	GRIM("Grim and gritty", "Low magic, moral compromise, scarce resources."),
 	INTRIGUE("Intrigue and mystery", "Courts, secrets and investigation over combat."),
 	LIGHTHEARTED("Lighthearted romp", "Jokes first, stakes second.");
 
 	/**
-	 * How a GM should actually run this style, returned with the campaign so it is in front of the GM every session
-	 * rather than only at setup (DESIGN.md §4.2) — the same arrangement as {@link ContentProfile#guidance()}.
+	 * How a GM should actually run this style, returned with the campaign so it is in front of the
+	 * GM every session rather than only at setup (DESIGN.md §4.2) — the same arrangement as
+	 * {@link ContentProfile#guidance()}.
 	 */
 	public String guidance() {
 		return switch (this) {
-			case EPIC -> "Run a fantasy epic in the spirit of Baldur's Gate III. The plot threatens the world and keeps "
-					+ "escalating; set pieces are big and spectacular. The companions are the heart of it: each has a "
-					+ "past, a secret, an agenda and opinions about what the player does, and they react — approve, "
-					+ "object, fall out, fall in love. Relationships develop naturally out of shared events, never "
-					+ "from a menu, and where the content profile allows it, romance and sex are part of the story "
-					+ "and are written like everything else. The player is free to solve problems creatively and to "
-					+ "make hard moral choices; consequences stick, and almost anyone can die. Play it to the hilt.";
-			case CLASSIC_HEROIC -> "Dungeons, wilderness and a serious plot with room for humour; the heroes are "
-					+ "heroes and the stakes are honest.";
-			case GRIM -> "Low magic and scarce resources; every victory costs something and moral compromise is the "
-					+ "norm, not the exception.";
-			case INTRIGUE -> "Courts, secrets and investigation; talk and inference resolve more than swords do, and "
-					+ "every faction wants something.";
-			case LIGHTHEARTED -> "Jokes first, stakes second; peril is real enough to matter but never so heavy it "
-					+ "kills the mood.";
+		case EPIC -> "Run a fantasy epic in the spirit of Baldur's Gate III. The plot threatens the world and keeps "
+				+ "escalating; set pieces are big and spectacular. The companions are the heart of it: each has a "
+				+ "past, a secret, an agenda and opinions about what the player does, and they react — approve, "
+				+ "object, fall out, fall in love. Relationships develop naturally out of shared events, never "
+				+ "from a menu, and where the content profile allows it, romance and sex are part of the story "
+				+ "and are written like everything else. The player is free to solve problems creatively and to "
+				+ "make hard moral choices; consequences stick, and almost anyone can die. Play it to the hilt.";
+		case CLASSIC_HEROIC -> "Dungeons, wilderness and a serious plot with room for humour; the heroes are "
+				+ "heroes and the stakes are honest.";
+		case GRIM -> "Low magic and scarce resources; every victory costs something and moral compromise is the "
+				+ "norm, not the exception.";
+		case INTRIGUE -> "Courts, secrets and investigation; talk and inference resolve more than swords do, and "
+				+ "every faction wants something.";
+		case LIGHTHEARTED ->
+			"Jokes first, stakes second; peril is real enough to matter but never so heavy it " + "kills the mood.";
 		};
 	}
 

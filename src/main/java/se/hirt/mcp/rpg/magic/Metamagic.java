@@ -50,30 +50,38 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The Sorcerer's Font of Magic and Metamagic (SRD 5.2.1 "Sorcerer"), driven by the class definition's feature blocks:
+ * The Sorcerer's Font of Magic and Metamagic (SRD 5.2.1 "Sorcerer"), driven by the class
+ * definition's feature blocks:
  * <ul>
- * <li>{@code FONT_OF_MAGIC}: sorcery points as a tracked resource (one per sorcerer level, back on a Long Rest) and the
- * two Bonus-Action conversions, points into a spell slot ({@code slot_costs}) and a slot into points.</li>
- * <li>{@code METAMAGIC}: the options the class knows ({@code options}, each with its point cost), how many a sorcerer
- * has at a given level ({@code options_known}), and the rule that only one option shapes a spell unless the option says
- * otherwise (Empowered, Seeking).</li>
+ * <li>{@code FONT_OF_MAGIC}: sorcery points as a tracked resource (one per sorcerer level, back on
+ * a Long Rest) and the two Bonus-Action conversions, points into a spell slot ({@code slot_costs})
+ * and a slot into points.</li>
+ * <li>{@code METAMAGIC}: the options the class knows ({@code options}, each with its point cost),
+ * how many a sorcerer has at a given level ({@code options_known}), and the rule that only one
+ * option shapes a spell unless the option says otherwise (Empowered, Seeking).</li>
  * <li>{@code SORCEROUS_RESTORATION}: points regained on a Short Rest, once per Long Rest.</li>
  * </ul>
- * Known options are {@code METAMAGIC} traits ({@code metamagic:<id>}), chosen at level-up when the count rises or set by
- * the audited {@code SET_METAMAGIC} override for a character that levelled before the feature existed.
+ * Known options are {@code METAMAGIC} traits ({@code metamagic:<id>}), chosen at level-up when the
+ * count rises or set by the audited {@code SET_METAMAGIC} override for a character that levelled
+ * before the feature existed.
  * <p>
- * At casting, {@code options.metamagic} names the options; the plan validates them against the spell, spends the
- * points and is consulted by the casting core: Empowered rerolls the lowest damage dice once per casting, Seeking
- * rerolls a missed spell attack (one point per reroll, spent when used), Heightened gives one target Disadvantage on
- * its save, Careful lets named creatures succeed automatically and take no damage, Transmuted swaps the element,
- * Extended doubles a duration of a minute or more (to at most 24 hours); Distant, Quickened, Subtle and Twinned are
- * bookkeeping the fiction honours (range, casting time, components, an extra target), reported in the result.
+ * At casting, {@code options.metamagic} names the options; the plan validates them against the
+ * spell, spends the points and is consulted by the casting core: Empowered rerolls the lowest
+ * damage dice once per casting, Seeking rerolls a missed spell attack (one point per reroll, spent
+ * when used), Heightened gives one target Disadvantage on its save, Careful lets named creatures
+ * succeed automatically and take no damage, Transmuted swaps the element, Extended doubles a
+ * duration of a minute or more (to at most 24 hours); Distant, Quickened, Subtle and Twinned are
+ * bookkeeping the fiction honours (range, casting time, components, an extra target), reported in
+ * the result.
  */
 public final class Metamagic {
 
 	public static final String POINTS = "sorcery_points";
 	public static final String RESTORATION = "sorcerous_restoration";
-	/** Known options are FEATURE traits whose content ref is {@code metamagic:<id>} (the trait kinds are a DB CHECK). */
+	/**
+	 * Known options are FEATURE traits whose content ref is {@code metamagic:<id>} (the trait kinds
+	 * are a DB CHECK).
+	 */
 	public static final String TRAIT_KIND = "FEATURE";
 	public static final String TRAIT_PREFIX = "metamagic:";
 	public static final String KIND_FONT = "FONT_OF_MAGIC";
@@ -84,9 +92,8 @@ public final class Metamagic {
 	static final Set<String> COMBINABLE = Set.of("empowered", "seeking");
 	static final Set<String> ELEMENTS = Set.of("acid", "cold", "fire", "lightning", "poison", "thunder");
 	/** Point costs when the seed does not say (SRD 5.2.1). */
-	private static final Map<String, Integer> DEFAULT_COST =
-			Map.of("careful", 1, "distant", 1, "empowered", 1, "extended", 1, "heightened", 2, "quickened", 2,
-					"seeking", 1, "subtle", 1, "transmuted", 1, "twinned", 1);
+	private static final Map<String, Integer> DEFAULT_COST = Map.of("careful", 1, "distant", 1, "empowered", 1,
+			"extended", 1, "heightened", 2, "quickened", 2, "seeking", 1, "subtle", 1, "transmuted", 1, "twinned", 1);
 
 	private Metamagic() {
 	}
@@ -132,7 +139,10 @@ public final class Metamagic {
 		return out;
 	}
 
-	/** How many options a sorcerer of the given class level knows: the largest {@code options_known} step reached. */
+	/**
+	 * How many options a sorcerer of the given class level knows: the largest {@code options_known}
+	 * step reached.
+	 */
 	@SuppressWarnings("unchecked")
 	public static int allowed(Map<String, Object> spec, int classLevel) {
 		int allowed = 0;
@@ -147,7 +157,10 @@ public final class Metamagic {
 		return allowed;
 	}
 
-	/** The METAMAGIC feature block of a class definition, if the class has one reachable at the given level. */
+	/**
+	 * The METAMAGIC feature block of a class definition, if the class has one reachable at the
+	 * given level.
+	 */
 	@SuppressWarnings("unchecked")
 	public static Optional<Map<String, Object>> featureSpec(RulesData.Definition classDef, int classLevel) {
 		if (!(classDef.payload().get("features") instanceof List<?> list)) {
@@ -168,7 +181,8 @@ public final class Metamagic {
 	public static List<String> known(Tx tx, long characterId) {
 		return tx.query(
 				"SELECT content_ref FROM character_trait WHERE character_id = ? AND kind = ? AND content_ref LIKE 'metamagic:%' ORDER BY id",
-				characterId, TRAIT_KIND).stream().map(r -> r.str("content_ref").substring(TRAIT_PREFIX.length())).toList();
+				characterId, TRAIT_KIND).stream().map(r -> r.str("content_ref").substring(TRAIT_PREFIX.length()))
+				.toList();
 	}
 
 	/** Resolves an option by id or name ("empowered", "Empowered Spell", "Empowered"). */
@@ -182,11 +196,11 @@ public final class Metamagic {
 	}
 
 	/**
-	 * Validates a list of option names against the class's list and the count the character may know, and returns
-	 * the ids. Used by the level-up choice and the SET_METAMAGIC override.
+	 * Validates a list of option names against the class's list and the count the character may
+	 * know, and returns the ids. Used by the level-up choice and the SET_METAMAGIC override.
 	 */
 	public static List<String> validateChoice(
-			List<Option> options, int allowed, List<String> alreadyKnown, Object value, boolean exactlyOwed) {
+		List<Option> options, int allowed, List<String> alreadyKnown, Object value, boolean exactlyOwed) {
 		if (!(value instanceof List<?> list) || list.isEmpty()) {
 			throw RpgException.invalidArgument(
 					"metamagic must be a list of option names, e.g. [\"Empowered Spell\", \"Quickened Spell\"]; the options are "
@@ -194,10 +208,9 @@ public final class Metamagic {
 		}
 		var ids = new ArrayList<String>();
 		for (Object o : list) {
-			Option opt = resolve(options, String.valueOf(o)).orElseThrow(() -> RpgException.validation(
-					List.of(new Violation("metamagic", "UNKNOWN_OPTION",
-							"'" + o + "' is not a Metamagic option; choose from " + options.stream().map(Option::name)
-									.toList() + "."))));
+			Option opt = resolve(options, String.valueOf(o)).orElseThrow(() -> RpgException.validation(List.of(
+					new Violation("metamagic", "UNKNOWN_OPTION", "'" + o + "' is not a Metamagic option; choose from "
+							+ options.stream().map(Option::name).toList() + "."))));
 			if (alreadyKnown.contains(opt.id())) {
 				throw RpgException.validation(
 						List.of(new Violation("metamagic", "ALREADY_KNOWN", opt.name() + " is already known.")));
@@ -208,9 +221,9 @@ public final class Metamagic {
 		}
 		int owed = allowed - alreadyKnown.size();
 		if (ids.size() > owed || (exactlyOwed && ids.size() != owed)) {
-			throw RpgException.validation(List.of(new Violation("metamagic", "COUNT",
-					"Choose " + owed + " option" + (owed == 1 ? "" : "s") + " (" + allowed + " known at this level, "
-							+ alreadyKnown.size() + " already chosen).")));
+			throw RpgException.validation(
+					List.of(new Violation("metamagic", "COUNT", "Choose " + owed + " option" + (owed == 1 ? "" : "s")
+							+ " (" + allowed + " known at this level, " + alreadyKnown.size() + " already chosen).")));
 		}
 		return ids;
 	}
@@ -243,7 +256,10 @@ public final class Metamagic {
 
 	// ── sheet ──────────────────────────────────────────────────────────
 
-	/** Adds {@code sorcery_points} and {@code metamagic} to a spellcasting block when the character has the features. */
+	/**
+	 * Adds {@code sorcery_points} and {@code metamagic} to a spellcasting block when the character
+	 * has the features.
+	 */
 	public static void appendSheet(Tx tx, RulesData rules, Row c, Map<String, Object> m) {
 		ClassFeatures.mechanic(tx, rules, c, KIND_FONT).ifPresent(font -> {
 			var points = new LinkedHashMap<String, Object>();
@@ -264,12 +280,12 @@ public final class Metamagic {
 			List<String> known = known(tx, c.id());
 			var block = new LinkedHashMap<String, Object>();
 			block.put("options_known_limit", allowed(mm.spec(), mm.classLevel()));
-			block.put("known", known.stream()
-					.map(id -> options.stream().filter(o -> o.id().equals(id)).findFirst().map(Option::toMap)
-							.orElse(Map.of("id", id))).toList());
+			block.put("known", known.stream().map(id -> options.stream().filter(o -> o.id().equals(id)).findFirst()
+					.map(Option::toMap).orElse(Map.of("id", id))).toList());
 			if (known.size() < allowed(mm.spec(), mm.classLevel())) {
 				block.put("unchosen", allowed(mm.spec(), mm.classLevel()) - known.size());
-				block.put("note", "Options still to choose: at the next level-up (choices.metamagic) or with apply_gm_override SET_METAMAGIC.");
+				block.put("note",
+						"Options still to choose: at the next level-up (choices.metamagic) or with apply_gm_override SET_METAMAGIC.");
 			}
 			block.put("rule",
 					"Pass options.metamagic (cast_spell) or action.metamagic (CAST) with option names; one option per spell, plus Empowered and/or Seeking.");
@@ -295,41 +311,43 @@ public final class Metamagic {
 	// ── Font of Magic conversions ──────────────────────────────────────
 
 	/**
-	 * {@code CREATE_SPELL_SLOT}: sorcery points become one spell slot of {@code slot_level} (1-5) at the table's cost;
-	 * {@code CONVERT_SPELL_SLOT}: one unexpended slot becomes points equal to its level, never above the maximum. Both
-	 * are Bonus Actions in the fiction. A created slot must be of a level the character can normally cast: created
-	 * slots live in the same pool and vanish at the Long Rest that refills it (RULES_ENGINE.md §6).
+	 * {@code CREATE_SPELL_SLOT}: sorcery points become one spell slot of {@code slot_level} (1-5)
+	 * at the table's cost; {@code CONVERT_SPELL_SLOT}: one unexpended slot becomes points equal to
+	 * its level, never above the maximum. Both are Bonus Actions in the fiction. A created slot
+	 * must be of a level the character can normally cast: created slots live in the same pool and
+	 * vanish at the Long Rest that refills it (RULES_ENGINE.md §6).
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> fontOfMagic(
-			Tx tx, RulesData rules, Row c, String kind, Map<String, Object> change) {
-		ClassFeatures.Mechanic font = ClassFeatures.mechanic(tx, rules, c, KIND_FONT).orElseThrow(
-				() -> RpgException.notAllowed(c.str("name") + " has no Font of Magic feature."));
+		Tx tx, RulesData rules, Row c, String kind, Map<String, Object> change) {
+		ClassFeatures.Mechanic font = ClassFeatures.mechanic(tx, rules, c, KIND_FONT)
+				.orElseThrow(() -> RpgException.notAllowed(c.str("name") + " has no Font of Magic feature."));
 		int level = change.get("slot_level") instanceof Number n ? n.intValue() : 0;
 		if (level < 1) {
 			throw RpgException.invalidArgument("change.slot_level (1-5) is required.");
 		}
-		Row points = pointsRow(tx, c.id()).orElseThrow(
-				() -> RpgException.notAllowed(c.str("name") + " has no sorcery points resource."));
-		Row slot = tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(),
-				SpellService.SLOT_PREFIX + level).filter(r -> r.intOr("max", 0) > 0).orElseThrow(
-				() -> RpgException.validation(List.of(new Violation("change.slot_level", "NO_SUCH_SLOT",
-						c.str("name") + " has no level " + level + " spell slots to " + (kind.equals("CREATE_SPELL_SLOT")
-								? "create" : "convert") + "."))));
+		Row points = pointsRow(tx, c.id())
+				.orElseThrow(() -> RpgException.notAllowed(c.str("name") + " has no sorcery points resource."));
+		Row slot = tx
+				.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(),
+						SpellService.SLOT_PREFIX + level)
+				.filter(r -> r.intOr("max", 0) > 0)
+				.orElseThrow(() -> RpgException.validation(List.of(new Violation("change.slot_level", "NO_SUCH_SLOT",
+						c.str("name") + " has no level " + level + " spell slots to "
+								+ (kind.equals("CREATE_SPELL_SLOT") ? "create" : "convert") + "."))));
 		var result = new LinkedHashMap<String, Object>();
 		if (kind.equals("CREATE_SPELL_SLOT")) {
-			Map<String, Object> costs = font.spec().get("slot_costs") instanceof Map<?, ?> m
-					? (Map<String, Object>) m : defaultSlotCosts();
+			Map<String, Object> costs = font.spec().get("slot_costs") instanceof Map<?, ?> m ? (Map<String, Object>) m
+					: defaultSlotCosts();
 			if (!(costs.get(Integer.toString(level)) instanceof Number costN)) {
-				throw RpgException.validation(List.of(new Violation("change.slot_level", "TOO_HIGH",
-						"Font of Magic creates slots of level 1 to " + costs.keySet().stream().mapToInt(Integer::parseInt)
-								.max().orElse(5) + " only.")));
+				throw RpgException.validation(List
+						.of(new Violation("change.slot_level", "TOO_HIGH", "Font of Magic creates slots of level 1 to "
+								+ costs.keySet().stream().mapToInt(Integer::parseInt).max().orElse(5) + " only.")));
 			}
 			int cost = costN.intValue();
 			if (points.intOr("current", 0) < cost) {
-				throw RpgException.insufficientResource(
-						c.str("name") + " has " + points.intOr("current", 0) + " sorcery points; a level " + level
-								+ " slot costs " + cost + ".");
+				throw RpgException.insufficientResource(c.str("name") + " has " + points.intOr("current", 0)
+						+ " sorcery points; a level " + level + " slot costs " + cost + ".");
 			}
 			tx.update("resource_state", points.id(), Map.of("current", points.intOr("current", 0) - cost));
 			// The created slot is an extra one: the pool's maximum grows with it until the Long Rest, which resizes
@@ -338,11 +356,12 @@ public final class Metamagic {
 					Map.of("current", slot.intOr("current", 0) + 1, "max", slot.intOr("max", 0) + 1));
 			result.put("created_slot_level", level);
 			result.put("points_spent", cost);
-			result.put("sorcery_points", Map.of("current", points.intOr("current", 0) - cost, "max",
-					points.intOr("max", 0)));
+			result.put("sorcery_points",
+					Map.of("current", points.intOr("current", 0) - cost, "max", points.intOr("max", 0)));
 			result.put("slot", Map.of("slot_level", level, "current", slot.intOr("current", 0) + 1, "max",
 					slot.intOr("max", 0) + 1));
-			result.put("note", "A Bonus Action; the created slot vanishes with the next Long Rest (SRD 5.2.1 Font of Magic).");
+			result.put("note",
+					"A Bonus Action; the created slot vanishes with the next Long Rest (SRD 5.2.1 Font of Magic).");
 		} else {
 			if (slot.intOr("current", 0) <= 0) {
 				throw RpgException.insufficientResource(
@@ -356,16 +375,19 @@ public final class Metamagic {
 			if (gained < level) {
 				result.put("note", "Points cannot exceed the maximum; " + (level - gained) + " lost.");
 			}
-			result.put("sorcery_points", Map.of("current", points.intOr("current", 0) + gained, "max",
-					points.intOr("max", 0)));
-			result.put("slot", Map.of("slot_level", level, "current", slot.intOr("current", 0) - 1, "max",
-					slot.intOr("max", 0)));
+			result.put("sorcery_points",
+					Map.of("current", points.intOr("current", 0) + gained, "max", points.intOr("max", 0)));
+			result.put("slot",
+					Map.of("slot_level", level, "current", slot.intOr("current", 0) - 1, "max", slot.intOr("max", 0)));
 		}
 		tx.update("character", c.id(), Map.of("revision", c.lng("revision") + 1));
 		return result;
 	}
 
-	/** Sorcerous Restoration on a Short Rest: regain up to half the class level in points, once per Long Rest. */
+	/**
+	 * Sorcerous Restoration on a Short Rest: regain up to half the class level in points, once per
+	 * Long Rest.
+	 */
 	public static Optional<Map<String, Object>> sorcerousRestoration(Tx tx, RulesData rules, Row c) {
 		Optional<ClassFeatures.Mechanic> feature = ClassFeatures.mechanic(tx, rules, c, KIND_RESTORATION);
 		if (feature.isEmpty()) {
@@ -387,15 +409,18 @@ public final class Metamagic {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("feature", feature.get().name());
 		m.put("points_regained", regain);
-		m.put("sorcery_points", Map.of("current", points.get().intOr("current", 0) + regain, "max",
-				points.get().intOr("max", 0)));
+		m.put("sorcery_points",
+				Map.of("current", points.get().intOr("current", 0) + regain, "max", points.get().intOr("max", 0)));
 		m.put("note", "Once per Long Rest.");
 		return Optional.of(m);
 	}
 
 	// ── a casting plan ─────────────────────────────────────────────────
 
-	/** The Metamagic applied to one casting: which options, what they cost, and what the casting core must do. */
+	/**
+	 * The Metamagic applied to one casting: which options, what they cost, and what the casting
+	 * core must do.
+	 */
 	public static final class Plan {
 
 		final List<Option> used = new ArrayList<>();
@@ -444,13 +469,14 @@ public final class Metamagic {
 	}
 
 	/**
-	 * Builds and pays for the plan named by {@code options.metamagic} (a name or a list of names), or returns null
-	 * when no Metamagic was asked for. Every option is checked against the spell it is applied to.
+	 * Builds and pays for the plan named by {@code options.metamagic} (a name or a list of names),
+	 * or returns null when no Metamagic was asked for. Every option is checked against the spell it
+	 * is applied to.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Plan plan(
-			Tx tx, RulesData rules, long campaignId, Row caster, Map<String, Object> opts, RulesData.Definition def,
-			Map<String, Object> mech, List<Row> targets) {
+		Tx tx, RulesData rules, long campaignId, Row caster, Map<String, Object> opts, RulesData.Definition def,
+		Map<String, Object> mech, List<Row> targets) {
 		Object asked = opts.get("metamagic");
 		if (asked == null) {
 			return null;
@@ -460,8 +486,8 @@ public final class Metamagic {
 		if (names.isEmpty()) {
 			return null;
 		}
-		ClassFeatures.Mechanic feature = feature(tx, rules, caster).orElseThrow(() -> RpgException.validation(
-				List.of(new Violation("options.metamagic", "NOT_AVAILABLE",
+		ClassFeatures.Mechanic feature = feature(tx, rules, caster)
+				.orElseThrow(() -> RpgException.validation(List.of(new Violation("options.metamagic", "NOT_AVAILABLE",
 						caster.str("name") + " has no Metamagic feature."))));
 		List<Option> options = options(feature.spec());
 		List<String> known = known(tx, caster.id());
@@ -471,8 +497,8 @@ public final class Metamagic {
 		int chaMod = Rules.modifier(caster.intOr("cha_score", 10));
 		// Sorcery Incarnate (level 7): while Innate Sorcery is active, two options may shape one spell. The fiction
 		// says whether it is active; the caster passes options.sorcery_incarnate: true and the feature must exist.
-		boolean incarnate = Boolean.TRUE.equals(opts.get("sorcery_incarnate")) || "true".equalsIgnoreCase(
-				String.valueOf(opts.get("sorcery_incarnate")));
+		boolean incarnate = Boolean.TRUE.equals(opts.get("sorcery_incarnate"))
+				|| "true".equalsIgnoreCase(String.valueOf(opts.get("sorcery_incarnate")));
 		if (incarnate && ClassFeatures.mechanic(tx, rules, caster, "SORCERY_INCARNATE").isEmpty()) {
 			throw RpgException.validation(List.of(new Violation("options.sorcery_incarnate", "NOT_AVAILABLE",
 					caster.str("name") + " does not have Sorcery Incarnate (Sorcerer level 7).")));
@@ -483,10 +509,10 @@ public final class Metamagic {
 			plan.notes.add("Sorcery Incarnate: up to two options on this spell.");
 		}
 		for (String name : names) {
-			Option opt = resolve(options, name).orElseThrow(() -> RpgException.validation(
-					List.of(new Violation("options.metamagic", "UNKNOWN_OPTION",
-							"'" + name + "' is not a Metamagic option; the options are " + options.stream()
-									.map(Option::name).toList() + "."))));
+			Option opt = resolve(options, name)
+					.orElseThrow(() -> RpgException.validation(List.of(new Violation("options.metamagic",
+							"UNKNOWN_OPTION", "'" + name + "' is not a Metamagic option; the options are "
+									+ options.stream().map(Option::name).toList() + "."))));
 			if (!known.contains(opt.id())) {
 				throw RpgException.validation(List.of(new Violation("options.metamagic", "NOT_KNOWN",
 						caster.str("name") + " does not know " + opt.name() + "; known: " + known + ".")));
@@ -497,9 +523,9 @@ public final class Metamagic {
 			if (!COMBINABLE.contains(opt.id())) {
 				if (shaping.size() >= shapingLimit) {
 					throw RpgException.validation(List.of(new Violation("options.metamagic", "ONE_OPTION",
-							(incarnate ? "Sorcery Incarnate allows two options" : "Only one Metamagic option shapes a spell")
-									+ " (plus Empowered and Seeking); " + String.join(", ", shaping) + " and " + opt.name()
-									+ " cannot all be used.")));
+							(incarnate ? "Sorcery Incarnate allows two options"
+									: "Only one Metamagic option shapes a spell") + " (plus Empowered and Seeking); "
+									+ String.join(", ", shaping) + " and " + opt.name() + " cannot all be used.")));
 				}
 				shaping.add(opt.name());
 			}
@@ -509,13 +535,13 @@ public final class Metamagic {
 				plan.pointsSpent += opt.cost();
 			}
 		}
-		Row points = pointsRow(tx, caster.id()).orElseThrow(
-				() -> RpgException.notAllowed(caster.str("name") + " has no sorcery points resource."));
+		Row points = pointsRow(tx, caster.id())
+				.orElseThrow(() -> RpgException.notAllowed(caster.str("name") + " has no sorcery points resource."));
 		int current = points.intOr("current", 0);
 		if (current < plan.pointsSpent) {
-			throw RpgException.insufficientResource(
-					caster.str("name") + " has " + current + " sorcery point" + (current == 1 ? "" : "s") + "; "
-							+ plan.summary() + " cost" + (plan.used.size() == 1 ? "s" : "") + " " + plan.pointsSpent + ".");
+			throw RpgException.insufficientResource(caster.str("name") + " has " + current + " sorcery point"
+					+ (current == 1 ? "" : "s") + "; " + plan.summary() + " cost" + (plan.used.size() == 1 ? "s" : "")
+					+ " " + plan.pointsSpent + ".");
 		}
 		plan.pointsRowId = points.id();
 		plan.pointsMax = points.intOr("max", 0);
@@ -528,8 +554,8 @@ public final class Metamagic {
 
 	@SuppressWarnings("unchecked")
 	private static void checkApplies(
-			Tx tx, long campaignId, Row caster, Option opt, Map<String, Object> p, Map<String, Object> mech,
-			String kind, List<Row> targets, Map<String, Object> opts, Plan plan, int chaMod) {
+		Tx tx, long campaignId, Row caster, Option opt, Map<String, Object> p, Map<String, Object> mech, String kind,
+		List<Row> targets, Map<String, Object> opts, Plan plan, int chaMod) {
 		String range = String.valueOf(p.getOrDefault("range", "")).toLowerCase();
 		String duration = String.valueOf(p.getOrDefault("duration", "")).toLowerCase();
 		String castingTime = String.valueOf(p.getOrDefault("casting_time", "")).toLowerCase();
@@ -578,15 +604,16 @@ public final class Metamagic {
 			Row target = ref != null ? CharacterService.character(tx, campaignId, String.valueOf(ref))
 					: targets.isEmpty() ? null : targets.get(0);
 			if (target == null) {
-				throw violation(opt, "TARGET_REQUIRED", "needs a target (options.heightened_target or the first target).");
+				throw violation(opt, "TARGET_REQUIRED",
+						"needs a target (options.heightened_target or the first target).");
 			}
 			plan.heightenedTarget = target.id();
 			plan.notes.add("Heightened: " + target.str("name") + " has Disadvantage on the save.");
 		}
 		case "quickened" -> {
 			if (!castingTime.startsWith("1 action")) {
-				throw violation(opt, "CASTING_TIME", "needs a casting time of 1 action (this spell: " + p.get(
-						"casting_time") + ").");
+				throw violation(opt, "CASTING_TIME",
+						"needs a casting time of 1 action (this spell: " + p.get("casting_time") + ").");
 			}
 			plan.notes.add("Quickened: cast as a Bonus Action; still one spell slot per turn (SRD 5.2.1).");
 		}
@@ -607,11 +634,12 @@ public final class Metamagic {
 				throw violation(opt, "DAMAGE_TYPE",
 						"pass options.damage_type as one of " + ELEMENTS.stream().sorted().toList() + ".");
 			}
-			boolean elemental = mech.get("damage") instanceof List<?> parts && parts.stream().anyMatch(
-					part -> part instanceof Map<?, ?> pm && ELEMENTS.contains(
-							String.valueOf(pm.get("type")).toLowerCase()));
+			boolean elemental = mech.get("damage") instanceof List<?> parts
+					&& parts.stream().anyMatch(part -> part instanceof Map<?, ?> pm
+							&& ELEMENTS.contains(String.valueOf(pm.get("type")).toLowerCase()));
 			if (!elemental) {
-				throw violation(opt, "NO_ELEMENT", "needs a spell that deals acid, cold, fire, lightning, poison or thunder damage.");
+				throw violation(opt, "NO_ELEMENT",
+						"needs a spell that deals acid, cold, fire, lightning, poison or thunder damage.");
 			}
 			plan.transmuteTo = String.valueOf(wanted).toLowerCase();
 			plan.notes.add("Transmuted: damage type changed to " + plan.transmuteTo + ".");
@@ -635,18 +663,18 @@ public final class Metamagic {
 	}
 
 	private static RpgException violation(Option opt, String code, String message) {
-		return RpgException.validation(
-				List.of(new Violation("options.metamagic", code, opt.name() + " " + message)));
+		return RpgException.validation(List.of(new Violation("options.metamagic", code, opt.name() + " " + message)));
 	}
 
 	// ── hooks used by the casting core ─────────────────────────────────
 
 	/**
-	 * Empowered Spell: rerolls the lowest damage dice of the casting's first damage roll (up to the Charisma modifier,
-	 * minimum one) and uses the new results. Returns the roll unchanged when the plan does not empower or has already.
+	 * Empowered Spell: rerolls the lowest damage dice of the casting's first damage roll (up to the
+	 * Charisma modifier, minimum one) and uses the new results. Returns the roll unchanged when the
+	 * plan does not empower or has already.
 	 */
 	public static Roll empower(
-			Tx tx, RollService roller, long campaignId, Plan plan, String expression, Roll roll, String label) {
+		Tx tx, RollService roller, long campaignId, Plan plan, String expression, Roll roll, String label) {
 		if (plan == null || !plan.has("empowered") || plan.empoweredSpent || roll.dice().isEmpty()) {
 			return roll;
 		}
@@ -690,7 +718,10 @@ public final class Metamagic {
 		return out;
 	}
 
-	/** Seeking Spell: whether a missed spell attack may be rerolled now; spends the point when it says yes. */
+	/**
+	 * Seeking Spell: whether a missed spell attack may be rerolled now; spends the point when it
+	 * says yes.
+	 */
 	public static boolean seek(Tx tx, Plan plan) {
 		if (plan == null || !plan.has("seeking")) {
 			return false;

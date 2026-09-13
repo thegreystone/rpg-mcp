@@ -37,7 +37,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
@@ -45,8 +44,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
 /**
- * Class features that the engine enforces come from the class definition's {@code features} array, not from Java
- * (RULES_ENGINE.md §2.2). Sneak Attack is the first of them: adding the next one should be a seed edit.
+ * Class features that the engine enforces come from the class definition's {@code features} array,
+ * not from Java (RULES_ENGINE.md §2.2). Sneak Attack is the first of them: adding the next one
+ * should be a seed edit.
  */
 class ClassFeatureTest {
 
@@ -60,18 +60,17 @@ class ClassFeatureTest {
 		String campaign = committedCampaign(engine);
 		engine.sessions().bootstrap(op(), campaign, null);
 		String rogue = (String) engine.runtime()
-				.materialize(op(), campaign, "Scout", "Vess", null, null, "CHAOTIC_GOOD", null, false)
-				.get("character");
+				.materialize(op(), campaign, "Scout", "Vess", null, null, "CHAOTIC_GOOD", null, false).get("character");
 		engine.party().updateMembership(op(), campaign, rogue, "JOIN", "recruited");
-		engine.inventory().grantLoot(op(), campaign, rogue,
-				List.of(map("item", "Shortsword", "quantity", 1)), null, "GM_GRANT", "her own blade");
+		engine.inventory().grantLoot(op(), campaign, rogue, List.of(map("item", "Shortsword", "quantity", 1)), null,
+				"GM_GRANT", "her own blade");
 		engine.runtime().awardXp(op(), campaign, null, 900, "QUEST", "enough for level 3");
 		for (int level = 1; level <= 3; level++) {
 			Map<String, Object> begun = engine.levelUps().begin(op(), campaign, rogue);
 			String t = (String) m(begun.get("transaction")).get("ref");
 			if (level == 1) {
-				engine.levelUps().update(op(), campaign, t, null, map("class", "Rogue", "skills",
-						List.of("Stealth", "Perception", "Deception", "Acrobatics")));
+				engine.levelUps().update(op(), campaign, t, null,
+						map("class", "Rogue", "skills", List.of("Stealth", "Perception", "Deception", "Acrobatics")));
 			}
 			engine.levelUps().commit(op(), campaign, t, null);
 		}
@@ -101,14 +100,13 @@ class ClassFeatureTest {
 			String campaign = setup[0], rogue = setup[1];
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null,
-							null).get("encounter");
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
 
 			// A shortsword is a Finesse weapon, and advantage qualifies the attack.
-			Map<String, Object> first = engine.encounters().perform(op(), campaign, encounter, rogue,
-					map("kind", "ATTACK", "attack", "Shortsword", "weapon", "Shortsword", "target", ogre, "advantage",
-							"ADVANTAGE"), false);
+			Map<String, Object> first = engine.encounters().perform(op(), campaign, encounter, rogue, map("kind",
+					"ATTACK", "attack", "Shortsword", "weapon", "Shortsword", "target", ogre, "advantage", "ADVANTAGE"),
+					false);
 			Map<String, Object> sneak = m(first.get("sneak_attack"));
 			assertNotNull(sneak, "sneak attack applied: " + first);
 			assertEquals("Sneak Attack", sneak.get("feature"));
@@ -116,9 +114,9 @@ class ClassFeatureTest {
 			assertEquals("advantage on the attack", sneak.get("qualified_by"));
 
 			// Second attack in the same turn: the feature is spent.
-			Map<String, Object> second = engine.encounters().perform(op(), campaign, encounter, rogue,
-					map("kind", "ATTACK", "attack", "Shortsword", "weapon", "Shortsword", "target", ogre, "advantage",
-							"ADVANTAGE"), false);
+			Map<String, Object> second = engine.encounters().perform(op(), campaign, encounter, rogue, map("kind",
+					"ATTACK", "attack", "Shortsword", "weapon", "Shortsword", "target", ogre, "advantage", "ADVANTAGE"),
+					false);
 			assertNull(second.get("sneak_attack"), "once per turn");
 		}
 	}
@@ -133,20 +131,20 @@ class ClassFeatureTest {
 					"GM_GRANT", "a test mace");
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null,
-							null).get("encounter");
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
 			Map<String, Object> hit = engine.encounters().perform(op(), campaign, encounter, rogue,
-					map("kind", "ATTACK", "attack", "Mace", "weapon", "Mace", "target", ogre, "advantage",
-							"ADVANTAGE"), false);
+					map("kind", "ATTACK", "attack", "Mace", "weapon", "Mace", "target", ogre, "advantage", "ADVANTAGE"),
+					false);
 			assertNull(hit.get("sneak_attack"), "a mace is neither Finesse nor Ranged: " + hit);
 		}
 	}
 
 	/**
-	 * Sleep has NO higher-level clause in SRD 5.2.1 — its radius does not grow with the slot. This test exists
-	 * because the GM asserted otherwise from memory, edited the seed to match, and had to be corrected by the PDF.
-	 * Three spells verified against the SRD text on 2026-09-03 are pinned here.
+	 * Sleep has NO higher-level clause in SRD 5.2.1 — its radius does not grow with the slot. This
+	 * test exists because the GM asserted otherwise from memory, edited the seed to match, and had
+	 * to be corrected by the PDF. Three spells verified against the SRD text on 2026-09-03 are
+	 * pinned here.
 	 */
 	@Test
 	void spellScalingMatchesTheVerifiedSrdText() throws Exception {
@@ -155,8 +153,9 @@ class ClassFeatureTest {
 			String campaign = committedCampaign(engine);
 			assertNull(mechanicsOf(engine, campaign, "Sleep").get("upcast"),
 					"SRD 5.2.1 Sleep has no Using a Higher-Level Spell Slot clause");
-			assertEquals("1d8", m(mechanicsOf(engine, campaign, "Glyph of Warding").get("upcast")).get(
-					"per_level_dice"), "explosive rune damage per slot level above 3");
+			assertEquals("1d8",
+					m(mechanicsOf(engine, campaign, "Glyph of Warding").get("upcast")).get("per_level_dice"),
+					"explosive rune damage per slot level above 3");
 		}
 	}
 

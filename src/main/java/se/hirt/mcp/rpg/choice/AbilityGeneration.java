@@ -33,11 +33,9 @@ package se.hirt.mcp.rpg.choice;
  */
 public enum AbilityGeneration implements Described {
 
-	STANDARD_ARRAY("Standard array", "Place 15, 14, 13, 12, 10 and 8 among the six abilities; quick and balanced.",
-			true),
+	STANDARD_ARRAY("Standard array", "Place 15, 14, 13, 12, 10 and 8 among the six abilities; quick and balanced.", true),
 	POINT_BUY("Point buy", "27 points to raise scores from 8 up to 15; full control over the spread."),
-	ROLL_4D6_DROP_LOWEST("Roll 4d6, drop the lowest",
-			"The server rolls six scores in the open and reports every die; no rerolls unless the campaign allows them.");
+	ROLL_4D6_DROP_LOWEST("Roll 4d6, drop the lowest", "The server rolls six scores in the open and reports every die; no rerolls unless the campaign allows them.");
 
 	private final String label;
 	private final String description;

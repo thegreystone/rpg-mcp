@@ -38,9 +38,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The setup interview as an ordered list of {@link Decision}s, derived from what the draft still lacks (MCP_PROTOCOL.md
- * §9.3.1). The first entry is the one to put to the player now; nothing here is authored twice — legal values come from
- * the {@link Described} enums and the rules content.
+ * The setup interview as an ordered list of {@link Decision}s, derived from what the draft still
+ * lacks (MCP_PROTOCOL.md §9.3.1). The first entry is the one to put to the player now; nothing here
+ * is authored twice — legal values come from the {@link Described} enums and the rules content.
  */
 final class SetupDecisions {
 
@@ -54,8 +54,8 @@ final class SetupDecisions {
 		Map<String, Object> profileSection = draft.section("content_profile");
 		boolean ageKnown = profileSection != null && profileSection.get("player_constraints") != null;
 		if (draft.profile() == null && !ageKnown) {
-			out.add(Decision.of("player_age",
-							"How old is the player? Only the derived content cap is stored, never the age.")
+			out.add(Decision
+					.of("player_age", "How old is the player? Only the derived content cap is stored, never the age.")
 					.recordedBy(SETUP, "changes.player_age").custom().optional(null)
 					.note("Skip if the player prefers not to say; the cap then stays at the server maximum."));
 		}
@@ -75,14 +75,15 @@ final class SetupDecisions {
 		}
 		Map<String, Object> experience = draft.section("experience");
 		if (experience == null) {
-			out.add(Decision.of("experience.authorship",
-							"How much of the story does the player want to define themselves?")
+			out.add(Decision
+					.of("experience.authorship", "How much of the story does the player want to define themselves?")
 					.recordedBy(SETUP, "changes.experience.authorship").suggestions(Described.options(Authorship.class))
 					.surpriseMe());
 		}
 		if (experience != null && !SetupDraft.SURPRISE_ME.equals(experience.get("authorship"))) {
 			if (experience.get("tone") == null && experience.get("fantasy_style") == null) {
-				out.add(Decision.of("experience.fantasy_style",
+				out.add(Decision
+						.of("experience.fantasy_style",
 								"What flavour of fantasy? The default is a Baldur's Gate-style fantasy epic.")
 						.recordedBy(SETUP, "changes.experience.fantasy_style")
 						.suggestions(Described.options(FantasyStyle.class))
@@ -92,17 +93,17 @@ final class SetupDecisions {
 								+ "from the answer."));
 			}
 			if (experience.get("relationship_focus") == null) {
-				out.add(Decision.of("experience.relationship_focus",
-								"How important are relationships between characters?")
+				out.add(Decision
+						.of("experience.relationship_focus", "How important are relationships between characters?")
 						.recordedBy(SETUP, "changes.experience.relationship_focus").optional("CENTRAL").surpriseMe()
 						.suggestions(List.of(Option.of("CENTRAL", "Central",
-										"Friendship, rivalry and romance are a main reason to play — the fantasy epic's default.")
-								.recommended(true),
-								Option.of("PRESENT", "Present", "They matter, but the plot leads."),
+								"Friendship, rivalry and romance are a main reason to play — the fantasy epic's default.")
+								.recommended(true), Option.of("PRESENT", "Present", "They matter, but the plot leads."),
 								Option.of("COMRADESHIP", "Comradeship only", "Keep romance out of it."))));
 			}
 			if (experience.get("excluded_themes") == null) {
-				out.add(Decision.of("experience.excluded_themes",
+				out.add(Decision
+						.of("experience.excluded_themes",
 								"Anything the player specifically does not want in the story?")
 						.recordedBy(SETUP, "changes.experience.excluded_themes").optional("[]").custom()
 						.note("Record a list of themes to exclude, or an empty list."));
@@ -154,7 +155,7 @@ final class SetupDecisions {
 		Row pc = pcId == null ? null : tx.find("character", pcId).orElse(null);
 		if (pc == null || "ARCHIVED".equals(pc.str("lifecycle"))) {
 			out.add(Decision.of("player_character",
-							"Who does the player want to play? A name, a species and class and a sentence of concept — or an archetype, or surprise them.")
+					"Who does the player want to play? A name, a species and class and a sentence of concept — or an archetype, or surprise them.")
 					.recordedBy("create_character_draft", "initial").custom().surpriseMe()
 					.note("Create the draft with whatever is known; species, class, scores, skills, spells and equipment then follow as their own decisions."));
 		} else if ("DRAFT".equals(pc.str("lifecycle"))) {
@@ -168,16 +169,17 @@ final class SetupDecisions {
 		}
 		if (draft.section("adventure") == null) {
 			out.add(Decision.of("adventure",
-							"Author the premise, the GM-only background truth, the opening location and the immediate goal.")
+					"Author the premise, the GM-only background truth, the opening location and the immediate goal.")
 					.recordedBy(SETUP, "changes.adventure").gmAuthored().surpriseMe()
 					.note("Optionally ask the player one framing question first (where the story opens); a player who chose to author gives the premise here."));
 		}
 		if (out.isEmpty()) {
-			out.add(Decision.of("campaign_review",
+			out.add(Decision
+					.of("campaign_review",
 							"Read the compact review back. Start the campaign, or change something first?")
-					.recordedBy("commit_campaign_setup", "campaign").legal(List.of(
-							Option.of("COMMIT", "Start the campaign",
-									"validate_campaign_setup, then commit_campaign_setup; then bootstrap_session and play from server state only."),
+					.recordedBy("commit_campaign_setup", "campaign")
+					.legal(List.of(Option.of("COMMIT", "Start the campaign",
+							"validate_campaign_setup, then commit_campaign_setup; then bootstrap_session and play from server state only."),
 							Option.of("REVISE", "Change something",
 									"Any section may be revisited with update_campaign_setup before commit."))));
 		}

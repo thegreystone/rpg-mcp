@@ -38,8 +38,9 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Renders service results as the protocol's response envelope and failures as structured tool errors (MCP_PROTOCOL.md
- * §6). Services return a result map that may carry a {@code meta} entry; it is lifted out into the envelope.
+ * Renders service results as the protocol's response envelope and failures as structured tool
+ * errors (MCP_PROTOCOL.md §6). Services return a result map that may carry a {@code meta} entry; it
+ * is lifted out into the envelope.
  */
 final class ToolSupport {
 
@@ -56,8 +57,9 @@ final class ToolSupport {
 			return ToolResponse.error(Json.write(e.toErrorMap()));
 		} catch (RuntimeException e) {
 			LOG.errorf(e, "%s failed unexpectedly", tool);
-			return ToolResponse.error(Json.write(RpgException.internal(
-							"Internal error in " + tool + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(), e)
+			return ToolResponse.error(Json.write(RpgException
+					.internal("Internal error in " + tool + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(),
+							e)
 					.toErrorMap()));
 		}
 	}

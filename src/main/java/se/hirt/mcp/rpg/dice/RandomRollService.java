@@ -32,7 +32,8 @@ import java.security.SecureRandom;
 import java.util.random.RandomGenerator;
 
 /**
- * Production roller backed by a CSPRNG (or a seeded generator when a campaign asks for reproducibility).
+ * Production roller backed by a CSPRNG (or a seeded generator when a campaign asks for
+ * reproducibility).
  */
 public final class RandomRollService extends RollService {
 

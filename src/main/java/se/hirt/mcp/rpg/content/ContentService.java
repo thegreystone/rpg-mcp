@@ -43,9 +43,9 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Content definitions: installed ruleset content (immutable, {@code srd5e:item/longsword}) and campaign-owned custom
- * definitions ({@code content:N}, optional {@code custom:item/...} symbolic id) — MCP_PROTOCOL.md §13.6/§13.7,
- * DOMAIN_MODEL.md §18.
+ * Content definitions: installed ruleset content (immutable, {@code srd5e:item/longsword}) and
+ * campaign-owned custom definitions ({@code content:N}, optional {@code custom:item/...} symbolic
+ * id) — MCP_PROTOCOL.md §13.6/§13.7, DOMAIN_MODEL.md §18.
  */
 public final class ContentService {
 
@@ -130,13 +130,13 @@ public final class ContentService {
 	// ── resolution ─────────────────────────────────────────────────────
 
 	/**
-	 * Resolves {@code srd5e:item/dagger}, {@code Dagger}, {@code content:5} or {@code custom:item/x} within a
-	 * campaign.
+	 * Resolves {@code srd5e:item/dagger}, {@code Dagger}, {@code content:5} or
+	 * {@code custom:item/x} within a campaign.
 	 */
 	public static Item resolveItem(Tx tx, RulesData rules, long campaignId, String text) {
 		if (text == null || text.isBlank()) {
-			throw RpgException.invalidArgument(
-					"An item is required (name, 'srd5e:item/...', 'content:N' or 'custom:...').");
+			throw RpgException
+					.invalidArgument("An item is required (name, 'srd5e:item/...', 'content:N' or 'custom:...').");
 		}
 		String t = text.trim();
 		if (t.startsWith(Ref.CONTENT + ":")) {
@@ -159,8 +159,9 @@ public final class ContentService {
 		// Fall back to a custom definition by name.
 		return tx.queryOne(
 				"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' AND LOWER(name) = LOWER(?)",
-				campaignId, t).map(ContentService::fromCustomRow).orElseThrow(() -> RpgException.notFound(
-				"Item '" + t + "' (use get_content_definitions to search, or define_content to create it)"));
+				campaignId, t).map(ContentService::fromCustomRow)
+				.orElseThrow(() -> RpgException.notFound(
+						"Item '" + t + "' (use get_content_definitions to search, or define_content to create it)"));
 	}
 
 	public static Item fromDefinition(RulesData.Definition d) {
@@ -181,18 +182,18 @@ public final class ContentService {
 		if ("CUSTOM".equals(entry.str("content_ref_kind"))) {
 			return fromCustomRow(tx.get("custom_content", entry.lng("custom_content_id")));
 		}
-		return rules.find(entry.str("content_ref")).map(ContentService::fromDefinition).orElseGet(
-				() -> new Item(false, entry.str("content_ref"), null, entry.str("content_ref"),
-						Map.of("type", "OTHER")));
+		return rules.find(entry.str("content_ref")).map(ContentService::fromDefinition).orElseGet(() -> new Item(false,
+				entry.str("content_ref"), null, entry.str("content_ref"), Map.of("type", "OTHER")));
 	}
 
 	// ── get_content_definitions ────────────────────────────────────────
 
 	/**
-	 * Ranked free-text search across every installed definition and the campaign's own custom content
-	 * (MCP_PROTOCOL.md §13.8). This is how a rules question gets an answer with a citation instead of a recollection:
-	 * the SRD's Rules Glossary is installed as {@code RULE} content, so conditions, actions, hazards, cover, resting
-	 * and the rest are searchable next to the spells and items they interact with.
+	 * Ranked free-text search across every installed definition and the campaign's own custom
+	 * content (MCP_PROTOCOL.md §13.8). This is how a rules question gets an answer with a citation
+	 * instead of a recollection: the SRD's Rules Glossary is installed as {@code RULE} content, so
+	 * conditions, actions, hazards, cover, resting and the rest are searchable next to the spells
+	 * and items they interact with.
 	 */
 	public Map<String, Object> search(String campaignRef, String query, String kind, int limit) {
 		if (query == null || query.isBlank()) {
@@ -242,9 +243,12 @@ public final class ContentService {
 		});
 	}
 
-	/** Scores one definition against the search terms and builds its hit, or nothing when it does not match. */
+	/**
+	 * Scores one definition against the search terms and builds its hit, or nothing when it does
+	 * not match.
+	 */
 	private Optional<Map<String, Object>> scoreOne(
-			String id, String kind, String name, Map<String, Object> payload, List<String> terms) {
+		String id, String kind, String name, Map<String, Object> payload, List<String> terms) {
 		String lowerName = name.toLowerCase();
 		String text = String.valueOf(payload.getOrDefault("text", ""));
 		String summary = String.valueOf(payload.getOrDefault("summary", ""));
@@ -289,7 +293,10 @@ public final class ContentService {
 		return n;
 	}
 
-	/** A window of text around the first matching term, so a hit can be judged without a second call. */
+	/**
+	 * A window of text around the first matching term, so a hit can be judged without a second
+	 * call.
+	 */
 	private static String snippet(String text, List<String> terms) {
 		if (text.isBlank()) {
 			return "";
@@ -311,8 +318,8 @@ public final class ContentService {
 	}
 
 	public Map<String, Object> definitions(
-			String campaignRef, String kind, String itemType, String text,
-			Object minCost, Object maxCost, String cursor, int limit, String detail) {
+		String campaignRef, String kind, String itemType, String text, Object minCost, Object maxCost, String cursor,
+		int limit, String detail) {
 		int max = Math.max(1, Math.min(limit <= 0 ? 25 : limit, 100));
 		String k = kind == null || kind.isBlank() ? "ITEM" : kind.toUpperCase();
 		String type = itemType == null || itemType.isBlank() ? null : itemType.toUpperCase();
@@ -340,7 +347,8 @@ public final class ContentService {
 						}
 						continue;
 					}
-					var d = new RulesData.Definition("content:" + row.id(), k, row.str("name"), row.map("payload_json"));
+					var d = new RulesData.Definition("content:" + row.id(), k, row.str("name"),
+							row.map("payload_json"));
 					Map<String, Object> entry = genericSummary(d);
 					entry.put("custom", true);
 					if (matches(entry, d.payload(), type, needle, min, maxC)) {
@@ -406,16 +414,16 @@ public final class ContentService {
 	}
 
 	private static boolean matches(
-			Map<String, Object> entry, Map<String, Object> payload, String type, String needle, Long min, Long max) {
+		Map<String, Object> entry, Map<String, Object> payload, String type, String needle, Long min, Long max) {
 		if (type != null && !type.equals(String.valueOf(payload.get("type")))) {
 			return false;
 		}
 		if (needle != null) {
-			String hay = (entry.get("name") + " " + entry.get("id") + " " + payload.getOrDefault("text",
-					"") + " " + payload.getOrDefault("description", "") + " " + payload.getOrDefault("properties",
-					"") + " " + payload.getOrDefault("category", "") + " " + payload.getOrDefault("classes", "") + (
-					payload.get("level") == null ? "" : " level " + payload.get("level") + " ") + payload.getOrDefault(
-					"school", "")).toLowerCase();
+			String hay = (entry.get("name") + " " + entry.get("id") + " " + payload.getOrDefault("text", "") + " "
+					+ payload.getOrDefault("description", "") + " " + payload.getOrDefault("properties", "") + " "
+					+ payload.getOrDefault("category", "") + " " + payload.getOrDefault("classes", "")
+					+ (payload.get("level") == null ? "" : " level " + payload.get("level") + " ")
+					+ payload.getOrDefault("school", "")).toLowerCase();
 			for (String word : needle.split("\\s+")) {
 				if (!hay.contains(word)) {
 					return false;
@@ -435,8 +443,8 @@ public final class ContentService {
 			return 0;
 		}
 		try {
-			return Integer.parseInt(
-					new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).substring(4));
+			return Integer
+					.parseInt(new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).substring(4));
 		} catch (RuntimeException e) {
 			throw RpgException.invalidArgument("Invalid cursor.");
 		}
@@ -450,9 +458,9 @@ public final class ContentService {
 	// ── define_content ─────────────────────────────────────────────────
 
 	public Map<String, Object> define(
-			String operationId, String campaignRef, String kind, String name, String symbolicId, String description,
-			String itemType, Object cost, Double weightLb, Map<String, Object> properties, List<String> tags,
-			String provenance) {
+		String operationId, String campaignRef, String kind, String name, String symbolicId, String description,
+		String itemType, Object cost, Double weightLb, Map<String, Object> properties, List<String> tags,
+		String provenance) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -471,7 +479,8 @@ public final class ContentService {
 				throw RpgException.invalidArgument("A name is required.");
 			}
 			if (k.equals("BACKGROUND")) {
-				return defineBackground(tx, campaign, campaignId, name, symbolicId, description, properties, tags, prov);
+				return defineBackground(tx, campaign, campaignId, name, symbolicId, description, properties, tags,
+						prov);
 			}
 			if (!k.equals("ITEM")) {
 				throw RpgException.capabilityUnavailable(
@@ -479,19 +488,19 @@ public final class ContentService {
 			}
 			String type = itemType == null || itemType.isBlank() ? "GEAR" : itemType.toUpperCase();
 			if (!ITEM_TYPES.contains(type)) {
-				throw RpgException.invalidArgument(
-						"item_type must be one of " + ITEM_TYPES.stream().sorted().toList() + ".");
+				throw RpgException
+						.invalidArgument("item_type must be one of " + ITEM_TYPES.stream().sorted().toList() + ".");
 			}
 			if (Set.of("WEAPON", "ARMOR", "SHIELD", "PACK").contains(type)) {
-				throw RpgException.capabilityUnavailable(
-						"Custom " + type + " definitions need mechanical schemas that arrive with the encounter milestone; use GEAR/VALUABLE/CONSUMABLE/DOCUMENT/OTHER for now.");
+				throw RpgException.capabilityUnavailable("Custom " + type
+						+ " definitions need mechanical schemas that arrive with the encounter milestone; use GEAR/VALUABLE/CONSUMABLE/DOCUMENT/OTHER for now.");
 			}
 			String symbolic = null;
 			if (symbolicId != null && !symbolicId.isBlank()) {
 				symbolic = symbolicId.trim();
 				if (!symbolic.matches("custom:[a-z]+/[a-z0-9][a-z0-9-]*")) {
-					throw RpgException.invalidArgument(
-							"symbolic_id must look like 'custom:item/bellhaven-broadsheet'.");
+					throw RpgException
+							.invalidArgument("symbolic_id must look like 'custom:item/bellhaven-broadsheet'.");
 				}
 				if (tx.count("SELECT COUNT(*) FROM custom_content WHERE campaign_id = ? AND symbolic_id = ?",
 						campaignId, symbolic) > 0) {
@@ -544,15 +553,15 @@ public final class ContentService {
 	}
 
 	/**
-	 * A campaign-scoped background (SRD 5.2.1 "Character Backgrounds"): three abilities for the +2/+1 increase, an
-	 * Origin feat, two skills, a tool proficiency (fixed or a category choice) and starting equipment. Validated
-	 * against installed content and stored in the seeded shape, so it behaves exactly like an SRD background wherever
-	 * one is chosen (RULES_ENGINE.md §8).
+	 * A campaign-scoped background (SRD 5.2.1 "Character Backgrounds"): three abilities for the
+	 * +2/+1 increase, an Origin feat, two skills, a tool proficiency (fixed or a category choice)
+	 * and starting equipment. Validated against installed content and stored in the seeded shape,
+	 * so it behaves exactly like an SRD background wherever one is chosen (RULES_ENGINE.md §8).
 	 */
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> defineBackground(
-			Tx tx, Row campaign, long campaignId, String name, String symbolicId, String description,
-			Map<String, Object> properties, List<String> tags, String prov) {
+		Tx tx, Row campaign, long campaignId, String name, String symbolicId, String description,
+		Map<String, Object> properties, List<String> tags, String prov) {
 		Map<String, Object> props = properties == null ? Map.of() : properties;
 		var payload = new LinkedHashMap<String, Object>();
 		var abilities = new ArrayList<String>();
@@ -573,7 +582,8 @@ public final class ContentService {
 				.orElseThrow(() -> RpgException.invalidArgument(
 						"properties.feat must name an Origin feat (get_character_choices scope FEAT lists them)."));
 		if (!"ORIGIN".equals(String.valueOf(feat.payload().get("category")))) {
-			throw RpgException.invalidArgument(feat.name() + " is not an Origin feat; a background grants an Origin feat.");
+			throw RpgException
+					.invalidArgument(feat.name() + " is not an Origin feat; a background grants an Origin feat.");
 		}
 		payload.put("feat", feat.id());
 		if (props.get("feat_choices") instanceof Map<?, ?> fc) {
@@ -626,10 +636,11 @@ public final class ContentService {
 					var resolved = new ArrayList<Map<String, Object>>();
 					for (Object o : items) {
 						if (!(o instanceof Map<?, ?> im) || im.get("item") == null) {
-							throw RpgException.invalidArgument("starting_equipment items are objects like {item, quantity}.");
+							throw RpgException
+									.invalidArgument("starting_equipment items are objects like {item, quantity}.");
 						}
-						RulesData.Definition def = rules.resolve("ITEM", String.valueOf(im.get("item")))
-								.orElseThrow(() -> RpgException.invalidArgument("Unknown item '" + im.get("item") + "'."));
+						RulesData.Definition def = rules.resolve("ITEM", String.valueOf(im.get("item"))).orElseThrow(
+								() -> RpgException.invalidArgument("Unknown item '" + im.get("item") + "'."));
 						var line = new LinkedHashMap<String, Object>();
 						line.put("item", def.id());
 						line.put("quantity", im.get("quantity") instanceof Number n ? n.intValue() : 1);
@@ -682,7 +693,8 @@ public final class ContentService {
 		definition.put("name", name.trim());
 		definition.put("ability_scores", abilities);
 		definition.put("feat", feat.name());
-		definition.put("skills", skills.stream().map(s -> rules.find(s).map(RulesData.Definition::name).orElse(s)).toList());
+		definition.put("skills",
+				skills.stream().map(s -> rules.find(s).map(RulesData.Definition::name).orElse(s)).toList());
 		definition.put("tool", tool);
 		var result = new LinkedHashMap<String, Object>();
 		result.put("content", Ref.of(Ref.CONTENT, id));

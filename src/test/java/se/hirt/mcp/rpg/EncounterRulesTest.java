@@ -45,8 +45,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
 /**
- * Two things the engine used to leave to the GM's memory: a stat block that says "makes two attacks" only ever got
- * one, and a spell that grants the target another save at the end of its turn never rolled it.
+ * Two things the engine used to leave to the GM's memory: a stat block that says "makes two
+ * attacks" only ever got one, and a spell that grants the target another save at the end of its
+ * turn never rolled it.
  */
 class EncounterRulesTest {
 
@@ -67,8 +68,8 @@ class EncounterRulesTest {
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
 			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(scout), "b", List.of(bandit)), null, null, null, null,
-							null).get("encounter");
+					.start(op(), campaign, map("a", List.of(scout), "b", List.of(bandit)), null, null, null, null, null)
+					.get("encounter");
 
 			Map<String, Object> state = engine.encounters().encounterState(campaign, encounter, 3);
 			String first = (String) m(m(state).get("turn")).get("character");
@@ -104,9 +105,8 @@ class EncounterRulesTest {
 			engine.spells().prepare(op(), campaign, pc, null, List.of("Sleep", "Magic Missile"));
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("party", List.of(pc), "foes", List.of(bandit)), null, null, null, null,
-							null).get("encounter");
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(pc), "foes", List.of(bandit)), null, null, null, null, null).get("encounter");
 
 			// Put the bandit under Sleep however the initiative fell, then let its turn end.
 			Map<String, Object> state = engine.encounters().encounterState(campaign, encounter, 3);
@@ -117,8 +117,8 @@ class EncounterRulesTest {
 					map("kind", "CAST", "spell", "Sleep", "targets", List.of(bandit)), true);
 			assertNotNull(cast, "sleep cast");
 
-			Map<String, Object> ended = engine.encounters()
-					.perform(op(), campaign, encounter, bandit, map("kind", "END_TURN"), true);
+			Map<String, Object> ended = engine.encounters().perform(op(), campaign, encounter, bandit,
+					map("kind", "END_TURN"), true);
 			List<Map<String, Object>> saves = (List<Map<String, Object>>) ended.get("repeat_saves");
 			assertNotNull(saves, "the engine rolls the repeat save itself: " + ended.keySet());
 			Map<String, Object> save = saves.get(0);
@@ -135,7 +135,10 @@ class EncounterRulesTest {
 		}
 	}
 
-	/** The content profile carries running guidance, not just a label, so it reaches the GM at play time. */
+	/**
+	 * The content profile carries running guidance, not just a label, so it reaches the GM at play
+	 * time.
+	 */
 	@Test
 	void adultProfileSaysScenesArePlayedThroughRatherThanCutAway() {
 		String guidance = se.hirt.mcp.rpg.choice.ContentProfile.PEGI_18.guidance();

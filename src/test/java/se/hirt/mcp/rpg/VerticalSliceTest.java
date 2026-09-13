@@ -41,9 +41,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Acceptance requirements from MCP_PROTOCOL.md §25 covered by the vertical slice: 25.1 fresh campaign, 25.2 policy
- * enforcement, 25.3 setup resumption, 25.4 context boundary, 25.5 deterministic mechanics (sanity invariants), 25.10
- * provider replacement / long hiatus.
+ * Acceptance requirements from MCP_PROTOCOL.md §25 covered by the vertical slice: 25.1 fresh
+ * campaign, 25.2 policy enforcement, 25.3 setup resumption, 25.4 context boundary, 25.5
+ * deterministic mechanics (sanity invariants), 25.10 provider replacement / long hiatus.
  */
 class VerticalSliceTest {
 
@@ -112,9 +112,8 @@ class VerticalSliceTest {
 					() -> second.campaigns().commitSetup(op(), campaign, null));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, early.code());
 
-			second.campaigns().updateSetup(op(), campaign, null,
-					map("experience", "SURPRISE_ME", "rules", map("ability_generation", "STANDARD_ARRAY"),
-							"continuation", map("policy", "IRONMAN")));
+			second.campaigns().updateSetup(op(), campaign, null, map("experience", "SURPRISE_ME", "rules",
+					map("ability_generation", "STANDARD_ARRAY"), "continuation", map("policy", "IRONMAN")));
 			assertEquals("CHARACTER_CONCEPT",
 					m(second.campaigns().setupState(campaign).get("meta")).get("harness_state"));
 
@@ -122,18 +121,17 @@ class VerticalSliceTest {
 			pc = (String) created.get("character");
 			assertEquals("character:1", pc);
 			// Standard array must be exactly the array.
-			RpgException bad = assertThrows(RpgException.class, () -> second.characters()
-					.updateDraft(op(), campaign, pc, null, map("ability_scores",
-							map("STR", 18, "DEX", 18, "CON", 18, "INT", 18, "WIS", 18, "CHA", 18))));
+			RpgException bad = assertThrows(RpgException.class, () -> second.characters().updateDraft(op(), campaign,
+					pc, null,
+					map("ability_scores", map("STR", 18, "DEX", 18, "CON", 18, "INT", 18, "WIS", 18, "CHA", 18))));
 			assertEquals(ErrorCode.VALIDATION_FAILED, bad.code());
-			second.characters().updateDraft(op(), campaign, pc, null,
-					map("species", "Halfling", "class", "Rogue", "ability_scores",
-							map("DEX", 15, "CON", 14, "INT", 13, "WIS", 12, "CHA", 10, "STR", 8), "background",
-							"Acolyte", "background_ability_scores", map("INT", 2, "WIS", 1), "feat_choices",
-							map("feat", "Magic Initiate", "ability", "WIS", "cantrips", List.of("Light", "Guidance"),
-									"spell", "Cure Wounds"), "skills",
-							List.of("Stealth", "Sleight of Hand", "Deception", "Perception"), "personality",
-							"Dry, observant, allergic to authority."));
+			second.characters().updateDraft(op(), campaign, pc, null, map("species", "Halfling", "class", "Rogue",
+					"ability_scores", map("DEX", 15, "CON", 14, "INT", 13, "WIS", 12, "CHA", 10, "STR", 8),
+					"background", "Acolyte", "background_ability_scores", map("INT", 2, "WIS", 1), "feat_choices",
+					map("feat", "Magic Initiate", "ability", "WIS", "cantrips", List.of("Light", "Guidance"), "spell",
+							"Cure Wounds"),
+					"skills", List.of("Stealth", "Sleight of Hand", "Deception", "Perception"), "personality",
+					"Dry, observant, allergic to authority."));
 			Map<String, Object> validation = second.characters().validateDraft(campaign, pc);
 			assertEquals(Boolean.TRUE, validation.get("valid"), validation.toString());
 			Map<String, Object> sheet = m(validation.get("review"));
@@ -142,9 +140,10 @@ class VerticalSliceTest {
 			assertEquals("PARTY_DESIGN", m(second.campaigns().setupState(campaign).get("meta")).get("harness_state"));
 
 			second.campaigns().updateSetup(op(), campaign, null, map("party", "SURPRISE_ME"));
-			second.campaigns().updateSetup(op(), campaign, null, map("adventure",
-					map("premise", "A quiet river town hides a failing magical boundary.", "opening_location",
-							"Bellhaven", "immediate_goal", "Find Aldren's contact at The Copper Kettle.")));
+			second.campaigns().updateSetup(op(), campaign, null,
+					map("adventure",
+							map("premise", "A quiet river town hides a failing magical boundary.", "opening_location",
+									"Bellhaven", "immediate_goal", "Find Aldren's contact at The Copper Kettle.")));
 			Map<String, Object> validate = second.campaigns().validateSetup(campaign);
 			assertEquals(Boolean.TRUE, validate.get("valid"), validate.toString());
 			assertTrue(((List<?>) validate.get("delegated")).contains("experience.authorship"));
@@ -185,8 +184,8 @@ class VerticalSliceTest {
 					"no setup transcript leaks");
 
 			// 25.5: a deterministic check with sanity invariants.
-			Map<String, Object> check = third.checks()
-					.resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Stealth", 15, "ADVANTAGE", "sneaking");
+			Map<String, Object> check = third.checks().resolveCheck(op(), campaign, pc, "SKILL_CHECK", null, "Stealth",
+					15, "ADVANTAGE", "sneaking");
 			assertEquals("DEX", check.get("ability"));
 			assertEquals(Boolean.TRUE, check.get("proficient"));
 			assertEquals(2, check.get("proficiency_bonus"));
@@ -200,11 +199,11 @@ class VerticalSliceTest {
 			assertTrue(roll.get("roll_ref").toString().startsWith("roll:"));
 
 			// Saving throw proficiency from the class (Rogue: DEX, INT).
-			Map<String, Object> save = third.checks()
-					.resolveCheck(op(), campaign, pc, "SAVING_THROW", "INT", null, 10, null, null);
+			Map<String, Object> save = third.checks().resolveCheck(op(), campaign, pc, "SAVING_THROW", "INT", null, 10,
+					null, null);
 			assertEquals(Boolean.TRUE, save.get("proficient"));
-			Map<String, Object> wisSave = third.checks()
-					.resolveCheck(op(), campaign, pc, "SAVING_THROW", "WIS", null, 10, null, null);
+			Map<String, Object> wisSave = third.checks().resolveCheck(op(), campaign, pc, "SAVING_THROW", "WIS", null,
+					10, null, null);
 			assertEquals(Boolean.FALSE, wisSave.get("proficient"));
 
 			// Memory round trip.
@@ -212,8 +211,8 @@ class VerticalSliceTest {
 					"Mara met a survivor of the lost caravan in a riverside tavern.", List.of(pc), "MAJOR", null, null,
 					null, null, "The survivor insisted the wagons burned without ordinary fire.", null);
 			assertTrue(recorded.get("event").toString().startsWith("event:"));
-			Map<String, Object> memories = third.ledger()
-					.queryMemories(campaign, List.of(pc), null, "caravan survivor", null, 5);
+			Map<String, Object> memories = third.ledger().queryMemories(campaign, List.of(pc), null, "caravan survivor",
+					null, 5);
 			assertTrue(((List<?>) third.ledger().queryMemories(campaign, List.of("character:99"), null, null, null, 5)
 					.get("events")).isEmpty(), "participant filters bind to the character, not the campaign");
 			List<Map<String, Object>> events = (List<Map<String, Object>>) memories.get("events");
@@ -223,8 +222,8 @@ class VerticalSliceTest {
 			// Time and suspension.
 			Map<String, Object> time = third.sessions().advanceTime(op(), campaign, 90, "walking to the tavern");
 			assertEquals("Day 1, 09:30", m(time.get("to")).get("instant"));
-			Map<String, Object> suspended = third.sessions()
-					.suspend(op(), campaign, "Mara found the survivor and heard about the burned wagons.");
+			Map<String, Object> suspended = third.sessions().suspend(op(), campaign,
+					"Mara found the survivor and heard about the burned wagons.");
 			assertEquals(Boolean.TRUE, suspended.get("session_closed"));
 			assertEquals(1L, suspended.get("important_events_written"),
 					"CAMPAIGN_STARTED predates the session; only the meeting counts");

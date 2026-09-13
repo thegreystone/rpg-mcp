@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -72,9 +71,11 @@ import static se.hirt.mcp.rpg.tools.SrdText.slice;
 /**
  * Diff the srd5e seed files against the SRD 5.2.1 text.
  * <p>
- * Writes {@code srd_report.txt} (one line per finding, bracketed by category). Categories without a suffix are hard
- * discrepancies; the {@code *-text / *-info / *-upcast / *-table / *-equipment / *-traits} categories are context for
- * manual review. The checks are a straight port of the original Python script and keep its structure and messages.
+ * Writes {@code srd_report.txt} (one line per finding, bracketed by category). Categories without a
+ * suffix are hard discrepancies; the
+ * {@code *-text / *-info / *-upcast / *-table / *-equipment / *-traits} categories are context for
+ * manual review. The checks are a straight port of the original Python script and keep its
+ * structure and messages.
  */
 final class VerifySrd {
 	private final String txt;
@@ -120,9 +121,9 @@ final class VerifySrd {
 		for (String r : report) {
 			counts.merge(r.substring(1, r.indexOf(']')), 1, Integer::sum);
 		}
-		System.out.println("Counter(" + repr(counts.entrySet().stream()
-				.sorted((a, b) -> b.getValue() - a.getValue())
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, LinkedHashMap::new)))
+		System.out.println("Counter("
+				+ repr(counts.entrySet().stream().sorted((a, b) -> b.getValue() - a.getValue()).collect(
+						Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, LinkedHashMap::new)))
 				+ ")");
 	}
 
@@ -195,7 +196,8 @@ final class VerifySrd {
 		int start = lines.indexOf("Simple Melee Weapons");
 		List<String[]> rows = new ArrayList<>();
 		String buf = "";
-		Pattern row = re("^(.+?) (1|\\d+d\\d+) (Bludgeoning|Piercing|Slashing) (.*?) (\\S+) (—|[\\d/]+ lb\\.) ([\\d,]+ (?:CP|SP|GP))$");
+		Pattern row = re(
+				"^(.+?) (1|\\d+d\\d+) (Bludgeoning|Piercing|Slashing) (.*?) (\\S+) (—|[\\d/]+ lb\\.) ([\\d,]+ (?:CP|SP|GP))$");
 		Pattern section = re("^(Simple|Martial) (Melee|Ranged) Weapons$");
 		for (int i = start; i < start + 120; i++) {
 			String ln = lines.get(i).strip();
@@ -242,7 +244,8 @@ final class VerifySrd {
 		for (String[] r : weaponsTable()) {
 			srdWeapons.put(norm(r[0]), r);
 		}
-		Map<String, JsonNode> seedWeapons = seedByName(items, e -> "WEAPON".equals(str(e.path("payload").path("type"))));
+		Map<String, JsonNode> seedWeapons = seedByName(items,
+				e -> "WEAPON".equals(str(e.path("payload").path("type"))));
 		rep("weapons", "SRD rows " + srdWeapons.size() + ", seed weapons " + seedWeapons.size());
 		for (String n : minus(srdWeapons.keySet(), seedWeapons.keySet())) {
 			rep("weapons", "MISSING in seed: " + srdWeapons.get(n)[0]);
@@ -298,7 +301,8 @@ final class VerifySrd {
 				seedProps.add(x.asText().toLowerCase().replace('-', '_'));
 			}
 			if (!seedProps.equals(srdProps)) {
-				rep("weapons", name + ": properties seed " + repr(sorted(seedProps)) + " vs SRD " + repr(sorted(srdProps)));
+				rep("weapons",
+						name + ": properties seed " + repr(sorted(seedProps)) + " vs SRD " + repr(sorted(srdProps)));
 			}
 			if (versatile != null && neq(str(p.path("versatile")), versatile)) {
 				rep("weapons", name + ": versatile seed " + repr(p.path("versatile")) + " vs SRD " + versatile);
@@ -320,7 +324,8 @@ final class VerifySrd {
 	private List<String[]> armorTable() {
 		int start = lines.indexOf("Armor Armor Class (AC) Strength Stealth Weight Cost");
 		List<String[]> rows = new ArrayList<>();
-		Pattern row = re("^(.+?) (\\+2|\\d+(?: \\+ Dex modifier(?: \\(max 2\\))?)?) (—|Str \\d+) (—|Disadvantage) (—|[\\d/]+ lb\\.) ([\\d,]+ GP)$");
+		Pattern row = re(
+				"^(.+?) (\\+2|\\d+(?: \\+ Dex modifier(?: \\(max 2\\))?)?) (—|Str \\d+) (—|Disadvantage) (—|[\\d/]+ lb\\.) ([\\d,]+ GP)$");
 		for (String ln : slice(lines, start + 1, start + 30)) {
 			Matcher m = match(row, ln.strip());
 			if (m != null) {
@@ -361,10 +366,11 @@ final class VerifySrd {
 				}
 			} else {
 				int base = Integer.parseInt(ac.split(" ")[0]);
-				String dex = ac.contains("Dex") && !ac.contains("max") ? "FULL" : ac.contains("max 2") ? "MAX_2" : "NONE";
+				String dex = ac.contains("Dex") && !ac.contains("max") ? "FULL"
+						: ac.contains("max 2") ? "MAX_2" : "NONE";
 				if (neq(integer(a.path("base_ac")), base) || neq(str(a.path("dex_bonus")), dex)) {
-					rep("armor", name + ": AC seed base " + repr(a.path("base_ac")) + " dex " + repr(a.path("dex_bonus"))
-							+ " vs SRD '" + ac + "'");
+					rep("armor", name + ": AC seed base " + repr(a.path("base_ac")) + " dex "
+							+ repr(a.path("dex_bonus")) + " vs SRD '" + ac + "'");
 				}
 			}
 			Integer sreq = strength.equals("—") ? null : Integer.parseInt(strength.split(" ")[1]);
@@ -385,8 +391,8 @@ final class VerifySrd {
 
 	// ── 3. Gear / tools / ammunition / foci / mounts / tack ──────────────
 
-	private static final Map<String, String> ALIASES = Map.ofEntries(
-			Map.entry("arrow", "arrows"), Map.entry("bolt", "bolts"), Map.entry("bullet firearm", "bullets firearm"),
+	private static final Map<String, String> ALIASES = Map.ofEntries(Map.entry("arrow", "arrows"),
+			Map.entry("bolt", "bolts"), Map.entry("bullet firearm", "bullets firearm"),
 			Map.entry("bullet sling", "bullets sling"), Map.entry("needle", "needles"),
 			Map.entry("arcane focus crystal", "crystal"), Map.entry("arcane focus orb", "orb"),
 			Map.entry("arcane focus rod", "rod"), Map.entry("arcane focus staff", "staff also a quarterstaff"),
@@ -410,7 +416,8 @@ final class VerifySrd {
 		List<String> eq = slice(lines, eqStart, eqEnd);
 
 		Map<String, String[]> gearRows = new LinkedHashMap<>();
-		Pattern gearRow = re("^(.+?) (—|[\\d/.,]+ lb\\.|Varies) (—|Varies|[\\d,]+ (?:CP|SP|GP|PP)(?: per (?:day|hour|mile|item))?)$");
+		Pattern gearRow = re(
+				"^(.+?) (—|[\\d/.,]+ lb\\.|Varies) (—|Varies|[\\d,]+ (?:CP|SP|GP|PP)(?: per (?:day|hour|mile|item))?)$");
 		for (String ln : eq) {
 			Matcher m = match(gearRow, ln.strip());
 			if (m != null && !srdWeapons.containsKey(norm(m.group(1))) && !srdArmor.containsKey(norm(m.group(1)))) {
@@ -428,7 +435,8 @@ final class VerifySrd {
 			if (m != null && i + 1 < eq.size() && eq.get(i + 1).startsWith("Ability:")) {
 				Matcher mm = match(toolAbility, eq.get(i + 1).strip());
 				String ability = mm != null ? mm.group(1) : null;
-				toolRows.put(norm(m.group(1)), new String[] {m.group(1), m.group(2), mm != null ? mm.group(2) : null, ability});
+				toolRows.put(norm(m.group(1)),
+						new String[] {m.group(1), m.group(2), mm != null ? mm.group(2) : null, ability});
 				int j = i + 2;
 				StringBuilder para = new StringBuilder();
 				while (j < eq.size() && j < i + 12 && match(anyHead, eq.get(j).strip()) == null) {
@@ -446,7 +454,8 @@ final class VerifySrd {
 			}
 		}
 		Map<String, String[]> ammoRows = new LinkedHashMap<>();
-		Pattern ammoRow = re("^(Arrows|Bolts|Bullets, Firearm|Bullets, Sling|Needles) (\\d+) (\\w+) ([\\d/.]+ lb\\.) (\\d+ (?:CP|SP|GP))$");
+		Pattern ammoRow = re(
+				"^(Arrows|Bolts|Bullets, Firearm|Bullets, Sling|Needles) (\\d+) (\\w+) ([\\d/.]+ lb\\.) (\\d+ (?:CP|SP|GP))$");
 		for (String ln : eq) {
 			Matcher m = match(ammoRow, ln.strip());
 			if (m != null) {
@@ -454,7 +463,8 @@ final class VerifySrd {
 			}
 		}
 		Map<String, String[]> mountRows = new LinkedHashMap<>();
-		Pattern mountRow = re("^(Camel|Elephant|Horse, Draft|Horse, Riding|Mastiff|Mule|Pony|Warhorse) ([\\d,]+ lb\\.) ([\\d,]+ GP)$");
+		Pattern mountRow = re(
+				"^(Camel|Elephant|Horse, Draft|Horse, Riding|Mastiff|Mule|Pony|Warhorse) ([\\d,]+ lb\\.) ([\\d,]+ GP)$");
 		for (String ln : eq) {
 			Matcher m = match(mountRow, ln.strip());
 			if (m != null) {
@@ -476,8 +486,10 @@ final class VerifySrd {
 			String t = str(e.path("payload").path("type"));
 			return !"WEAPON".equals(t) && !"ARMOR".equals(t) && !"SHIELD".equals(t);
 		});
-		rep("gear", "SRD gear rows " + gearRows.size() + ", tools " + toolRows.size() + ", ammo " + ammoRows.size()
-				+ ", mounts " + mountRows.size() + ", packs " + packText.size() + "; seed other items " + seedOther.size());
+		rep("gear",
+				"SRD gear rows " + gearRows.size() + ", tools " + toolRows.size() + ", ammo " + ammoRows.size()
+						+ ", mounts " + mountRows.size() + ", packs " + packText.size() + "; seed other items "
+						+ seedOther.size());
 		Set<String> matched = new HashSet<>();
 		Map<String, String> itemNameById = new HashMap<>();
 		for (JsonNode x : items.get("entries")) {
@@ -491,7 +503,8 @@ final class VerifySrd {
 			JsonNode p = e.get("payload");
 			String ename = e.get("name").asText();
 			String type = str(p.path("type"));
-			List<String> cands = new ArrayList<>(List.of(n, ALIASES.getOrDefault(n, n), n + "s", Py.rstrip(n, 's'), norm(ename)));
+			List<String> cands = new ArrayList<>(
+					List.of(n, ALIASES.getOrDefault(n, n), n + "s", Py.rstrip(n, 's'), norm(ename)));
 			if (ename.contains(", ")) {
 				String[] ab = ename.split(", ", 2);
 				cands.add(norm(ab[1] + " " + ab[0]));
@@ -538,13 +551,15 @@ final class VerifySrd {
 			if (hit.kind().equals("mount")) {
 				int cap = Integer.parseInt(mountRows.get(hit.key())[1].replace(",", "").split(" ")[0]);
 				if (neq(integer(p.path("carrying_capacity_lb")), cap)) {
-					rep("gear", ename + ": carrying capacity seed " + repr(p.path("carrying_capacity_lb")) + " vs SRD " + cap);
+					rep("gear", ename + ": carrying capacity seed " + repr(p.path("carrying_capacity_lb")) + " vs SRD "
+							+ cap);
 				}
 			}
 			if (hit.kind().equals("tool") && toolRows.get(hit.key())[3] != null) {
 				String ab = Py.head(toolRows.get(hit.key())[3], 3).toUpperCase();
 				if (neq(str(p.path("ability")), ab)) {
-					rep("gear", ename + ": tool ability seed " + repr(p.path("ability")) + " vs SRD " + toolRows.get(hit.key())[3]);
+					rep("gear", ename + ": tool ability seed " + repr(p.path("ability")) + " vs SRD "
+							+ toolRows.get(hit.key())[3]);
 				}
 			}
 			if ("PACK".equals(type)) {
@@ -559,11 +574,13 @@ final class VerifySrd {
 					}
 					List<String> seedItems = new ArrayList<>();
 					for (JsonNode c : p.path("contents")) {
-						seedItems.add(canonPackItem(c.get("quantity").asInt(), norm(itemNameById.get(c.get("item").asText()))));
+						seedItems.add(canonPackItem(c.get("quantity").asInt(),
+								norm(itemNameById.get(c.get("item").asText()))));
 					}
 					List<String> a = sortedPairs(seedItems), b = sortedPairs(srdItems);
 					if (!a.equals(b)) {
-						rep("gear", ename + ": contents seed [" + String.join(", ", a) + "] vs SRD [" + String.join(", ", b) + "]");
+						rep("gear", ename + ": contents seed [" + String.join(", ", a) + "] vs SRD ["
+								+ String.join(", ", b) + "]");
 					}
 				}
 			}
@@ -582,7 +599,10 @@ final class VerifySrd {
 		}
 	}
 
-	/** {@code (quantity, canonical-name)} rendered as a Python tuple so the list sorts like the original. */
+	/**
+	 * {@code (quantity, canonical-name)} rendered as a Python tuple so the list sorts like the
+	 * original.
+	 */
 	private static String canonPackItem(int q, String nm) {
 		nm = nm.replace("lantern hooded", "hooded lantern").replace("lantern bullseye", "bullseye lantern")
 				.replace("clothes fine", "fine clothes").replace("case map or scroll", "map or scroll case");
@@ -656,7 +676,8 @@ final class VerifySrd {
 			String sv = srdCr.get(cr);
 			if (sv == null) {
 				List<String> keys = sorted(srdCr.keySet());
-				rep("xp-by-cr", "CR " + cr + " not found in SRD table (parsed " + repr(keys.subList(0, Math.min(5, keys.size()))) + "...)");
+				rep("xp-by-cr", "CR " + cr + " not found in SRD table (parsed "
+						+ repr(keys.subList(0, Math.min(5, keys.size()))) + "...)");
 				continue;
 			}
 			String[] alt = sv.split(" or ");
@@ -671,15 +692,16 @@ final class VerifySrd {
 			}
 			double crv = cr.contains("/") ? Double.parseDouble(cr.split("/")[0]) / Double.parseDouble(cr.split("/")[1])
 					: Integer.parseInt(cr);
-			int expPb = crv <= 4 ? 2 : crv <= 8 ? 3 : crv <= 12 ? 4 : crv <= 16 ? 5 : crv <= 20 ? 6 : crv <= 24 ? 7
-					: crv <= 28 ? 8 : 9;
+			int expPb = crv <= 4 ? 2
+					: crv <= 8 ? 3 : crv <= 12 ? 4 : crv <= 16 ? 5 : crv <= 20 ? 6 : crv <= 24 ? 7 : crv <= 28 ? 8 : 9;
 			if (neq(integer(row.path("proficiency_bonus")), expPb)) {
 				rep("xp-by-cr", "CR " + cr + ": PB seed " + repr(row.path("proficiency_bonus")) + " vs SRD " + expPb);
 			}
 		}
 		JsonNode gen = entryEndingWith(advancement, "ability-generation").get("payload");
 		int pcStart = lines.indexOf("Ability Score Point Costs");
-		String pcText = slice(lines, pcStart, pcStart + 14).stream().map(String::strip).collect(Collectors.joining(" "));
+		String pcText = slice(lines, pcStart, pcStart + 14).stream().map(String::strip)
+				.collect(Collectors.joining(" "));
 		Map<String, String> srdCosts = new HashMap<>();
 		Matcher m = re("(?:^|\\s)(\\d{1,2}) (\\d)(?=\\s|$)").matcher(pcText);
 		while (m.find()) {
@@ -689,29 +711,34 @@ final class VerifySrd {
 		for (var it = cost.fields(); it.hasNext();) {
 			var f = it.next();
 			if (neq(srdCosts.get(f.getKey()), f.getValue().asText())) {
-				rep("advancement", "point cost " + f.getKey() + ": seed " + f.getValue() + " vs SRD " + srdCosts.get(f.getKey()));
+				rep("advancement",
+						"point cost " + f.getKey() + ": seed " + f.getValue() + " vs SRD " + srdCosts.get(f.getKey()));
 			}
 		}
-		String around = dehyph(slice(lines, pcStart - 40, pcStart + 10).stream().map(String::strip).collect(Collectors.joining(" ")));
-		Matcher sa = search(re("Standard Array\\. Use the following six scores for your ability scores: ([\\d, ]+)\\."), around);
+		String around = dehyph(
+				slice(lines, pcStart - 40, pcStart + 10).stream().map(String::strip).collect(Collectors.joining(" ")));
+		Matcher sa = search(re("Standard Array\\. Use the following six scores for your ability scores: ([\\d, ]+)\\."),
+				around);
 		if (sa != null) {
 			List<Integer> srdArray = Arrays.stream(sa.group(1).split(", ")).map(Integer::parseInt).toList();
 			if (!srdArray.equals(Py.ints(gen.path("standard_array")))) {
-				rep("advancement", "standard array seed " + repr(gen.path("standard_array")) + " vs SRD " + sa.group(1));
+				rep("advancement",
+						"standard array seed " + repr(gen.path("standard_array")) + " vs SRD " + sa.group(1));
 			}
 		}
 	}
 
 	// ── 5. Classes ───────────────────────────────────────────────────────
 
-	private static final Map<String, String> SKILL_ALIAS = Map.of("sleight of hand", "sleight-of-hand", "animal handling", "animal-handling");
-	private static final int[][] FULL = {{2}, {3}, {4, 2}, {4, 3}, {4, 3, 2}, {4, 3, 3}, {4, 3, 3, 1}, {4, 3, 3, 2}, {4, 3, 3, 3, 1},
-			{4, 3, 3, 3, 2}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1, 1}, {4, 3, 3, 3, 2, 1, 1},
-			{4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1, 1}, {4, 3, 3, 3, 3, 1, 1, 1, 1},
-			{4, 3, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 3, 2, 2, 1, 1}};
-	private static final int[][] HALF = {{2}, {2}, {3}, {3}, {4, 2}, {4, 2}, {4, 3}, {4, 3}, {4, 3, 2}, {4, 3, 2}, {4, 3, 3},
-			{4, 3, 3}, {4, 3, 3, 1}, {4, 3, 3, 1}, {4, 3, 3, 2}, {4, 3, 3, 2}, {4, 3, 3, 3, 1}, {4, 3, 3, 3, 1}, {4, 3, 3, 3, 2},
-			{4, 3, 3, 3, 2}};
+	private static final Map<String, String> SKILL_ALIAS = Map.of("sleight of hand", "sleight-of-hand",
+			"animal handling", "animal-handling");
+	private static final int[][] FULL = {{2}, {3}, {4, 2}, {4, 3}, {4, 3, 2}, {4, 3, 3}, {4, 3, 3, 1}, {4, 3, 3, 2},
+			{4, 3, 3, 3, 1}, {4, 3, 3, 3, 2}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1}, {4, 3, 3, 3, 2, 1, 1},
+			{4, 3, 3, 3, 2, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 2, 1, 1, 1, 1},
+			{4, 3, 3, 3, 3, 1, 1, 1, 1}, {4, 3, 3, 3, 3, 2, 1, 1, 1}, {4, 3, 3, 3, 3, 2, 2, 1, 1}};
+	private static final int[][] HALF = {{2}, {2}, {3}, {3}, {4, 2}, {4, 2}, {4, 3}, {4, 3}, {4, 3, 2}, {4, 3, 2},
+			{4, 3, 3}, {4, 3, 3}, {4, 3, 3, 1}, {4, 3, 3, 1}, {4, 3, 3, 2}, {4, 3, 3, 2}, {4, 3, 3, 3, 1},
+			{4, 3, 3, 3, 1}, {4, 3, 3, 3, 2}, {4, 3, 3, 3, 2}};
 
 	private String classBlock(String name) {
 		int start = lines.indexOf("Core " + name + " Traits");
@@ -781,9 +808,11 @@ final class VerifySrd {
 			}
 			m = search(re("Saving Throw Proficiencies (\\w+) and (\\w+)"), block);
 			if (m != null) {
-				List<String> srdSaves = sorted(List.of(Py.head(m.group(1), 3).toUpperCase(), Py.head(m.group(2), 3).toUpperCase()));
+				List<String> srdSaves = sorted(
+						List.of(Py.head(m.group(1), 3).toUpperCase(), Py.head(m.group(2), 3).toUpperCase()));
 				if (!sorted(Py.strings(p.path("saving_throws"))).equals(srdSaves)) {
-					rep("classes", name + ": saves seed " + repr(p.path("saving_throws")) + " vs SRD " + repr(srdSaves));
+					rep("classes",
+							name + ": saves seed " + repr(p.path("saving_throws")) + " vs SRD " + repr(srdSaves));
 				}
 			}
 			m = search(re("Skill Proficiencies Choose (\\d+): (.*?)(?: Weapon Proficiencies)"), block);
@@ -807,10 +836,12 @@ final class VerifySrd {
 				Integer seedCount = integer(p.path("skill_choices").path("count"));
 				if (raw.toLowerCase().contains("any")) {
 					if (seedOpts.size() != 18 || neq(cnt, seedCount)) {
-						rep("classes", name + ": skills should be any " + cnt + " (seed " + seedCount + " of " + seedOpts.size() + ")");
+						rep("classes", name + ": skills should be any " + cnt + " (seed " + seedCount + " of "
+								+ seedOpts.size() + ")");
 					}
 				} else if (!opts.equals(seedOpts) || neq(cnt, seedCount)) {
-					rep("classes", name + ": skills seed " + seedCount + " of " + repr(seedOpts) + " vs SRD " + cnt + " of " + repr(opts));
+					rep("classes", name + ": skills seed " + seedCount + " of " + repr(seedOpts) + " vs SRD " + cnt
+							+ " of " + repr(opts));
 				}
 			}
 			m = search(re("Starting Equipment (.*)$"), block);
@@ -867,7 +898,8 @@ final class VerifySrd {
 						int expSlots = lvl >= 17 ? 4 : lvl >= 11 ? 3 : lvl >= 2 ? 2 : 1;
 						int expLvl = lvl >= 9 ? 5 : lvl >= 7 ? 4 : lvl >= 5 ? 3 : lvl >= 3 ? 2 : 1;
 						if (slots != expSlots || slotLvl != expLvl) {
-							rep("classes", name + " L" + lvl + ": pact slots SRD " + slots + "@" + slotLvl + " vs engine " + expSlots + "@" + expLvl);
+							rep("classes", name + " L" + lvl + ": pact slots SRD " + slots + "@" + slotLvl
+									+ " vs engine " + expSlots + "@" + expLvl);
 						}
 					} else if ("HALF".equals(progression)) {
 						cant = 0;
@@ -875,7 +907,8 @@ final class VerifySrd {
 						List<Integer> slots = nums.subList(n - 5, n);
 						List<Integer> exp = padded(HALF[lvl - 1], 5);
 						if (!slots.equals(exp)) {
-							rep("classes", name + " L" + lvl + ": slots SRD " + repr(slots) + " vs engine " + repr(exp));
+							rep("classes",
+									name + " L" + lvl + ": slots SRD " + repr(slots) + " vs engine " + repr(exp));
 						}
 					} else {
 						cant = nums.get(n - 11);
@@ -883,14 +916,17 @@ final class VerifySrd {
 						List<Integer> slots = nums.subList(n - 9, n);
 						List<Integer> exp = padded(FULL[lvl - 1], 9);
 						if (!slots.equals(exp)) {
-							rep("classes", name + " L" + lvl + ": slots SRD " + repr(slots) + " vs engine " + repr(exp));
+							rep("classes",
+									name + " L" + lvl + ": slots SRD " + repr(slots) + " vs engine " + repr(exp));
 						}
 					}
 					if (neq(integer(sc.path("cantrips_known").path(lvl - 1)), cant)) {
-						rep("classes", name + " L" + lvl + ": cantrips seed " + repr(sc.path("cantrips_known").path(lvl - 1)) + " vs SRD " + cant);
+						rep("classes", name + " L" + lvl + ": cantrips seed "
+								+ repr(sc.path("cantrips_known").path(lvl - 1)) + " vs SRD " + cant);
 					}
 					if (neq(integer(sc.path("prepared").path(lvl - 1)), prep)) {
-						rep("classes", name + " L" + lvl + ": prepared seed " + repr(sc.path("prepared").path(lvl - 1)) + " vs SRD " + prep);
+						rep("classes", name + " L" + lvl + ": prepared seed " + repr(sc.path("prepared").path(lvl - 1))
+								+ " vs SRD " + prep);
 					}
 				}
 			}
@@ -944,8 +980,10 @@ final class VerifySrd {
 			if (mt != null && neq(str(p.path("creature_type")), mt.group(1))) {
 				rep("species", name + ": type seed " + repr(p.path("creature_type")) + " vs SRD " + mt.group(1));
 			}
-			String traitText = slice(lines, idx + 5, idx + 45).stream().map(String::strip).collect(Collectors.joining(" "));
-			List<String> traits = findAll(traitPattern, traitText).stream().filter(t -> t.length() < 30).limit(8).toList();
+			String traitText = slice(lines, idx + 5, idx + 45).stream().map(String::strip)
+					.collect(Collectors.joining(" "));
+			List<String> traits = findAll(traitPattern, traitText).stream().filter(t -> t.length() < 30).limit(8)
+					.toList();
 			List<String> keys = new ArrayList<>();
 			p.fieldNames().forEachRemaining(keys::add);
 			Collections.sort(keys);
@@ -958,8 +996,9 @@ final class VerifySrd {
 	private static final Pattern SIZES = re("^(Tiny|Small|Medium|Large|Huge|Gargantuan)");
 	// Group 10 (the damage dice) is absent for flat damage ("Hit: 1 Piercing damage"); the seed then records the flat number.
 	private static final String ATTACK = "(?: \\([^)]*\\))?\\. (Melee|Ranged|Melee or Ranged) Attack Roll: \\+(\\d+)(?: to hit)?(?: \\([^)]*\\))?, (?:reach (\\d+) (?:ft|feet)|range (\\d+)(?:/(\\d+))? (?:ft|feet)|reach (\\d+) (?:ft|feet)\\.? or range (\\d+)(?:/(\\d+))? (?:ft|feet))\\.? Hit: (?:(\\d+)(?: \\(([^)]+)\\))? (\\w+) damage)?";
-	private static final Set<String> CONDS = Set.of("blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled",
-			"incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious");
+	private static final Set<String> CONDS = Set.of("blinded", "charmed", "deafened", "exhaustion", "frightened",
+			"grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained",
+			"stunned", "unconscious");
 
 	private List<String> statBlock(String name) {
 		for (int i = 0; i + 1 < lines.size(); i++) {
@@ -967,8 +1006,9 @@ final class VerifySrd {
 				int end = Math.min(i + 60, lines.size());
 				for (int j = i + 2; j < Math.min(i + 90, lines.size()); j++) {
 					String prev = lines.get(j - 1).strip();
-					if (match(SIZES, lines.get(j).strip()) != null && !lines.get(j - 1).startsWith("===") && !prev.isEmpty()
-							&& Character.isUpperCase(prev.charAt(0)) && prev.split("\\s+").length <= 4) {
+					if (match(SIZES, lines.get(j).strip()) != null && !lines.get(j - 1).startsWith("===")
+							&& !prev.isEmpty() && Character.isUpperCase(prev.charAt(0))
+							&& prev.split("\\s+").length <= 4) {
 						end = j;
 						break;
 					}
@@ -996,8 +1036,8 @@ final class VerifySrd {
 			}
 			m = search(re("HP (\\d+) \\(([^)]+)\\)"), text);
 			JsonNode hp = p.path("hp");
-			if (m != null && (neq(integer(hp.path("average")), Integer.parseInt(m.group(1)))
-					|| neq(Objects.toString(str(hp.path("dice")), "").replace(" ", ""), BuildCreatures.dice(m.group(2))))) {
+			if (m != null && (neq(integer(hp.path("average")), Integer.parseInt(m.group(1))) || neq(
+					Objects.toString(str(hp.path("dice")), "").replace(" ", ""), BuildCreatures.dice(m.group(2))))) {
 				rep("creatures", name + ": HP seed " + repr(hp) + " vs SRD " + m.group(1) + " (" + m.group(2) + ")");
 			}
 			m = search(re("Speed (.*?)(?= MOD)"), text);
@@ -1006,11 +1046,13 @@ final class VerifySrd {
 				for (String part : m.group(1).split(",")) {
 					Matcher mm = match(re("\\s*(?:(\\w+) )?(\\d+) ft"), part);
 					if (mm != null) {
-						srdSpeed.put((mm.group(1) != null ? mm.group(1) : "walk").toLowerCase(), Integer.parseInt(mm.group(2)));
+						srdSpeed.put((mm.group(1) != null ? mm.group(1) : "walk").toLowerCase(),
+								Integer.parseInt(mm.group(2)));
 					}
 				}
 				Map<String, Integer> seedSpeed = new LinkedHashMap<>();
-				p.path("speed").fields().forEachRemaining(f -> seedSpeed.put(f.getKey().toLowerCase(), integer(f.getValue())));
+				p.path("speed").fields()
+						.forEachRemaining(f -> seedSpeed.put(f.getKey().toLowerCase(), integer(f.getValue())));
 				if (!srdSpeed.equals(seedSpeed)) {
 					rep("creatures", name + ": speed seed " + repr(p.path("speed")) + " vs SRD " + repr(srdSpeed));
 				}
@@ -1021,25 +1063,30 @@ final class VerifySrd {
 				int score = Integer.parseInt(ab.group(2));
 				int save = Integer.parseInt(ab.group(4));
 				if (neq(integer(p.path("abilities").path(a)), score)) {
-					rep("creatures", name + ": " + a + " seed " + repr(p.path("abilities").path(a)) + " vs SRD " + score);
+					rep("creatures",
+							name + ": " + a + " seed " + repr(p.path("abilities").path(a)) + " vs SRD " + score);
 				}
 				JsonNode saves = p.path("saves");
 				Integer seedSave = saves.has(a) ? integer(saves.get(a)) : Integer.valueOf(Math.floorDiv(score - 10, 2));
 				if (neq(seedSave, save)) {
-					rep("creatures", name + ": " + a + " save seed " + seedSave + " vs SRD " + save + " (add to saves)");
+					rep("creatures",
+							name + ": " + a + " save seed " + seedSave + " vs SRD " + save + " (add to saves)");
 				}
 			}
 			// Four blocks (three metallic wyrmlings, Young White Dragon) print "700 XP" instead of "XP 700".
-			m = search(re("CR ([\\d/]+) \\((?:XP ([\\d,]+)|([\\d,]+) XP)(?:,? or [\\d ,]+ in lair)?; PB \\+(\\d)\\)"), text);
+			m = search(re("CR ([\\d/]+) \\((?:XP ([\\d,]+)|([\\d,]+) XP)(?:,? or [\\d ,]+ in lair)?; PB \\+(\\d)\\)"),
+					text);
 			if (m == null) {
 				rep("creatures", name + ": CR line unparsed");
 			} else if (neq(str(p.path("cr")), m.group(1))
-					|| neq(integer(p.path("xp_value")), Integer.parseInt((m.group(2) != null ? m.group(2) : m.group(3)).replace(",", "")))
+					|| neq(integer(p.path("xp_value")),
+							Integer.parseInt((m.group(2) != null ? m.group(2) : m.group(3)).replace(",", "")))
 					|| neq(integer(p.path("proficiency_bonus")), Integer.parseInt(m.group(4)))) {
 				rep("creatures", name + ": CR/XP/PB seed " + str(p.path("cr")) + "/" + str(p.path("xp_value")) + "/"
 						+ str(p.path("proficiency_bonus")) + " vs SRD " + tuple(groups(m)));
 			}
-			m = search(re("Skills (.*?)(?= Senses| Resistances| Immunities| Vulnerabilities| Gear| Languages| CR)"), text);
+			m = search(re("Skills (.*?)(?= Senses| Resistances| Immunities| Vulnerabilities| Gear| Languages| CR)"),
+					text);
 			Map<String, Integer> srdSkills = new LinkedHashMap<>();
 			if (m != null) {
 				Matcher sk = re("(\\w+) \\+(\\d+)").matcher(m.group(1));
@@ -1052,10 +1099,12 @@ final class VerifySrd {
 			if (!srdSkills.equals(seedSkills)) {
 				rep("creatures", name + ": skills seed " + repr(p.path("skills")) + " vs SRD " + repr(srdSkills));
 			}
-			for (String[] kl : new String[][] {{"Resistances", "damage_resistances"}, {"Immunities", "damage_immunities"},
-					{"Vulnerabilities", "damage_vulnerabilities"}}) {
+			for (String[] kl : new String[][] {{"Resistances", "damage_resistances"},
+					{"Immunities", "damage_immunities"}, {"Vulnerabilities", "damage_vulnerabilities"}}) {
 				String key = kl[0], label = kl[1];
-				Matcher mm = search(re(key + " (.*?)(?= Senses| Gear| Languages| CR| Resistances| Immunities| Vulnerabilities)"), text);
+				Matcher mm = search(
+						re(key + " (.*?)(?= Senses| Gear| Languages| CR| Resistances| Immunities| Vulnerabilities)"),
+						text);
 				List<String> srdAll = new ArrayList<>();
 				if (mm != null) {
 					for (String x : mm.group(1).split("[,;]")) {
@@ -1067,13 +1116,15 @@ final class VerifySrd {
 				List<String> srdV = sorted(srdAll.stream().filter(x -> !isCond.test(x)).toList());
 				List<String> srdC = sorted(srdAll.stream().filter(isCond).toList());
 				// The seed keeps unclassified tokens (not a damage type, not a condition) in <label>_notes.
-				List<String> seedV = sorted(java.util.stream.Stream.concat(Py.strings(p.path(label)).stream(),
-						Py.strings(p.path(label + "_notes")).stream()).map(String::toLowerCase).toList());
+				List<String> seedV = sorted(java.util.stream.Stream
+						.concat(Py.strings(p.path(label)).stream(), Py.strings(p.path(label + "_notes")).stream())
+						.map(String::toLowerCase).toList());
 				if (!srdV.equals(seedV)) {
 					rep("creatures", name + ": " + label + " seed " + repr(seedV) + " vs SRD " + repr(srdV));
 				}
 				if (key.equals("Immunities")) {
-					List<String> seedC = sorted(Py.strings(p.path("condition_immunities")).stream().map(String::toLowerCase).toList());
+					List<String> seedC = sorted(
+							Py.strings(p.path("condition_immunities")).stream().map(String::toLowerCase).toList());
 					if (!srdC.equals(seedC)) {
 						rep("creatures", name + ": condition_immunities seed " + repr(seedC) + " vs SRD " + repr(srdC));
 					}
@@ -1096,8 +1147,10 @@ final class VerifySrd {
 				}
 				for (String sense : List.of("Darkvision", "Blindsight", "Tremorsense", "Truesight")) {
 					Matcher ms = search(re(sense + " (\\d+) ft"), m.group(1));
-					if (ms != null && senses.stream().noneMatch(s -> s.toLowerCase().contains(sense.toLowerCase()) && s.contains(ms.group(1)))) {
-						rep("creatures", name + ": sense '" + ms.group() + "' missing in seed " + repr(p.path("senses")));
+					if (ms != null && senses.stream()
+							.noneMatch(s -> s.toLowerCase().contains(sense.toLowerCase()) && s.contains(ms.group(1)))) {
+						rep("creatures",
+								name + ": sense '" + ms.group() + "' missing in seed " + repr(p.path("senses")));
 					}
 				}
 			}
@@ -1116,11 +1169,14 @@ final class VerifySrd {
 				String dice = ma.group(10) != null ? BuildCreatures.dice(ma.group(10)) : ma.group(9);
 				String dtype = ma.group(11) != null ? ma.group(11).toLowerCase() : null;
 				if (neq(integer(a.path("attack_bonus")), bonus)) {
-					rep("creatures", name + " " + aname + ": attack bonus seed " + repr(a.path("attack_bonus")) + " vs SRD +" + bonus);
+					rep("creatures", name + " " + aname + ": attack bonus seed " + repr(a.path("attack_bonus"))
+							+ " vs SRD +" + bonus);
 				}
 				JsonNode sd = a.path("damage").path(0);
-				if (dtype != null && (!Objects.toString(str(sd.path("dice")), "").replace(" ", "").equals(dice) || neq(str(sd.path("type")), dtype))) {
-					rep("creatures", name + " " + aname + ": damage seed " + repr(sd) + " vs SRD " + dice + " " + dtype);
+				if (dtype != null && (!Objects.toString(str(sd.path("dice")), "").replace(" ", "").equals(dice)
+						|| neq(str(sd.path("type")), dtype))) {
+					rep("creatures",
+							name + " " + aname + ": damage seed " + repr(sd) + " vs SRD " + dice + " " + dtype);
 				}
 				String reach = ma.group(3) != null ? ma.group(3) : ma.group(6);
 				String rn = ma.group(4) != null ? ma.group(4) : ma.group(7);
@@ -1129,19 +1185,23 @@ final class VerifySrd {
 					rep("creatures", name + " " + aname + ": reach seed " + repr(a.path("reach")) + " vs SRD " + reach);
 				}
 				if (rn != null && neq(integer(a.path("range").path("normal")), Integer.parseInt(rn))) {
-					rep("creatures", name + " " + aname + ": range seed " + repr(a.path("range")) + " vs SRD " + rn + "/" + rl);
+					rep("creatures",
+							name + " " + aname + ": range seed " + repr(a.path("range")) + " vs SRD " + rn + "/" + rl);
 				}
-				Matcher extra = search(re(Pattern.quote(aname) + ATTACK + "(?: plus (\\d+) \\(([^)]+)\\) (\\w+) damage)?"), text);
+				Matcher extra = search(
+						re(Pattern.quote(aname) + ATTACK + "(?: plus (\\d+) \\(([^)]+)\\) (\\w+) damage)?"), text);
 				if (extra != null && extra.group(12) != null) {
 					JsonNode dmg = a.path("damage");
-					if (dmg.size() < 2 || !Objects.toString(str(dmg.get(1).path("dice")), "").replace(" ", "").equals(extra.group(13).replace(" ", ""))) {
-						rep("creatures", name + " " + aname + ": SRD adds 'plus " + extra.group(12) + " (" + extra.group(13) + ") "
-								+ extra.group(14) + "' — seed damage " + repr(dmg));
+					if (dmg.size() < 2 || !Objects.toString(str(dmg.get(1).path("dice")), "").replace(" ", "")
+							.equals(extra.group(13).replace(" ", ""))) {
+						rep("creatures", name + " " + aname + ": SRD adds 'plus " + extra.group(12) + " ("
+								+ extra.group(13) + ") " + extra.group(14) + "' — seed damage " + repr(dmg));
 					}
 				}
 			}
-			List<String> srdActions = findAll(re("(?:^|\\s)((?:Actions )?[A-Z][\\w' ]+?)(?: \\([^)]*\\))?\\. (?:Melee|Ranged|Melee or Ranged) Attack Roll"), text)
-					.stream().map(n -> n.replace("Actions ", "").strip()).toList();
+			List<String> srdActions = findAll(re(
+					"(?:^|\\s)((?:Actions )?[A-Z][\\w' ]+?)(?: \\([^)]*\\))?\\. (?:Melee|Ranged|Melee or Ranged) Attack Roll"),
+					text).stream().map(n -> n.replace("Actions ", "").strip()).toList();
 			List<String> seedNames = new ArrayList<>();
 			for (JsonNode a : p.path("actions")) {
 				if (Objects.toString(str(a.path("kind")), "").endsWith("ATTACK")) {
@@ -1157,7 +1217,8 @@ final class VerifySrd {
 			if (mm != null && !truthy(p.path("multiattack"))) {
 				rep("creatures", name + ": SRD has Multiattack '" + mm.group(1) + "', seed has none");
 			} else if (mm != null) {
-				rep("creatures-info", name + ": Multiattack SRD '" + mm.group(1) + "' | seed " + repr(p.path("multiattack")));
+				rep("creatures-info",
+						name + ": Multiattack SRD '" + mm.group(1) + "' | seed " + repr(p.path("multiattack")));
 			}
 			if (text.contains("Traits")) {
 				String tsec = text.split("Actions")[0];
@@ -1175,7 +1236,8 @@ final class VerifySrd {
 
 	// ── 8. Spells ────────────────────────────────────────────────────────
 
-	private static final List<String> CLASSES = List.of("bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard");
+	private static final List<String> CLASSES = List.of("bard", "cleric", "druid", "paladin", "ranger", "sorcerer",
+			"warlock", "wizard");
 	private static final Pattern HEAD = re("^(?:Level (\\d+) (\\w+)|(\\w+) Cantrip) \\((.*)\\)$");
 	private static final Pattern HEAD_LOWER = re("^(level \\d+ \\w+|\\w+ cantrip) \\(");
 
@@ -1259,7 +1321,8 @@ final class VerifySrd {
 			String castingTime = Objects.toString(str(p.path("casting_time")), "");
 			if (ct != null) {
 				boolean ritual = ct.contains("Ritual");
-				String ctMain = ct.split(",")[0].replaceAll("\\([^)]*\\)", "").replace("or Ritual", "").strip().replaceAll("\\s+", " ");
+				String ctMain = ct.split(",")[0].replaceAll("\\([^)]*\\)", "").replace("or Ritual", "").strip()
+						.replaceAll("\\s+", " ");
 				if (!norm(ctMain).replace("1 ", "").equals(norm(castingTime).replace("1 ", ""))) {
 					rep("spells", name + ": casting time seed '" + castingTime + "' vs SRD '" + ct + "'");
 				}
@@ -1284,7 +1347,8 @@ final class VerifySrd {
 			if (dur != null) {
 				boolean conc = dur.startsWith("Concentration");
 				if (truthy(p.path("concentration")) != conc) {
-					rep("spells", name + ": concentration seed " + repr(p.path("concentration")) + " vs SRD '" + dur + "'");
+					rep("spells",
+							name + ": concentration seed " + repr(p.path("concentration")) + " vs SRD '" + dur + "'");
 				}
 				String d = dur.replace("Concentration, ", "").replace("up to ", "");
 				if (!norm(d).equals(norm(Objects.toString(str(p.path("duration")), "").replace("up to ", "")))) {
@@ -1301,30 +1365,38 @@ final class VerifySrd {
 			}
 			Set<String> missing = minus(mechDice, textDice);
 			if (!missing.isEmpty()) {
-				rep("spells-dice", name + ": mechanics dice " + repr(sorted(missing)) + " not in SRD text (text dice " + repr(sorted(textDice)) + ")");
+				rep("spells-dice", name + ": mechanics dice " + repr(sorted(missing)) + " not in SRD text (text dice "
+						+ repr(sorted(textDice)) + ")");
 			}
 			String kind = str(mk.path("kind"));
-			Matcher sv = search(re("(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw"), text);
+			Matcher sv = search(re("(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw"),
+					text);
 			if ("SAVE".equals(kind) && sv != null && neq(str(mk.path("save")), Py.head(sv.group(1), 3).toUpperCase())) {
 				rep("spells", name + ": save seed " + repr(mk.path("save")) + " vs SRD " + sv.group(1));
 			}
-			if (!"SAVE".equals(kind) && sv != null && kind != null && List.of("ATTACK", "AUTO", "HEAL").contains(kind)) {
-				rep("spells-info", name + ": mechanics " + kind + " but SRD mentions a " + sv.group(1) + " saving throw");
+			if (!"SAVE".equals(kind) && sv != null && kind != null
+					&& List.of("ATTACK", "AUTO", "HEAL").contains(kind)) {
+				rep("spells-info",
+						name + ": mechanics " + kind + " but SRD mentions a " + sv.group(1) + " saving throw");
 			}
 			String onSuccess = mk.has("on_success") ? str(mk.get("on_success")) : "HALF";
 			if ("SAVE".equals(kind) && lowerText.contains("half as much damage") && !"HALF".equals(onSuccess)) {
-				rep("spells", name + ": SRD says half damage on success; seed on_success " + repr(mk.path("on_success")));
+				rep("spells",
+						name + ": SRD says half damage on success; seed on_success " + repr(mk.path("on_success")));
 			}
-			if ("SAVE".equals(kind) && !lowerText.contains("half as much damage") && truthy(mk.path("damage")) && "HALF".equals(onSuccess)) {
+			if ("SAVE".equals(kind) && !lowerText.contains("half as much damage") && truthy(mk.path("damage"))
+					&& "HALF".equals(onSuccess)) {
 				rep("spells", name + ": SRD does not say half damage; seed on_success HALF");
 			}
 			if ("ATTACK".equals(kind) && !lowerText.contains("spell attack") && !lowerText.contains("attack roll")) {
 				rep("spells", name + ": mechanics ATTACK but SRD text has no attack roll");
 			}
-			if (lowerText.contains("ranged spell attack") && neq(str(mk.path("attack")), "RANGED_SPELL") && "ATTACK".equals(kind)) {
+			if (lowerText.contains("ranged spell attack") && neq(str(mk.path("attack")), "RANGED_SPELL")
+					&& "ATTACK".equals(kind)) {
 				rep("spells", name + ": SRD ranged spell attack; seed " + repr(mk.path("attack")));
 			}
-			if (lowerText.contains("melee spell attack") && neq(str(mk.path("attack")), "MELEE_SPELL") && "ATTACK".equals(kind)) {
+			if (lowerText.contains("melee spell attack") && neq(str(mk.path("attack")), "MELEE_SPELL")
+					&& "ATTACK".equals(kind)) {
 				rep("spells", name + ": SRD melee spell attack; seed " + repr(mk.path("attack")));
 			}
 			Matcher up = search(re("Using a Higher-Level Spell Slot\\. (.*?)(?:\\.|$)"), text);
@@ -1336,13 +1408,16 @@ final class VerifySrd {
 					rep("spells", name + ": upcast per-level dice seed " + repr(seedUp) + " vs SRD " + um.group(1));
 				}
 				if (um == null && seedUp != null && !seedUp.isEmpty() && up.group(1).contains("increases by")) {
-					rep("spells", name + ": seed upcast " + repr(mk.path("upcast")) + " but SRD says '" + up.group(1) + "'");
+					rep("spells",
+							name + ": seed upcast " + repr(mk.path("upcast")) + " but SRD says '" + up.group(1) + "'");
 				}
 			}
 			Matcher cs = search(re("Cantrip Upgrade\\. (.*?)(?:\\.|$)"), text);
 			if (cs != null) {
-				rep("spells-upcast", name + ": SRD cantrip '" + cs.group(1) + "' | seed scaling " + repr(mk.path("cantrip_scaling")));
-				Matcher cm = search(re("levels 5 \\((\\d+d\\d+)\\), 11 \\((\\d+d\\d+)\\), and 17 \\((\\d+d\\d+)\\)"), cs.group(1));
+				rep("spells-upcast", name + ": SRD cantrip '" + cs.group(1) + "' | seed scaling "
+						+ repr(mk.path("cantrip_scaling")));
+				Matcher cm = search(re("levels 5 \\((\\d+d\\d+)\\), 11 \\((\\d+d\\d+)\\), and 17 \\((\\d+d\\d+)\\)"),
+						cs.group(1));
 				JsonNode scaling = mk.path("cantrip_scaling");
 				if (cm != null && (scaling.size() != 3 || neq(str(scaling.path("5")), cm.group(1))
 						|| neq(str(scaling.path("11")), cm.group(2)) || neq(str(scaling.path("17")), cm.group(3)))) {
@@ -1359,7 +1434,8 @@ final class VerifySrd {
 			allSeed.add(e.get("name").asText());
 		}
 		Pattern listEnd = re("^(Level \\d+ \\w+ Spells|\\w+ Cantrips)");
-		Pattern listRow = re("^(.+?) (Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) (—|[CMR, ]+)$");
+		Pattern listRow = re(
+				"^(.+?) (Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) (—|[CMR, ]+)$");
 		for (String c : CLASSES) {
 			String cap = Character.toUpperCase(c.charAt(0)) + c.substring(1);
 			Pattern listHead = re("^(Level \\d+ " + cap + " Spells|Cantrips \\(Level 0 " + cap + " Spells\\))$");
@@ -1391,14 +1467,18 @@ final class VerifySrd {
 				for (String n : minus(both(listed, allSeed), seedList)) {
 					rep("spell-lists", c + ": SRD lists '" + n + "' but seed does not");
 				}
-				rep("spell-lists-info", c + ": SRD list has " + listed.size() + " spells, seed covers " + both(seedList, listed).size());
+				rep("spell-lists-info", c + ": SRD list has " + listed.size() + " spells, seed covers "
+						+ both(seedList, listed).size());
 			}
 		}
 	}
 
 	// ── character origins: species traits, backgrounds, feats ───────────
 
-	/** Text of each subsection: heading line until the next name in {@code names} (page markers skipped). */
+	/**
+	 * Text of each subsection: heading line until the next name in {@code names} (page markers
+	 * skipped).
+	 */
 	private Map<String, String> sectionBlock(int heading, List<String> names) {
 		Map<String, Integer> idx = new LinkedHashMap<>();
 		Set<String> wanted = new HashSet<>(names);
@@ -1447,7 +1527,8 @@ final class VerifySrd {
 			JsonNode traits = e.get("payload").path("traits");
 			for (JsonNode t : traits) {
 				if (!blk.contains(norm(t.get("name").asText()))) {
-					rep("species-traits", name + ": trait '" + t.get("name").asText() + "' not found in the SRD species block");
+					rep("species-traits",
+							name + ": trait '" + t.get("name").asText() + "' not found in the SRD species block");
 				}
 				JsonNode dv = t.path("darkvision_ft");
 				if (dv.isInt() && !blk.contains(norm("darkvision with a range of " + dv.asInt() + " feet"))) {
@@ -1468,8 +1549,8 @@ final class VerifySrd {
 		for (JsonNode s : load("skills.json").get("entries")) {
 			skillById.put(s.get("id").asText(), s.get("name").asText());
 		}
-		Map<String, String> abilityNames = Map.of("STR", "strength", "DEX", "dexterity", "CON", "constitution",
-				"INT", "intelligence", "WIS", "wisdom", "CHA", "charisma");
+		Map<String, String> abilityNames = Map.of("STR", "strength", "DEX", "dexterity", "CON", "constitution", "INT",
+				"intelligence", "WIS", "wisdom", "CHA", "charisma");
 		for (JsonNode e : backgrounds.get("entries")) {
 			String name = e.get("name").asText();
 			JsonNode p = e.get("payload");
@@ -1499,8 +1580,8 @@ final class VerifySrd {
 		}
 
 		Map<String, String> featBlocks = sectionBlock(lineNoOrZero("Origin Feats"), names(feats));
-		Map<String, String> category = Map.of("ORIGIN", "origin feat", "GENERAL", "general feat",
-				"FIGHTING_STYLE", "fighting style feat", "EPIC_BOON", "epic boon feat");
+		Map<String, String> category = Map.of("ORIGIN", "origin feat", "GENERAL", "general feat", "FIGHTING_STYLE",
+				"fighting style feat", "EPIC_BOON", "epic boon feat");
 		for (JsonNode f : feats.get("entries")) {
 			String name = f.get("name").asText();
 			JsonNode p = f.get("payload");
@@ -1542,13 +1623,15 @@ final class VerifySrd {
 			String probe = Py.head(squash(text), 90);
 			if (!probe.isEmpty() && !flat.contains(probe)) {
 				missing++;
-				rep("rules", e.get("name").asText() + ": opening text not found verbatim in the SRD - " + repr(Py.head(text, 70)));
+				rep("rules", e.get("name").asText() + ": opening text not found verbatim in the SRD - "
+						+ repr(Py.head(text, 70)));
 			}
 			if (truthy(e.path("payload").path("text_is_paraphrase"))) {
 				rep("rules", e.get("name").asText() + ": marked as a paraphrase but rules.json must be verbatim");
 			}
 		}
-		rep("rules-info", "rules.json: " + entries.size() + " entries, " + missing + " whose opening text did not match the SRD verbatim");
+		rep("rules-info", "rules.json: " + entries.size() + " entries, " + missing
+				+ " whose opening text did not match the SRD verbatim");
 		for (Object[] tw : new Object[][] {{"CONDITION", 15}, {"AREA_OF_EFFECT", 5}, {"HAZARD", 5}}) {
 			int got = 0;
 			for (JsonNode e : entries) {

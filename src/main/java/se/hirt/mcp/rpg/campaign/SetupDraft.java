@@ -38,14 +38,18 @@ import se.hirt.mcp.rpg.protocol.Violation;
 import java.util.*;
 
 /**
- * The resumable campaign setup draft (DOMAIN_MODEL.md §4.2). A thin view over the draft payload that knows which
- * decisions are outstanding, derives the harness state from completeness, and validates the whole graph before commit.
+ * The resumable campaign setup draft (DOMAIN_MODEL.md §4.2). A thin view over the draft payload
+ * that knows which decisions are outstanding, derives the harness state from completeness, and
+ * validates the whole graph before commit.
  */
 public final class SetupDraft {
 
 	public static final String SURPRISE_ME = "SURPRISE_ME";
 
-	/** Legal values, in the order they are presented; the enums in {@code se.hirt.mcp.rpg.choice} own them. */
+	/**
+	 * Legal values, in the order they are presented; the enums in {@code se.hirt.mcp.rpg.choice}
+	 * own them.
+	 */
 	public static final List<String> PROFILES = Described.names(ContentProfile.class);
 	public static final List<String> ABILITY_METHODS = Described.names(AbilityGeneration.class);
 	public static final List<String> PROGRESSION = Described.names(Progression.class);
@@ -103,9 +107,10 @@ public final class SetupDraft {
 	}
 
 	/**
-	 * The experience section as the campaign will run it: whatever the player recorded, with the fantasy style
-	 * defaulted to {@link FantasyStyle#EPIC} — a Baldur's Gate-style fantasy epic — when neither a style nor a tone
-	 * was given (DESIGN.md §4.2). A player who described the flavour in their own words is never overridden.
+	 * The experience section as the campaign will run it: whatever the player recorded, with the
+	 * fantasy style defaulted to {@link FantasyStyle#EPIC} — a Baldur's Gate-style fantasy epic —
+	 * when neither a style nor a tone was given (DESIGN.md §4.2). A player who described the
+	 * flavour in their own words is never overridden.
 	 */
 	public Map<String, Object> effectiveExperience() {
 		Map<String, Object> s = section("experience");
@@ -170,7 +175,10 @@ public final class SetupDraft {
 
 	// ── completeness and harness state ─────────────────────────────────
 
-	/** Derives the protocol-visible setup state from what is still outstanding (DOMAIN_MODEL.md §16). */
+	/**
+	 * Derives the protocol-visible setup state from what is still outstanding (DOMAIN_MODEL.md
+	 * §16).
+	 */
 	public HarnessState deriveState(Tx tx, long campaignId) {
 		if (profile() == null) {
 			return HarnessState.SETUP_CONTENT_PROFILE;
@@ -240,8 +248,8 @@ public final class SetupDraft {
 		} else {
 			Row pc = tx.find("character", pcId).orElse(null);
 			if (pc != null && "DRAFT".equals(pc.str("lifecycle"))) {
-				out.add("character " + Ref.of(Ref.CHARACTER,
-						pc.id()) + " — complete and commit_character_draft (" + characterState(tx, pc) + ")");
+				out.add("character " + Ref.of(Ref.CHARACTER, pc.id()) + " — complete and commit_character_draft ("
+						+ characterState(tx, pc) + ")");
 			}
 		}
 		if (section("party") == null) {
@@ -288,8 +296,8 @@ public final class SetupDraft {
 		}
 		for (Row other : tx.query("SELECT id, name FROM character WHERE campaign_id = ? AND lifecycle = 'DRAFT'",
 				campaignId)) {
-			v.add(new Violation("characters", "UNFINISHED_DRAFT", Ref.of(Ref.CHARACTER, other.id()) + " (" + other.str(
-					"name") + ") is still a draft; commit or abandon it."));
+			v.add(new Violation("characters", "UNFINISHED_DRAFT", Ref.of(Ref.CHARACTER, other.id()) + " ("
+					+ other.str("name") + ") is still a draft; commit or abandon it."));
 		}
 		if (section("party") == null) {
 			v.add(new Violation("party", "REQUIRED", "Party preferences must be recorded (delegation is fine)."));
@@ -327,7 +335,8 @@ public final class SetupDraft {
 			if (SURPRISE_ME.equals(e.getValue())) {
 				out.add(path);
 			} else if (e.getValue() instanceof Map<?, ?> m) {
-				@SuppressWarnings("unchecked") Map<String, Object> child = (Map<String, Object>) m;
+				@SuppressWarnings("unchecked")
+				Map<String, Object> child = (Map<String, Object>) m;
 				collectDelegated(path, child, out);
 			}
 		}

@@ -41,8 +41,8 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Level-up transaction invariants (DOMAIN_MODEL.md I-55..I-57): nothing touches the live character until commit; commit
- * is atomic; abandon leaves canonical state unchanged.
+ * Level-up transaction invariants (DOMAIN_MODEL.md I-55..I-57): nothing touches the live character
+ * until commit; commit is atomic; abandon leaves canonical state unchanged.
  */
 class LevelUpTest {
 
@@ -79,8 +79,8 @@ class LevelUpTest {
 					"d6 rolled 5 + CON, fixed at begin");
 
 			// Gameplay is gated while the transaction is open; a second transaction is refused (I-55).
-			RpgException gated = assertThrows(RpgException.class, () -> engine.checks()
-					.resolveCheck(op(), campaign, pc, "ABILITY_CHECK", "STR", null, 10, null, null));
+			RpgException gated = assertThrows(RpgException.class, () -> engine.checks().resolveCheck(op(), campaign, pc,
+					"ABILITY_CHECK", "STR", null, 10, null, null));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, gated.code());
 			assertTrue(((List<?>) gated.details().get("allowed_operations")).contains("commit_level_up"));
 
@@ -92,8 +92,8 @@ class LevelUpTest {
 					map("metamagic", List.of("Empowered Spell", "Quickened Spell")));
 			assertEquals(Boolean.TRUE, engine.levelUps().validate(campaign, tx).get("valid"));
 			// ASI is not offered at level 2.
-			RpgException noAsi = assertThrows(RpgException.class, () -> engine.levelUps()
-					.update(op(), campaign, tx, null, map("ability_score_improvement", map("CHA", 2))));
+			RpgException noAsi = assertThrows(RpgException.class, () -> engine.levelUps().update(op(), campaign, tx,
+					null, map("ability_score_improvement", map("CHA", 2))));
 			assertEquals(ErrorCode.VALIDATION_FAILED, noAsi.code());
 
 			// hp_method is no longer a per-level choice; the campaign policy governs.
@@ -116,9 +116,10 @@ class LevelUpTest {
 			assertEquals(maxHp + Math.max(1, 5 + conMod), m(after.get("hp")).get("current"),
 					"current HP rises with the maximum");
 			assertEquals(Boolean.FALSE, after.get("level_up_eligible"));
-			assertEquals(1, ((List<?>) engine.ledger()
-					.queryTimeline(campaign, null, null, null, List.of("LEVEL_UP"), null, false, 5)
-					.get("events")).size());
+			assertEquals(1,
+					((List<?>) engine.ledger()
+							.queryTimeline(campaign, null, null, null, List.of("LEVEL_UP"), null, false, 5)
+							.get("events")).size());
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED,
 					assertThrows(RpgException.class, () -> engine.levelUps().commit(op(), campaign, tx, null)).code(),
 					"a committed transaction cannot be committed again");
@@ -137,17 +138,19 @@ class LevelUpTest {
 			String t4 = (String) m(begun4.get("transaction")).get("ref");
 			assertNotNull(begun4.get("ability_score_improvement"), "level 4 grants an ASI");
 			int cha = (Integer) m(
-					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("abilities")).get("CHA")).get(
-					"score");
-			RpgException badAsi = assertThrows(RpgException.class, () -> engine.levelUps()
-					.update(op(), campaign, t4, null, map("ability_score_improvement", map("CHA", 3))));
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("abilities")).get("CHA"))
+					.get("score");
+			RpgException badAsi = assertThrows(RpgException.class, () -> engine.levelUps().update(op(), campaign, t4,
+					null, map("ability_score_improvement", map("CHA", 3))));
 			assertEquals(ErrorCode.VALIDATION_FAILED, badAsi.code());
 			// A feat may be taken instead of the ASI (SRD 5.2.1); an unknown feat is refused, a legal one recorded.
-			assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(RpgException.class,
-					() -> engine.levelUps().update(op(), campaign, t4, null, map("feat", "No Such Feat"))).code());
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class,
+							() -> engine.levelUps().update(op(), campaign, t4, null, map("feat", "No Such Feat")))
+							.code());
 			engine.levelUps().update(op(), campaign, t4, null, map("feat", "Alert"));
-			engine.levelUps()
-					.update(op(), campaign, t4, null, map("ability_score_improvement", map("CHA", 1, "CON", 1)));
+			engine.levelUps().update(op(), campaign, t4, null,
+					map("ability_score_improvement", map("CHA", 1, "CON", 1)));
 			Map<String, Object> done = engine.levelUps().commit(op(), campaign, t4, null);
 			assertEquals(4, done.get("level"));
 			assertEquals(cha + 1, m(m(m(done.get("sheet")).get("abilities")).get("CHA")).get("score"));

@@ -29,8 +29,8 @@
 package se.hirt.mcp.rpg.choice;
 
 /**
- * How much of a creative section the player wants to author themselves. Offered as suggestions for the experience and
- * party sections; any free text is equally valid there.
+ * How much of a creative section the player wants to author themselves. Offered as suggestions for
+ * the experience and party sections; any free text is equally valid there.
  */
 public enum Authorship implements Described {
 

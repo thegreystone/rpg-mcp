@@ -45,8 +45,9 @@ import java.time.Duration;
 import java.util.*;
 
 /**
- * Gameplay sessions and the Context Builder (MCP_PROTOCOL.md §11, EXECUTION_MODEL.md §10–11): bootstrap returns the
- * smallest sufficient context; suspend closes the session with a compact summary.
+ * Gameplay sessions and the Context Builder (MCP_PROTOCOL.md §11, EXECUTION_MODEL.md §10–11):
+ * bootstrap returns the smallest sufficient context; suspend closes the session with a compact
+ * summary.
  */
 public final class SessionService {
 
@@ -55,8 +56,7 @@ public final class SessionService {
 	private final CharacterService characters;
 	private final se.hirt.mcp.rpg.encounter.EncounterService encounters;
 
-	public SessionService(
-			Database db, se.hirt.mcp.rpg.content.RulesData rules, CharacterService characters,
+	public SessionService(Database db, se.hirt.mcp.rpg.content.RulesData rules, CharacterService characters,
 			se.hirt.mcp.rpg.encounter.EncounterService encounters) {
 		this.db = db;
 		this.rules = rules;
@@ -67,12 +67,16 @@ public final class SessionService {
 	// ── bootstrap_session ──────────────────────────────────────────────
 
 	/**
-	 * A session is never closed by hand (a lost connection must lose nothing): an open session is resumed when the
-	 * campaign was touched more recently than this, and closed and replaced by a new one otherwise. Tests shorten it.
+	 * A session is never closed by hand (a lost connection must lose nothing): an open session is
+	 * resumed when the campaign was touched more recently than this, and closed and replaced by a
+	 * new one otherwise. Tests shorten it.
 	 */
 	public static volatile Duration SESSION_GAP = Duration.ofHours(3);
 
-	/** Default bootstrap budget in approximate tokens; JSON tokenizes at about three characters a token. */
+	/**
+	 * Default bootstrap budget in approximate tokens; JSON tokenizes at about three characters a
+	 * token.
+	 */
 	public static final int DEFAULT_BUDGET = 16_000;
 	public static final int CHARS_PER_TOKEN = 3;
 
@@ -116,8 +120,9 @@ public final class SessionService {
 					"SELECT COUNT(*) FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE')",
 					campaignId) > 0;
 			HarnessState next = encounterRunning ? HarnessState.ENCOUNTER
-					: (stateBefore == HarnessState.CHECKPOINT_DECISION || stateBefore == HarnessState.PLAYER_CHARACTER_TRANSFER)
-					  ? stateBefore : HarnessState.EXPLORATION;
+					: (stateBefore == HarnessState.CHECKPOINT_DECISION
+							|| stateBefore == HarnessState.PLAYER_CHARACTER_TRANSFER) ? stateBefore
+									: HarnessState.EXPLORATION;
 			var cols = new LinkedHashMap<String, Object>();
 			cols.put("status", "ACTIVE");
 			cols.put("harness_state", next.name());
@@ -143,12 +148,16 @@ public final class SessionService {
 		});
 	}
 
-	/** True when the campaign's last journal entry before this one is older than {@link #SESSION_GAP}. */
+	/**
+	 * True when the campaign's last journal entry before this one is older than
+	 * {@link #SESSION_GAP}.
+	 */
 	private static boolean stale(Tx tx, long campaignId) {
 		return tx.queryOne(
-						"SELECT recorded_at FROM journal_entry WHERE campaign_id = ? AND id < ? ORDER BY id DESC LIMIT 1",
-						campaignId, tx.journalId())
-				.map(r -> Duration.between(Instant.parse(r.str("recorded_at")), Instant.now()).compareTo(SESSION_GAP) > 0)
+				"SELECT recorded_at FROM journal_entry WHERE campaign_id = ? AND id < ? ORDER BY id DESC LIMIT 1",
+				campaignId, tx.journalId())
+				.map(r -> Duration.between(Instant.parse(r.str("recorded_at")), Instant.now())
+						.compareTo(SESSION_GAP) > 0)
 				.orElse(false);
 	}
 
@@ -161,14 +170,18 @@ public final class SessionService {
 	}
 
 	/**
-	 * Former members as current state, not history: one entry per character whose latest membership episode ended
-	 * and who has no open one, with where they are now and why they went. The full episode list is in the CHARACTER
-	 * context ({@link #membershipHistory}).
+	 * Former members as current state, not history: one entry per character whose latest membership
+	 * episode ended and who has no open one, with where they are now and why they went. The full
+	 * episode list is in the CHARACTER context ({@link #membershipHistory}).
 	 */
 	public static List<Map<String, Object>> formerMembers(Tx tx, long campaignId) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row m : tx.query(
-				"SELECT m.state AS membership_state, m.left_time, m.notes AS membership_notes, c.* FROM party_membership m " + "JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? AND m.state IN ('DEAD','LEFT','DISMISSED','ENDED') " + "AND m.id = (SELECT MAX(id) FROM party_membership x WHERE x.character_id = m.character_id) " + "AND NOT EXISTS (SELECT 1 FROM party_membership o WHERE o.character_id = m.character_id AND o.state IN ('ACTIVE','SEPARATED','GUEST')) " + "ORDER BY m.id",
+				"SELECT m.state AS membership_state, m.left_time, m.notes AS membership_notes, c.* FROM party_membership m "
+						+ "JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? AND m.state IN ('DEAD','LEFT','DISMISSED','ENDED') "
+						+ "AND m.id = (SELECT MAX(id) FROM party_membership x WHERE x.character_id = m.character_id) "
+						+ "AND NOT EXISTS (SELECT 1 FROM party_membership o WHERE o.character_id = m.character_id AND o.state IN ('ACTIVE','SEPARATED','GUEST')) "
+						+ "ORDER BY m.id",
 				campaignId)) {
 			var f = new LinkedHashMap<String, Object>();
 			f.put("ref", Ref.of(Ref.CHARACTER, m.id()));
@@ -205,9 +218,10 @@ public final class SessionService {
 	// ── find ───────────────────────────────────────────────────────────
 
 	/**
-	 * Lookup by name for characters and locations: case-insensitive, exact name first, then a name prefix, then a
-	 * substring of the name, then a mention in the description. Each hit is one line: ref, name and what the reader
-	 * needs to pick the right one (membership, life state and whereabouts for people; kind and parent for places).
+	 * Lookup by name for characters and locations: case-insensitive, exact name first, then a name
+	 * prefix, then a substring of the name, then a mention in the description. Each hit is one
+	 * line: ref, name and what the reader needs to pick the right one (membership, life state and
+	 * whereabouts for people; kind and parent for places).
 	 */
 	public Map<String, Object> find(String campaignRef, String kind, String query, Integer limit) {
 		return db.read(tx -> {
@@ -228,7 +242,7 @@ public final class SessionService {
 						campaignId)) {
 					int score = score(q, c.str("name"), c.str("description"), c.str("backstory"));
 					if (score > 0) {
-						scored.add(new Object[] { score, c });
+						scored.add(new Object[] {score, c});
 					}
 				}
 				scored.sort((a, b) -> Integer.compare((Integer) b[0], (Integer) a[0]));
@@ -260,7 +274,7 @@ public final class SessionService {
 				for (Row l : tx.query("SELECT * FROM location WHERE campaign_id = ? ORDER BY id", campaignId)) {
 					int score = score(q, l.str("name"), l.str("description"), null);
 					if (score > 0) {
-						scored.add(new Object[] { score, l });
+						scored.add(new Object[] {score, l});
 					}
 				}
 				scored.sort((a, b) -> Integer.compare((Integer) b[0], (Integer) a[0]));
@@ -297,7 +311,10 @@ public final class SessionService {
 		});
 	}
 
-	/** 40 exact name, 30 name prefix, 20 name substring, 10 word in description or backstory, 0 no match. */
+	/**
+	 * 40 exact name, 30 name prefix, 20 name substring, 10 word in description or backstory, 0 no
+	 * match.
+	 */
 	private static int score(String q, String name, String description, String backstory) {
 		String n = name == null ? "" : name.trim().toLowerCase();
 		if (n.equals(q)) {
@@ -309,7 +326,7 @@ public final class SessionService {
 		if (n.contains(q)) {
 			return 20;
 		}
-		for (String text : new String[] { description, backstory }) {
+		for (String text : new String[] {description, backstory}) {
 			if (text != null && text.toLowerCase().contains(q)) {
 				return 10;
 			}
@@ -318,10 +335,11 @@ public final class SessionService {
 	}
 
 	/**
-	 * The Context Builder: canonical current state first, recent history second, never the whole campaign. The
-	 * budget is honoured in characters ({@link #CHARS_PER_TOKEN} per token): the story section (synopsis, chapters,
-	 * the digest of the uncovered tail) gets a third, relationship profiles and full inventories stay out of
-	 * bootstrap (the RELATIONSHIP, INTIMACY and CHARACTER scopes carry them), and the result reports its own size.
+	 * The Context Builder: canonical current state first, recent history second, never the whole
+	 * campaign. The budget is honoured in characters ({@link #CHARS_PER_TOKEN} per token): the
+	 * story section (synopsis, chapters, the digest of the uncovered tail) gets a third,
+	 * relationship profiles and full inventories stay out of bootstrap (the RELATIONSHIP, INTIMACY
+	 * and CHARACTER scopes carry them), and the result reports its own size.
 	 */
 	public Map<String, Object> context(Tx tx, Row campaign, int budget) {
 		long campaignId = campaign.id();
@@ -354,9 +372,9 @@ public final class SessionService {
 		ctx.put("location",
 				campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
 
-		Optional<Row> pc = tx.queryOne(
-				"SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id " + "WHERE p.campaign_id = ? AND p.active = 1",
-				campaignId);
+		Optional<Row> pc = tx
+				.queryOne("SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
+						+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId);
 		Long here = campaign.isNull("current_location_id") ? null : campaign.lng("current_location_id");
 		ctx.put("player_character", pc.map(r -> compactSheet(characters.sheet(tx, r, "PLAY"))).orElse(null));
 		ctx.put("relationships",
@@ -365,7 +383,8 @@ public final class SessionService {
 
 		var party = new ArrayList<Map<String, Object>>();
 		for (Row m : tx.query(
-				"SELECT m.state, m.notes, c.* FROM party_membership m JOIN character c ON c.id = m.character_id " + "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY m.id",
+				"SELECT m.state, m.notes, c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
+						+ "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY m.id",
 				campaignId)) {
 			var member = characters.sheet(tx, m, "SUMMARY");
 			member.put("membership", m.str("state"));
@@ -376,25 +395,26 @@ public final class SessionService {
 		ctx.put("party", party);
 		ctx.put("former_members", formerMembers(tx, campaignId));
 
-		ctx.put("story_beats", tx.query(
-				"SELECT * FROM story_beat WHERE campaign_id = ? AND state IN ('AVAILABLE','PLANNED','BLOCKED') " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
-				campaignId).stream().map(b -> {
-			var m = new LinkedHashMap<String, Object>();
-			m.put("ref", Ref.of(Ref.STORY_BEAT, b.id()));
-			m.put("title", b.str("title"));
-			m.put("state", b.str("state"));
-			m.put("visibility", b.str("visibility"));
-			return m;
-		}).toList());
+		ctx.put("story_beats", tx
+				.query("SELECT * FROM story_beat WHERE campaign_id = ? AND state IN ('AVAILABLE','PLANNED','BLOCKED') "
+						+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id", campaignId)
+				.stream().map(b -> {
+					var m = new LinkedHashMap<String, Object>();
+					m.put("ref", Ref.of(Ref.STORY_BEAT, b.id()));
+					m.put("title", b.str("title"));
+					m.put("state", b.str("state"));
+					m.put("visibility", b.str("visibility"));
+					return m;
+				}).toList());
 		ctx.put("active_quests",
 				tx.query("SELECT * FROM quest WHERE campaign_id = ? AND status IN ('OFFERED','ACCEPTED') ORDER BY id",
 						campaignId).stream().map(q -> {
-					var m = new LinkedHashMap<String, Object>();
-					m.put("title", q.str("title"));
-					m.put("status", q.str("status"));
-					m.put("visibility", q.str("visibility"));
-					return m;
-				}).toList());
+							var m = new LinkedHashMap<String, Object>();
+							m.put("title", q.str("title"));
+							m.put("status", q.str("status"));
+							m.put("visibility", q.str("visibility"));
+							return m;
+						}).toList());
 
 		Map<String, Object> adventure = campaign.map("adventure_json");
 		var adv = new LinkedHashMap<String, Object>();
@@ -412,13 +432,13 @@ public final class SessionService {
 				campaignId).ifPresent(e -> ctx.put("encounter", encounters.state(tx, e, 5)));
 		ctx.put("recent_events", LedgerService.recent(tx, campaignId, eventLimit));
 		ctx.put("chronicle", ChronicleService.view(tx, campaignId, chars / 3));
-		ctx.put("pending_transaction",
-				tx.queryOne("SELECT * FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'", campaignId)
-						.map(t -> Map.<String, Object> of("ref", Ref.of(Ref.TRANSACTION, t.id()), "kind",
-								t.str("kind"))).orElse(null));
-		ctx.put("director_seeds",
-				tx.query("SELECT id, kind, state FROM director_seed WHERE campaign_id = ? AND state = 'OPEN'",
-						campaignId).stream().map(s -> Ref.of(Ref.SEED, s.id()) + " (" + s.str("kind") + ")").toList());
+		ctx.put("pending_transaction", tx
+				.queryOne("SELECT * FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'", campaignId)
+				.map(t -> Map.<String, Object> of("ref", Ref.of(Ref.TRANSACTION, t.id()), "kind", t.str("kind")))
+				.orElse(null));
+		ctx.put("director_seeds", tx
+				.query("SELECT id, kind, state FROM director_seed WHERE campaign_id = ? AND state = 'OPEN'", campaignId)
+				.stream().map(s -> Ref.of(Ref.SEED, s.id()) + " (" + s.str("kind") + ")").toList());
 		var b = new LinkedHashMap<String, Object>();
 		b.put("tokens", budget);
 		b.put("chars_target", chars);
@@ -432,7 +452,10 @@ public final class SessionService {
 		return partyLocationId == null || c.isNull("location_id") || c.lng("location_id") == partyLocationId;
 	}
 
-	/** A PLAY sheet for bootstrap: the inventory becomes one line per item; get_character_sheet has the rest. */
+	/**
+	 * A PLAY sheet for bootstrap: the inventory becomes one line per item; get_character_sheet has
+	 * the rest.
+	 */
 	@SuppressWarnings("unchecked")
 	static Map<String, Object> compactSheet(Map<String, Object> sheet) {
 		if (sheet.get("inventory") instanceof List<?> items) {
@@ -440,7 +463,8 @@ public final class SessionService {
 			for (Object o : items) {
 				if (o instanceof Map<?, ?> item) {
 					Object qty = item.get("quantity");
-					brief.add(item.get("name") + (qty instanceof Number n && n.intValue() != 1 ? " x" + n.intValue() : ""));
+					brief.add(item.get("name")
+							+ (qty instanceof Number n && n.intValue() != 1 ? " x" + n.intValue() : ""));
 				}
 			}
 			sheet.put("inventory", brief);
@@ -464,9 +488,9 @@ public final class SessionService {
 	// ── get_party ──────────────────────────────────────────────────────
 
 	/**
-	 * The player may always ask about their own state and their party's, in detail, in any harness state: every current
-	 * member with a full sheet, the fallen, the player character, location, time and any running encounter. During
-	 * setup the draft characters are listed instead.
+	 * The player may always ask about their own state and their party's, in detail, in any harness
+	 * state: every current member with a full sheet, the fallen, the player character, location,
+	 * time and any running encounter. During setup the draft characters are listed instead.
 	 */
 	public Map<String, Object> party(String campaignRef, String detail) {
 		return db.read(tx -> {
@@ -479,9 +503,9 @@ public final class SessionService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("campaign", Ref.of(Ref.CAMPAIGN, campaignId));
 			result.put("harness_state", campaign.str("harness_state"));
-			Optional<Row> pc = tx.queryOne(
-					"SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id " + "WHERE p.campaign_id = ? AND p.active = 1",
-					campaignId);
+			Optional<Row> pc = tx
+					.queryOne("SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
+							+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId);
 			result.put("player_character", pc.map(r -> Ref.of(Ref.CHARACTER, r.id())).orElse(null));
 			if ("SETUP".equals(campaign.str("status"))) {
 				var drafts = new ArrayList<Map<String, Object>>();
@@ -524,7 +548,8 @@ public final class SessionService {
 				.filter(r -> !r.isNull("id")).map(Row::id).orElse(null);
 		var members = new ArrayList<Map<String, Object>>();
 		for (Row m : tx.query(
-				"SELECT m.state AS membership_state, m.joined_time, m.notes, c.* FROM party_membership m JOIN character c ON c.id = m.character_id " + "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY m.id",
+				"SELECT m.state AS membership_state, m.joined_time, m.notes, c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
+						+ "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY m.id",
 				campaignId)) {
 			var sheet = characters.sheet(tx, m, detail);
 			sheet.put("membership", m.str("membership_state"));
@@ -547,8 +572,12 @@ public final class SessionService {
 
 	// ── update_house_rules ─────────────────────────────────────────────
 
-	/** Table rulings every client sees at bootstrap: short strings, added to, removed from or replaced; audited. */
-	public Map<String, Object> updateHouseRules(String operationId, String campaignRef, List<Object> rules, String mode) {
+	/**
+	 * Table rulings every client sees at bootstrap: short strings, added to, removed from or
+	 * replaced; audited.
+	 */
+	public Map<String, Object> updateHouseRules(
+		String operationId, String campaignRef, List<Object> rules, String mode) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -580,9 +609,11 @@ public final class SessionService {
 			tx.update("campaign", campaignId, cols);
 			tx.touched(Ref.of(Ref.CAMPAIGN, campaignId), campaign.lng("revision") + 1);
 			long eventId = LedgerService.append(tx, campaignId,
-					new LedgerService.EventSpec("HOUSE_RULE", "House rules (" + m.toLowerCase() + "): " + (
-							given.isEmpty() ? "cleared" : String.join("; ", given)), List.of(), "NOTABLE",
-							"PARTY_KNOWN", "GM", null, null, null, Map.of("mode", m, "rules", given)));
+					new LedgerService.EventSpec("HOUSE_RULE",
+							"House rules (" + m.toLowerCase() + "): "
+									+ (given.isEmpty() ? "cleared" : String.join("; ", given)),
+							List.of(), "NOTABLE", "PARTY_KNOWN", "GM", null, null, null,
+							Map.of("mode", m, "rules", given)));
 			var result = new LinkedHashMap<String, Object>();
 			result.put("house_rules", current);
 			result.put("event", Ref.of(Ref.EVENT, eventId));
@@ -609,7 +640,8 @@ public final class SessionService {
 			if (summary != null && !summary.isBlank() && ChronicleService.uncovered(tx, campaignId)[0] > 0) {
 				chapter = ChronicleService.writeChapter(tx, campaign, null, summary.trim(), null);
 			}
-			Row session = tx.queryOne(
+			Row session = tx
+					.queryOne(
 							"SELECT * FROM session WHERE campaign_id = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1",
 							campaignId)
 					.orElseThrow(() -> RpgException.notAllowed("No session is open for " + campaignRef + "."));

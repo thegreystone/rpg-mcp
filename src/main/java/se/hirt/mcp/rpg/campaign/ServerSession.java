@@ -31,8 +31,8 @@ package se.hirt.mcp.rpg.campaign;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Process-scoped convenience state: which campaign the connected AI last opened. Not canonical — every campaign-scoped
- * tool still names its campaign explicitly.
+ * Process-scoped convenience state: which campaign the connected AI last opened. Not canonical —
+ * every campaign-scoped tool still names its campaign explicitly.
  */
 public final class ServerSession {
 

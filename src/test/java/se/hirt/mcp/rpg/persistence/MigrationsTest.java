@@ -34,35 +34,36 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
- * The applied-migration guard must catch a changed schema and ignore a changed file. Hashing raw bytes did the
- * opposite: reformatting the migration SQL on 2026-09-02 locked an existing campaign database out of its own schema
- * with "V001__baseline.sql was modified after being applied", even though every one of its 58 schema objects was
- * byte-identical once whitespace was ignored (DATABASE.md §2, RULES_ENGINE.md §6).
+ * The applied-migration guard must catch a changed schema and ignore a changed file. Hashing raw
+ * bytes did the opposite: reformatting the migration SQL on 2026-09-02 locked an existing campaign
+ * database out of its own schema with "V001__baseline.sql was modified after being applied", even
+ * though every one of its 58 schema objects was byte-identical once whitespace was ignored
+ * (DATABASE.md §2, RULES_ENGINE.md §6).
  */
 class MigrationsTest {
 
 	private static final String ORIGINAL = """
-	                                       -- Baseline.
-	                                       CREATE TABLE campaign(
-	                                           id INTEGER PRIMARY KEY AUTOINCREMENT,
-	                                           title TEXT NOT NULL
-	                                       );
-	                                       CREATE INDEX idx_campaign_title ON campaign(title);
-	                                       """;
+			-- Baseline.
+			CREATE TABLE campaign(
+			    id INTEGER PRIMARY KEY AUTOINCREMENT,
+			    title TEXT NOT NULL
+			);
+			CREATE INDEX idx_campaign_title ON campaign(title);
+			""";
 
 	@Test
 	void reformattingAMigrationDoesNotChangeItsChecksum() {
 		// What a SQL formatter does: spaces before parentheses, different indentation, rewrapped lines.
 		String reformatted = """
-		                     -- Baseline.
-		                     CREATE TABLE campaign (
-		                       id    INTEGER PRIMARY KEY AUTOINCREMENT,
-		                       title TEXT    NOT NULL
-		                     );
+				-- Baseline.
+				CREATE TABLE campaign (
+				  id    INTEGER PRIMARY KEY AUTOINCREMENT,
+				  title TEXT    NOT NULL
+				);
 
-		                     CREATE INDEX idx_campaign_title
-		                         ON campaign (title);
-		                     """;
+				CREATE INDEX idx_campaign_title
+				    ON campaign (title);
+				""";
 		assertEquals(Migrations.checksum(ORIGINAL), Migrations.checksum(reformatted));
 	}
 
@@ -86,7 +87,10 @@ class MigrationsTest {
 				Migrations.checksum(ORIGINAL.replace("CREATE INDEX", "CREATE UNIQUE INDEX")));
 	}
 
-	/** Prints the fingerprint of every shipped migration, so an existing database can be repaired deliberately. */
+	/**
+	 * Prints the fingerprint of every shipped migration, so an existing database can be repaired
+	 * deliberately.
+	 */
 	@Test
 	void shippedMigrationsHaveStableFingerprints() {
 		for (String file : Migrations.MIGRATIONS) {

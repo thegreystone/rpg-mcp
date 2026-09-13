@@ -56,38 +56,47 @@ import static se.hirt.mcp.rpg.tools.SrdText.joinBlock;
 import static se.hirt.mcp.rpg.tools.SrdText.search;
 
 /**
- * {@code build-creatures}: regenerates {@code seed/srd5e/creatures.json} from every stat block in the SRD 5.2.1
- * bestiary ("Monsters A-Z" and "Animals"). A stat block is a heading line followed by a size line ("Medium or Small
- * Humanoid, Neutral"). The header fields (AC, HP, speed, abilities and saves, skills, resistances, immunities,
- * vulnerabilities, senses, languages, gear, CR) are parsed exactly; the Traits / Actions / Bonus Actions / Reactions /
- * Legendary Actions sections are split into named entries whose attack rolls and saving throws are structured and whose
- * remaining text is kept verbatim (dehyphenated). Entries already present in the seed file are kept as they are.
+ * {@code build-creatures}: regenerates {@code seed/srd5e/creatures.json} from every stat block in
+ * the SRD 5.2.1 bestiary ("Monsters A-Z" and "Animals"). A stat block is a heading line followed by
+ * a size line ("Medium or Small Humanoid, Neutral"). The header fields (AC, HP, speed, abilities
+ * and saves, skills, resistances, immunities, vulnerabilities, senses, languages, gear, CR) are
+ * parsed exactly; the Traits / Actions / Bonus Actions / Reactions / Legendary Actions sections are
+ * split into named entries whose attack rolls and saving throws are structured and whose remaining
+ * text is kept verbatim (dehyphenated). Entries already present in the seed file are kept as they
+ * are.
  */
 final class BuildCreatures {
 
-	private static final Set<String> TYPES = Set.of("Aberration", "Beast", "Celestial", "Construct", "Dragon", "Elemental",
-			"Fey", "Fiend", "Giant", "Humanoid", "Monstrosity", "Ooze", "Plant", "Undead");
-	private static final Pattern SIZE_LINE = Pattern.compile(
-			"^(Tiny|Small|Medium|Large|Huge|Gargantuan)(?: or (Tiny|Small|Medium|Large|Huge|Gargantuan))?"
+	private static final Set<String> TYPES = Set.of("Aberration", "Beast", "Celestial", "Construct", "Dragon",
+			"Elemental", "Fey", "Fiend", "Giant", "Humanoid", "Monstrosity", "Ooze", "Plant", "Undead");
+	private static final Pattern SIZE_LINE = Pattern
+			.compile("^(Tiny|Small|Medium|Large|Huge|Gargantuan)(?: or (Tiny|Small|Medium|Large|Huge|Gargantuan))?"
 					+ " (?:(Swarm of (?:Tiny|Small|Medium)) )?([A-Z][a-z]+)(?: \\(([^)]+)\\))?(?:, ([A-Z][A-Za-z ]+))?$");
-	private static final List<String> SECTIONS = List.of("Traits", "Actions", "Bonus Actions", "Reactions", "Legendary Actions");
+	private static final List<String> SECTIONS = List.of("Traits", "Actions", "Bonus Actions", "Reactions",
+			"Legendary Actions");
 	/**
-	 * The stat blocks seeded by hand on 2026-09-01 and verified against the PDF then; they are kept as they are and
-	 * only diffed. Every other entry is regenerated from the text on each run, so a parser fix reaches the seed.
+	 * The stat blocks seeded by hand on 2026-09-01 and verified against the PDF then; they are kept
+	 * as they are and only diffed. Every other entry is regenerated from the text on each run, so a
+	 * parser fix reaches the seed.
 	 */
-	private static final Set<String> HAND_SEEDED = Set.of("Bandit", "Bandit Captain", "Commoner", "Cultist", "Giant Rat",
-			"Goblin Warrior", "Guard", "Ogre", "Scout", "Skeleton", "Wolf", "Zombie");
-	private static final Set<String> CONDS = Set.of("blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled",
-			"incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious");
+	private static final Set<String> HAND_SEEDED = Set.of("Bandit", "Bandit Captain", "Commoner", "Cultist",
+			"Giant Rat", "Goblin Warrior", "Guard", "Ogre", "Scout", "Skeleton", "Wolf", "Zombie");
+	private static final Set<String> CONDS = Set.of("blinded", "charmed", "deafened", "exhaustion", "frightened",
+			"grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained",
+			"stunned", "unconscious");
 	private static final Set<String> DAMAGE_TYPES = Set.of("acid", "bludgeoning", "cold", "fire", "force", "lightning",
 			"necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder");
-	private static final Pattern ENTRY_START = Pattern.compile("^([A-Z][A-Za-z'\\- ]{0,40}?(?: \\([^)]{1,50}\\))?)\\.(?: (\\S.*))?$");
+	private static final Pattern ENTRY_START = Pattern
+			.compile("^([A-Z][A-Za-z'\\- ]{0,40}?(?: \\([^)]{1,50}\\))?)\\.(?: (\\S.*))?$");
 	// "+5 (with Advantage if the target is Grappled)", "+17 to hit" and "reach 5 feet" are the SRD's own variants.
-	private static final Pattern ATTACK = Pattern.compile(
-			"^(Melee|Ranged|Melee or Ranged) Attack Roll: \\+(\\d+)(?: to hit)?(?: \\(([^)]*)\\))?, "
+	private static final Pattern ATTACK = Pattern
+			.compile("^(Melee|Ranged|Melee or Ranged) Attack Roll: \\+(\\d+)(?: to hit)?(?: \\(([^)]*)\\))?, "
 					+ "(?:reach (\\d+) (?:ft|feet)\\.?(?: or range (\\d+)(?:/(\\d+))? (?:ft|feet)\\.?)?|range (\\d+)(?:/(\\d+))? (?:ft|feet)\\.?)"
 					+ "\\.? Hit: (?:(\\d+)(?: \\(([^)]+)\\))? (\\w+) damage)?(.*)$");
-	/** Bodies that unmistakably open a new entry even when the previous line ended mid-list (a spell list, say). */
+	/**
+	 * Bodies that unmistakably open a new entry even when the previous line ended mid-list (a spell
+	 * list, say).
+	 */
 	private static final Pattern OPENER = Pattern.compile(
 			"^(?:(?:Melee|Ranged|Melee or Ranged) Attack Roll|(?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC|Trigger:).*");
 	private static final Pattern PLUS = Pattern.compile("^,? plus (\\d+)(?: \\(([^)]+)\\))? (\\w+) damage");
@@ -173,8 +182,10 @@ final class BuildCreatures {
 		}
 		ObjectNode doc = mapper.createObjectNode();
 		doc.put("kind", "CREATURE");
-		doc.put("citation", "SRD 5.2.1, Monsters A-Z and Animals; Gameplay Toolbox - Experience Points by Challenge Rating");
-		doc.put("verify", "Generated from the SRD 5.2.1 PDF text (CC-BY-4.0) by tools 'build-creatures' on 2026-09-08: " + built.size()
+		doc.put("citation",
+				"SRD 5.2.1, Monsters A-Z and Animals; Gameplay Toolbox - Experience Points by Challenge Rating");
+		doc.put("verify", "Generated from the SRD 5.2.1 PDF text (CC-BY-4.0) by tools 'build-creatures' on 2026-09-08: "
+				+ built.size()
 				+ " stat blocks, every heading in Monsters A-Z and Animals. Parsed exactly: size, type, alignment, AC, initiative, HP, speed, "
 				+ "ability scores and saves, skills, gear, senses, languages, damage resistances/immunities/vulnerabilities, condition "
 				+ "immunities, CR/XP/PB, attack names, bonuses, reach/range and damage (with 'plus' riders), saving-throw actions (ability, DC, "
@@ -182,7 +193,8 @@ final class BuildCreatures {
 				+ "reaction and legendary action bodies (dehyphenated, verbatim). The 12 entries seeded by hand on 2026-09-01 are kept "
 				+ "unchanged; differences the generator found against them are listed in the build output. xp_value comes from the "
 				+ "Experience Points by Challenge Rating table (CR 0 keeps the printed 0 or 10); the printed XP is cross-checked and "
-				+ "SRD errata are listed here: " + (errata.isEmpty() ? "none" : String.join("; ", errata)) + ". Checked with tools 'verify'.");
+				+ "SRD errata are listed here: " + (errata.isEmpty() ? "none" : String.join("; ", errata))
+				+ ". Checked with tools 'verify'.");
 		ObjectNode schema = mapper.createObjectNode();
 		schema.put("hp", "{average, dice}");
 		schema.put("abilities", "{STR..CHA}");
@@ -191,7 +203,8 @@ final class BuildCreatures {
 		schema.put("actions",
 				"[{name, kind: MELEE_ATTACK|RANGED_ATTACK|OTHER, attack_bonus, reach|range, damage: [{dice, type}], save: {ability, dc, targets, failure, success}, recharge, uses, text}]");
 		schema.put("multiattack", "{count, text} when the creature attacks more than once per Attack action");
-		schema.put("traits, bonus_actions, reactions, legendary_actions", "[{name, text}]; legendary_action_uses when present");
+		schema.put("traits, bonus_actions, reactions, legendary_actions",
+				"[{name, text}]; legendary_action_uses when present");
 		doc.set("schema", schema);
 		ArrayNode entries = doc.putArray("entries");
 		int kept = 0;
@@ -211,15 +224,15 @@ final class BuildCreatures {
 				entries.add(existing.get(name));
 			}
 		}
-		DefaultPrettyPrinter printer = new DefaultPrettyPrinter()
-				.withSeparators(Separators.createDefaultInstance().withObjectFieldValueSpacing(Separators.Spacing.AFTER));
+		DefaultPrettyPrinter printer = new DefaultPrettyPrinter().withSeparators(
+				Separators.createDefaultInstance().withObjectFieldValueSpacing(Separators.Spacing.AFTER));
 		DefaultIndenter indenter = new DefaultIndenter(" ", "\r\n");
 		printer.indentObjectsWith(indenter);
 		printer.indentArraysWith(indenter);
 		String json = mapper.writer(printer).writeValueAsString(doc);
 		Files.writeString(seedFile, json, StandardCharsets.UTF_8);
-		System.out.println("wrote " + seedFile + ": " + entries.size() + " creatures (" + kept + " kept from the previous seed, "
-				+ (built.size() - kept) + " generated)");
+		System.out.println("wrote " + seedFile + ": " + entries.size() + " creatures (" + kept
+				+ " kept from the previous seed, " + (built.size() - kept) + " generated)");
 		for (String f : failed) {
 			System.out.println("FAILED " + f);
 		}
@@ -228,7 +241,10 @@ final class BuildCreatures {
 		}
 	}
 
-	/** Index of the next line that is not a page marker or one of the two running-header lines after it. */
+	/**
+	 * Index of the next line that is not a page marker or one of the two running-header lines after
+	 * it.
+	 */
 	private int nextContent(int i) {
 		int j = i + 1;
 		while (j < lines.size()) {
@@ -243,7 +259,8 @@ final class BuildCreatures {
 	}
 
 	private static boolean isHeading(String name) {
-		if (name.isEmpty() || name.startsWith("===") || name.matches("\\d+") || name.startsWith("System Reference Document")) {
+		if (name.isEmpty() || name.startsWith("===") || name.matches("\\d+")
+				|| name.startsWith("System Reference Document")) {
 			return false;
 		}
 		if (!Character.isUpperCase(name.charAt(0)) || name.endsWith(".") || name.endsWith(",") || name.contains(":")) {
@@ -317,7 +334,8 @@ final class BuildCreatures {
 		for (String part : m.group(1).split(",")) {
 			Matcher mm = SrdText.match(Pattern.compile("\\s*(?:(\\w+) )?(\\d+) ft"), part);
 			if (mm != null) {
-				speed.put((mm.group(1) != null ? mm.group(1) : "walk").toLowerCase(Locale.ROOT), Integer.parseInt(mm.group(2)));
+				speed.put((mm.group(1) != null ? mm.group(1) : "walk").toLowerCase(Locale.ROOT),
+						Integer.parseInt(mm.group(2)));
 			}
 		}
 		if (m.group(1).contains("(hover)")) {
@@ -386,28 +404,34 @@ final class BuildCreatures {
 		}
 		m = search(Pattern.compile("Gear (.*?)" + fieldEnd), head);
 		if (m != null) {
-			strings(p.putArray("gear"), Arrays.stream(m.group(1).split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList());
+			strings(p.putArray("gear"),
+					Arrays.stream(m.group(1).split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList());
 		}
 		m = search(Pattern.compile("Senses (.*?)(?= Languages| CR)"), head);
 		if (m != null) {
-			strings(p.putArray("senses"), Arrays.stream(m.group(1).split("[;,]")).map(String::strip).filter(s -> !s.isEmpty()).toList());
+			strings(p.putArray("senses"),
+					Arrays.stream(m.group(1).split("[;,]")).map(String::strip).filter(s -> !s.isEmpty()).toList());
 		}
 		m = search(Pattern.compile("Languages (.*?)(?= CR \\d)"), head);
 		if (m != null && !m.group(1).strip().equals("None")) {
-			strings(p.putArray("languages"), Arrays.stream(m.group(1).split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList());
+			strings(p.putArray("languages"),
+					Arrays.stream(m.group(1).split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList());
 		}
 		// Four blocks (three metallic wyrmlings, Young White Dragon) print "700 XP" instead of "XP 700"; the Young White
 		// Dragon's Intelligence save is printed without its sign. Both are typographical slips in the SRD text.
-		m = req(search(Pattern.compile("CR ([\\d/]+) \\((?:XP ([\\d,]+)|([\\d,]+) XP)(?:,? or ([\\d,]+) in lair)?; PB \\+(\\d+)\\)"), head), "CR", name);
+		m = req(search(
+				Pattern.compile(
+						"CR ([\\d/]+) \\((?:XP ([\\d,]+)|([\\d,]+) XP)(?:,? or ([\\d,]+) in lair)?; PB \\+(\\d+)\\)"),
+				head), "CR", name);
 		String cr = m.group(1);
 		String xp = m.group(2) != null ? m.group(2) : m.group(3);
 		p.put("cr", cr);
 		p.put("cr_times_8", switch (cr) {
-			case "0" -> 0;
-			case "1/8" -> 1;
-			case "1/4" -> 2;
-			case "1/2" -> 4;
-			default -> Integer.parseInt(cr) * 8;
+		case "0" -> 0;
+		case "1/8" -> 1;
+		case "1/4" -> 2;
+		case "1/2" -> 4;
+		default -> Integer.parseInt(cr) * 8;
 		});
 		int printedXp = Integer.parseInt(xp.replace(",", ""));
 		Integer tableXp = xpByCr.get(cr);
@@ -467,7 +491,8 @@ final class BuildCreatures {
 			ArrayNode arr = p.putArray("legendary_actions");
 			for (var e : leg) {
 				if (e.getKey().startsWith("Legendary Action Uses")) {
-					Matcher u = search(Pattern.compile("(\\d+)(?: \\((\\d+) in Lair\\))?"), e.getKey() + ". " + e.getValue());
+					Matcher u = search(Pattern.compile("(\\d+)(?: \\((\\d+) in Lair\\))?"),
+							e.getKey() + ". " + e.getValue());
 					if (u != null) {
 						p.put("legendary_action_uses", Integer.parseInt(u.group(1)));
 						if (u.group(2) != null) {
@@ -489,7 +514,10 @@ final class BuildCreatures {
 		return entry;
 	}
 
-	/** "Fire Breath (Recharge 5-6)" -> name + recharge; "(3/Day)" -> uses; other parentheticals -> qualifier. */
+	/**
+	 * "Fire Breath (Recharge 5-6)" -> name + recharge; "(3/Day)" -> uses; other parentheticals ->
+	 * qualifier.
+	 */
 	private static void named(ObjectNode n, String heading) {
 		Matcher q = QUALIFIER.matcher(heading);
 		if (!q.matches()) {
@@ -599,9 +627,9 @@ final class BuildCreatures {
 	}
 
 	/**
-	 * Splits a section into "Name. text" entries. A new entry starts on a line that begins with a short capitalised name
-	 * followed by ". " when the previous line ended a sentence (so wrapped lines such as "Piercing damage." after a line
-	 * ending in ")" stay inside the running entry).
+	 * Splits a section into "Name. text" entries. A new entry starts on a line that begins with a
+	 * short capitalised name followed by ". " when the previous line ended a sentence (so wrapped
+	 * lines such as "Piercing damage." after a line ending in ")" stay inside the running entry).
 	 */
 	private static List<Map.Entry<String, String>> entries(List<String> sec) {
 		List<Map.Entry<String, String>> out = new ArrayList<>();
@@ -649,7 +677,10 @@ final class BuildCreatures {
 		return out;
 	}
 
-	/** "1d4 – 1" -> "1d4-1": no spaces, and every dash variant (en dash, em dash, minus sign) as ASCII. */
+	/**
+	 * "1d4 – 1" -> "1d4-1": no spaces, and every dash variant (en dash, em dash, minus sign) as
+	 * ASCII.
+	 */
 	static String dice(String s) {
 		return s.replace(" ", "").replace('\u2013', '-').replace('\u2014', '-').replace('\u2212', '-');
 	}
@@ -660,8 +691,8 @@ final class BuildCreatures {
 	}
 
 	private void diff(String name, JsonNode old, JsonNode fresh) {
-		for (String k : List.of("ac", "hp", "speed", "abilities", "saves", "skills", "cr", "xp_value", "proficiency_bonus",
-				"damage_resistances", "damage_immunities", "damage_vulnerabilities")) {
+		for (String k : List.of("ac", "hp", "speed", "abilities", "saves", "skills", "cr", "xp_value",
+				"proficiency_bonus", "damage_resistances", "damage_immunities", "damage_vulnerabilities")) {
 			JsonNode a = old.get(k);
 			JsonNode b = fresh.get(k);
 			if (a == null && b == null) {

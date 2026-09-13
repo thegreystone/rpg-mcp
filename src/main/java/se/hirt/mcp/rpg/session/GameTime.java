@@ -36,9 +36,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * The campaign clock (DOMAIN_MODEL.md §13). The MVP calendar is a simple day clock: {@code seq} is minutes since
- * campaign start and {@code instant} renders as {@code "Day N, HH:MM"}. Ordering always uses {@code seq}; the instant
- * is presentation (I-42).
+ * The campaign clock (DOMAIN_MODEL.md §13). The MVP calendar is a simple day clock: {@code seq} is
+ * minutes since campaign start and {@code instant} renders as {@code "Day N, HH:MM"}. Ordering
+ * always uses {@code seq}; the instant is presentation (I-42).
  */
 public final class GameTime {
 
@@ -75,7 +75,10 @@ public final class GameTime {
 		return m;
 	}
 
-	/** As {@link #toMap(long)} plus the calendar date (year, month, day, weekday, season) of the campaign. */
+	/**
+	 * As {@link #toMap(long)} plus the calendar date (year, month, day, weekday, season) of the
+	 * campaign.
+	 */
 	public static Map<String, Object> toMap(long seq, Calendar calendar) {
 		var m = toMap(seq);
 		Calendar cal = calendar == null ? Calendar.DEFAULT : calendar;

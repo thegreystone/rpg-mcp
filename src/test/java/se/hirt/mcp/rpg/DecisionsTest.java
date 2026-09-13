@@ -45,9 +45,9 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * Structured decisions (MCP_PROTOCOL.md §9.3.1): every setting the player decides on is returned by the server as an
- * ordered list of decisions, each carrying every legal option with a description, derived from one source — never
- * authored twice in tool descriptions.
+ * Structured decisions (MCP_PROTOCOL.md §9.3.1): every setting the player decides on is returned by
+ * the server as an ordered list of decisions, each carrying every legal option with a description,
+ * derived from one source — never authored twice in tool descriptions.
  */
 class DecisionsTest {
 
@@ -115,10 +115,10 @@ class DecisionsTest {
 					assertTrue(d.summary().containsKey("summary"), d.id());
 				}
 			}
-			Map<String, Object> spells = engine.content()
-					.definitions(null, "SPELL", null, "sorcerer", null, null, null, 100, "SUMMARY");
-			@SuppressWarnings("unchecked") List<Map<String, Object>> items = (List<Map<String, Object>>) spells.get(
-					"items");
+			Map<String, Object> spells = engine.content().definitions(null, "SPELL", null, "sorcerer", null, null, null,
+					100, "SUMMARY");
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> items = (List<Map<String, Object>>) spells.get("items");
 			assertFalse(items.isEmpty());
 			for (Map<String, Object> item : items) {
 				assertTrue(item.get("level") instanceof Integer, item.toString());
@@ -143,7 +143,8 @@ class DecisionsTest {
 			assertEquals(5, options(profile).size());
 			assertDescribed(options(profile));
 			assertEquals("PEGI_18", profile.get("recommended"));
-			assertTrue(String.valueOf(profile.get("note")).contains("Baldur's Gate"), String.valueOf(profile.get("note")));
+			assertTrue(String.valueOf(profile.get("note")).contains("Baldur's Gate"),
+					String.valueOf(profile.get("note")));
 
 			// A young player caps the profile options; the age question disappears.
 			Map<String, Object> aged = engine.campaigns().updateSetup(op(), campaign, null, map("player_age", 14));
@@ -151,8 +152,8 @@ class DecisionsTest {
 			assertEquals(List.of("PEGI_3", "PEGI_7", "PEGI_12"),
 					options(decisions(aged).get(0)).stream().map(o -> o.get("value")).toList());
 
-			Map<String, Object> exp = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("content_profile", "PEGI_12"));
+			Map<String, Object> exp = engine.campaigns().updateSetup(op(), campaign, null,
+					map("content_profile", "PEGI_12"));
 			Map<String, Object> authorship = decisions(exp).get(0);
 			assertEquals("experience.authorship", authorship.get("id"));
 			assertEquals("SUGGESTIONS", authorship.get("options_are"));
@@ -160,25 +161,26 @@ class DecisionsTest {
 			assertEquals(Boolean.TRUE, authorship.get("allow_surprise_me"));
 
 			// Guided authorship opens the creative follow-ups one by one; each answer merges into the section.
-			Map<String, Object> tone = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("experience", map("authorship", "GUIDED")));
+			Map<String, Object> tone = engine.campaigns().updateSetup(op(), campaign, null,
+					map("experience", map("authorship", "GUIDED")));
 			Map<String, Object> style = decisions(tone).get(0);
 			assertEquals("experience.fantasy_style", style.get("id"));
 			assertEquals("changes.experience.fantasy_style", style.get("path"));
 			assertEquals("SUGGESTIONS", style.get("options_are"));
 			assertEquals("EPIC", style.get("recommended"));
 			assertEquals("EPIC", style.get("default"));
-			assertTrue(String.valueOf(style.get("question")).contains("Baldur's Gate"), String.valueOf(style.get("question")));
+			assertTrue(String.valueOf(style.get("question")).contains("Baldur's Gate"),
+					String.valueOf(style.get("question")));
 			assertEquals(5, options(style).size());
 			assertDescribed(options(style));
 			Map<String, Object> rel = engine.campaigns().updateSetup(op(), campaign, null,
 					map("experience", map("tone", "Classic heroic with a mystery underneath")));
 			assertEquals("experience.relationship_focus", ids(rel).get(0));
-			Map<String, Object> excl = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("experience", map("relationship_focus", "CENTRAL")));
+			Map<String, Object> excl = engine.campaigns().updateSetup(op(), campaign, null,
+					map("experience", map("relationship_focus", "CENTRAL")));
 			assertEquals("experience.excluded_themes", ids(excl).get(0));
-			Map<String, Object> gen = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("experience", map("excluded_themes", List.of())));
+			Map<String, Object> gen = engine.campaigns().updateSetup(op(), campaign, null,
+					map("experience", map("excluded_themes", List.of())));
 			Map<String, Object> ability = decisions(gen).get(0);
 			assertEquals("rules.ability_generation", ability.get("id"));
 			assertEquals(3, options(ability).size());
@@ -186,34 +188,34 @@ class DecisionsTest {
 			assertEquals(Boolean.TRUE, ability.get("optional"));
 			assertEquals("STANDARD_ARRAY", ability.get("default"));
 
-			Map<String, Object> prog = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("ability_generation", "POINT_BUY")));
+			Map<String, Object> prog = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("ability_generation", "POINT_BUY")));
 			assertEquals("rules.progression", ids(prog).get(0));
-			Map<String, Object> hpq = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("progression", "XP")));
+			Map<String, Object> hpq = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("progression", "XP")));
 			assertEquals("rules.hp_progression", ids(hpq).get(0));
 			assertEquals(3, options(decisions(hpq).get(0)).size());
 			assertDescribed(options(decisions(hpq).get(0)));
 			assertEquals("FIRST_3_MAX", decisions(hpq).get(0).get("recommended"));
-			Map<String, Object> xpq = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("hp_progression", "FIRST_3_MAX")));
+			Map<String, Object> xpq = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("hp_progression", "FIRST_3_MAX")));
 			assertEquals("rules.xp_policy", ids(xpq).get(0));
 			assertEquals(3, options(decisions(xpq).get(0)).size());
 			assertDescribed(options(decisions(xpq).get(0)));
 			assertEquals("SHARED", decisions(xpq).get(0).get("recommended"));
-			Map<String, Object> compq = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("xp_policy", "LOCKSTEP")));
+			Map<String, Object> compq = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("xp_policy", "LOCKSTEP")));
 			assertEquals("rules.companion_level_up", ids(compq).get(0));
 			assertEquals(2, options(decisions(compq).get(0)).size());
-			Map<String, Object> ovr = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("companion_level_up", "ENGINE")));
+			Map<String, Object> ovr = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("companion_level_up", "ENGINE")));
 			assertEquals("rules.gm_override_policy", ids(ovr).get(0));
-			Map<String, Object> cont = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("rules", map("gm_override_policy", "EXPLICIT_AUDITED")));
+			Map<String, Object> cont = engine.campaigns().updateSetup(op(), campaign, null,
+					map("rules", map("gm_override_policy", "EXPLICIT_AUDITED")));
 			assertEquals("continuation", ids(cont).get(0));
 			assertEquals(3, options(decisions(cont).get(0)).size());
-			Map<String, Object> pcq = engine.campaigns()
-					.updateSetup(op(), campaign, null, map("continuation", "CHECKPOINT"));
+			Map<String, Object> pcq = engine.campaigns().updateSetup(op(), campaign, null,
+					map("continuation", "CHECKPOINT"));
 			assertEquals("player_character", ids(pcq).get(0));
 			assertEquals("create_character_draft", decisions(pcq).get(0).get("tool"));
 
@@ -309,9 +311,10 @@ class DecisionsTest {
 			Map<String, Object> adv = engine.campaigns().updateSetup(op(), campaign, null, map("party", "SURPRISE_ME"));
 			assertEquals("adventure", ids(adv).get(0));
 			assertEquals("GM", decisions(adv).get(0).get("owner"));
-			Map<String, Object> review = engine.campaigns().updateSetup(op(), campaign, null, map("adventure",
-					map("premise", "A quiet river town hides a failing magical boundary.", "opening_location",
-							"Bellhaven", "immediate_goal", "Find Aldren's contact at The Copper Kettle.")));
+			Map<String, Object> review = engine.campaigns().updateSetup(op(), campaign, null,
+					map("adventure",
+							map("premise", "A quiet river town hides a failing magical boundary.", "opening_location",
+									"Bellhaven", "immediate_goal", "Find Aldren's contact at The Copper Kettle.")));
 			assertEquals(List.of("campaign_review"), ids(review));
 			assertEquals("commit_campaign_setup", decisions(review).get(0).get("tool"));
 
@@ -320,19 +323,24 @@ class DecisionsTest {
 		}
 	}
 
-	/** A delegated experience commits as the fantasy epic, and the running guidance reaches the GM every session. */
+	/**
+	 * A delegated experience commits as the fantasy epic, and the running guidance reaches the GM
+	 * every session.
+	 */
 	@Test
 	void delegatedExperienceDefaultsToTheFantasyEpic() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("epic"))) {
 			String campaign = (String) engine.campaigns().create(op(), null, null).get("campaign");
-			engine.campaigns().updateSetup(op(), campaign, null,
-					map("content_profile", "PEGI_18", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
-							"CHECKPOINT"));
-			String pc = (String) engine.characters().createDraft(op(), campaign,
-					map("name", "Tav", "species", "Dwarf", "class", "Fighter", "ability_scores",
-							map("STR", 15, "CON", 14, "DEX", 13, "WIS", 12, "INT", 10, "CHA", 8), "background",
-							"Criminal", "background_ability_scores", map("DEX", 2, "CON", 1), "skills",
-							List.of("Athletics", "Perception"), "personality", "Wry."), true).get("character");
+			engine.campaigns().updateSetup(op(), campaign, null, map("content_profile", "PEGI_18", "experience",
+					"SURPRISE_ME", "rules", Map.of(), "continuation", "CHECKPOINT"));
+			String pc = (String) engine.characters()
+					.createDraft(op(), campaign,
+							map("name", "Tav", "species", "Dwarf", "class", "Fighter", "ability_scores",
+									map("STR", 15, "CON", 14, "DEX", 13, "WIS", 12, "INT", 10, "CHA", 8), "background",
+									"Criminal", "background_ability_scores", map("DEX", 2, "CON", 1), "skills",
+									List.of("Athletics", "Perception"), "personality", "Wry."),
+							true)
+					.get("character");
 			engine.characters().commitDraft(op(), campaign, pc, null);
 			engine.campaigns().updateSetup(op(), campaign, null, map("party", "SURPRISE_ME", "adventure",
 					map("premise", "x", "opening_location", "Beach", "immediate_goal", "get the tadpole out")));

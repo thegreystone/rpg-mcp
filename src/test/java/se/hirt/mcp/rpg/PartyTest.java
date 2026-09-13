@@ -41,8 +41,8 @@ import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
- * The player must always be able to ask about their own state and their party's, in detail, whatever the harness state
- * — setup, exploration, mid-encounter, after a death.
+ * The player must always be able to ask about their own state and their party's, in detail,
+ * whatever the harness state — setup, exploration, mid-encounter, after a death.
  */
 class PartyTest {
 
@@ -66,14 +66,13 @@ class PartyTest {
 					map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
 							"CHECKPOINT", "party", "SURPRISE_ME", "adventure",
 							map("premise", "x", "opening_location", "Bellhaven", "immediate_goal", "y")));
-			String pc = (String) engine.characters().createDraft(op(), campaign,
-					map("name", "Richard", "species", "Human", "class", "Sorcerer", "ability_scores",
-							map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8), "background",
-							"Criminal", "background_ability_scores", map("CON", 2, "INT", 1), "species_skill",
-							"Insight", "origin_feat",
-							map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")),
-							"skills", List.of("Deception", "Persuasion"), "personality", "Confident.",
-							"starting_equipment", "A"), true).get("character");
+			String pc = (String) engine.characters().createDraft(op(), campaign, map("name", "Richard", "species",
+					"Human", "class", "Sorcerer", "ability_scores",
+					map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8), "background", "Criminal",
+					"background_ability_scores", map("CON", 2, "INT", 1), "species_skill", "Insight", "origin_feat",
+					map("feat", "Skilled", "proficiencies", List.of("Nature", "Survival", "Medicine")), "skills",
+					List.of("Deception", "Persuasion"), "personality", "Confident.", "starting_equipment", "A"), true)
+					.get("character");
 			Map<String, Object> setupParty = engine.sessions().party(campaign, "FULL");
 			assertEquals(Boolean.TRUE, setupParty.get("setup"));
 			assertEquals("Richard", list(setupParty.get("members")).get(0).get("name"));
@@ -87,7 +86,8 @@ class PartyTest {
 
 			engine.sessions().bootstrap(op(), campaign, null);
 			String mara = (String) engine.runtime()
-					.materialize(op(), campaign, "Guard", "Mara", null, "dry, loyal", null, null, false).get("character");
+					.materialize(op(), campaign, "Guard", "Mara", null, "dry, loyal", null, null, false)
+					.get("character");
 			engine.db().mutate(Database.Mutation.of("test_join", 1L, op(), "GM", null), tx -> {
 				tx.insert("party_membership",
 						map("campaign_id", 1L, "character_id", 2L, "state", "ACTIVE", "joined_seq", 0));
@@ -110,12 +110,11 @@ class PartyTest {
 			assertNull(party.get("encounter"));
 
 			// Mid-encounter: still readable, and the encounter is included.
-			String wolf = (String) engine.runtime().materialize(op(), campaign, "Wolf", null, null, null, null, null, false)
-					.get("character");
+			String wolf = (String) engine.runtime()
+					.materialize(op(), campaign, "Wolf", null, null, null, null, null, false).get("character");
 			dice.queue(20, 50, 10, 50, 1, 50);
-			engine.encounters()
-					.start(op(), campaign, map("party", List.of(pc, mara), "wild", List.of(wolf)), null, null, null,
-							null, null);
+			engine.encounters().start(op(), campaign, map("party", List.of(pc, mara), "wild", List.of(wolf)), null,
+					null, null, null, null);
 			Map<String, Object> inFight = engine.sessions().party(campaign, "FULL");
 			assertEquals("ENCOUNTER", inFight.get("harness_state"));
 			assertNotNull(inFight.get("encounter"));

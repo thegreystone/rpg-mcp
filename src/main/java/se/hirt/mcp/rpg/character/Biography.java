@@ -40,22 +40,27 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The two slow-changing narrative aggregates a character carries besides the identity columns (DOMAIN_MODEL.md §5.1,
- * MCP_PROTOCOL.md §12.7): the <b>biography</b> (dated life events, verbatim lines, long-running bodily state, permanent
- * marks, and the <b>wants</b> that drive the person: dated, closable, shown open in every party list) and, under a
- * PEGI_18 content profile only, the <b>intimate profile</b> (the character's own body, likes, dislikes, limits, hard
- * lines, the wants that concern intimacy, the standing terms of their household, and how they talk in bed). Both are JSON maps of lists merged the way relationship profiles are: lists append without duplicates, an
- * entry with the same {@code note} replaces the older one (so a want can be marked done and a state given an end), a
- * null removes a key, {@code replace: true} starts over.
+ * The two slow-changing narrative aggregates a character carries besides the identity columns
+ * (DOMAIN_MODEL.md §5.1, MCP_PROTOCOL.md §12.7): the <b>biography</b> (dated life events, verbatim
+ * lines, long-running bodily state, permanent marks, and the <b>wants</b> that drive the person:
+ * dated, closable, shown open in every party list) and, under a PEGI_18 content profile only, the
+ * <b>intimate profile</b> (the character's own body, likes, dislikes, limits, hard lines, the wants
+ * that concern intimacy, the standing terms of their household, and how they talk in bed). Both are
+ * JSON maps of lists merged the way relationship profiles are: lists append without duplicates, an
+ * entry with the same {@code note} replaces the older one (so a want can be marked done and a state
+ * given an end), a null removes a key, {@code replace: true} starts over.
  */
 public final class Biography {
 
-	/** Keys of {@code biography_json}; {@code wants} are the character's drives: what they are working toward. */
+	/**
+	 * Keys of {@code biography_json}; {@code wants} are the character's drives: what they are
+	 * working toward.
+	 */
 	public static final Set<String> BIOGRAPHY_KEYS = Set.of("timeline", "voice", "state", "marks", "wants");
 
 	/** Keys of {@code intimacy_json}; its {@code wants} are the drives that concern intimacy. */
-	public static final Set<String> INTIMACY_KEYS = Set.of("body", "likes", "dislikes", "limits", "hard_lines",
-			"wants", "household_terms", "voice_in_bed");
+	public static final Set<String> INTIMACY_KEYS = Set.of("body", "likes", "dislikes", "limits", "hard_lines", "wants",
+			"household_terms", "voice_in_bed");
 
 	/** Entries of these lists are maps stamped with the game time when written. */
 	private static final Map<String, String> STAMPED = Map.of("timeline", "game_time", "state", "since", "wants",
@@ -84,15 +89,15 @@ public final class Biography {
 	}
 
 	/**
-	 * Merges {@code given} into {@code current} under the allowed keys. Lists append without duplicates; an entry that
-	 * is a map with a {@code note} replaces an existing entry with the same note; entries of dated lists are stamped
-	 * with the current game time when the caller gave none; a null value removes the key; {@code replace: true} starts
-	 * from an empty aggregate.
+	 * Merges {@code given} into {@code current} under the allowed keys. Lists append without
+	 * duplicates; an entry that is a map with a {@code note} replaces an existing entry with the
+	 * same note; entries of dated lists are stamped with the current game time when the caller gave
+	 * none; a null value removes the key; {@code replace: true} starts from an empty aggregate.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> merge(
-			Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, Set<String> allowed,
-			String what) {
+		Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, Set<String> allowed,
+		String what) {
 		if (given == null) {
 			return current;
 		}
@@ -135,7 +140,10 @@ public final class Biography {
 		return out;
 	}
 
-	/** A dated list's entry becomes a map stamped with the game time; a bare string is its {@code note}. */
+	/**
+	 * A dated list's entry becomes a map stamped with the game time; a bare string is its
+	 * {@code note}.
+	 */
 	private static Object normalize(Tx tx, long campaignId, String key, Object item) {
 		String stamp = STAMPED.get(key);
 		if (stamp == null) {
@@ -205,8 +213,8 @@ public final class Biography {
 		var out = new ArrayList<Map<String, Object>>();
 		if (wants instanceof List<?> list) {
 			for (Object o : list) {
-				if (o instanceof Map<?, ?> m && (m.get("status") == null || "OPEN".equalsIgnoreCase(
-						String.valueOf(m.get("status"))))) {
+				if (o instanceof Map<?, ?> m
+						&& (m.get("status") == null || "OPEN".equalsIgnoreCase(String.valueOf(m.get("status"))))) {
 					out.add((Map<String, Object>) m);
 				}
 			}
@@ -228,9 +236,10 @@ public final class Biography {
 	}
 
 	/**
-	 * The one-line person behind the numbers, added to party lists at every detail level: age, presentation, a brief
-	 * appearance, the state entries that are still running (carrying a child, an arm in a sling) and the open wants,
-	 * so an NPC is played toward the same things in every scene.
+	 * The one-line person behind the numbers, added to party lists at every detail level: age,
+	 * presentation, a brief appearance, the state entries that are still running (carrying a child,
+	 * an arm in a sling) and the open wants, so an NPC is played toward the same things in every
+	 * scene.
 	 */
 	public static void appendBrief(Row c, Map<String, Object> m) {
 		if (!c.isNull("age")) {

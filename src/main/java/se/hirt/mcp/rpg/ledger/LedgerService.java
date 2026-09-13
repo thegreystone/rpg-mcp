@@ -40,8 +40,8 @@ import se.hirt.mcp.rpg.session.GameTime;
 import java.util.*;
 
 /**
- * The semantic event ledger (DOMAIN_MODEL.md §14.1): compact structured memories with two independent orderings —
- * insertion (event id) and fictional (game time).
+ * The semantic event ledger (DOMAIN_MODEL.md §14.1): compact structured memories with two
+ * independent orderings — insertion (event id) and fictional (game time).
  */
 public final class LedgerService {
 
@@ -59,13 +59,12 @@ public final class LedgerService {
 
 	/** Parameters for one ledger event. Nulls fall back to sensible defaults. */
 	public record EventSpec(String type, String summary, List<Long> actorIds, String importance, String visibility,
-	                        String provenance, Long fictionalSeq, Long locationId, String episodicDetail,
-	                        Map<String, Object> payload) {
+			String provenance, Long fictionalSeq, Long locationId, String episodicDetail, Map<String, Object> payload) {
 	}
 
 	/**
-	 * Appends an event inside an existing unit of work — this is how mechanical operations write their own ledger
-	 * entries (I-47). Returns the new event id.
+	 * Appends an event inside an existing unit of work — this is how mechanical operations write
+	 * their own ledger entries (I-47). Returns the new event id.
 	 */
 	public static long append(Tx tx, long campaignId, EventSpec spec) {
 		long now = GameTime.currentSeq(tx, campaignId);
@@ -100,9 +99,9 @@ public final class LedgerService {
 	// ── record_memory ──────────────────────────────────────────────────
 
 	public Map<String, Object> record(
-			String operationId, String campaignRef, String type, String summary, List<String> participants,
-			String importance, String visibility, String provenance, String gameTime, String locationRef, String detail,
-			Map<String, Object> payload) {
+		String operationId, String campaignRef, String type, String summary, List<String> participants,
+		String importance, String visibility, String provenance, String gameTime, String locationRef, String detail,
+		Map<String, Object> payload) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -142,8 +141,8 @@ public final class LedgerService {
 						throw RpgException.invalidArgument(p + " belongs to another campaign.");
 					}
 					if (!"ACTIVE".equals(c.str("lifecycle"))) {
-						throw RpgException.invalidArgument(
-								p + " is not an active character and cannot appear in the ledger.");
+						throw RpgException
+								.invalidArgument(p + " is not an active character and cannot appear in the ledger.");
 					}
 					actorIds.add(id);
 				}
@@ -157,14 +156,13 @@ public final class LedgerService {
 				}
 			}
 			Long fictional = gameTime == null || gameTime.isBlank() ? null : GameTime.parse(gameTime);
-			long eventId = append(tx, campaignId,
-					new EventSpec(type.toUpperCase(), summary, actorIds, imp, vis, prov, fictional, locationId, detail,
-							payload));
+			long eventId = append(tx, campaignId, new EventSpec(type.toUpperCase(), summary, actorIds, imp, vis, prov,
+					fictional, locationId, detail, payload));
 			tx.touched(Ref.of(Ref.EVENT, eventId), 0);
 			var result = new LinkedHashMap<String, Object>();
 			result.put("event", Ref.of(Ref.EVENT, eventId));
-			result.put("game_time",
-					GameTime.toMap(tx, campaignId, fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
+			result.put("game_time", GameTime.toMap(tx, campaignId,
+					fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
 			// A long session learns here, not only at bootstrap, that the chronicle is owed a chapter.
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			result.put("meta", Harness.meta(campaign, due == null ? null : List.of(due)));
@@ -175,8 +173,8 @@ public final class LedgerService {
 	// ── queries ────────────────────────────────────────────────────────
 
 	public Map<String, Object> queryMemories(
-			String campaignRef, List<String> participants, List<String> types,
-			String focus, String minImportance, int limit) {
+		String campaignRef, List<String> participants, List<String> types, String focus, String minImportance,
+		int limit) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		int max = Math.max(1, Math.min(limit <= 0 ? 10 : limit, 100));
 		return db.read(tx -> {
@@ -235,8 +233,8 @@ public final class LedgerService {
 	}
 
 	public Map<String, Object> queryTimeline(
-			String campaignRef, String fromTime, String toTime,
-			List<String> participants, List<String> types, String minImportance, boolean byInsertion, int limit) {
+		String campaignRef, String fromTime, String toTime, List<String> participants, List<String> types,
+		String minImportance, boolean byInsertion, int limit) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		int max = Math.max(1, Math.min(limit <= 0 ? 25 : limit, 100));
 		return db.read(tx -> {
@@ -287,9 +285,8 @@ public final class LedgerService {
 
 	/** Recent significant events for a bootstrap context (most recent first). */
 	public static List<Map<String, Object>> recent(Tx tx, long campaignId, int limit) {
-		List<Row> rows = tx.query(
-				"SELECT * FROM event WHERE campaign_id = ? AND importance <> 'MINOR' " + "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT ?",
-				campaignId, limit);
+		List<Row> rows = tx.query("SELECT * FROM event WHERE campaign_id = ? AND importance <> 'MINOR' "
+				+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT ?", campaignId, limit);
 		return rows.stream().map(r -> eventSummary(tx, r, false)).toList();
 	}
 
@@ -301,9 +298,8 @@ public final class LedgerService {
 		m.put("importance", r.str("importance"));
 		m.put("visibility", r.str("visibility"));
 		m.put("game_time", r.str("fictional_time"));
-		List<Row> actors = tx.query(
-				"SELECT c.id, c.name FROM event_actor a JOIN character c ON c.id = a.character_id " + "WHERE a.event_id = ? ORDER BY a.id",
-				r.id());
+		List<Row> actors = tx.query("SELECT c.id, c.name FROM event_actor a JOIN character c ON c.id = a.character_id "
+				+ "WHERE a.event_id = ? ORDER BY a.id", r.id());
 		m.put("participants",
 				actors.stream().map(a -> Ref.of(Ref.CHARACTER, a.id()) + " (" + a.str("name") + ")").toList());
 		if (!r.isNull("location_id")) {
@@ -316,15 +312,17 @@ public final class LedgerService {
 	}
 
 	/**
-	 * "Since you last played": the ledger between two journal points, arranged by importance under a character budget
-	 * and never by a model. CRITICAL events keep their episodic detail, MAJOR their summaries, NOTABLE one line each
-	 * while the budget lasts, MINOR only a count by type. Within each group the order is chronological. When the
-	 * budget is exceeded the least important lines go first, oldest first, and the digest says how many were left out.
+	 * "Since you last played": the ledger between two journal points, arranged by importance under
+	 * a character budget and never by a model. CRITICAL events keep their episodic detail, MAJOR
+	 * their summaries, NOTABLE one line each while the budget lasts, MINOR only a count by type.
+	 * Within each group the order is chronological. When the budget is exceeded the least important
+	 * lines go first, oldest first, and the digest says how many were left out.
 	 */
-	public static Map<String, Object> digest(Tx tx, long campaignId, long fromJournalId, long toJournalId,
-	                                         int charBudget) {
+	public static Map<String, Object> digest(
+		Tx tx, long campaignId, long fromJournalId, long toJournalId, int charBudget) {
 		List<Row> rows = tx.query(
-				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? " + "AND visibility <> 'DIRECTOR_ONLY' AND type <> 'CHRONICLE_WRITTEN' ORDER BY id",
+				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? "
+						+ "AND visibility <> 'DIRECTOR_ONLY' AND type <> 'CHRONICLE_WRITTEN' ORDER BY id",
 				campaignId, fromJournalId, toJournalId);
 		var critical = new ArrayList<Map<String, Object>>();
 		var major = new ArrayList<Map<String, Object>>();
@@ -376,10 +374,10 @@ public final class LedgerService {
 
 	private static String importanceAtLeast(String min) {
 		return switch (min) {
-			case "CRITICAL" -> "'CRITICAL'";
-			case "MAJOR" -> "'CRITICAL','MAJOR'";
-			case "NOTABLE" -> "'CRITICAL','MAJOR','NOTABLE'";
-			default -> "'CRITICAL','MAJOR','NOTABLE','MINOR'";
+		case "CRITICAL" -> "'CRITICAL'";
+		case "MAJOR" -> "'CRITICAL','MAJOR'";
+		case "NOTABLE" -> "'CRITICAL','MAJOR','NOTABLE'";
+		default -> "'CRITICAL','MAJOR','NOTABLE','MINOR'";
 		};
 	}
 }

@@ -40,9 +40,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Answers "which operations are legal now" (DOMAIN_MODEL.md §16, I-61). Reads are always legal against an existing
- * campaign; mutations are gated by the campaign's harness state. The advisory {@code allowed_operations} list and the
- * server-side validation come from the same table.
+ * Answers "which operations are legal now" (DOMAIN_MODEL.md §16, I-61). Reads are always legal
+ * against an existing campaign; mutations are gated by the campaign's harness state. The advisory
+ * {@code allowed_operations} list and the server-side validation come from the same table.
  */
 public final class Harness {
 
@@ -68,39 +68,36 @@ public final class Harness {
 			ops.addAll(SETUP_TOOLS);
 			ops.add("commit_campaign_setup");
 		}
-		case READY_TO_PLAY, SESSION_SUSPEND -> ops.addAll(
-				List.of("bootstrap_session", "get_character_sheet", "query_memories", "query_timeline",
-						"get_continuation_options", "restore_checkpoint", "materialize_location",
-						"upsert_narrative_state", "commit_director_changes", "apply_gm_override", "prepare_spells",
-						"update_character", "update_house_rules", "complete_campaign", "set_calendar", "create_account",
-						"transfer_money", "define_cash_flow", "update_cash_flow", "write_chronicle"));
-		case EXPLORATION -> ops.addAll(
-				List.of("bootstrap_session", "get_character_sheet", "resolve_check", "roll_dice", "record_memory", "query_memories",
-						"query_timeline", "advance_time", "create_checkpoint", "get_continuation_options",
-						"restore_checkpoint", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
-						"set_calendar", "create_account", "transfer_money", "define_cash_flow", "update_cash_flow",
-						"define_content", "materialize_character", "start_encounter", "apply_runtime_change", "award_xp",
-						"transfer_player_control", "begin_level_up", "update_character", "update_party_membership",
-						"update_relationship", "update_house_rules", "materialize_location", "move_party", "upsert_narrative_state",
-						"commit_director_changes", "perform_rest", "apply_gm_override", "cast_spell", "prepare_spells",
-						"suspend_session", "complete_campaign", "write_chronicle"));
-		case LEVEL_UP -> ops.addAll(
-				List.of("get_level_up_choices", "update_level_up", "validate_level_up", "commit_level_up",
-						"abandon_transaction", "get_character_sheet", "get_party", "record_memory",
-						"complete_campaign"));
-		case ENCOUNTER -> ops.addAll(
-				List.of("get_encounter_state", "perform_encounter_action", "resolve_pending_choice", "end_encounter",
-						"resolve_check", "roll_dice", "apply_runtime_change", "equip_item", "update_relationship", "update_house_rules",
-						"materialize_character",
-						"get_character_sheet", "record_memory", "get_continuation_options", "restore_checkpoint",
-						"transfer_player_control", "apply_gm_override", "complete_campaign", "write_chronicle"));
-		case CHECKPOINT_DECISION -> ops.addAll(
-				List.of("get_continuation_options", "restore_checkpoint", "transfer_player_control",
-						"complete_campaign"));
+		case READY_TO_PLAY,
+				SESSION_SUSPEND ->
+			ops.addAll(List.of("bootstrap_session", "get_character_sheet", "query_memories", "query_timeline",
+					"get_continuation_options", "restore_checkpoint", "materialize_location", "upsert_narrative_state",
+					"commit_director_changes", "apply_gm_override", "prepare_spells", "update_character",
+					"update_house_rules", "complete_campaign", "set_calendar", "create_account", "transfer_money",
+					"define_cash_flow", "update_cash_flow", "write_chronicle"));
+		case EXPLORATION -> ops.addAll(List.of("bootstrap_session", "get_character_sheet", "resolve_check", "roll_dice",
+				"record_memory", "query_memories", "query_timeline", "advance_time", "create_checkpoint",
+				"get_continuation_options", "restore_checkpoint", "transfer_item", "give_money", "equip_item", "trade",
+				"grant_loot", "set_calendar", "create_account", "transfer_money", "define_cash_flow",
+				"update_cash_flow", "define_content", "materialize_character", "start_encounter",
+				"apply_runtime_change", "award_xp", "transfer_player_control", "begin_level_up", "update_character",
+				"update_party_membership", "update_relationship", "update_house_rules", "materialize_location",
+				"move_party", "upsert_narrative_state", "commit_director_changes", "perform_rest", "apply_gm_override",
+				"cast_spell", "prepare_spells", "suspend_session", "complete_campaign", "write_chronicle"));
+		case LEVEL_UP ->
+			ops.addAll(List.of("get_level_up_choices", "update_level_up", "validate_level_up", "commit_level_up",
+					"abandon_transaction", "get_character_sheet", "get_party", "record_memory", "complete_campaign"));
+		case ENCOUNTER -> ops.addAll(List.of("get_encounter_state", "perform_encounter_action",
+				"resolve_pending_choice", "end_encounter", "resolve_check", "roll_dice", "apply_runtime_change",
+				"equip_item", "update_relationship", "update_house_rules", "materialize_character",
+				"get_character_sheet", "record_memory", "get_continuation_options", "restore_checkpoint",
+				"transfer_player_control", "apply_gm_override", "complete_campaign", "write_chronicle"));
+		case CHECKPOINT_DECISION -> ops.addAll(List.of("get_continuation_options", "restore_checkpoint",
+				"transfer_player_control", "complete_campaign"));
 		case PLAYER_CHARACTER_TRANSFER ->
-				ops.addAll(List.of("get_continuation_options", "transfer_player_control", "complete_campaign"));
+			ops.addAll(List.of("get_continuation_options", "transfer_player_control", "complete_campaign"));
 		case CAMPAIGN_COMPLETED, CAMPAIGN_FAILED, CAMPAIGN_ABANDONED ->
-				ops.addAll(List.of("get_server_state", "open_campaign", "query_memories", "query_timeline"));
+			ops.addAll(List.of("get_server_state", "open_campaign", "query_memories", "query_timeline"));
 		default -> {
 			if (state.isSetup()) {
 				ops.addAll(SETUP_TOOLS);
@@ -144,8 +141,9 @@ public final class Harness {
 		}
 		long actual = row.lng("revision");
 		if (actual != expectedRevision) {
-			throw RpgException.conflict(
-							what + " has revision " + actual + " but expected_revision was " + expectedRevision + "; re-read it and retry.")
+			throw RpgException
+					.conflict(what + " has revision " + actual + " but expected_revision was " + expectedRevision
+							+ "; re-read it and retry.")
 					.withDetail("actual_revision", actual).withDetail("expected_revision", expectedRevision);
 		}
 	}

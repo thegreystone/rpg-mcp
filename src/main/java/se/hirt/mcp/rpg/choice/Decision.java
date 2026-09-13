@@ -34,15 +34,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One outstanding decision, rendered for a GM to put to the player: the question, the tool and field that record the
- * answer, every legal option with its description, and whether a free-text or SURPRISE_ME answer is acceptable. The
- * server lists decisions in interview order; the GM asks the first one only, shows all of its options, records the
- * answer and reads the list again (MCP_PROTOCOL.md §9.3.1).
+ * One outstanding decision, rendered for a GM to put to the player: the question, the tool and
+ * field that record the answer, every legal option with its description, and whether a free-text or
+ * SURPRISE_ME answer is acceptable. The server lists decisions in interview order; the GM asks the
+ * first one only, shows all of its options, records the answer and reads the list again
+ * (MCP_PROTOCOL.md §9.3.1).
  */
 public final class Decision {
 
-	/** What the {@code options} list is: the closed set of legal values, mere suggestions, or nothing. */
-	public enum OptionsKind {LEGAL_VALUES, SUGGESTIONS, NONE}
+	/**
+	 * What the {@code options} list is: the closed set of legal values, mere suggestions, or
+	 * nothing.
+	 */
+	public enum OptionsKind {
+		LEGAL_VALUES, SUGGESTIONS, NONE
+	}
 
 	private final String id;
 	private final String question;

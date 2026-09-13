@@ -46,10 +46,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Accounts (MCP_PROTOCOL.md §14.6, DATABASE.md §3.11): money bags that are not a character's purse — an estate or
- * faction treasury such as "The House of Greystone". Balances are copper like character purses; every movement is a
- * {@code MONEY_FLOW} ledger event, and the engine never creates coin silently: an opening balance or a transfer from
- * {@code WORLD} is a GM grant recorded as such.
+ * Accounts (MCP_PROTOCOL.md §14.6, DATABASE.md §3.11): money bags that are not a character's purse
+ * — an estate or faction treasury such as "The House of Greystone". Balances are copper like
+ * character purses; every movement is a {@code MONEY_FLOW} ledger event, and the engine never
+ * creates coin silently: an opening balance or a transfer from {@code WORLD} is a GM grant recorded
+ * as such.
  */
 public final class AccountService {
 
@@ -66,8 +67,8 @@ public final class AccountService {
 	// ── create_account ─────────────────────────────────────────────────
 
 	public Map<String, Object> create(
-			String operationId, String campaignRef, String name, String ownerKind, String ownerRef, Object money,
-			String notes) {
+		String operationId, String campaignRef, String name, String ownerKind, String ownerRef, Object money,
+		String notes) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -124,7 +125,7 @@ public final class AccountService {
 	// ── transfer_money ─────────────────────────────────────────────────
 
 	public Map<String, Object> transfer(
-			String operationId, String campaignRef, Object from, Object to, Object money, String reason) {
+		String operationId, String campaignRef, Object from, Object to, Object money, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -150,12 +151,14 @@ public final class AccountService {
 			String targetName = target.name(tx, campaignId);
 			source.adjust(tx, campaignId, -cp);
 			target.adjust(tx, campaignId, cp);
-			String summary = Money.format(cp) + (source.isWorld() ? " to " + targetName
-					: target.isWorld() ? " paid out of " + sourceName
-							: " from " + sourceName + " to " + targetName) + (reason == null || reason.isBlank() ? "."
-					: ": " + reason);
+			String summary = Money.format(cp)
+					+ (source.isWorld() ? " to " + targetName
+							: target.isWorld() ? " paid out of " + sourceName
+									: " from " + sourceName + " to " + targetName)
+					+ (reason == null || reason.isBlank() ? "." : ": " + reason);
 			long eventId = moneyFlowEvent(tx, campaignId, source, target, cp, summary,
-					cp >= 10 * Money.GP ? "NOTABLE" : "MINOR", null, null, Map.of("reason", reason == null ? "" : reason));
+					cp >= 10 * Money.GP ? "NOTABLE" : "MINOR", null, null,
+					Map.of("reason", reason == null ? "" : reason));
 			var result = new LinkedHashMap<String, Object>();
 			result.put("from", source.toString());
 			result.put("to", target.toString());
@@ -189,7 +192,8 @@ public final class AccountService {
 			result.put("accounts", accounts);
 			var purses = new ArrayList<Map<String, Object>>();
 			for (Row c : tx.query(
-					"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? " + "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' ORDER BY m.id",
+					"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
+							+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' ORDER BY m.id",
 					campaignId)) {
 				var p = new LinkedHashMap<String, Object>();
 				p.put("character", Ref.of(Ref.CHARACTER, c.id()));
@@ -201,7 +205,8 @@ public final class AccountService {
 			result.put("purses", purses);
 			var recent = new ArrayList<Map<String, Object>>();
 			for (Row r : tx.query(
-					"SELECT r.*, f.name AS flow_name, f.kind AS flow_kind FROM cash_flow_run r JOIN cash_flow f ON f.id = r.cash_flow_id " + "WHERE f.campaign_id = ? ORDER BY r.due_seq DESC, r.id DESC LIMIT ?",
+					"SELECT r.*, f.name AS flow_name, f.kind AS flow_kind FROM cash_flow_run r JOIN cash_flow f ON f.id = r.cash_flow_id "
+							+ "WHERE f.campaign_id = ? ORDER BY r.due_seq DESC, r.id DESC LIMIT ?",
 					campaignId, runs)) {
 				recent.add(runView(r, cal));
 			}
@@ -228,10 +233,10 @@ public final class AccountService {
 			return null;
 		}
 		String table = switch (kind) {
-			case "FACTION" -> "faction";
-			case "CHARACTER" -> "character";
-			case "ESTATE" -> "location";
-			default -> null;
+		case "FACTION" -> "faction";
+		case "CHARACTER" -> "character";
+		case "ESTATE" -> "location";
+		default -> null;
 		};
 		if (table == null) {
 			throw RpgException.invalidArgument("owner is only meaningful for FACTION, CHARACTER or ESTATE accounts.");
@@ -250,10 +255,10 @@ public final class AccountService {
 		m.put("name", a.str("name"));
 		m.put("owner_kind", a.str("owner_kind"));
 		String ownerTable = switch (a.str("owner_kind")) {
-			case "FACTION" -> "faction";
-			case "CHARACTER" -> "character";
-			case "ESTATE" -> "location";
-			default -> null;
+		case "FACTION" -> "faction";
+		case "CHARACTER" -> "character";
+		case "ESTATE" -> "location";
+		default -> null;
 		};
 		Long ownerId = a.lng("owner_id");
 		m.put("owner", ownerTable == null || ownerId == null ? null : Ref.of(ownerTable, ownerId));
@@ -269,7 +274,8 @@ public final class AccountService {
 	static List<Map<String, Object>> upcoming(Tx tx, long campaignId, Calendar cal, String ref, int limit) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row f : tx.query(
-				"SELECT * FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND (from_ref = ? OR to_ref = ?) " + "ORDER BY next_due_seq, id LIMIT ?",
+				"SELECT * FROM cash_flow WHERE campaign_id = ? AND active = 1 AND next_due_seq IS NOT NULL AND (from_ref = ? OR to_ref = ?) "
+						+ "ORDER BY next_due_seq, id LIMIT ?",
 				campaignId, ref, ref, limit)) {
 			var m = new LinkedHashMap<String, Object>();
 			m.put("cash_flow", Ref.of(CASH_FLOW, f.id()));
@@ -307,10 +313,13 @@ public final class AccountService {
 		return m;
 	}
 
-	/** Writes the {@code MONEY_FLOW} ledger event for a movement of coin; characters involved become actors. */
+	/**
+	 * Writes the {@code MONEY_FLOW} ledger event for a movement of coin; characters involved become
+	 * actors.
+	 */
 	static long moneyFlowEvent(
-			Tx tx, long campaignId, MoneyRef from, MoneyRef to, long cp, String summary, String importance,
-			Long fictionalSeq, Long locationId, Map<String, Object> extraPayload) {
+		Tx tx, long campaignId, MoneyRef from, MoneyRef to, long cp, String summary, String importance,
+		Long fictionalSeq, Long locationId, Map<String, Object> extraPayload) {
 		var payload = new LinkedHashMap<String, Object>();
 		payload.put("from", from.toString());
 		payload.put("to", to.toString());
@@ -325,8 +334,7 @@ public final class AccountService {
 		if (to.kind() == MoneyRef.Kind.CHARACTER) {
 			actors.add(to.id());
 		}
-		return LedgerService.append(tx, campaignId,
-				new LedgerService.EventSpec("MONEY_FLOW", summary, actors, importance, "PARTY_KNOWN", "GM",
-						fictionalSeq, locationId, null, payload));
+		return LedgerService.append(tx, campaignId, new LedgerService.EventSpec("MONEY_FLOW", summary, actors,
+				importance, "PARTY_KNOWN", "GM", fictionalSeq, locationId, null, payload));
 	}
 }

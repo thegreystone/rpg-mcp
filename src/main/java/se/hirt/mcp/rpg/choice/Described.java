@@ -32,10 +32,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * A closed set of legal values that knows how to present itself. Every setting the player must decide on is an enum
- * implementing this interface, so the legal values, their labels and their descriptions live in exactly one place:
- * validation, {@code constraints}, and the structured {@code decisions} handed to the GM are all derived from it
- * (MCP_PROTOCOL.md §9.3.1).
+ * A closed set of legal values that knows how to present itself. Every setting the player must
+ * decide on is an enum implementing this interface, so the legal values, their labels and their
+ * descriptions live in exactly one place: validation, {@code constraints}, and the structured
+ * {@code decisions} handed to the GM are all derived from it (MCP_PROTOCOL.md §9.3.1).
  */
 public interface Described {
 

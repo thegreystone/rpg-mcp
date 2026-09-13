@@ -40,11 +40,12 @@ import se.hirt.mcp.rpg.rules.Rules;
 import java.util.*;
 
 /**
- * Character origins per SRD 5.2.1 "Character Origins" and "Feats": mechanical backgrounds (three-ability increase,
- * Origin feat, two skills, a tool, equipment), species special traits, and feats — granted as {@code character_trait}
- * rows whose payload records the granting {@code source} ({@code class} when absent, {@code background},
- * {@code species}, {@code feat:<ref>}). Traits the engine cannot enforce are surfaced on the sheet with their
- * {@code enforcement} marker instead of being silently dropped (RULES_ENGINE.md §2.3).
+ * Character origins per SRD 5.2.1 "Character Origins" and "Feats": mechanical backgrounds
+ * (three-ability increase, Origin feat, two skills, a tool, equipment), species special traits, and
+ * feats — granted as {@code character_trait} rows whose payload records the granting {@code source}
+ * ({@code class} when absent, {@code background}, {@code species}, {@code feat:<ref>}). Traits the
+ * engine cannot enforce are surfaced on the sheet with their {@code enforcement} marker instead of
+ * being silently dropped (RULES_ENGINE.md §2.3).
  */
 public final class Origins {
 
@@ -66,7 +67,10 @@ public final class Origins {
 		return c.isNull("background_ref") ? Optional.empty() : rules.find(c.str("background_ref"));
 	}
 
-	/** The character's background, installed or campaign-defined ({@code content:N}, MCP_PROTOCOL.md §13.7). */
+	/**
+	 * The character's background, installed or campaign-defined ({@code content:N}, MCP_PROTOCOL.md
+	 * §13.7).
+	 */
 	public static Optional<RulesData.Definition> backgroundOf(Tx tx, RulesData rules, Row c) {
 		if (c.isNull("background_ref")) {
 			return Optional.empty();
@@ -75,8 +79,12 @@ public final class Origins {
 		return ref.startsWith("content:") ? customBackground(tx, c.lng("campaign_id"), ref) : rules.find(ref);
 	}
 
-	/** Resolves a background by id, symbolic id or name: installed content first, then the campaign's own. */
-	public static Optional<RulesData.Definition> resolveBackground(Tx tx, RulesData rules, long campaignId, String text) {
+	/**
+	 * Resolves a background by id, symbolic id or name: installed content first, then the
+	 * campaign's own.
+	 */
+	public static Optional<RulesData.Definition> resolveBackground(
+		Tx tx, RulesData rules, long campaignId, String text) {
 		Optional<RulesData.Definition> installed = rules.resolve("BACKGROUND", text);
 		return installed.isPresent() ? installed : customBackground(tx, campaignId, text);
 	}
@@ -92,8 +100,8 @@ public final class Origins {
 			return Optional.empty();
 		}
 		String t = text.trim();
-		for (Row row : tx.query("SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'BACKGROUND' ORDER BY id",
-				campaignId)) {
+		for (Row row : tx.query(
+				"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'BACKGROUND' ORDER BY id", campaignId)) {
 			boolean symbolic = !row.isNull("symbolic_id") && row.str("symbolic_id").equalsIgnoreCase(t);
 			if (("content:" + row.id()).equals(t) || row.str("name").equalsIgnoreCase(t) || symbolic) {
 				return Optional.of(customDefinition(row));
@@ -103,7 +111,8 @@ public final class Origins {
 	}
 
 	static RulesData.Definition customDefinition(Row row) {
-		return new RulesData.Definition("content:" + row.id(), row.str("kind"), row.str("name"), row.map("payload_json"));
+		return new RulesData.Definition("content:" + row.id(), row.str("kind"), row.str("name"),
+				row.map("payload_json"));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -111,7 +120,10 @@ public final class Origins {
 		return species.payload().get("traits") instanceof List<?> l ? (List<Map<String, Object>>) l : List.of();
 	}
 
-	/** The first species trait carrying the given payload key (skill_grant, feat_grant, choice, ...). */
+	/**
+	 * The first species trait carrying the given payload key (skill_grant, feat_grant, choice,
+	 * ...).
+	 */
 	public static Optional<Map<String, Object>> traitWith(RulesData.Definition species, String key) {
 		return traitsOf(species).stream().filter(t -> t.get(key) != null).findFirst();
 	}
@@ -131,7 +143,10 @@ public final class Origins {
 				.stream().filter(t -> SOURCE_SPECIES.equals(sourceOf(t))).findFirst();
 	}
 
-	/** The chosen option of the species' choice trait (Draconic Ancestry, Elven Lineage, ...), if any. */
+	/**
+	 * The chosen option of the species' choice trait (Draconic Ancestry, Elven Lineage, ...), if
+	 * any.
+	 */
 	@SuppressWarnings("unchecked")
 	public static Optional<Map<String, Object>> chosenSpeciesOption(Tx tx, RulesData rules, Row c) {
 		Optional<RulesData.Definition> species = speciesOf(rules, c);
@@ -157,9 +172,8 @@ public final class Origins {
 
 	/** Extra maximum hit points per character level (Dwarven Toughness). */
 	public static int hpPerLevel(RulesData rules, Row c) {
-		return speciesOf(rules, c).map(
-				s -> traitsOf(s).stream().mapToInt(t -> t.get("hp_per_level") instanceof Number n ? n.intValue() : 0)
-						.sum()).orElse(0);
+		return speciesOf(rules, c).map(s -> traitsOf(s).stream()
+				.mapToInt(t -> t.get("hp_per_level") instanceof Number n ? n.intValue() : 0).sum()).orElse(0);
 	}
 
 	/** Carrying-capacity multiplier (Goliath Powerful Build counts as one size larger). */
@@ -185,9 +199,8 @@ public final class Origins {
 
 	/** True when a feat adds the proficiency bonus to initiative (Alert). */
 	public static boolean initiativeProficient(Tx tx, RulesData rules, Row c) {
-		return featRows(tx, c).stream().anyMatch(
-				f -> featDefinition(rules, f).map(d -> Boolean.TRUE.equals(d.payload().get("initiative_proficiency")))
-						.orElse(false));
+		return featRows(tx, c).stream().anyMatch(f -> featDefinition(rules, f)
+				.map(d -> Boolean.TRUE.equals(d.payload().get("initiative_proficiency"))).orElse(false));
 	}
 
 	/** True when a feat rerolls weapon damage once per turn (Savage Attacker). */
@@ -207,12 +220,12 @@ public final class Origins {
 	}
 
 	/**
-	 * Relentless Endurance (Orc): when a drop to 0 HP is not outright death, spend the tracked use and stay at 1 HP.
-	 * Returns true when the trait applied.
+	 * Relentless Endurance (Orc): when a drop to 0 HP is not outright death, spend the tracked use
+	 * and stay at 1 HP. Returns true when the trait applied.
 	 */
 	public static boolean spendRelentlessEndurance(Tx tx, RulesData rules, Row c) {
-		boolean has = speciesOf(rules, c).map(
-						s -> traitsOf(s).stream().anyMatch(t -> Boolean.TRUE.equals(t.get("relentless_endurance"))))
+		boolean has = speciesOf(rules, c)
+				.map(s -> traitsOf(s).stream().anyMatch(t -> Boolean.TRUE.equals(t.get("relentless_endurance"))))
 				.orElse(false);
 		if (!has) {
 			return false;
@@ -229,8 +242,7 @@ public final class Origins {
 	// ── trait-row helpers ──────────────────────────────────────────────
 
 	public static void insertTrait(
-			Tx tx, long characterId, String kind, String contentRef,
-			Map<String, Object> payload) {
+		Tx tx, long characterId, String kind, String contentRef, Map<String, Object> payload) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("character_id", characterId);
 		cols.put("kind", kind);
@@ -264,7 +276,10 @@ public final class Origins {
 
 	// ── species application ────────────────────────────────────────────
 
-	/** Removes everything a previously chosen species granted (skills, cantrips, features, feats, senses). */
+	/**
+	 * Removes everything a previously chosen species granted (skills, cantrips, features, feats,
+	 * senses).
+	 */
 	public static void clearSpeciesGrants(Tx tx, Row c) {
 		for (Row t : tx.query("SELECT * FROM character_trait WHERE character_id = ? ORDER BY id", c.id())) {
 			String source = sourceOf(t);
@@ -277,9 +292,12 @@ public final class Origins {
 		}
 	}
 
-	/** Applies a freshly set species: base cantrips, senses and speed (the choice traits become decisions). */
+	/**
+	 * Applies a freshly set species: base cantrips, senses and speed (the choice traits become
+	 * decisions).
+	 */
 	public static void onSpeciesSet(
-			Tx tx, RulesData rules, RulesData.Definition species, Row c, Map<String, Object> cols) {
+		Tx tx, RulesData rules, RulesData.Definition species, Row c, Map<String, Object> cols) {
 		clearSpeciesGrants(tx, c);
 		for (Map<String, Object> trait : traitsOf(species)) {
 			grantCantrips(tx, rules, c, trait.get("cantrips"), null);
@@ -289,7 +307,7 @@ public final class Origins {
 
 	/** Speed and senses from the species and (optionally) the chosen lineage/ancestry option. */
 	public static void applySpeciesDerived(
-			RulesData.Definition species, Optional<Map<String, Object>> option, Map<String, Object> cols) {
+		RulesData.Definition species, Optional<Map<String, Object>> option, Map<String, Object> cols) {
 		int speed = species.payload().get("speed") instanceof Number n ? n.intValue() : 30;
 		if (option.isPresent() && option.get().get("speed") instanceof Number n) {
 			speed = n.intValue();
@@ -311,8 +329,8 @@ public final class Origins {
 	public static void applySpeciesSkill(Tx tx, RulesData rules, RulesData.Definition species, Row c, Object value) {
 		Map<String, Object> grant = traitWith(species, "skill_grant").map(t -> castMap(t.get("skill_grant")))
 				.orElseThrow(() -> RpgException.invalidArgument(species.name() + " grants no bonus skill."));
-		RulesData.Definition skill = rules.resolve("SKILL",
-						String.valueOf(value instanceof List<?> l && !l.isEmpty() ? l.get(0) : value))
+		RulesData.Definition skill = rules
+				.resolve("SKILL", String.valueOf(value instanceof List<?> l && !l.isEmpty() ? l.get(0) : value))
 				.orElseThrow(() -> RpgException.invalidArgument("Unknown skill '" + value + "'."));
 		List<String> options = skillGrantOptions(rules, grant);
 		if (!options.contains(skill.id())) {
@@ -322,7 +340,8 @@ public final class Origins {
 		deleteBySource(tx, c.id(), Set.of("SKILL"), SOURCE_SPECIES);
 		if (heldSkills(tx, c.id()).contains(skill.id())) {
 			throw RpgException.validation(List.of(new Violation("species_skill", "ALREADY_PROFICIENT",
-					c.str("name") + " is already proficient in " + skill.name() + "; choose a different skill (SRD 5.2.1: duplicate proficiencies are re-chosen).")));
+					c.str("name") + " is already proficient in " + skill.name()
+							+ "; choose a different skill (SRD 5.2.1: duplicate proficiencies are re-chosen).")));
 		}
 		insertTrait(tx, c.id(), "SKILL", skill.id(), Map.of("source", SOURCE_SPECIES));
 	}
@@ -338,7 +357,7 @@ public final class Origins {
 	/** Records the species lineage/ancestry choice with its mechanical consequences. */
 	@SuppressWarnings("unchecked")
 	public static void applySpeciesChoice(
-			Tx tx, RulesData rules, RulesData.Definition species, Row c, Object value, Map<String, Object> cols) {
+		Tx tx, RulesData rules, RulesData.Definition species, Row c, Object value, Map<String, Object> cols) {
 		Map<String, Object> trait = traitWith(species, "choice").orElseThrow(
 				() -> RpgException.invalidArgument(species.name() + " has no lineage or ancestry choice."));
 		Map<String, Object> choice = castMap(trait.get("choice"));
@@ -416,9 +435,9 @@ public final class Origins {
 	}
 
 	/**
-	 * Grants the species spells (Elven Lineage, Fiendish Legacy, Gnomish Lineage) whose level threshold the character
-	 * has reached, each always prepared with a free-cast resource. Idempotent; called at activation and at level-up
-	 * commit.
+	 * Grants the species spells (Elven Lineage, Fiendish Legacy, Gnomish Lineage) whose level
+	 * threshold the character has reached, each always prepared with a free-cast resource.
+	 * Idempotent; called at activation and at level-up commit.
 	 */
 	@SuppressWarnings("unchecked")
 	public static List<String> grantSpeciesSpells(Tx tx, RulesData rules, Row c) {
@@ -474,11 +493,10 @@ public final class Origins {
 
 	@SuppressWarnings("unchecked")
 	public static void applyBackground(
-			Tx tx, RulesData rules, Row c, Object value, Map<String, Object> cols,
-			Map<String, Object> creation) {
-		RulesData.Definition bg = resolveBackground(tx, rules, c.lng("campaign_id"), String.valueOf(value)).orElseThrow(
-				() -> RpgException.invalidArgument(
-						"Unknown background '" + value + "'; see get_character_choices BACKGROUND."));
+		Tx tx, RulesData rules, Row c, Object value, Map<String, Object> cols, Map<String, Object> creation) {
+		RulesData.Definition bg = resolveBackground(tx, rules, c.lng("campaign_id"), String.valueOf(value))
+				.orElseThrow(() -> RpgException
+						.invalidArgument("Unknown background '" + value + "'; see get_character_choices BACKGROUND."));
 		clearBackgroundGrants(tx, c, creation);
 		cols.put("background_ref", bg.id());
 		// The two background skills are fixed; a class/species pick that duplicates one is released for re-choice
@@ -498,15 +516,18 @@ public final class Origins {
 					Map.of("source", SOURCE_BACKGROUND, "kind", "TOOL"));
 		}
 		RulesData.Definition feat = rules.require(String.valueOf(bg.payload().get("feat")), "FEAT");
-		Map<String, Object> preset =
-				bg.payload().get("feat_choices") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+		Map<String, Object> preset = bg.payload().get("feat_choices") instanceof Map<?, ?> m ? (Map<String, Object>) m
+				: Map.of();
 		grantFeat(tx, rules, c, feat, SOURCE_BACKGROUND, preset);
 	}
 
-	/** Validates and records the background ability-score increase (+2/+1 or +1/+1/+1 among its three abilities). */
+	/**
+	 * Validates and records the background ability-score increase (+2/+1 or +1/+1/+1 among its
+	 * three abilities).
+	 */
 	@SuppressWarnings("unchecked")
 	public static void applyBackgroundAbilityScores(
-			RulesData.Definition bg, Object value, Map<String, Object> creation) {
+		RulesData.Definition bg, Object value, Map<String, Object> creation) {
 		if (!(value instanceof Map<?, ?> m) || m.isEmpty()) {
 			throw RpgException.invalidArgument(
 					"background_ability_scores must be like {\"CHA\": 2, \"CON\": 1} or {\"CON\": 1, \"INT\": 1, \"WIS\": 1}.");
@@ -518,21 +539,20 @@ public final class Origins {
 		for (var e : m.entrySet()) {
 			Ability a = Ability.parse(String.valueOf(e.getKey()));
 			if (!allowed.contains(a.name())) {
-				throw RpgException.validation(
-						List.of(new Violation("background_ability_scores." + a.name(), "NOT_A_BACKGROUND_ABILITY",
-								bg.name() + " increases " + allowed + " only.")));
+				throw RpgException.validation(List.of(new Violation("background_ability_scores." + a.name(),
+						"NOT_A_BACKGROUND_ABILITY", bg.name() + " increases " + allowed + " only.")));
 			}
 			if (!(e.getValue() instanceof Number n) || n.intValue() < 1 || n.intValue() > 2) {
-				throw RpgException.validation(List.of(new Violation("background_ability_scores." + a.name(), "RANGE",
-						"Increases are +1 or +2.")));
+				throw RpgException.validation(List.of(
+						new Violation("background_ability_scores." + a.name(), "RANGE", "Increases are +1 or +2.")));
 			}
 			asi.put(a.name(), n.intValue());
 			total += n.intValue();
 		}
-		boolean twoOne = asi.size() == 2 && total == 3 && asi.values().stream()
-				.anyMatch(v -> ((Number) v).intValue() == 2);
-		boolean threeOnes = asi.size() == 3 && total == 3 && asi.values().stream()
-				.allMatch(v -> ((Number) v).intValue() == 1);
+		boolean twoOne = asi.size() == 2 && total == 3
+				&& asi.values().stream().anyMatch(v -> ((Number) v).intValue() == 2);
+		boolean threeOnes = asi.size() == 3 && total == 3
+				&& asi.values().stream().allMatch(v -> ((Number) v).intValue() == 1);
 		if (!twoOne && !threeOnes) {
 			throw RpgException.validation(List.of(new Violation("background_ability_scores", "PATTERN",
 					"Increase one ability by 2 and another by 1, or all three by 1 (SRD 5.2.1 \"Ability Scores\" under Backgrounds).")));
@@ -551,9 +571,9 @@ public final class Origins {
 				.orElseThrow(() -> RpgException.invalidArgument("Unknown tool '" + value + "'."));
 		String toolKind = String.valueOf(item.payload().get("tool_kind"));
 		boolean legal = switch (kind) {
-			case "GAMING_SET" -> "GAMING_SET".equals(toolKind);
-			case "ARTISANS_TOOLS" -> "ARTISAN".equals(toolKind);
-			default -> "TOOL".equals(String.valueOf(item.payload().get("type")));
+		case "GAMING_SET" -> "GAMING_SET".equals(toolKind);
+		case "ARTISANS_TOOLS" -> "ARTISAN".equals(toolKind);
+		default -> "TOOL".equals(String.valueOf(item.payload().get("type")));
 		};
 		if (!legal) {
 			throw RpgException.validation(List.of(new Violation("background_tool", "NOT_AN_OPTION",
@@ -577,13 +597,19 @@ public final class Origins {
 
 	// ── feats ──────────────────────────────────────────────────────────
 
-	/** Removes what a feat granted (its spells and proficiencies) before the feat row itself is deleted. */
+	/**
+	 * Removes what a feat granted (its spells and proficiencies) before the feat row itself is
+	 * deleted.
+	 */
 	public static void clearFeatGrants(Tx tx, Row c, String featContentRef) {
 		String source = "feat:" + featContentRef;
 		deleteBySource(tx, c.id(), Set.of("SKILL", "PROFICIENCY", "SPELL_KNOWN", "SPELL_PREPARED"), source);
 	}
 
-	/** The species' Origin-feat grant (Human Versatile): applies the chosen feat, replacing an earlier pick. */
+	/**
+	 * The species' Origin-feat grant (Human Versatile): applies the chosen feat, replacing an
+	 * earlier pick.
+	 */
 	public static void applyOriginFeat(Tx tx, RulesData rules, RulesData.Definition species, Row c, Object value) {
 		Map<String, Object> grant = traitWith(species, "feat_grant").map(t -> castMap(t.get("feat_grant")))
 				.orElseThrow(() -> RpgException.invalidArgument(species.name() + " grants no origin feat."));
@@ -606,9 +632,8 @@ public final class Origins {
 				() -> RpgException.invalidArgument("Unknown feat '" + featRef + "'; see get_character_choices FEAT."));
 		String category = String.valueOf(grant.getOrDefault("category", "ORIGIN"));
 		if (!category.equals(String.valueOf(feat.payload().get("category")))) {
-			throw RpgException.validation(List.of(new Violation("origin_feat", "WRONG_CATEGORY",
-					feat.name() + " is not " + (category.equals("ORIGIN") ? "an Origin feat"
-							: "a " + category + " feat") + ".")));
+			throw RpgException.validation(List.of(new Violation("origin_feat", "WRONG_CATEGORY", feat.name()
+					+ " is not " + (category.equals("ORIGIN") ? "an Origin feat" : "a " + category + " feat") + ".")));
 		}
 		for (Row f : featRows(tx, c)) {
 			if (SOURCE_SPECIES.equals(sourceOf(f))) {
@@ -623,17 +648,17 @@ public final class Origins {
 	}
 
 	/**
-	 * Grants a feat as a FEAT trait whose payload records source, resolved choices, and the pending choice keys still
-	 * owed. Repeatable feats get a {@code #n} suffix on the stored ref.
+	 * Grants a feat as a FEAT trait whose payload records source, resolved choices, and the pending
+	 * choice keys still owed. Repeatable feats get a {@code #n} suffix on the stored ref.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Row grantFeat(
-			Tx tx, RulesData rules, Row c, RulesData.Definition feat, String source, Map<String, Object> preset) {
+		Tx tx, RulesData rules, Row c, RulesData.Definition feat, String source, Map<String, Object> preset) {
 		String ref = feat.id();
 		if (hasTrait(tx, c.id(), "FEAT", ref)) {
 			if (feat.payload().get("repeatable") == null) {
-				throw RpgException.validation(List.of(new Violation("feat", "ALREADY_TAKEN",
-						c.str("name") + " already has " + feat.name() + ".")));
+				throw RpgException.validation(List.of(
+						new Violation("feat", "ALREADY_TAKEN", c.str("name") + " already has " + feat.name() + ".")));
 			}
 			int n = 2;
 			while (hasTrait(tx, c.id(), "FEAT", feat.id() + "#" + n)) {
@@ -660,8 +685,9 @@ public final class Origins {
 	}
 
 	/**
-	 * Resolves feat-choice values ({@code feat_choices} draft field / level-up feat choices): one object naming the
-	 * feat, or a list of them when several feats owe choices at once (a Human Sage: Skilled and Magic Initiate).
+	 * Resolves feat-choice values ({@code feat_choices} draft field / level-up feat choices): one
+	 * object naming the feat, or a list of them when several feats owe choices at once (a Human
+	 * Sage: Skilled and Magic Initiate).
 	 */
 	public static void applyFeatChoices(Tx tx, RulesData rules, Row c, Object value) {
 		if (value instanceof List<?> list) {
@@ -680,8 +706,8 @@ public final class Origins {
 		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(m.get("feat")))
 				.orElseThrow(() -> RpgException.invalidArgument("Unknown feat '" + m.get("feat") + "'."));
 		Row featRow = featRows(tx, c).stream().filter(f -> baseFeatRef(f.str("content_ref")).equals(feat.id()))
-				.findFirst().orElseThrow(() -> RpgException.invalidArgument(
-						c.str("name") + " does not have the feat " + feat.name() + "."));
+				.findFirst().orElseThrow(() -> RpgException
+						.invalidArgument(c.str("name") + " does not have the feat " + feat.name() + "."));
 		var values = new LinkedHashMap<String, Object>();
 		m.forEach((k, v) -> {
 			if (!"feat".equals(k)) {
@@ -694,27 +720,26 @@ public final class Origins {
 	@SuppressWarnings("unchecked")
 	static Row applyFeatChoiceValues(Tx tx, RulesData rules, Row c, Row featRow, Map<String, Object> values) {
 		RulesData.Definition feat = featDefinition(rules, featRow).orElseThrow();
-		Map<String, Object> spec =
-				feat.payload().get("choices") instanceof Map<?, ?> s ? (Map<String, Object>) s : Map.of();
+		Map<String, Object> spec = feat.payload().get("choices") instanceof Map<?, ?> s ? (Map<String, Object>) s
+				: Map.of();
 		Map<String, Object> payload = featRow.map("payload_json");
-		Map<String, Object> choices =
-				payload.get("choices") instanceof Map<?, ?> ch ? new LinkedHashMap<>((Map<String, Object>) ch)
-						: new LinkedHashMap<>();
+		Map<String, Object> choices = payload.get("choices") instanceof Map<?, ?> ch
+				? new LinkedHashMap<>((Map<String, Object>) ch) : new LinkedHashMap<>();
 		String source = "feat:" + featRow.str("content_ref");
 		for (var e : values.entrySet()) {
 			String key = e.getKey();
 			Object v = e.getValue();
 			if (!spec.containsKey(key) && !("spell".equals(key) && spec.containsKey("spells"))) {
-				throw RpgException.invalidArgument(
-						feat.name() + " has no choice '" + key + "'; expected " + spec.keySet() + ".");
+				throw RpgException
+						.invalidArgument(feat.name() + " has no choice '" + key + "'; expected " + spec.keySet() + ".");
 			}
 			switch (key) {
 			case "spell_list" -> {
 				String list = String.valueOf(v).toLowerCase(Locale.ROOT);
 				List<String> lists = ((List<Object>) spec.get("spell_list")).stream().map(Object::toString).toList();
 				if (!lists.contains(list)) {
-					throw RpgException.validation(List.of(new Violation("feat_choices.spell_list", "NOT_AN_OPTION",
-							"Choose one of " + lists + ".")));
+					throw RpgException.validation(List.of(
+							new Violation("feat_choices.spell_list", "NOT_AN_OPTION", "Choose one of " + lists + ".")));
 				}
 				choices.put("spell_list", list);
 			}
@@ -738,11 +763,10 @@ public final class Origins {
 		}
 		// Skilled: any combination of three skills or tools.
 		if (values.get("proficiencies") != null) {
-			if (!(values.get("proficiencies") instanceof List<?> list) || list.size() != ((Number) spec.get(
-					"proficiencies")).intValue()) {
-				throw RpgException.validation(List.of(new Violation("feat_choices.proficiencies", "COUNT",
-						feat.name() + " grants exactly " + spec.get(
-								"proficiencies") + " skill or tool proficiencies.")));
+			if (!(values.get("proficiencies") instanceof List<?> list)
+					|| list.size() != ((Number) spec.get("proficiencies")).intValue()) {
+				throw RpgException.validation(List.of(new Violation("feat_choices.proficiencies", "COUNT", feat.name()
+						+ " grants exactly " + spec.get("proficiencies") + " skill or tool proficiencies.")));
 			}
 			deleteBySource(tx, c.id(), Set.of("SKILL", "PROFICIENCY"), source);
 			var names = new ArrayList<String>();
@@ -750,10 +774,9 @@ public final class Origins {
 				Optional<RulesData.Definition> skill = rules.resolve("SKILL", String.valueOf(o));
 				if (skill.isPresent()) {
 					if (heldSkills(tx, c.id()).contains(skill.get().id())) {
-						throw RpgException.validation(
-								List.of(new Violation("feat_choices.proficiencies", "ALREADY_PROFICIENT",
-										"Already proficient in " + skill.get()
-												.name() + "; choose a different skill or tool.")));
+						throw RpgException.validation(List.of(new Violation("feat_choices.proficiencies",
+								"ALREADY_PROFICIENT", "Already proficient in " + skill.get().name()
+										+ "; choose a different skill or tool.")));
 					}
 					insertTrait(tx, c.id(), "SKILL", skill.get().id(), Map.of("source", source));
 					names.add(skill.get().name());
@@ -763,8 +786,8 @@ public final class Origins {
 						.filter(d -> "TOOL".equals(String.valueOf(d.payload().get("type"))))
 						.orElseThrow(() -> RpgException.invalidArgument("'" + o + "' is neither a skill nor a tool."));
 				if (hasTrait(tx, c.id(), "PROFICIENCY", item.id())) {
-					throw RpgException.validation(
-							List.of(new Violation("feat_choices.proficiencies", "ALREADY_PROFICIENT",
+					throw RpgException
+							.validation(List.of(new Violation("feat_choices.proficiencies", "ALREADY_PROFICIENT",
 									"Already proficient with " + item.name() + "; choose a different skill or tool.")));
 				}
 				insertTrait(tx, c.id(), "PROFICIENCY", item.id(), Map.of("source", source, "kind", "TOOL"));
@@ -781,8 +804,8 @@ public final class Origins {
 						"Choose spell_list and ability before (or together with) the spells of " + feat.name() + ".");
 			}
 			if (values.get("cantrips") != null) {
-				if (!(values.get("cantrips") instanceof List<?> cs) || cs.size() != ((Number) spec.get(
-						"cantrips")).intValue()) {
+				if (!(values.get("cantrips") instanceof List<?> cs)
+						|| cs.size() != ((Number) spec.get("cantrips")).intValue()) {
 					throw RpgException.validation(List.of(new Violation("feat_choices.cantrips", "COUNT",
 							feat.name() + " grants exactly " + spec.get("cantrips") + " cantrips.")));
 				}
@@ -821,9 +844,9 @@ public final class Origins {
 		var pending = new ArrayList<String>();
 		for (String key : pendingOrder(spec.keySet())) {
 			boolean satisfied = switch (key) {
-				case "cantrips" -> choices.get("cantrips") != null;
-				case "spells" -> choices.get("spell") != null;
-				default -> choices.get(key) != null;
+			case "cantrips" -> choices.get("cantrips") != null;
+			case "spells" -> choices.get("spell") != null;
+			default -> choices.get(key) != null;
 			};
 			if (!satisfied) {
 				pending.add(key);
@@ -836,8 +859,9 @@ public final class Origins {
 	}
 
 	/**
-	 * The answerable choice keys of a feat's choices spec, in ask-order (the spell list and ability come before the
-	 * spells they constrain). Other spec keys ("from", counts' metadata) are not choices.
+	 * The answerable choice keys of a feat's choices spec, in ask-order (the spell list and ability
+	 * come before the spells they constrain). Other spec keys ("from", counts' metadata) are not
+	 * choices.
 	 */
 	public static List<String> pendingOrder(Set<String> keys) {
 		var out = new ArrayList<String>();
@@ -855,8 +879,8 @@ public final class Origins {
 				.orElseThrow(() -> RpgException.invalidArgument("Unknown spell '" + value + "'."));
 		int spellLevel = ((Number) spell.payload().get("level")).intValue();
 		if (spellLevel != level) {
-			throw RpgException.validation(List.of(new Violation("feat_choices", "LEVEL",
-					spell.name() + " is level " + spellLevel + "; a level " + level + " spell from the " + list + " list is required.")));
+			throw RpgException.validation(List.of(new Violation("feat_choices", "LEVEL", spell.name() + " is level "
+					+ spellLevel + "; a level " + level + " spell from the " + list + " list is required.")));
 		}
 		if (!((List<Object>) spell.payload().get("classes")).contains(list)) {
 			throw RpgException.validation(List.of(new Violation("feat_choices", "CLASS_LIST",
@@ -871,7 +895,10 @@ public final class Origins {
 
 	// ── validation ─────────────────────────────────────────────────────
 
-	/** Origin-related whole-character violations (backgrounds, species grants, unresolved feat choices). */
+	/**
+	 * Origin-related whole-character violations (backgrounds, species grants, unresolved feat
+	 * choices).
+	 */
 	public static List<Violation> validate(Tx tx, RulesData rules, Row c) {
 		var v = new ArrayList<Violation>();
 		Optional<RulesData.Definition> bg = backgroundOf(tx, rules, c);
@@ -881,21 +908,21 @@ public final class Origins {
 		} else {
 			if (c.map("creation_json").get("background_ability_scores") == null) {
 				v.add(new Violation("background_ability_scores", "REQUIRED",
-						"Apply the background ability increase: +2/+1 or +1/+1/+1 among " + bg.get().payload()
-								.get("ability_scores") + "."));
+						"Apply the background ability increase: +2/+1 or +1/+1/+1 among "
+								+ bg.get().payload().get("ability_scores") + "."));
 			}
 			Map<String, Object> tool = castMap(bg.get().payload().get("tool"));
-			if (tool.get("choice") != null && tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY'", c.id()).stream()
-					.noneMatch(t -> SOURCE_BACKGROUND.equals(sourceOf(t)))) {
+			if (tool.get("choice") != null
+					&& tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY'", c.id())
+							.stream().noneMatch(t -> SOURCE_BACKGROUND.equals(sourceOf(t)))) {
 				v.add(new Violation("background_tool", "REQUIRED",
 						bg.get().name() + " grants a " + tool.get("choice") + " tool proficiency; choose one."));
 			}
 		}
 		speciesOf(rules, c).ifPresent(species -> {
-			if (traitWith(species, "skill_grant").isPresent() && tx.query(
-							"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'", c.id()).stream()
-					.noneMatch(t -> SOURCE_SPECIES.equals(sourceOf(t)))) {
+			if (traitWith(species, "skill_grant").isPresent()
+					&& tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL'", c.id())
+							.stream().noneMatch(t -> SOURCE_SPECIES.equals(sourceOf(t)))) {
 				v.add(new Violation("species_skill", "REQUIRED",
 						species.name() + " grants a bonus skill; choose one."));
 			}
@@ -903,8 +930,8 @@ public final class Origins {
 				Map<String, Object> choice = castMap(traitWith(species, "choice").get().get("choice"));
 				v.add(new Violation("species_choice", "REQUIRED", String.valueOf(choice.get("question"))));
 			}
-			if (traitWith(species, "feat_grant").isPresent() && featRows(tx, c).stream()
-					.noneMatch(f -> SOURCE_SPECIES.equals(sourceOf(f)))) {
+			if (traitWith(species, "feat_grant").isPresent()
+					&& featRows(tx, c).stream().noneMatch(f -> SOURCE_SPECIES.equals(sourceOf(f)))) {
 				v.add(new Violation("origin_feat", "REQUIRED", species.name() + " grants an Origin feat; choose one."));
 			}
 		});
@@ -927,17 +954,17 @@ public final class Origins {
 	// ── activation and progression ─────────────────────────────────────
 
 	/**
-	 * Creates or resizes the tracked-use resources of species traits and feats (breath weapon, heroic inspiration,
-	 * Magic Initiate free casts, ...). Proficiency-bonus maxima resize on level-up; called at activation and level-up
-	 * commit alongside spell slots.
+	 * Creates or resizes the tracked-use resources of species traits and feats (breath weapon,
+	 * heroic inspiration, Magic Initiate free casts, ...). Proficiency-bonus maxima resize on
+	 * level-up; called at activation and level-up commit alongside spell slots.
 	 */
 	public static void initializeResources(Tx tx, RulesData rules, Row c) {
 		int level = characterLevel(tx, c);
 		int pb = RuntimeService.proficiencyBonus(tx, rules, c);
 		speciesOf(rules, c).ifPresent(species -> {
 			for (Map<String, Object> trait : traitsOf(species)) {
-				Map<String, Object> resource =
-						trait.get("resource") instanceof Map<?, ?> ? castMap(trait.get("resource")) : null;
+				Map<String, Object> resource = trait.get("resource") instanceof Map<?, ?>
+						? castMap(trait.get("resource")) : null;
 				if (resource == null) {
 					continue;
 				}
@@ -953,8 +980,8 @@ public final class Origins {
 		// Class features with a tracked resource (sorcery points, Innate Sorcery uses, ...): the feature block's
 		// `resource` names the pool; `max` may be a number, CLASS_LEVEL, HALF_CLASS_LEVEL or PROFICIENCY_BONUS.
 		for (Map<String, Object> feature : se.hirt.mcp.rpg.progression.ClassFeatures.featuresOf(tx, rules, c)) {
-			Map<String, Object> resource =
-					feature.get("resource") instanceof Map<?, ?> ? castMap(feature.get("resource")) : null;
+			Map<String, Object> resource = feature.get("resource") instanceof Map<?, ?>
+					? castMap(feature.get("resource")) : null;
 			if (resource == null || resource.get("ref") == null) {
 				continue;
 			}
@@ -962,7 +989,7 @@ public final class Origins {
 			Object maxSpec = resource.get("max");
 			int max = "CLASS_LEVEL".equals(maxSpec) ? classLevel
 					: "HALF_CLASS_LEVEL".equals(maxSpec) ? Math.max(1, classLevel / 2)
-					: "PROFICIENCY_BONUS".equals(maxSpec) ? pb : maxSpec instanceof Number n ? n.intValue() : 1;
+							: "PROFICIENCY_BONUS".equals(maxSpec) ? pb : maxSpec instanceof Number n ? n.intValue() : 1;
 			upsertResource(tx, c.id(), String.valueOf(resource.get("ref")), max,
 					String.valueOf(resource.getOrDefault("recharge", "LONG_REST")));
 		}
@@ -970,8 +997,8 @@ public final class Origins {
 		for (Row t : tx.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'",
 				c.id())) {
 			Map<String, Object> p = t.isNull("payload_json") ? Map.of() : t.map("payload_json");
-			if (p.get("free_cast_resource") instanceof String ref && tx.queryOne(
-							"SELECT id FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(), ref)
+			if (p.get("free_cast_resource") instanceof String ref && tx
+					.queryOne("SELECT id FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(), ref)
 					.isEmpty()) {
 				upsertResource(tx, c.id(), ref, 1, "LONG_REST");
 			}
@@ -998,7 +1025,10 @@ public final class Origins {
 
 	// ── sheet ──────────────────────────────────────────────────────────
 
-	/** Origin blocks for the character sheet: background, species traits, feats, tools, tracked resources. */
+	/**
+	 * Origin blocks for the character sheet: background, species traits, feats, tools, tracked
+	 * resources.
+	 */
 	public static void appendSheet(Tx tx, RulesData rules, Row c, Map<String, Object> m, String detail) {
 		boolean full = "FULL".equals(detail);
 		backgroundOf(tx, rules, c).ifPresent(bg -> {
@@ -1028,8 +1058,8 @@ public final class Origins {
 					t.put("adjudication", "ENGINE".equals(enforcement) ? "ENGINE"
 							: ("MIXED".equals(enforcement) ? "GM (uses tracked)" : "GM"));
 				}
-				if (trait.get("choice") != null && choiceRow.isPresent() && String.valueOf(
-						castMap(trait.get("choice")).get("id")).equals(refChoiceId(choiceRow.get()))) {
+				if (trait.get("choice") != null && choiceRow.isPresent() && String
+						.valueOf(castMap(trait.get("choice")).get("id")).equals(refChoiceId(choiceRow.get()))) {
 					Map<String, Object> p = choiceRow.get().map("payload_json");
 					t.put("chosen", p.get("label"));
 					if (p.get("ability") != null) {

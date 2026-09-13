@@ -45,8 +45,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * D20 Tests outside encounters: ability checks, skill checks and saving throws (MCP_PROTOCOL.md §13.2; SRD 5.2.1 "D20
- * Tests"). The AI supplies intent and the DC; the engine owns modifiers and dice.
+ * D20 Tests outside encounters: ability checks, skill checks and saving throws (MCP_PROTOCOL.md
+ * §13.2; SRD 5.2.1 "D20 Tests"). The AI supplies intent and the DC; the engine owns modifiers and
+ * dice.
  */
 public final class CheckService {
 
@@ -61,22 +62,21 @@ public final class CheckService {
 	}
 
 	public Map<String, Object> resolveCheck(
-			String operationId, String campaignRef, String actorRef, String kind,
-			String abilityText, String skillText, Integer difficulty, String advantageText, String reason) {
+		String operationId, String campaignRef, String actorRef, String kind, String abilityText, String skillText,
+		Integer difficulty, String advantageText, String reason) {
 		return resolveCheck(operationId, campaignRef, actorRef, kind, abilityText, skillText, null, difficulty,
 				advantageText, reason);
 	}
 
 	/**
 	 * @param toolText
-	 * 		a tool used for the check (SRD 5.2.1 "Tool Proficiency"): the actor's proficiency bonus applies when they
-	 * 		are proficient with it, and a skill check made with a tool the actor is also proficient in has advantage
-	 * 		("Tools and Skills Together")
+	 *            a tool used for the check (SRD 5.2.1 "Tool Proficiency"): the actor's proficiency
+	 *            bonus applies when they are proficient with it, and a skill check made with a tool
+	 *            the actor is also proficient in has advantage ("Tools and Skills Together")
 	 */
 	public Map<String, Object> resolveCheck(
-			String operationId, String campaignRef, String actorRef, String kind,
-			String abilityText, String skillText, String toolText, Integer difficulty, String advantageText,
-			String reason) {
+		String operationId, String campaignRef, String actorRef, String kind, String abilityText, String skillText,
+		String toolText, Integer difficulty, String advantageText, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -107,10 +107,10 @@ public final class CheckService {
 			RulesData.Definition skill = null;
 			boolean proficient;
 			if (k.equals("SKILL_CHECK")) {
-				skill = rules.resolve("SKILL", skillText).orElseThrow(() -> RpgException.invalidArgument(
-						"A known skill is required for a SKILL_CHECK; got '" + skillText + "'."));
-				ability = abilityText == null || abilityText.isBlank() ? Ability.parse(
-						(String) skill.payload().get("ability")) : Ability.parse(abilityText);
+				skill = rules.resolve("SKILL", skillText).orElseThrow(() -> RpgException
+						.invalidArgument("A known skill is required for a SKILL_CHECK; got '" + skillText + "'."));
+				ability = abilityText == null || abilityText.isBlank()
+						? Ability.parse((String) skill.payload().get("ability")) : Ability.parse(abilityText);
 				proficient = tx.count(
 						"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SKILL' AND content_ref = ?",
 						actor.id(), skill.id()) > 0;
@@ -164,9 +164,8 @@ public final class CheckService {
 			// (SRD 5.2.1 "Statistics"; RULES_ENGINE.md §3.1). The moment that character takes a class it stops being
 			// a stat block and is built from its own abilities and proficiencies, which is the whole point of
 			// classing a companion — otherwise a rogue with Expertise would still roll the Scout's numbers.
-			Integer block = level > 0 ? null
-					: k.equals("SKILL_CHECK") ? statBlockSkill(rules, actor, skill.name())
-							: k.equals("SAVING_THROW") ? statBlockSave(rules, actor, ability) : null;
+			Integer block = level > 0 ? null : k.equals("SKILL_CHECK") ? statBlockSkill(rules, actor, skill.name())
+					: k.equals("SAVING_THROW") ? statBlockSave(rules, actor, ability) : null;
 			int profBonus;
 			int modifier;
 			if (block != null) {
@@ -179,9 +178,9 @@ public final class CheckService {
 			}
 
 			String dice = switch (advantage) {
-				case "ADVANTAGE" -> "2d20kh1";
-				case "DISADVANTAGE" -> "2d20kl1";
-				default -> "1d20";
+			case "ADVANTAGE" -> "2d20kh1";
+			case "DISADVANTAGE" -> "2d20kl1";
+			default -> "1d20";
 			};
 			String expression = dice + (modifier >= 0 ? "+" + modifier : Integer.toString(modifier));
 			Roll roll = roller.roll(expression);
@@ -242,8 +241,9 @@ public final class CheckService {
 	}
 
 	/**
-	 * The stat block's listed total for a skill, or null when the character is not creature-backed or lacks it.
-	 * Callers must ignore it for a character that has class levels; see {@code resolveCheck}.
+	 * The stat block's listed total for a skill, or null when the character is not creature-backed
+	 * or lacks it. Callers must ignore it for a character that has class levels; see
+	 * {@code resolveCheck}.
 	 */
 	@SuppressWarnings("unchecked")
 	public static Integer statBlockSkill(RulesData rules, Row actor, String skillName) {
@@ -267,7 +267,10 @@ public final class CheckService {
 				.map(s -> ((Number) s.get(ability.name())).intValue()).orElse(null);
 	}
 
-	/** A character's own bonus for a named skill: ability modifier plus proficiency when they have it. */
+	/**
+	 * A character's own bonus for a named skill: ability modifier plus proficiency when they have
+	 * it.
+	 */
 	public static Integer characterSkill(Tx tx, RulesData rules, Row c, String skillName) {
 		return rules.resolve("SKILL", skillName).map(skill -> {
 			Ability a = Ability.parse((String) skill.payload().get("ability"));
@@ -276,8 +279,8 @@ public final class CheckService {
 			boolean proficient = tx.count(
 					"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SKILL' AND content_ref = ?",
 					c.id(), skill.id()) > 0;
-			return Rules.modifier(c.intOr(a.column(), 10)) + (proficient ? rules.proficiencyBonus(Math.max(1, level))
-					: 0);
+			return Rules.modifier(c.intOr(a.column(), 10))
+					+ (proficient ? rules.proficiencyBonus(Math.max(1, level)) : 0);
 		}).orElse(null);
 	}
 
@@ -297,11 +300,12 @@ public final class CheckService {
 	}
 
 	/**
-	 * A free, journaled roll for anything the semantic tools do not cover: falling damage, a random table, an NPC's
-	 * dice, a coin toss. Nothing is applied; the breakdown and a roll_ref come back (MCP_PROTOCOL.md §13.6).
+	 * A free, journaled roll for anything the semantic tools do not cover: falling damage, a random
+	 * table, an NPC's dice, a coin toss. Nothing is applied; the breakdown and a roll_ref come back
+	 * (MCP_PROTOCOL.md §13.6).
 	 */
 	public Map<String, Object> rollDice(
-			String operationId, String campaignRef, String expression, String actorRef, String reason) {
+		String operationId, String campaignRef, String expression, String actorRef, String reason) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);

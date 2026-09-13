@@ -38,14 +38,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The campaign calendar (DOMAIN_MODEL.md §13, DATABASE.md §3.11): a 365-day year of twelve months with the familiar
- * lengths and no leap years, seven-day weeks (Monday = 1; 1 January of year 1 is a Monday), and four seasons derived
- * from the month (spring March–May, summer June–August, autumn September–November, winter December–February).
+ * The campaign calendar (DOMAIN_MODEL.md §13, DATABASE.md §3.11): a 365-day year of twelve months
+ * with the familiar lengths and no leap years, seven-day weeks (Monday = 1; 1 January of year 1 is
+ * a Monday), and four seasons derived from the month (spring March–May, summer June–August, autumn
+ * September–November, winter December–February).
  * <p>
- * The clock stays what it is: {@code seq} is minutes since campaign start and "Day N" is the primary display. The
- * calendar only maps Day 1 onto a date, the epoch stored in {@code campaign.calendar_json} as
- * {@code {"year": 1, "month": 3, "day": 1}}. A campaign without a calendar uses {@link #DEFAULT}: Day 1 is
- * 1 March of year 1, a spring morning.
+ * The clock stays what it is: {@code seq} is minutes since campaign start and "Day N" is the
+ * primary display. The calendar only maps Day 1 onto a date, the epoch stored in
+ * {@code campaign.calendar_json} as {@code {"year": 1, "month": 3, "day": 1}}. A campaign without a
+ * calendar uses {@link #DEFAULT}: Day 1 is 1 March of year 1, a spring morning.
  */
 public final class Calendar {
 
@@ -118,20 +119,22 @@ public final class Calendar {
 
 	public static String season(int month) {
 		return switch (month) {
-			case 3, 4, 5 -> "SPRING";
-			case 6, 7, 8 -> "SUMMER";
-			case 9, 10, 11 -> "AUTUMN";
-			default -> "WINTER";
+		case 3, 4, 5 -> "SPRING";
+		case 6, 7, 8 -> "SUMMER";
+		case 9, 10, 11 -> "AUTUMN";
+		default -> "WINTER";
 		};
 	}
 
-	/** The month a season opens in: spring March, summer June, autumn September, winter December. */
+	/**
+	 * The month a season opens in: spring March, summer June, autumn September, winter December.
+	 */
 	public static int seasonStartMonth(String season) {
 		return switch (normalizeSeason(season)) {
-			case "SPRING" -> 3;
-			case "SUMMER" -> 6;
-			case "AUTUMN" -> 9;
-			default -> 12;
+		case "SPRING" -> 3;
+		case "SUMMER" -> 6;
+		case "AUTUMN" -> 9;
+		default -> 12;
 		};
 	}
 
@@ -200,7 +203,10 @@ public final class Calendar {
 		return m;
 	}
 
-	/** The clock value of a date at a minute of the day (0–1439). Dates before Day 1 give negative values. */
+	/**
+	 * The clock value of a date at a minute of the day (0–1439). Dates before Day 1 give negative
+	 * values.
+	 */
 	public long seqOf(int year, int month, int day, int minuteOfDay) {
 		validate(year, month, day);
 		if (minuteOfDay < 0 || minuteOfDay >= GameTime.MINUTES_PER_DAY) {
@@ -209,10 +215,14 @@ public final class Calendar {
 		return (absoluteDay(year, month, day) - epochAbsoluteDay) * GameTime.MINUTES_PER_DAY + minuteOfDay;
 	}
 
-	/** Parses {@code {"year", "month", "day", "minute_of_day"?}} or {@code "Day N, HH:MM"} to a clock value. */
+	/**
+	 * Parses {@code {"year", "month", "day", "minute_of_day"?}} or {@code "Day N, HH:MM"} to a
+	 * clock value.
+	 */
 	public long seqOf(Object when) {
 		if (when instanceof Map<?, ?> m) {
-			@SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) m;
+			@SuppressWarnings("unchecked")
+			Map<String, Object> map = (Map<String, Object>) m;
 			int year = intOf(map, "year", epochYear);
 			int month = intOf(map, "month", -1);
 			int day = intOf(map, "day", -1);
@@ -246,8 +256,8 @@ public final class Calendar {
 			throw RpgException.invalidArgument("month must be 1–12.");
 		}
 		if (day < 1 || day > daysInMonth(month)) {
-			throw RpgException.invalidArgument(
-					"day must be 1–" + daysInMonth(month) + " for " + MONTHS.get(month - 1) + ".");
+			throw RpgException
+					.invalidArgument("day must be 1–" + daysInMonth(month) + " for " + MONTHS.get(month - 1) + ".");
 		}
 	}
 
