@@ -25,6 +25,24 @@ campaign**.
 
 ## 1. Install
 
+### The easy way: the plugin
+
+Both Claude Code and Claude Desktop can install it as a plugin from the
+[`hirt-plugins`](https://github.com/thegreystone/claude-plugins) marketplace. In Claude Code:
+
+```
+/plugin marketplace add thegreystone/claude-plugins
+/plugin install rpg-mcp@hirt-plugins
+```
+
+In Claude Desktop, go to *Settings → Extensions → Browse → Add marketplace*, paste
+`https://github.com/thegreystone/claude-plugins`, then install **rpg-mcp** from it. Either way the plugin
+downloads the right native build for your machine (macOS, Windows or Linux), and adds `/rpg new` and
+`/rpg continue` so you never have to type the bootstrap sentence below. Skip to
+[Get a campaign started](#2-get-a-campaign-started).
+
+Everything that follows is the manual route: a binary you download and a config entry you write.
+
 ### Download a binary
 
 Grab the file for your platform from the [Releases page](https://github.com/thegreystone/rpg-mcp/releases/latest).

@@ -142,7 +142,17 @@ one purpose: a Claude plugin marketplace entry can reference only one bundle for
 downloads should keep using the per-platform bundles. It is packed by [`mcpb/pack-universal.sh`](../mcpb/pack-universal.sh)
 on Linux only, since a pack done on Windows cannot set the executable bits of the Unix binaries; the Bundles
 workflow's *universal* choice re-packs it for an existing release, and the Windows signing script dispatches
-that automatically after replacing the Windows binary. To try a bundle locally (Git Bash on Windows):
+that automatically after replacing the Windows binary.
+
+The universal bundle is what the `rpg-mcp` plugin in the
+[`thegreystone/claude-plugins`](https://github.com/thegreystone/claude-plugins) marketplace points at: its
+`plugin.json` sets `mcpServers` to the bundle's release URL, and both Claude Code and Claude Desktop install
+from that marketplace. **After every release, bump that URL and the `version` fields in the marketplace repo
+(`.claude-plugin/marketplace.json` and `rpg-mcp/.claude-plugin/plugin.json`)**, once the Windows signing script
+has re-packed the universal bundle. The plugin also ships the `/rpg` skill (`rpg-mcp/skills/rpg/SKILL.md`),
+which is the user-facing bootstrap; keep it in step with the protocol guide.
+
+To try a bundle locally (Git Bash on Windows):
 
 ```bash
 bash mcpb/pack.sh 0.0.0 windows-x86_64 win32 target/rpg-mcp-server-*-runner.exe target/rpg-mcp-server-dev.mcpb
