@@ -8,7 +8,7 @@
 [![License: BSD-3](https://img.shields.io/badge/License-BSD--3-green)](https://opensource.org/licenses/BSD-3-Clause)
 
 This is quite frankly the most fun gaming experience I've had in a long time. This MCP server transform your AI harness to 
-into a fully fledged Dungeon Master, running fully fledged campaigns for you, where everything and anything is 
+into a fully fledged Dungeon Master, running immense campaigns for you, where everything and anything is 
 possible. 
 
 The mcp server provides a persistent, rules-aware RPG engine. An AI agent acts as game master, narrator and
