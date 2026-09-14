@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/thegreystone/rpg-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/thegreystone/rpg-mcp/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/thegreystone/rpg-mcp)](https://github.com/thegreystone/rpg-mcp/releases/latest)
-[![Java 21+](https://img.shields.io/badge/Java-21%2B-blue)](https://adoptium.net/)
+[![Java 25+](https://img.shields.io/badge/Java-25%2B-blue)](https://adoptium.net/)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.38-blueviolet)](https://quarkus.io/)
 [![GraalVM Native](https://img.shields.io/badge/GraalVM-native--image-orange)](https://www.graalvm.org/)
 [![License: BSD-3](https://img.shields.io/badge/License-BSD--3-green)](https://opensource.org/licenses/BSD-3-Clause)
@@ -73,7 +73,7 @@ xattr -d com.apple.quarantine rpg-mcp-server-0.1.2-macos-aarch64
 ```
 
 > Prefer the JVM? Download `rpg-mcp-server-0.1.2-runner.jar` instead and run it with
-> [Java 21+](https://adoptium.net/): the command becomes `java` and the arguments start with
+> [Java 25+](https://adoptium.net/): the command becomes `java` and the arguments start with
 > `-jar /path/to/rpg-mcp-server-0.1.2-runner.jar`. Everything else below is identical.
 
 ### Add it to Claude Code

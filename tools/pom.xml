@@ -27,8 +27,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 <!--
-Standalone tooling for the srd5e seed data. Deliberately NOT a module of the server pom: the server targets
-Java 21 for GraalVM and its release workflow must not pick this up. Run from the repository root:
+Standalone tooling for the srd5e seed data. Deliberately NOT a module of the server pom: the server's
+release workflow must not pick this up. Run from the repository root:
 
     mvn -q -f tools/pom.xml compile exec:java -Dexec.args="extract path/to/SRD_CC_v5.2.1.pdf"
     mvn -q -f tools/pom.xml compile exec:java -Dexec.args="verify path/to/srd.txt"
