@@ -113,6 +113,9 @@ public final class EncounterService {
 		if (!NPC_REACTION_POLICIES.contains(npcReactions)) {
 			throw RpgException.invalidArgument("options.npc_reactions must be AUTO or ASK.");
 		}
+		List<String> surprised = options == null || options.get("surprised") == null ? List.of()
+				: options.get("surprised") instanceof List<?> l ? l.stream().map(String::valueOf).toList()
+						: List.of(String.valueOf(options.get("surprised")));
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
 		args.put("options", options);
@@ -184,6 +187,12 @@ public final class EncounterService {
 					stanceMap.put(key, stance);
 				}
 			}
+			for (String s : surprised) {
+				if (!names.contains(s)) {
+					throw RpgException.invalidArgument(
+							"options.surprised names a side that is not in sides: '" + s + "' (sides: " + names + ").");
+				}
+			}
 			Long locationId = campaign.lng("current_location_id");
 			if (locationRef != null && !locationRef.isBlank()) {
 				locationId = Ref.id(locationRef, Ref.LOCATION);
@@ -199,6 +208,9 @@ public final class EncounterService {
 			sidesJson.put("names", names);
 			sidesJson.put("party_side", partySide);
 			sidesJson.put("stances", stanceMap);
+			if (!surprised.isEmpty()) {
+				sidesJson.put("surprised", surprised);
+			}
 			// The XP pool is fixed up front: every hostile participant counts when the encounter is
 			// overcome, however it is overcome (RULES_ENGINE.md §6).
 			long xpPool = 0;
@@ -233,8 +245,10 @@ public final class EncounterService {
 				// Alert (Origin feat): the proficiency bonus is added to initiative (SRD 5.2.1 "Feats").
 				int initiativeBonus = dexMod + (se.hirt.mcp.rpg.character.Origins.initiativeProficient(tx, rules, c)
 						? RuntimeService.proficiencyBonus(tx, rules, c) : 0);
-				Roll roll = roller.roll(
-						"1d20" + (initiativeBonus >= 0 ? "+" + initiativeBonus : Integer.toString(initiativeBonus)));
+				// A surprised side rolls initiative with Disadvantage (SRD 5.2.1 "Surprise").
+				boolean isSurprised = surprised.contains(String.valueOf(p.get("side")));
+				Roll roll = roller.roll((isSurprised ? "2d20kl1" : "1d20")
+						+ (initiativeBonus >= 0 ? "+" + initiativeBonus : Integer.toString(initiativeBonus)));
 				CharacterService.recordRoll(tx, campaignId, "initiative " + Ref.of(Ref.CHARACTER, c.id()), roll);
 				int tiebreak = c.intOr("dex_score", 10) * 100 + roller.roll("1d100").total();
 				var pc = new LinkedHashMap<String, Object>();
@@ -254,6 +268,9 @@ public final class EncounterService {
 				o.put("tiebreak", tiebreak);
 				o.put("name", c.str("name"));
 				o.put("roll", roll.toMap());
+				if (isSurprised) {
+					o.put("surprised", true);
+				}
 				order.add(o);
 			}
 			List<Row> ordered = turnOrder(tx, encounterId);
@@ -469,7 +486,12 @@ public final class EncounterService {
 		args.put("end_turn", endTurn);
 		return db.mutate(Database.Mutation.of("perform_encounter_action", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "perform_encounter_action");
-			Row encounter = encounter(tx, campaignId, encounterRef);
+			Row opened = encounter(tx, campaignId, encounterRef);
+			// A turn pointer left on someone who can no longer act (killed out of turn, removed by fiat, or
+			// never set) moves on before the actor is judged, so the fight cannot wedge on a corpse.
+			List<String> turnsSkipped = "RUNNING".equals(opened.str("status"))
+					? skipTurnsNobodyCanTake(tx, campaignId, opened) : List.of();
+			Row encounter = turnsSkipped.isEmpty() ? opened : tx.get("encounter", opened.id());
 			if ("WAITING_CHOICE".equals(encounter.str("status"))) {
 				throw RpgException.notAllowed("A pending choice must be resolved first (resolve_pending_choice): "
 						+ pendingChoices(tx, encounter.id()).stream()
@@ -506,6 +528,9 @@ public final class EncounterService {
 			result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
 			result.put("actor", Ref.of(Ref.CHARACTER, actor.id()));
 			result.put("kind", kind);
+			if (!turnsSkipped.isEmpty()) {
+				result.put("turns_skipped", turnsSkipped);
+			}
 			switch (kind) {
 			case "ATTACK" -> result.putAll(attack(tx, campaignId, encounter, actor, participant, action, round));
 			case "CAST" -> {
@@ -698,17 +723,21 @@ public final class EncounterService {
 					.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
 							encounter.id(), target.id())
 					.orElse(null);
-			if (targetParticipant != null) {
+			if (targetParticipant != null
+					&& !java.util.Objects.equals(targetParticipant.str("side"), actorParticipant.str("side"))) {
 				for (Row p : tx.query(
 						"SELECT * FROM encounter_participant WHERE encounter_id = ? AND side = ? AND character_id <> ?",
 						encounter.id(), actorParticipant.str("side"), actor.id())) {
-					if (!java.util.Objects.equals(p.str("zone"), targetParticipant.str("zone"))
+					// Within 5 feet of the target: in the target's zone (the column is position_zone), still in
+					// the fight, alive and not incapacitated (SRD 5.2.1 "Sneak Attack").
+					if (!java.util.Objects.equals(p.str("position_zone"), targetParticipant.str("position_zone"))
 							|| !"ACTIVE".equals(p.str("status"))) {
 						continue;
 					}
 					Row ally = tx.get("character", p.lng("character_id"));
-					if ("DEAD".equals(ally.str("life_state")) || RuntimeService.conditions(tx, ally.id()).stream()
-							.anyMatch(cond -> String.valueOf(cond).toUpperCase().contains("INCAPACITATED"))) {
+					if (!"ALIVE".equals(ally.str("life_state"))
+							|| RuntimeService.conditions(tx, ally.id()).stream().anyMatch(cond -> NO_REACTION_CONDITIONS
+									.contains(String.valueOf(cond.get("condition")).toUpperCase()))) {
 						continue;
 					}
 					qualifies = true;
@@ -768,24 +797,48 @@ public final class EncounterService {
 		// happens to name the same weapon: otherwise a promoted companion keeps the monster's flat numbers and
 		// loses its own ability modifier, proficiency and weapon properties (RULES_ENGINE.md §3).
 		boolean statBlock = RuntimeService.usesStatBlock(tx, actor);
-		Optional<Map<String, Object>> creatureAction = statBlock ? creatureAction(actor, attackName) : Optional.empty();
+		String named = weaponText != null && !weaponText.isBlank() && !weaponText.equalsIgnoreCase("unarmed")
+				? weaponText : null;
 		Combat.AttackProfile profile;
-		if (creatureAction.isPresent()) {
-			profile = Combat.creatureAction(creatureAction.get());
-		} else if (weaponText != null && !weaponText.isBlank() && !weaponText.equalsIgnoreCase("unarmed")) {
-			Row weaponEntry = carriedWeapon(tx, actor, weaponText);
-			ContentService.Item item = ContentService.itemForEntry(tx, rules, weaponEntry);
-			if (!weaponEntry.bool("equipped")) {
-				warnings.add(item.name() + " was not equipped; treating the draw as part of the attack.");
+		if (statBlock) {
+			// A pure stat block: its own actions first (the named one, else the first attack), then whatever
+			// it happens to carry.
+			Optional<Map<String, Object>> creatureAction = creatureAction(actor, attackName);
+			if (creatureAction.isPresent()) {
+				profile = Combat.creatureAction(creatureAction.get());
+			} else if (named != null) {
+				profile = carriedProfile(tx, actor, named, prof, action, warnings);
+			} else {
+				profile = Combat.unarmed(actor, prof);
 			}
-			profile = Combat.weapon(actor, item.name(), item.payload(), prof,
-					Boolean.TRUE.equals(action.get("two_handed")));
-		} else if (statBlock && creatureAction(actor, null).isPresent()) {
-			profile = Combat.creatureAction(creatureAction(actor, null).get());
+		} else if (named != null) {
+			// A classed character attacks with what it carries. An action of the stat block it was
+			// materialized from (a Priest's Radiant Flame, a Scout's Longbow it never owned) stays reachable
+			// by name when no carried weapon answers to it.
+			Optional<Map<String, Object>> creatureAction = creatureAction(actor, named);
+			try {
+				profile = carriedProfile(tx, actor, named, prof, action, warnings);
+			} catch (RpgException notCarried) {
+				if (creatureAction.isEmpty()) {
+					throw notCarried;
+				}
+				profile = Combat.creatureAction(creatureAction.get());
+				warnings.add(named + " is not a carried weapon; using the stat-block action of that name.");
+			}
 		} else {
 			profile = Combat.unarmed(actor, prof);
 		}
 		return new Setup(profile, warnings);
+	}
+
+	private Combat.AttackProfile carriedProfile(
+		Tx tx, Row actor, String named, int prof, Map<String, Object> action, List<String> warnings) {
+		Row weaponEntry = carriedWeapon(tx, actor, named);
+		ContentService.Item item = ContentService.itemForEntry(tx, rules, weaponEntry);
+		if (!weaponEntry.bool("equipped")) {
+			warnings.add(item.name() + " was not equipped; treating the draw as part of the attack.");
+		}
+		return Combat.weapon(actor, item.name(), item.payload(), prof, Boolean.TRUE.equals(action.get("two_handed")));
 	}
 
 	/**
@@ -1299,7 +1352,19 @@ public final class EncounterService {
 			switch (kind) {
 			case "OPPORTUNITY_ATTACK" -> {
 				Row mover = tx.get("character", ((Number) ctx.get("mover")).longValue());
-				if (option.equals("TAKE")) {
+				Row moverParticipant = tx
+						.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+								encounter.id(), mover.id())
+						.orElse(null);
+				boolean moverDown = !"ALIVE".equals(mover.str("life_state")) || moverParticipant == null
+						|| !"ACTIVE".equals(moverParticipant.str("status"));
+				if (option.equals("TAKE") && moverDown) {
+					// Another reaction already brought the mover down: the choice is void and the reaction kept.
+					result.put("cancelled",
+							mover.str("name") + " is already down; " + chooser.str("name") + " keeps the reaction.");
+					log(tx, campaignId, encounter.id(), round, chooser.id(), "REACTION", chooser.str("name")
+							+ " has no one left to strike: " + mover.str("name") + " is already down.", null);
+				} else if (option.equals("TAKE")) {
 					if (!reactionAvailable(tx, chooserParticipant, chooser)) {
 						throw RpgException.notAllowed(chooser.str("name") + " no longer has a reaction available.");
 					}
@@ -1358,7 +1423,8 @@ public final class EncounterService {
 		if (actor.isNull("origin_content_ref")) {
 			return Optional.empty();
 		}
-		// Attacks stay available to a promoted companion only through equipment; see resolveProfile.
+		// A promoted companion reaches these only by name, and only when it carries no weapon of that name;
+		// see resolveProfile.
 		return rules.find(actor.str("origin_content_ref")).flatMap(d -> {
 			List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload().getOrDefault("actions",
 					List.of());
@@ -1528,6 +1594,49 @@ public final class EncounterService {
 	// ── turn advancement ───────────────────────────────────────────────
 
 	/**
+	 * While the turn pointer rests on a participant who cannot take a turn (dead, defeated,
+	 * removed, dying, or no pointer at all), moves it on with the ordinary turn advance. Returns
+	 * the names skipped, in order.
+	 */
+	private List<String> skipTurnsNobodyCanTake(Tx tx, long campaignId, Row encounter) {
+		var skipped = new ArrayList<String>();
+		List<Row> order = turnOrder(tx, encounter.id());
+		for (int guard = 0; guard <= order.size(); guard++) {
+			Row live = tx.get("encounter", encounter.id());
+			Long turnId = live.lng("turn_participant_id");
+			if (turnId == null) {
+				// Nobody's turn: the first participant in order who can act takes it, without a new round.
+				for (Row p : order) {
+					Row c = tx.get("character", p.lng("character_id"));
+					if ("ACTIVE".equals(p.str("status")) && "ALIVE".equals(c.str("life_state"))) {
+						tx.update("encounter", live.id(), Map.of("turn_participant_id", p.id()));
+						tx.update("encounter_participant", p.id(), Map.of("reaction_used", 0));
+						skipped.add("(nobody's turn) -> " + c.str("name"));
+						log(tx, campaignId, live.id(), live.lng("round"), null, "TURN_SKIPPED",
+								"The turn passes to " + c.str("name") + ".", null);
+						return skipped;
+					}
+				}
+				return skipped;
+			}
+			Row p = tx.get("encounter_participant", turnId);
+			Row c = tx.get("character", p.lng("character_id"));
+			if ("ACTIVE".equals(p.str("status")) && "ALIVE".equals(c.str("life_state"))) {
+				return skipped;
+			}
+			if ("DEAD".equals(c.str("life_state")) && "ACTIVE".equals(p.str("status"))) {
+				tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
+			}
+			String why = "ACTIVE".equals(p.str("status")) ? c.str("life_state") : p.str("status");
+			skipped.add(c.str("name"));
+			log(tx, campaignId, live.id(), live.lng("round"), c.id(), "TURN_SKIPPED",
+					c.str("name") + " cannot take a turn (" + why + "); the turn moves on.", null);
+			advanceTurn(tx, campaignId, live);
+		}
+		return skipped;
+	}
+
+	/**
 	 * Moves to the next participant who can act, rolling death saves for dying party members whose
 	 * turn comes up and expiring "until start of turn" effects. Returns the new turn (or none if
 	 * nobody can act).
@@ -1557,6 +1666,11 @@ public final class EncounterService {
 				continue;
 			}
 			Row c = tx.get("character", p.lng("character_id"));
+			if ("DEAD".equals(c.str("life_state"))) {
+				// Killed outside the attack loop (a fall, a fiat): out of the fight from here on.
+				tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
+				continue;
+			}
 			// Effects that last until the start of this participant's turn expire now.
 			for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
 					c.id())) {
@@ -1695,7 +1809,8 @@ public final class EncounterService {
 					if (!"DEAD".equals(c.str("life_state"))) {
 						recipients.add(c);
 					}
-				} else if ("DEFEATED".equals(p.str("status")) && hostile(stances, partySide, p.str("side"))) {
+				} else if (("DEFEATED".equals(p.str("status")) || "DEAD".equals(c.str("life_state")))
+						&& !"REMOVED".equals(p.str("status")) && hostile(stances, partySide, p.str("side"))) {
 					long xp = c.isNull("origin_content_ref") ? 0 : rules.find(c.str("origin_content_ref"))
 							.map(d -> d.payload().get("xp_value")).map(v -> ((Number) v).longValue()).orElse(0L);
 					defeatedXp += xp;
@@ -1826,6 +1941,11 @@ public final class EncounterService {
 	}
 
 	private static boolean hostile(Map<String, Object> stances, String a, String b) {
+		if (a == null || b == null || a.equals(b)) {
+			// A side is never hostile to itself: allies neither provoke nor take opportunity attacks on
+			// each other, and their stat blocks never count toward the XP pool.
+			return false;
+		}
 		Object s = stances.get(a + "|" + b);
 		if (s == null) {
 			s = stances.get(b + "|" + a);

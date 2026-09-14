@@ -58,6 +58,35 @@ import java.util.*;
  */
 public final class LevelUpService {
 
+	/**
+	 * The hit points a change of Constitution modifier adds (or, for a cut, removes) at the given
+	 * character level: one per level attained (SRD 5.2.1 "Constitution").
+	 */
+	public static int constitutionHp(int scoreBefore, int scoreAfter, int level) {
+		return (Rules.modifier(scoreAfter) - Rules.modifier(scoreBefore)) * Math.max(0, level);
+	}
+
+	private static int constitutionHp(Row c, Map<String, Object> cols, int level) {
+		int before = c.intOr("con_score", 10);
+		int after = cols.get("con_score") instanceof Number n ? n.intValue() : before;
+		return constitutionHp(before, after, level);
+	}
+
+	/**
+	 * Moves the working max_hp / current_hp columns by a delta the way SET_MAX_HP does: a raise
+	 * carries current hit points up with it, a cut clamps them to the new maximum (never below 1).
+	 */
+	public static void shiftMaxHp(Map<String, Object> cols, int delta) {
+		if (delta == 0) {
+			return;
+		}
+		int max = ((Number) cols.get("max_hp")).intValue();
+		int current = ((Number) cols.get("current_hp")).intValue();
+		int target = Math.max(1, max + delta);
+		cols.put("max_hp", target);
+		cols.put("current_hp", delta > 0 ? current + delta : Math.max(1, Math.min(current, target)));
+	}
+
 	/** Origin answers a promotion may carry, applied at commit in this order. */
 	private static final List<String> ORIGIN_CHOICES = List.of("species", "species_skill", "species_choice",
 			"origin_feat", "background", "background_tool", "feat_choices");
@@ -749,14 +778,22 @@ public final class LevelUpService {
 		before.put("level", payload.get("from_level"));
 		after.put("level", toLevel);
 		before.put("max_hp", c.integer("max_hp"));
+		Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
+				? (Map<String, Object>) m : Map.of();
 		Object gain = chosen.get("hp_gain");
-		after.put("max_hp", gain == null ? null : c.intOr("max_hp", 0) + ((Number) gain).intValue());
+		int conBefore = c.intOr("con_score", 10);
+		int conAfter = conBefore + (asi.get("CON") instanceof Number n ? n.intValue() : 0)
+				+ (chosen.get("feat") instanceof Map<?, ?> feat && feat.get("choices") instanceof Map<?, ?> fc
+						&& "CON".equalsIgnoreCase(String.valueOf(fc.get("ability_increase"))) ? 1 : 0);
+		int constitutionHp = constitutionHp(conBefore, Math.min(Rules.MAX_SCORE, conAfter), toLevel);
+		after.put("max_hp", gain == null ? null : c.intOr("max_hp", 0) + ((Number) gain).intValue() + constitutionHp);
+		if (constitutionHp != 0) {
+			after.put("constitution_hp", constitutionHp);
+		}
 		before.put("proficiency_bonus", rules.proficiencyBonus(((Number) payload.get("from_level")).intValue()));
 		after.put("proficiency_bonus", rules.proficiencyBonus(toLevel));
 		var scoresBefore = new LinkedHashMap<String, Object>();
 		var scoresAfter = new LinkedHashMap<String, Object>();
-		Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
-				? (Map<String, Object>) m : Map.of();
 		for (Ability a : Ability.values()) {
 			int score = c.intOr(a.column(), 10);
 			scoresBefore.put(a.name(), score);
@@ -866,6 +903,10 @@ public final class LevelUpService {
 				}
 				se.hirt.mcp.rpg.character.Origins.grantFeat(tx, rules, c, feat, "level_up", featChoices);
 			}
+			// A higher Constitution modifier raises the maximum by one for every level attained, this one
+			// included (SRD 5.2.1 "Constitution": the increase is retroactive).
+			int constitutionHp = constitutionHp(c, cols, toLevel);
+			shiftMaxHp(cols, constitutionHp);
 			cols.put("revision", c.lng("revision") + 1);
 			tx.update("character", c.id(), cols);
 			se.hirt.mcp.rpg.magic.SpellService.initializeSlots(tx, rules, tx.get("character", c.id()));
@@ -873,15 +914,15 @@ public final class LevelUpService {
 					tx.get("character", c.id()));
 			se.hirt.mcp.rpg.character.Origins.initializeResources(tx, rules, tx.get("character", c.id()));
 			tx.update("pending_transaction", t.id(), Map.of("status", "COMMITTED", "revision", t.lng("revision") + 1));
-			LedgerService.append(tx, campaignId,
-					new LedgerService.EventSpec("LEVEL_UP",
-							c.str("name") + " reached level " + toLevel + " (" + payload.get("class_name") + "): +"
-									+ gain + " HP" + (asi.isEmpty() ? "" : ", ability improvement " + asi)
-									+ (featName == null ? "" : ", feat " + featName)
-									+ (lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells)
-									+ (metamagicNames.isEmpty() ? "" : ", Metamagic " + metamagicNames) + ".",
-							List.of(c.id()), "MAJOR", "PARTY_KNOWN", "PLAYER", null, c.lng("location_id"), null,
-							Map.of("level", toLevel, "hp_gain", gain, "choices", chosen)));
+			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("LEVEL_UP",
+					c.str("name") + " reached level " + toLevel + " (" + payload.get("class_name") + "): +" + gain
+							+ " HP" + (constitutionHp == 0 ? "" : ", +" + constitutionHp + " HP for Constitution")
+							+ (asi.isEmpty() ? "" : ", ability improvement " + asi)
+							+ (featName == null ? "" : ", feat " + featName)
+							+ (lineageSpells.isEmpty() ? "" : ", species spells " + lineageSpells)
+							+ (metamagicNames.isEmpty() ? "" : ", Metamagic " + metamagicNames) + ".",
+					List.of(c.id()), "MAJOR", "PARTY_KNOWN", "PLAYER", null, c.lng("location_id"), null,
+					Map.of("level", toLevel, "hp_gain", gain, "choices", chosen)));
 			tx.update("campaign", campaignId,
 					Map.of("harness_state", HarnessState.EXPLORATION.name(), "revision", campaign.lng("revision") + 1));
 			Row after = tx.get("character", c.id());
@@ -891,6 +932,9 @@ public final class LevelUpService {
 			result.put("character", Ref.of(Ref.CHARACTER, c.id()));
 			result.put("level", toLevel);
 			result.put("hp_gain", gain);
+			if (constitutionHp != 0) {
+				result.put("constitution_hp", constitutionHp);
+			}
 			result.put("ability_score_improvement", asi);
 			if (featName != null) {
 				result.put("feat", featName);
@@ -1017,6 +1061,8 @@ public final class LevelUpService {
 			Ability a = Ability.parse(e.getKey());
 			cols.put(a.column(), c.intOr(a.column(), 10) + ((Number) e.getValue()).intValue());
 		}
+		int constitutionHp = constitutionHp(c, cols, to);
+		shiftMaxHp(cols, constitutionHp);
 		cols.put("revision", c.lng("revision") + 1);
 		tx.update("character_class", classRow.id(), Map.of("level", to));
 		tx.update("character", c.id(), cols);
@@ -1028,6 +1074,7 @@ public final class LevelUpService {
 		LedgerService.append(tx, campaignId,
 				new LedgerService.EventSpec("LEVEL_UP",
 						c.str("name") + " reached level " + to + " (" + def.name() + "): +" + gain + " HP"
+								+ (constitutionHp == 0 ? "" : ", +" + constitutionHp + " HP for Constitution")
 								+ (asi.isEmpty() ? "" : ", ability improvement " + asi) + ", levelled by the engine.",
 						List.of(c.id()), "NOTABLE", "PARTY_KNOWN", "GM", null, c.lng("location_id"), null,
 						Map.of("level", to, "hp_gain", gain, "companion", true)));
@@ -1038,6 +1085,9 @@ public final class LevelUpService {
 		m.put("level", to);
 		m.put("hp_method", method);
 		m.put("hp_gain", gain);
+		if (constitutionHp != 0) {
+			m.put("constitution_hp", constitutionHp);
+		}
 		m.put("max_hp", after.intOr("max_hp", 0));
 		if (!asi.isEmpty()) {
 			m.put("ability_score_improvement", asi);

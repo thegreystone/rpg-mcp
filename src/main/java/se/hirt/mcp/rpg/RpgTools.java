@@ -633,7 +633,7 @@ public class RpgTools {
 			+ "({\"party\": [\"character:1\"], \"raiders\": [\"character:5\", \"character:6\"]}), optional stances between sides "
 			+ "({\"party|raiders\": \"HOSTILE\"}; default HOSTILE), optional zones per character ({\"character:5\": \"far\"}). "
 			+ "Rolls initiative (d20 + DEX), creates the retry checkpoint under ENCOUNTER_RETRY, and returns the first turn. All participants must be materialized characters. "
-			+ "options.npc_reactions: AUTO (default; the engine resolves NPC opportunity attacks and Shield) or ASK (every reaction becomes a pending choice).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "options.npc_reactions: AUTO (default; the engine resolves NPC opportunity attacks and Shield) or ASK (every reaction becomes a pending choice); options.surprised: [side names] roll initiative with Disadvantage (SRD Surprise). Allies never take opportunity attacks on each other.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse startEncounter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Side name → list of character references")
@@ -644,7 +644,8 @@ public class RpgTools {
 		Map<String, Object> zones, @ToolArg(description = "Environment/terrain description")
 		Optional<String> environment, @ToolArg(description = "Encounter objectives")
 		Optional<List<String>> objectives, @ToolArg(description = "Location reference (default: current location)")
-		Optional<String> location, @ToolArg(description = "Options: {npc_reactions: AUTO|ASK}", required = false)
+		Optional<String> location,
+		@ToolArg(description = "Options: {npc_reactions: AUTO|ASK, surprised: [side names]}", required = false)
 		Map<String, Object> options) {
 		return ToolSupport.run("start_encounter", () -> engine.encounters().start(operation_id, campaign, sides,
 				stances, zones, environment.orElse(null), objectives.orElse(null), location.orElse(null), options));
@@ -708,7 +709,7 @@ public class RpgTools {
 	}
 
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
-			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} "
+			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
 			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT / CONVERT_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, a Bonus Action); "
 			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
 			+ "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. "

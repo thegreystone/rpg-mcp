@@ -219,6 +219,96 @@ public final class Effects {
 		return tx.insert("active_effect", cols);
 	}
 
+	private static final java.util.regex.Pattern DURATION_TEXT = java.util.regex.Pattern
+			.compile("(?i)\\s*(\\d+)\\s*(round|minute|min|hour|day)s?\\s*");
+
+	/**
+	 * A duration given by the GM (ADD_CONDITION), normalized to the shapes the engine expires: a
+	 * number is minutes; "3 rounds", "1 minute", "2 hours", "1 day" parse; "long rest" / LONG_REST,
+	 * "restored" / RESTORED and "start of turn" / START_OF_TURN are milestones; a map with
+	 * expires_seq, expires_round or until passes through; {minutes: n} / {rounds: n} / {hours: n}
+	 * are converted. Null (or "until removed") means no expiry.
+	 */
+	public static Map<String, Object> parseDuration(Tx tx, long campaignId, Row c, Object duration, String label) {
+		if (duration == null) {
+			return null;
+		}
+		Long encounterId = c.lng("encounter_id");
+		long round = encounterId == null ? 0 : tx.get("encounter", encounterId).lng("round");
+		if (duration instanceof Number n) {
+			return minutes(tx, campaignId, Math.max(1, n.longValue()), label);
+		}
+		if (duration instanceof Map<?, ?> given) {
+			var m = new LinkedHashMap<String, Object>();
+			for (var e : given.entrySet()) {
+				m.put(String.valueOf(e.getKey()), e.getValue());
+			}
+			if (m.get("minutes") instanceof Number n) {
+				return minutes(tx, campaignId, Math.max(1, n.longValue()), label);
+			}
+			if (m.get("hours") instanceof Number n) {
+				return minutes(tx, campaignId, Math.max(1, n.longValue()) * 60, label);
+			}
+			if (m.get("rounds") instanceof Number n) {
+				return rounds(tx, campaignId, encounterId, round, Math.max(1, n.longValue()), label);
+			}
+			if (m.get("until") != null) {
+				String until = String.valueOf(m.get("until")).toUpperCase();
+				if (!java.util.Set.of("LONG_REST", "RESTORED", "START_OF_TURN", "HP_ABOVE_ZERO").contains(until)) {
+					throw se.hirt.mcp.rpg.protocol.RpgException.invalidArgument(
+							"duration.until must be LONG_REST, RESTORED, START_OF_TURN or HP_ABOVE_ZERO.");
+				}
+				m.put("until", until);
+				m.putIfAbsent("label", label);
+				return m;
+			}
+			if (m.get("expires_seq") instanceof Number || m.get("expires_round") instanceof Number) {
+				m.putIfAbsent("label", label);
+				return m;
+			}
+			throw se.hirt.mcp.rpg.protocol.RpgException.invalidArgument(
+					"duration must be minutes (a number or '1 minute'), rounds ('3 rounds'), hours, days, 'long rest', 'restored', 'start of turn', or a map with minutes/rounds/hours/until.");
+		}
+		String text = String.valueOf(duration).trim();
+		String key = text.toUpperCase().replace(' ', '_').replace('-', '_');
+		switch (key) {
+		case "LONG_REST", "UNTIL_LONG_REST" -> {
+			return until("LONG_REST", label);
+		}
+		case "RESTORED", "UNTIL_RESTORED" -> {
+			return until("RESTORED", label);
+		}
+		case "START_OF_TURN", "UNTIL_START_OF_TURN", "UNTIL_START_OF_NEXT_TURN" -> {
+			return until("START_OF_TURN", label);
+		}
+		case "UNTIL_REMOVED", "INDEFINITE", "PERMANENT", "NONE" -> {
+			return null;
+		}
+		default -> {
+			var m = DURATION_TEXT.matcher(text);
+			if (!m.matches()) {
+				throw se.hirt.mcp.rpg.protocol.RpgException.invalidArgument("Cannot read the duration '" + text
+						+ "': use '3 rounds', '1 minute', '2 hours', '1 day', 'long rest', 'restored', 'start of turn', 'until removed', a number of minutes, or a map.");
+			}
+			long n = Long.parseLong(m.group(1));
+			return switch (m.group(2).toLowerCase()) {
+			case "round" -> rounds(tx, campaignId, encounterId, round, n, label);
+			case "hour" -> minutes(tx, campaignId, n * 60, label);
+			case "day" -> minutes(tx, campaignId, n * 60 * 24, label);
+			default -> minutes(tx, campaignId, n, label);
+			};
+		}
+		}
+	}
+
+	private static Map<String, Object> until(String milestone, String label) {
+		var d = new LinkedHashMap<String, Object>();
+		d.put("kind", "UNTIL");
+		d.put("label", label);
+		d.put("until", milestone);
+		return d;
+	}
+
 	/** Duration in game minutes from now. */
 	public static Map<String, Object> minutes(Tx tx, long campaignId, long minutes, String label) {
 		var d = new LinkedHashMap<String, Object>();

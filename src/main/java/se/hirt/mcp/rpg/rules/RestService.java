@@ -419,6 +419,13 @@ public final class RestService {
 								cols.put("current_hp", 0);
 								cols.put("death_saves_json", Json.write(Combat.freshDeathSaves()));
 							}
+							// A participant of a running encounter follows: DEAD is out of the fight, a revival
+							// is back in the turn order.
+							if (state.equals("DEAD")) {
+								RuntimeService.markDefeatedInRunningEncounter(tx, c.id());
+							} else {
+								RuntimeService.restoreToRunningEncounter(tx, c.id());
+							}
 							label = c.str("name") + " life state " + c.str("life_state") + " → " + state;
 						}
 						case "SET_MONEY" -> {
@@ -448,6 +455,21 @@ public final class RestService {
 							cols.put(a.column(), n.intValue());
 							label = c.str("name") + " " + a.fullName() + " " + c.integer(a.column()) + " → "
 									+ n.intValue();
+							if (a == Ability.CON) {
+								// The hit point maximum follows the Constitution modifier, one per class level
+								// (SRD 5.2.1 "Constitution"); stat blocks without levels keep their printed HP.
+								int delta = se.hirt.mcp.rpg.progression.LevelUpService.constitutionHp(
+										c.intOr(a.column(), 10), n.intValue(),
+										se.hirt.mcp.rpg.character.Origins.characterLevel(tx, c));
+								if (delta != 0) {
+									cols.put("max_hp", c.intOr("max_hp", 0));
+									cols.put("current_hp", c.intOr("current_hp", 0));
+									se.hirt.mcp.rpg.progression.LevelUpService.shiftMaxHp(cols, delta);
+									before.put("max_hp", c.intOr("max_hp", 0));
+									after.put("max_hp", cols.get("max_hp"));
+									label += " (max HP " + c.intOr("max_hp", 0) + " → " + cols.get("max_hp") + ")";
+								}
+							}
 						}
 						default -> {
 							Row l = se.hirt.mcp.rpg.world.WorldService.location(tx, campaignId,
@@ -498,12 +520,9 @@ public final class RestService {
 						var cols = new LinkedHashMap<String, Object>();
 						cols.put("encounter_id", null);
 						tx.update("character", c.id(), cols);
-						Row enc = tx.get("encounter", p.lng("encounter_id"));
-						if (enc.lng("turn_participant_id") != null && enc.lng("turn_participant_id") == p.id()) {
-							var ecols = new LinkedHashMap<String, Object>();
-							ecols.put("turn_participant_id", null);
-							tx.update("encounter", enc.id(), ecols);
-						}
+						// If the removed participant held the turn the pointer stays with them: the next
+						// perform_encounter_action moves it on past anyone who cannot act (nulling it left the
+						// fight with nobody's turn).
 						label = c.str("name") + " removed from the encounter";
 					}
 					default -> {

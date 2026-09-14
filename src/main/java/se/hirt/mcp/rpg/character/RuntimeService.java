@@ -166,6 +166,27 @@ public final class RuntimeService {
 
 	// ── apply_runtime_change ───────────────────────────────────────────
 
+	private static final java.util.regex.Pattern SLOT_REF = java.util.regex.Pattern
+			.compile("(?i)(?:spell[_ ]?slot|slot)\\s*[:_ ]\\s*(\\d)");
+
+	/**
+	 * The resource ref of a USE_RESOURCE / RESTORE_RESOURCE change. Spell slots are resources too,
+	 * stored as slot:N and pact_slot but shown under spellcasting.slots, so "spell_slot:4", "slot
+	 * 4" and "pact_slot" are accepted: a readied spell or a cast narrated outside cast_spell still
+	 * spends its slot.
+	 */
+	static String resourceRef(Map<String, Object> change) {
+		String ref = change.get("resource") == null ? "" : change.get("resource").toString().trim();
+		var m = SLOT_REF.matcher(ref);
+		if (m.matches()) {
+			return se.hirt.mcp.rpg.magic.SpellService.SLOT_PREFIX + m.group(1);
+		}
+		if (ref.equalsIgnoreCase("pact_slot") || ref.equalsIgnoreCase("pact slot")) {
+			return se.hirt.mcp.rpg.magic.SpellService.PACT_SLOT;
+		}
+		return ref;
+	}
+
 	public Map<String, Object> applyRuntimeChange(
 		String operationId, String campaignRef, String characterRef, Map<String, Object> change) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
@@ -248,7 +269,8 @@ public final class RuntimeService {
 						conditionRef(condition)) > 0) {
 					result.put("already_present", true);
 				} else {
-					long id = addCondition(tx, campaignId, c.id(), condition, change.get("duration"), reason, "GM");
+					long id = addCondition(tx, campaignId, c.id(), condition, se.hirt.mcp.rpg.rules.Effects
+							.parseDuration(tx, campaignId, c, change.get("duration"), condition), reason, "GM");
 					result.put("effect", id);
 				}
 				result.put("condition", condition);
@@ -279,12 +301,13 @@ public final class RuntimeService {
 			case "USE_RESOURCE", "RESTORE_RESOURCE" -> {
 				// Species-trait and feat uses (Breath Weapon, Heroic Inspiration, ...) — tracked by the
 				// engine, triggered by the GM; the sheet's `resources` block lists the refs.
-				String ref = change.get("resource") == null ? "" : change.get("resource").toString();
+				String ref = resourceRef(change);
 				Row res = tx
 						.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(),
 								ref)
 						.orElseThrow(() -> RpgException.invalidArgument("Unknown resource '" + ref + "' for "
-								+ c.str("name") + "; the character sheet's resources block lists the legal refs."));
+								+ c.str("name")
+								+ "; the character sheet's resources block lists the legal refs, and spell slots are spell_slot:<level> (or pact_slot)."));
 				int current = res.intOr("current", 0);
 				int max = res.intOr("max", 0);
 				int n = change.get("amount") instanceof Number a ? Math.max(1, a.intValue()) : 1;
@@ -616,11 +639,38 @@ public final class RuntimeService {
 		}
 		cols.put("life_state", life);
 		tx.update("character", c.id(), cols);
+		if ("DEAD".equals(life)) {
+			markDefeatedInRunningEncounter(tx, c.id());
+		}
 		out.put("life_state", life);
 		if (dr.droppedToZero() && "DYING".equals(life)) {
 			out.put("dropped_to_zero", true);
 		}
 		return out;
+	}
+
+	/**
+	 * A participant killed outside the attack loop (a fall, a runtime change, a fiat) is out of the
+	 * fight: the turn order skips it and end_encounter counts it among the defeated.
+	 */
+	public static void markDefeatedInRunningEncounter(Tx tx, long characterId) {
+		for (Row p : tx.query(
+				"SELECT p.* FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND p.status = 'ACTIVE' AND e.status IN ('RUNNING','WAITING_CHOICE')",
+				characterId)) {
+			tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
+		}
+	}
+
+	/**
+	 * The reverse, for a fiat revival: a DEFEATED participant of a running encounter is back in the
+	 * order.
+	 */
+	public static void restoreToRunningEncounter(Tx tx, long characterId) {
+		for (Row p : tx.query(
+				"SELECT p.* FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND p.status = 'DEFEATED' AND e.status IN ('RUNNING','WAITING_CHOICE')",
+				characterId)) {
+			tx.update("encounter_participant", p.id(), Map.of("status", "ACTIVE"));
+		}
 	}
 
 	public static boolean isPartyMember(Tx tx, long campaignId, long characterId) {

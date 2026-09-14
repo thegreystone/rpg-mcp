@@ -29,6 +29,8 @@
 package se.hirt.mcp.rpg;
 
 import org.junit.jupiter.api.Test;
+import se.hirt.mcp.rpg.dice.ScriptedRollService;
+import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -37,6 +39,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
@@ -179,5 +183,82 @@ class ClassFeatureTest {
 
 	private static Map<String, Object> mechanicsOf(Engine engine, String campaign, String name) {
 		return m(payloadOf(engine, campaign, name).get("mechanics"));
+	}
+
+	/**
+	 * A companion promoted from a stat block attacks with what it carries, but an action printed on
+	 * the stat block stays reachable by name when no carried weapon answers to it (a Priest's
+	 * Radiant Flame, a Scout's Longbow it never owned).
+	 */
+	@Test
+	@SuppressWarnings("unchecked")
+	void aClassedCompanionReachesItsStatBlockActionsByName() throws Exception {
+		Path db = tempDb("feature-statblock-name");
+		try (Engine engine = engine(db)) {
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			String[] setup = withRogue(engine);
+			String campaign = setup[0], rogue = setup[1];
+			String ogre = (String) engine.runtime()
+					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
+			dice.queue(20, 50, 1, 50);
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
+			// The Scout's Longbow was never carried: by name it is still the stat block's attack, and says so.
+			Map<String, Object> bow = engine.encounters().perform(op(), campaign, encounter, rogue,
+					map("kind", "ATTACK", "attack", "Longbow", "target", ogre), false);
+			assertEquals("Longbow", bow.get("attack"));
+			assertTrue(((List<String>) bow.get("warnings")).stream().anyMatch(w -> w.contains("stat-block action")),
+					"" + bow.get("warnings"));
+			// The shortsword she carries is her own weapon, not the stat block's.
+			Map<String, Object> sword = engine.encounters().perform(op(), campaign, encounter, rogue,
+					map("kind", "ATTACK", "attack", "Shortsword", "target", ogre), false);
+			assertEquals("Shortsword", sword.get("attack"));
+			assertTrue(sword.get("warnings") == null
+					|| ((List<String>) sword.get("warnings")).stream().noneMatch(w -> w.contains("stat-block")));
+			// Something neither carried nor printed is still refused.
+			assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign, encounter, rogue,
+					map("kind", "ATTACK", "attack", "Greatsword", "target", ogre), false));
+		}
+	}
+
+	/**
+	 * "Beside the target" means an enemy of the target in the target's zone, not an ally anywhere
+	 * in the fight.
+	 */
+	@Test
+	void sneakAttackNeedsAnEnemyOfTheTargetInTheTargetsZone() throws Exception {
+		Path db = tempDb("feature-sneak-zone");
+		try (Engine engine = engine(db)) {
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			String[] setup = withRogue(engine);
+			String campaign = setup[0], rogue = setup[1], pc = "character:1";
+			String ogre = (String) engine.runtime()
+					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
+			// The PC stands in another zone from the ogre: nobody is beside the target.
+			dice.queue(20, 50, 5, 50, 1, 50);
+			String apart = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(rogue, pc), "foes", List.of(ogre)), null,
+							map(rogue, "far", pc, "near", ogre, "far"), null, null, null)
+					.get("encounter");
+			dice.queue(15);
+			Map<String, Object> alone = engine.encounters().perform(op(), campaign, apart, rogue,
+					map("kind", "ATTACK", "attack", "Shortsword", "target", ogre), false);
+			assertEquals(Boolean.TRUE, alone.get("hit"));
+			assertNull(alone.get("sneak_attack"), "the ally is not within 5 feet of the target: " + alone);
+			engine.encounters().end(op(), campaign, apart, "OTHER", "reset");
+
+			// Now the PC shares the ogre's zone: the rogue's blade finds the opening.
+			dice.queue(20, 50, 5, 50, 1, 50);
+			String together = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(rogue, pc), "foes", List.of(ogre)), null,
+							map(rogue, "far", pc, "far", ogre, "far"), null, null, null)
+					.get("encounter");
+			dice.queue(15);
+			Map<String, Object> flanked = engine.encounters().perform(op(), campaign, together, rogue,
+					map("kind", "ATTACK", "attack", "Shortsword", "target", ogre), false);
+			Map<String, Object> sneak = m(flanked.get("sneak_attack"));
+			assertNotNull(sneak, "an enemy of the target is beside it: " + flanked);
+			assertEquals("Richard Greystone is beside the target", sneak.get("qualified_by"));
+		}
 	}
 }
