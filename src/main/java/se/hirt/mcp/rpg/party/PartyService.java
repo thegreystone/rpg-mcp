@@ -29,6 +29,7 @@
 package se.hirt.mcp.rpg.party;
 
 import se.hirt.mcp.rpg.character.CharacterService;
+import se.hirt.mcp.rpg.character.DeepMerge;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.persistence.Database;
@@ -42,6 +43,7 @@ import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.session.GameTime;
 
 import java.util.*;
+import java.util.function.UnaryOperator;
 
 /**
  * Party membership as history (DOMAIN_MODEL.md §6, I-17..I-19) and relationships as compact state
@@ -371,8 +373,9 @@ public final class PartyService {
 	 * FIRST_MEETING, PROPOSAL, WEDDING, FIRST_NIGHT, PREGNANCY, PARTING, OATH…; the game time is
 	 * stamped when missing), {@code terms} (standing agreements between the two),
 	 * {@code preferences} (likes, dislikes and limits mapped in play; intimate detail only under a
-	 * PEGI-18 profile), {@code wants} and {@code hard_lines}. MERGE (default) appends to lists
-	 * without duplicates and overlays maps; a null value removes a key; REPLACE starts over.
+	 * PEGI-18 profile), {@code wants} and {@code hard_lines}. MERGE (default) never loses what is
+	 * stored: at every depth lists append without duplicates and maps merge key by key; a null
+	 * removes the key it sits under; REPLACE starts over ({@link DeepMerge}).
 	 */
 	public Map<String, Object> updateRelationship(
 		String operationId, String campaignRef, String fromRef, String toRef, Map<String, Object> dimensions,
@@ -538,8 +541,9 @@ public final class PartyService {
 	}
 
 	/**
-	 * Milestones and other list keys append without duplicates, map keys overlay, a null removes;
-	 * REPLACE starts over.
+	 * Milestones and other list keys append without duplicates, maps merge key by key all the way
+	 * down, a null removes the key it sits under; REPLACE starts over. A stored value is never
+	 * dropped by a value of another shape: see {@link DeepMerge}.
 	 */
 	static Map<String, Object> mergeProfile(
 		Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, boolean replace) {
@@ -552,34 +556,11 @@ public final class PartyService {
 			Object v = e.getValue();
 			if (v == null) {
 				out.remove(key);
-			} else if (v instanceof List<?> list) {
-				var merged = new ArrayList<Object>();
-				if (out.get(key) instanceof List<?> old) {
-					merged.addAll(old);
-				}
-				for (Object item : list) {
-					Object norm = "milestones".equals(key) ? milestone(tx, campaignId, item) : item;
-					if (!merged.contains(norm)) {
-						merged.add(norm);
-					}
-				}
-				out.put(key, merged);
-			} else if (v instanceof Map<?, ?> map) {
-				var merged = new LinkedHashMap<String, Object>();
-				if (out.get(key) instanceof Map<?, ?> old) {
-					old.forEach((k, val) -> merged.put(String.valueOf(k), val));
-				}
-				map.forEach((k, val) -> {
-					if (val == null) {
-						merged.remove(String.valueOf(k));
-					} else {
-						merged.put(String.valueOf(k), val);
-					}
-				});
-				out.put(key, merged);
-			} else {
-				out.put(key, v);
+				continue;
 			}
+			UnaryOperator<Object> normalize = "milestones".equals(key) ? item -> milestone(tx, campaignId, item)
+					: UnaryOperator.identity();
+			out.put(key, DeepMerge.merge(out.get(key), v, key, normalize, DeepMerge.NO_KEY));
 		}
 		return out;
 	}

@@ -320,8 +320,8 @@ public class RpgTools {
 			+ "{timeline: [{game_time?, note}], voice: [verbatim lines], state: [{note, since?, until?}] (carrying a child, an arm in a sling; give until to end one), "
 			+ "marks: [..], wants: [{note, with: [refs]?, status OPEN|DONE|ABANDONED}] (the character's drives: what they are working toward; open wants show in every "
 			+ "party list so the NPC is played toward the same things every scene)} and, under PEGI_18 only, `intimacy` {body, likes, dislikes, limits, hard_lines, "
-			+ "wants: [{note, with, status}] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. Lists append without duplicates; "
-			+ "an entry with the same note replaces the old one (mark a want DONE, end a state); a null removes a key; {replace: true} starts over. Record facts as they "
+			+ "wants: [{note, with, status}] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. Lists append without duplicates and maps merge key by key at every depth, nothing stored is lost; "
+			+ "an entry with the same note replaces the old one (mark a want DONE, end a state); a null removes the key it sits under; {replace: true} starts over. Record facts as they "
 			+ "are established in play: an age, a line worth keeping, a pregnancy, a scar, what someone wants. Mechanical state is never changed here. Drafts use update_character_draft.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateCharacter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
@@ -854,7 +854,7 @@ public class RpgTools {
 			+ "mutual=true applies the same change in both directions. "
 			+ "profile carries what drives a story: {milestones: [{kind: WEDDING|PROPOSAL|FIRST_NIGHT|PREGNANCY|PARTING|OATH|…, game_time (stamped now when omitted), note}], "
 			+ "terms: [standing agreements between the two], preferences: {likes: [], dislikes: [], limits: []} (intimate detail only under PEGI_18), wants: [], hard_lines: []}; "
-			+ "profile_mode MERGE (default: lists append without duplicates, maps overlay, null removes a key) or REPLACE. Never converts a Director seed into a predetermined outcome.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "profile_mode MERGE (default: nothing stored is lost; lists append without duplicates and maps merge key by key at every depth, null removes the key it sits under) or REPLACE (starts over). Never converts a Director seed into a predetermined outcome.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateRelationship(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Character whose feelings change")

@@ -38,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * The two slow-changing narrative aggregates a character carries besides the identity columns
@@ -90,11 +91,12 @@ public final class Biography {
 
 	/**
 	 * Merges {@code given} into {@code current} under the allowed keys. Lists append without
-	 * duplicates; an entry that is a map with a {@code note} replaces an existing entry with the
-	 * same note; entries of dated lists are stamped with the current game time when the caller gave
-	 * none; a null value removes the key; {@code replace: true} starts from an empty aggregate.
+	 * duplicates at every depth; an entry that is a map with a {@code note} replaces an existing
+	 * entry with the same note; entries of dated lists are stamped with the current game time when
+	 * the caller gave none; maps merge key by key; a null value removes the key it sits under;
+	 * {@code replace: true} starts from an empty aggregate. Nothing stored is dropped by a value of
+	 * another shape ({@link DeepMerge}).
 	 */
-	@SuppressWarnings("unchecked")
 	public static Map<String, Object> merge(
 		Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, Set<String> allowed,
 		String what) {
@@ -115,27 +117,15 @@ public final class Biography {
 			Object v = e.getValue();
 			if (v == null) {
 				out.remove(key);
-			} else if (v instanceof List<?> list) {
-				var merged = new ArrayList<Object>();
-				if (out.get(key) instanceof List<?> old) {
-					merged.addAll(old);
-				}
-				for (Object item : list) {
-					Object norm = normalize(tx, campaignId, key, item);
-					String note = noteOf(norm);
-					if (note != null) {
-						merged.removeIf(o -> note.equals(noteOf(o)));
-						merged.add(norm);
-					} else if (!merged.contains(norm)) {
-						merged.add(norm);
-					}
-				}
-				out.put(key, merged);
-			} else if (v instanceof Map<?, ?> map) {
-				out.put(key, normalize(tx, campaignId, key, map));
-			} else {
-				out.put(key, v.toString().trim());
+				continue;
 			}
+			// A single entry given for a dated list is that list's one new entry.
+			if (v instanceof Map<?, ?> && STAMPED.containsKey(key) && !(out.get(key) instanceof Map<?, ?>)) {
+				v = List.of(v);
+			}
+			UnaryOperator<Object> normalize = item -> normalize(tx, campaignId, key, item);
+			Object merged = DeepMerge.merge(out.get(key), v, key, normalize, Biography::noteOf);
+			out.put(key, merged instanceof String s ? s.trim() : merged);
 		}
 		return out;
 	}
