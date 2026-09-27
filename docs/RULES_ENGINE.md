@@ -1,87 +1,73 @@
 # RPG MCP Server — Rules Engine
 
-**Status:** Incremental working document. Grows with implementation milestones; each content kind's schema is pinned
-just before the milestone that imports it.
-**Purpose:** Define which game rules the engine implements as code, which arrive as data, which remain GM judgment — and
-the exact formulas the engine hard-codes.
-**Source of rules:** **SRD 5.2.1** (CC-BY-4.0). This document deliberately does not restate the SRD; it records the
-boundary, the encoded formulas, and citations. The SRD text is authoritative for everything cited.
+**Status:** Working document; each content kind's schema is pinned before the milestone that imports it.
+**Purpose:** Which rules are engine code, which are data, which are GM judgment, and the formulas the engine hard-codes.
+**Source of rules:** SRD 5.2.1 (CC-BY-4.0). The SRD text is authoritative; this document records the boundary, the
+encoded formulas and citations, not the rules themselves.
 
 ---
 
 ## 1. Verification Protocol
 
-Every rule encoded in the engine cites its SRD 5.2.1 section (and page in the reference PDF). The test that covers the
-rule references the same citation. A rule without a citation is a house rule and must be listed in §6.
+Every encoded rule cites its SRD 5.2.1 section (and page in the reference PDF); the test covering it cites the same.
+A rule without a citation is a house rule and must be listed in §6.
 
-Sections marked **[verify]** were not yet read against the SRD text during design; they MUST be verified at encoding
-time, not assumed from prior-edition knowledge. (The Equipment chapter pp. 89–103, Sample Poisons pp. 197–198, and the
-Sorcerer class pp. 64–65 were read directly during design; most other chapters were not.)
+Sections marked **[verify]** were not read against the SRD text during design and MUST be verified at encoding time,
+never assumed from prior-edition knowledge. Read directly during design: Equipment (pp. 89–103), Sample Poisons
+(pp. 197–198), Sorcerer (pp. 64–65).
 
 ---
 
 ## 2. The Three-Way Rules Boundary
 
-> If it is arithmetic or state, it is **engine code**. If it is a table, it is **data**. If it is judgment, it is the *
-*GM** — with the engine validating what it can.
+> Arithmetic or state is **engine code**. A table is **data**. Judgment is the **GM**, with the engine validating what
+> it can.
 
 ### 2.1 Engine-coded (deterministic procedures)
 
-- Dice expressions and all authoritative randomness (the roller, §4).
+- Dice expressions and all authoritative randomness (§4).
 - D20 Tests: ability checks, skill checks, saving throws, attack rolls (§5).
-- Damage application, resistance/vulnerability/immunity arithmetic, HP/temp-HP bookkeeping, dropping to 0 HP and death
-  saving throws. **[verify: SRD "Damage and Healing", pp. 16–18]**
-- Initiative, round/turn order.
+- Damage application, resistance/vulnerability/immunity, HP and temp HP, dropping to 0 HP, death saving throws.
+  **[verify: SRD "Damage and Healing", pp. 16–18]**
+- Initiative, round and turn order.
 - Resource accounting: spell slots, class resources, item charges, ammunition.
-- Rest procedures (short/long) and what they restore. **[verify: SRD Rules Glossary "Short Rest"/"Long Rest"]**
-- Conditions: applying/removing/stacking and their *mechanical* modifiers (the condition's rules text is data; its
-  arithmetic effect on rolls is code). **[verify: SRD Rules Glossary condition entries]**
-- Encumbrance and carrying capacity. **[verify: SRD "Carrying Capacity" glossary entry]**
-- XP accrual, level thresholds, proficiency bonus progression, level-up validation.
-- Money arithmetic in canonical copper; buying/selling (sell at half cost per Equipment ch., p. 89 sidebar); starting
-  equipment/gold choices.
-- Character creation validation: ability generation methods, legal class/species/background choices. *
-  *[verify: SRD "Character Creation", pp. 19–26]**
+- Rests and what they restore. **[verify: SRD Rules Glossary "Short Rest"/"Long Rest"]**
+- Conditions: applying, removing, stacking, and their mechanical modifiers (the rules text is data; the arithmetic
+  is code). **[verify: SRD Rules Glossary condition entries]**
+- Encumbrance and carrying capacity. **[verify: SRD "Carrying Capacity"]**
+- XP accrual, level thresholds, proficiency bonus, level-up validation.
+- Money in canonical copper; buying and selling (sell at half cost, Equipment ch. p. 89); starting equipment and gold.
+- Character creation validation: ability generation, legal class/species/background choices.
+  **[verify: SRD "Character Creation", pp. 19–26]**
 
 ### 2.1.1 The rules are installed, not remembered
 
-The SRD's **Rules Glossary is seeded as `RULE` content** (`seed/srd5e/rules.json`, 156 entries: 15 conditions,
-12 actions, 5 areas of effect, 5 hazards, 3 attitudes and the general glossary) and is searchable through
-`search_rules` alongside every spell, item, creature, class, species, background, feat and skill.
-
-The text is **lifted verbatim** from the SRD PDF by `tools/build_rules.py`, not paraphrased — every entry carries
-`text_is_paraphrase: false`, and `tools/verify_srd.py` checks each one back against the PDF text (156/156 verbatim
-on 2026-09-03). A rules question is therefore answerable with a citation instead of a recollection, which matters
-because the alternative has already gone wrong in play: Sleep was asserted from memory to gain radius at higher
-levels, the seed was edited to match, and the PDF showed SRD 5.2.1 gives Sleep no higher-level clause at all.
-
-**Adjudicate from `search_rules`, and say so when a rule is not in the SRD rather than supplying one.**
+The SRD Rules Glossary is seeded as `RULE` content (`seed/srd5e/rules.json`, 156 entries: 15 conditions, 12 actions,
+5 areas of effect, 5 hazards, 3 attitudes and the general glossary), searchable through `search_rules` next to every
+spell, item, creature, class, species, background, feat and skill. The text is lifted verbatim from the PDF by the
+`build-rules` command of the seed tooling (`text_is_paraphrase: false`) and checked back by `verify` (commands in the
+developer guide). Adjudicate from `search_rules`; when a rule is not in the SRD, say so rather than supply one.
 
 ### 2.2 Data-driven (seeded content, `DESIGN.md` §25.1–25.2)
 
-Items, weapons (with properties/masteries), armor, tools, spells, creatures (with CR and XP), conditions,
-classes/subclasses, species, backgrounds, feats, XP-by-CR, advancement tables, services/prices, poisons, crafting
-tables, trinkets.
-
-The engine interprets the *structured* fields of these definitions mechanically; their prose rules text rides along for
-the GM.
+Items, weapons (properties, masteries), armor, tools, spells, creatures (CR, XP), conditions, classes/subclasses,
+species, backgrounds, feats, XP-by-CR, advancement tables, services/prices, poisons, crafting tables, trinkets. The
+engine interprets the structured fields; the prose rules text rides along for the GM.
 
 ### 2.3 GM-interpreted (AI judgment inside engine guardrails)
 
-- Whether a check is warranted, which ability/skill applies, and the DC — within campaign rules policy; the engine
-  validates ranges and executes the roll.
-- Situational spell semantics not structurally expressible (the architecture explicitly supports both, `DESIGN.md` §13).
-- Improvised actions, environmental rulings, social consequences.
-- NPC tactics and behavior.
-- Anything the GM cannot decide mechanically becomes either a resolved check request or an audited override — never a
-  silently invented result.
+- Whether a check is warranted, which ability/skill applies, and the DC, within campaign rules policy; the engine
+  validates ranges and rolls.
+- Situational spell semantics not structurally expressible (`DESIGN.md` §13).
+- Improvised actions, environmental rulings, social consequences, NPC tactics.
+- Anything the GM cannot decide mechanically becomes a resolved check request or an audited override, never a silently
+  invented result.
 
 ---
 
 ## 3. Hard-coded Formulas
 
-The small set the engine encodes directly (all cited to SRD "Playing the Game" / "The Six Abilities", pp. 5–8 *
-*[verify exact wording]**):
+All cited to SRD "Playing the Game" / "The Six Abilities", pp. 5–8 **[verify exact wording]**:
 
 ```text
 ability_modifier = floor((score - 10) / 2)
@@ -89,49 +75,42 @@ ability_modifier = floor((score - 10) / 2)
 d20_test = d20 + ability_modifier + (proficiency_bonus if proficient)
            compared against DC (checks/saves) or AC (attacks)
 
-creature-backed characters: a stat block's listed skill or saving-throw
-           number ("Perception +5", "Saving Throws Wis +2") is the WHOLE
-           bonus — it already contains proficiency and any expertise — and
+creature-backed characters: a stat block's listed skill or save number
+           ("Perception +5", "Saving Throws Wis +2") is the WHOLE bonus and
            replaces ability_modifier + proficiency_bonus for that skill or
-           save. Skills the block does not list fall back to the formula
-           above. Reported as modifier_source = STAT_BLOCK.
-           This applies ONLY while the character has no class levels. The
-           moment one is taken the character is built from its own abilities
-           and proficiencies, which is the point of classing a companion:
-           otherwise a rogue with Expertise would go on rolling the Scout's
-           numbers.
+           save; unlisted skills use the formula above. Reported as
+           modifier_source = STAT_BLOCK. Applies ONLY while the character
+           has no class levels; from the first class level the character
+           rolls from its own abilities and proficiencies.
 
-advantage / disadvantage:
-  roll 2d20, take highest / lowest
-  multiple sources never stack; adv + dis cancel to a flat roll
+advantage / disadvantage: roll 2d20, take highest / lowest;
+           sources never stack; adv + dis cancel to a flat roll
 
-proficiency_bonus: from the advancement table (data), by character level;
-                   by CR for creatures
+proficiency_bonus: advancement table (data) by character level; by CR for
+           creatures
 
 attack: hit if total >= AC
-critical hit / automatic outcomes on natural 20 / natural 1:
-  encode exactly per SRD 5.2.1 "D20 Tests" — 2024 rules differ from 2014
-  on scope; take the SRD text, not prior-edition memory. [verify]
+natural 20 / natural 1: exactly per SRD 5.2.1 "D20 Tests" (2024 scope
+           differs from 2014; take the SRD text). [verify]
 critical hit damage: roll the attack's damage dice twice. [verify]
 
-multiattack: a creature whose stat block says it makes N attacks gets
-           N. An ATTACK leaves the turn open while attacks remain (the
-           result reports attacks_remaining); END_TURN always ends it.
+multiattack: a stat block that makes N attacks gets N. ATTACK leaves the
+           turn open while attacks remain (attacks_remaining); END_TURN
+           always ends it.
 
-repeat saves: a spell whose description grants the target another save at
-           the end of its turn (Sleep, Hold Person, Blindness/Deafness,
-           Hold Monster, Power Word Stun, …) records that instruction on
-           the effect, and the engine rolls it when that turn ends. A
-           second failure escalates where the spell says it does — Sleep
-           to Unconscious. Reported as repeat_saves.
+repeat saves: a spell granting another save at the end of the target's
+           turn (Sleep, Hold Person, Blindness/Deafness, Hold Monster,
+           Power Word Stun, …) records that on the effect; the engine rolls
+           it when the turn ends. A second failure escalates where the
+           spell says (Sleep to Unconscious). Reported as repeat_saves.
 
-damage pipeline: roll → apply resistance (halve) / vulnerability (double)
-                 / immunity (zero) → temp HP absorbs first → current HP.
-                 Ordering per SRD "Damage and Healing". [verify]
+damage pipeline: roll → resistance (halve) / vulnerability (double) /
+           immunity (zero) → temp HP first → current HP.
+           Order per SRD "Damage and Healing". [verify]
 ```
 
-Derived values (AC from equipped armor formula + Dex cap, saves, skill bonuses, carry capacity) are computed on read
-from base values + equipment + effects (`DOMAIN_MODEL.md` §5.5); no cache table in the MVP.
+Derived values (AC from armor formula and Dex cap, saves, skill bonuses, carry capacity) are computed on read from base
+values, equipment and effects (`DOMAIN_MODEL.md` §5.5). No cache table in the MVP.
 
 ---
 
@@ -142,157 +121,181 @@ RollService
   roll(expression, context) -> {expression, dice[], modifier, total, roll_ref}
 ```
 
-- One interface, two implementations: production (CSPRNG or seeded PRNG per campaign policy) and **test roller** (
-  scripted/seeded), injected — the seam exists from the first line of dice code.
+- One interface, two implementations: production (CSPRNG or seeded PRNG per campaign policy) and a scripted/seeded test
+  roller, injected.
 - Every authoritative roll is journaled with its breakdown (`MCP_PROTOCOL.md` §7.3).
-- Tests assert **sanity invariants** (dice within bounds, arithmetic consistent, resources correctly spent), not golden
-  transcripts (`MCP_PROTOCOL.md` §25.5).
-- The AI can never supply a desired die result; overrides go through `apply_gm_override`.
+- Tests assert sanity invariants (dice in bounds, arithmetic consistent, resources spent), not golden transcripts
+  (`MCP_PROTOCOL.md` §25.5).
+- The AI never supplies a die result; overrides go through `apply_gm_override`.
+- What no semantic tool rolls, the server still rolls: `roll_dice` journals a free roll, and `apply_runtime_change`
+  DAMAGE accepts a `dice` expression and rolls it.
+- A save spell centred on the caster (Spirit Guardians, Thunderwave) may be cast with no targets: the slot is spent,
+  concentration is tracked, and creatures entering later save with `resolve_check` against the returned `save_dc`. A
+  concentration save spell that leaves nothing on its targets still marks the caster as concentrating.
 
 ---
 
 ## 5. Mechanics by Milestone
 
-Maps `DESIGN.md` §33 (MVP lists) to rules work. E = engine code, D = data, G = GM.
+Maps `DESIGN.md` §33 to rules work. E = engine code, D = data, G = GM.
 
-| Milestone            | Mechanics                                                                                                                        | Kind |
-|----------------------|----------------------------------------------------------------------------------------------------------------------------------|------|
-| Vertical slice       | dice, one ability/skill check, modifiers, proficiency                                                                            | E    |
-| MVP                  | attacks, damage, HP, death, initiative/rounds/turns                                                                              | E    |
-| MVP                  | ability generation (standard array, point buy, 4d6-drop-lowest per campaign config), starting equipment/gold (fixed A/B choices) | E+D  |
-| MVP                  | XP award (encounter XP from creature XP values), level thresholds                                                                | E+D  |
-| MVP                  | money, basic inventory, buy/sell                                                                                                 | E+D  |
-| MVP seed             | items/equipment tables (`DESIGN.md` §25.1)                                                                                       | D    |
-| Early follow-up      | conditions/effects, encumbrance, rests, spellcasting + slots, level-up choice validation                                         | E+D  |
-| Early follow-up seed | creatures, spells, classes/species/backgrounds/feats (§25.2)                                                                     | D    |
-| Later                | mounted/underwater combat, crafting, poisons in play, mastery properties, tactical grid ranges                                   | E+D  |
+| Milestone            | Mechanics                                                                                                            | Kind |
+|----------------------|----------------------------------------------------------------------------------------------------------------------|------|
+| Vertical slice       | dice, one ability/skill check, modifiers, proficiency                                                                | E    |
+| MVP                  | attacks, damage, HP, death, initiative/rounds/turns                                                                  | E    |
+| MVP                  | ability generation (standard array, point buy, 4d6-drop-lowest per campaign config), starting equipment/gold (A/B) | E+D  |
+| MVP                  | XP award (encounter XP from creature XP values), level thresholds                                                    | E+D  |
+| MVP                  | money, basic inventory, buy/sell                                                                                     | E+D  |
+| MVP seed             | items/equipment tables (`DESIGN.md` §25.1)                                                                           | D    |
+| Early follow-up      | conditions/effects, encumbrance, rests, spellcasting + slots, level-up choice validation                              | E+D  |
+| Early follow-up seed | creatures, spells, classes/species/backgrounds/feats (§25.2)                                                         | D    |
+| Later                | mounted/underwater combat, crafting, poisons in play, mastery properties, tactical grid ranges                       | E+D  |
 
-A mechanic not yet implemented is not silently approximated: operations requiring it return `CAPABILITY_UNAVAILABLE` or
-fall to GM interpretation *explicitly*.
+A mechanic not yet implemented is never approximated: operations needing it return `CAPABILITY_UNAVAILABLE` or fall to
+GM interpretation explicitly.
 
 ---
 
 ## 6. Deviations and House Rules
 
-The engine ships with **zero deviations** from SRD 5.2.1. Optional, campaign-configured variants (all off by default):
+The engine ships with zero deviations from SRD 5.2.1. Campaign-configured variants, all off by default:
 
-1. **Rolled starting wealth** — SRD 5.2.1 uses fixed A/B choices; a rolled expression is available only as an explicit
-   house rule (`EXECUTION_EXAMPLE.md` §14 note).
-2. **GM override policy** — protocol-level, audited (`MCP_PROTOCOL.md` §20); not a rules deviation.
-3. **HP progression** (`rules.hp_progression`, default **FIRST_3_MAX**) — replaces the RAW per-level
-   average-or-roll choice with a campaign policy: `FIRST_3_MAX` (full hit die through level 3, open server
-   roll from level 4), `AVERAGE` (fixed every level) or `ROLL` (open server roll every level). CON and
-   species bonuses always apply. Fixed at `begin_level_up`; journaled like any roll.
-4. **Encounter XP on any overcome outcome** — the XP pool is fixed at `start_encounter` (sum of hostile
-   participants' XP values, stored on the encounter) and pays out in full on `PARTY_VICTORY`, `NEGOTIATED`
-   or `ENEMIES_FLED` — killed, captured, or talked down all count as overcoming (SRD: XP rewards
-   *overcoming* an encounter). `PARTY_DEFEAT`/`PARTY_FLED` pay nothing. Encounters started before this
-   ruling fall back to defeated-only XP.
-5. **XP policy** (`rules.xp_policy`, default **SHARED**) — `SHARED` divides every award evenly among the
-   active party, which is both SRD 5.2.1 and the classic party-RPG behaviour. `LOCKSTEP` instead pays
-   player characters in full and then pulls every companion up to the leading player character's total, so
-   party size never changes the player's pace. `PLAYER_ONLY` lets only player characters earn. The policy
-   is applied in exactly one place (`PartyXp`) and every XP-granting operation routes through it:
-   `end_encounter` and `award_xp` (which awards to the whole party when `characters` is omitted).
-6. **Recruits join at the party's experience** — a companion who becomes an active party member is raised
-   to the leading player character's XP total, **under every policy**: what `xp_policy` governs is what a
-   companion earns from then on, not what they arrive with. Journalled as a `GM_ONLY` `XP_AWARDED` event
-   with source `PARTY_JOIN`.
-7. **Companion level-up** (`rules.companion_level_up`, default **PLAYER**) — under `PLAYER` a companion who
-   reaches a new level is listed in `companions_awaiting_level_up` *together with the complete proposal the
-   engine would otherwise have committed* (`proposal`: the hit points `rules.hp_progression` dictates, and
-   at an ASI level the improvement it would pick), so the player can accept it in one word or change any
-   part of it. Under `ENGINE` the same choices are applied immediately and silently. The ASI heuristic is
-   +2 into the class's first `primary_abilities` entry that has room, falling back to +1/+1, then
-   CON/DEX/WIS. `begin_level_up` carries the same figure as `ability_score_improvement.recommended`, for
-   player characters too. **A companion with no class is never advanced by the engine under either
-   setting**: the engine does not invent a class.
-8. **A stat-block companion may be promoted to a full character.** Companions materialized from a creature
-   definition have no class, so their first `begin_level_up` opens a promotion instead of a hit-point gain:
-   `class_choice`, the class's `skill_choice`, and `origin_choice` (species and background, with whatever they
-   ask for in turn — `species_skill`, `species_choice`, `origin_feat`, `background_tool`, `feat_choices`).
-   Class and skills are required; the origin is optional but a companion without one is not a character a
-   player could inherit. Everything is applied at commit, through the same `Origins` code the creation draft
-   uses, in the order species → background → class → hit points, because hit points depend on the species
-   (Dwarven Toughness) and a background grants an origin feat that may itself grant proficiencies. The result
-   is indistinguishable from a character built through the wizard.
+1. **Rolled starting wealth.** SRD 5.2.1 uses fixed A/B choices; a rolled expression is an explicit house rule only
+   (`EXECUTION_EXAMPLE.md` §14 note).
+2. **GM override policy.** Protocol-level and audited (`MCP_PROTOCOL.md` §20); not a rules deviation.
+3. **HP progression** (`rules.hp_progression`, default `FIRST_3_MAX`). Replaces the per-level average-or-roll choice
+   with a campaign policy: `FIRST_3_MAX` (full hit die through level 3, open server roll from 4), `AVERAGE`, or `ROLL`
+   (open server roll every level). CON and species bonuses always apply. Fixed at `begin_level_up`; journaled like any
+   roll.
+4. **Encounter XP on any overcome outcome.** The XP pool is fixed at `start_encounter` (sum of hostile participants'
+   XP, stored on the encounter) and pays out in full on `PARTY_VICTORY`, `NEGOTIATED` or `ENEMIES_FLED`; `PARTY_DEFEAT`
+   and `PARTY_FLED` pay nothing. Encounters started before this ruling fall back to defeated-only XP.
+5. **XP policy** (`rules.xp_policy`, default `SHARED`). `SHARED` divides every award evenly among the active party
+   (SRD behaviour). `LOCKSTEP` pays player characters in full and pulls every companion up to the leading player
+   character's total. `PLAYER_ONLY` lets only player characters earn. Applied in one place (`PartyXp`) by every
+   XP-granting operation: `end_encounter` and `award_xp` (whole party when `characters` is omitted).
+6. **Recruits join at the party's experience.** A companion becoming an active member is raised to the leading player
+   character's XP under every policy; `xp_policy` governs what they earn from then on. Journaled as a `GM_ONLY`
+   `XP_AWARDED` event with source `PARTY_JOIN`.
+7. **Companion level-up** (`rules.companion_level_up`, default `PLAYER`). Under `PLAYER`, a companion due a level is
+   listed in `companions_awaiting_level_up` with the complete `proposal` the engine would commit (hit points per
+   `hp_progression`, and at an ASI level the improvement it would pick), to accept in one word or amend. Under
+   `ENGINE` the same choices apply immediately. The ASI heuristic: +2 into the class's first `primary_abilities` entry
+   with room, else +1/+1, then CON/DEX/WIS; `begin_level_up` reports the same figure as
+   `ability_score_improvement.recommended` for every character. A companion with no class is never advanced by the
+   engine under either setting.
+8. **A stat-block companion may be promoted to a full character.** A companion materialized from a creature
+   definition has no class, so its first `begin_level_up` opens a promotion: `class_choice`, the class's
+   `skill_choice`, and `origin_choice` (species and background, with `species_skill`, `species_choice`, `origin_feat`,
+   `background_tool`, `feat_choices` as they ask). Class and skills are required; the origin is optional but a
+   companion without one cannot be inherited by a player. Everything applies at commit through the same `Origins` code
+   as the creation draft, in the order species → background → class → hit points. The class may be recorded alone
+   first to obtain the concrete skill list; later levels are ordinary. `get_party` reports `sheet_gaps` (class,
+   species, background, alignment, inventory) for every member. Three rules inside it:
+   - Hit points are replaced, not added to: the class's full hit die + CON + species bonuses supersede the stat block's
+     average.
+   - The background's ability-score increase is not applied; the companion has been played with its scores.
+     `apply_gm_override SET_ABILITY_SCORE` is the deliberate route.
+   - The stat block's actions, senses and identity are kept; its listed numbers are not (§3), so the class and
+     background skills are granted.
+9. **Class features are seeded, not coded.** A class definition may carry `features`; each has `enforcement`
+   (`ENGINE` or `GM`), `summary`, the SRD `text`, and for ENGINE features a `mechanic` block. `ClassFeatures` resolves
+   which features a character has reached and hands the engine the mechanic with the class level attached, so scaling
+   is data. Mechanic kinds: `SNEAK_ATTACK` (`die`, `dice_per_levels`, `requires_weapon`, `once_per_turn`),
+   `FONT_OF_MAGIC` (`slot_costs`), `METAMAGIC` (`options_known` by class level, `options` with `id`, `name`, `cost`,
+   `summary`), `SORCEROUS_RESTORATION`, `SORCERY_INCARNATE` (marker: two options on one spell while Innate Sorcery is
+   active). A feature may carry a `resource` block (`ref`, `max` as a number or `CLASS_LEVEL` / `HALF_CLASS_LEVEL` /
+   `PROFICIENCY_BONUS`, `recharge`) that becomes a tracked pool. A new feature of a known kind is a seed edit; a new
+   kind needs Java. Features appear on the sheet under `class_features` with their adjudication.
 
-   Three deliberate rules inside it:
-   - **Hit points are replaced, not added to.** The class's own full hit die + CON + species bonuses supersede
-     the stat block's average.
-   - **The background's ability-score increase is *not* applied.** That belongs to creation; a companion being
-     promoted has already been played with the scores they have, and silently adding +3 would rewrite a
-     character the player knows. `apply_gm_override` `SET_ABILITY_SCORE` is the deliberate route.
-   - **The stat block's actions, senses and creature identity are kept; its numbers are not** (§3). Granting
-     the class and background skills is therefore not bookkeeping: without them a newly classed companion
-     would be strictly worse at its own job than the stat block it replaced.
+   **Metamagic** (`magic.Metamagic`): known options are `FEATURE` traits (`metamagic:<id>`), chosen at the level-up
+   where the count rises (two at 2, one more at 10 and 17; the level-up does not commit without them) or set by the
+   audited `SET_METAMAGIC` override. At casting, `options.metamagic` names the options; the plan is validated against
+   the spell (Heightened and Careful need a save, Seeking an attack roll, Empowered and Transmuted damage, Quickened a
+   1-action casting time, Extended a duration of a minute or more, Distant a range other than Self, Twinned a spell
+   that gains a target from a higher slot) and paid before any die is rolled; one option shapes a spell, Empowered and
+   Seeking may join it. Empowered rerolls the lowest damage dice of the casting's first damage roll; Seeking rerolls a
+   missed attack roll and spends its point only then; Heightened gives the target's save Disadvantage; Careful marks
+   the named creatures as automatic successes taking no damage; Transmuted swaps an elemental type; Extended doubles a
+   minute-or-longer duration to at most 24 hours. Quickened, Distant, Subtle and Twinned are paid and reported; the
+   engine does not track action economy, range or components.
 
-   The class may be recorded on its own first, which is how the concrete skill list is obtained. Later levels
-   are ordinary. `get_party` reports `sheet_gaps` for every member — class, species, background, alignment,
-   inventory — so the distance to a full character is visible before a player character dies, not after.
-9. **Class features are seeded, not coded.** A class definition may carry a `features` array; each entry has an
-   `enforcement` (`ENGINE` or `GM`), a `summary`, the SRD `text`, and — for ENGINE features — a `mechanic` block the
-   rules engine applies. `ClassFeatures` resolves which features a character has actually reached and hands the
-   engine the mechanic with the character's level in that class attached, so scaling is data. Understood mechanic
-   kinds so far: **`SNEAK_ATTACK`** (`die`, `dice_per_levels`, `requires_weapon`, `once_per_turn`). Adding another
-   feature of a known kind is a seed edit; adding a new *kind* is the only thing that needs Java. Features appear on
-   the character sheet under `class_features` with their adjudication.
+   **Sneak Attack**: on a hit with a Finesse or Ranged weapon, when the roll had Advantage, or when an ally is beside
+   the target and the roll did not have Disadvantage. Once per turn, tracked on the participant. With zones instead
+   of a grid, "an ally within 5 feet" is adjudicated as "a living, non-incapacitated ally shares the target's zone".
+   The result reports `qualified_by`.
+10. **House rules may be retuned after commit.** `apply_gm_override` kind `SET_CAMPAIGN_RULE {rule, value}` rewrites
+    one of `hp_progression`, `xp_policy`, `companion_level_up`, `progression` or `gm_override_policy` on a committed
+    campaign, audited. Everything else in the setup draft is fixed at commit.
+11. **Font of Magic creates slots of a level the character can already cast.** The SRD allows any slot of level 1–5;
+    the engine only creates a slot whose pool exists, because the casting core refuses slots whose pool maximum is 0.
+    The created slot grows the pool's maximum until the next Long Rest resizes every pool back to the class table, so
+    the slot vanishes as the rule says.
 
-   **Sneak Attack**, as implemented: on a hit with a Finesse or Ranged weapon, when the roll had Advantage, or when
-   an ally is beside the target and the roll did not have Disadvantage. Once per turn, tracked on the participant
-   like Savage Attacker. This engine has zones rather than a grid, so *"an ally within 5 feet of the target"* is
-   adjudicated as **"a living, non-incapacitated ally shares the target's zone"**. The result reports `qualified_by`.
-10. **House rules may be retuned after commit** — `apply_gm_override` kind `SET_CAMPAIGN_RULE {rule, value}`
-   rewrites one of `hp_progression`, `xp_policy`, `companion_level_up`, `progression` or
-   `gm_override_policy` on a committed campaign. Audited like any other override. Everything else in the
-   setup draft stays fixed at commit.
-
-Any future divergence gets an entry here *before* it is coded.
+Any future divergence gets an entry here before it is coded.
 
 ---
 
 ## 7. Content Payload Schemas
 
-Pinned per kind before its import milestone (inherited from `DATABASE.md` §10). Resolved so far:
+Pinned per kind before its import milestone (`DATABASE.md` §10). Filterable columns are fixed by `DATABASE.md` §3.1:
+`cost_cp`, `weight_g`, `spell_level`, `cr_times_8`, `xp_value`, `tags_json`. Per-kind JSON shapes: ITEM first, then
+CREATURE + SPELL, then CLASS/SPECIES/BACKGROUND/FEAT.
 
-- Filterable columns already fixed by `DATABASE.md` §3.1: `cost_cp`, `weight_g`, `spell_level`, `cr_times_8`,
-  `xp_value`, `tags_json`.
-- Remaining per-kind JSON shapes: **ITEM first** (vertical slice / MVP), then CREATURE + SPELL together (encounter +
-  casting milestone), then CLASS/SPECIES/BACKGROUND/FEAT (creation/level-up milestone).
+Still open: relationship `dimensions_json` shape and the tactical-grid schema (`DATABASE.md` §10 items 3 and 5).
 
-Still open here: relationship `dimensions_json` shape, `calendar_json` format, tactical-grid schema (
-`DATABASE.md` §10 items 3–5).
 ---
 
 ## 8. Character Origins (Species Traits, Backgrounds, Feats)
 
-Encoded from SRD 5.2.1 "Character Origins" (pp. 83–86) and "Feats" (pp. 87–88); seed files
-`species.json`, `backgrounds.json`, `feats.json` carry the data with per-trait `enforcement` markers.
+Encoded from SRD 5.2.1 "Character Origins" (pp. 83–86) and "Feats" (pp. 87–88); `species.json`, `backgrounds.json`
+and `feats.json` carry the data with per-trait `enforcement` markers.
 
-- **Backgrounds (engine):** the three-ability +2/+1 or +1/+1/+1 increase (validated against the
-  background's abilities, never above 20; base scores stay separately validated against the generation
-  method), the Origin feat, the two skills, the tool proficiency (fixed or category choice), and
-  equipment option A/B granted at activation alongside the class equipment.
-- **Species traits:** `enforcement: ENGINE` traits are fully mechanical (bonus skills, lineage/ancestry
-  cantrips and spells with free casts, darkvision senses, damage resistances, Dwarven Toughness HP,
-  Powerful Build carrying capacity, Relentless Endurance in the damage pipeline). `MIXED` traits have
-  engine-tracked uses (`resource_state`, spent via `apply_runtime_change` USE_RESOURCE) with
-  GM-adjudicated triggers (Breath Weapon, Stonecunning, Giant Ancestry, Adrenaline Rush, Heroic
-  Inspiration). `GM` traits are rules text surfaced on the sheet with `adjudication: GM` (Halfling Luck,
-  Brave, Fey Ancestry, Gnomish Cunning, Trance) — never silently dropped (§2.3).
-- **Feats (engine):** Alert (initiative proficiency), Skilled (three skill/tool proficiencies), Magic
-  Initiate (cantrips + a level 1 spell with one free cast per Long Rest, cast with the chosen ability),
-  Savage Attacker (first weapon hit per turn rolls damage dice twice, higher total kept, both recorded).
-  At ASI levels a feat may be taken instead of the improvement; prerequisites (category, level, ability
-  minimums, repeatability) are validated. Fighting Style feats and Epic Boons are seeded as data but
-  GM-adjudicated until their milestones.
-- **Duplicate proficiencies are re-chosen** (background skills are fixed; class/species/feat pickers
-  exclude held skills and reject duplicates).
-- **Campaign backgrounds (engine):** `define_content` kind `BACKGROUND` stores a background in the seeded
-  shape (three abilities, an Origin feat, two skills, a tool, equipment options), validated against installed
-  content; `Origins.resolveBackground` looks installed content up first and the campaign's own second, so a
-  Noble or a Fen Keeper behaves exactly like an SRD background in drafts, promotions and on the sheet.
-- **Tool proficiency in checks (engine):** `resolve_check` takes a `tool`; the actor's proficiency bonus applies
-  to an ability check made with a tool they are proficient with, and a skill check made with a tool they are also
-  proficient in has advantage, cancelling a GM-imposed disadvantage instead (SRD 5.2.1 "Tools and Skills
-  Together"). Checks are legal mid-encounter and never advance the initiative order.
+- **Backgrounds (engine):** the +2/+1 or +1/+1/+1 increase (validated against the background's abilities, never above
+  20; base scores stay validated against the generation method), the Origin feat, two skills, the tool proficiency
+  (fixed or category choice), and equipment option A/B granted at activation with the class equipment.
+- **Species traits:** `ENGINE` traits are fully mechanical (bonus skills, lineage/ancestry cantrips and spells with
+  free casts, darkvision, resistances, Dwarven Toughness, Powerful Build, Relentless Endurance). `MIXED` traits have
+  engine-tracked uses (`resource_state`, spent via `apply_runtime_change` USE_RESOURCE) and GM-adjudicated triggers
+  (Breath Weapon, Stonecunning, Giant Ancestry, Adrenaline Rush, Heroic Inspiration). `GM` traits are rules text on
+  the sheet with `adjudication: GM` (Halfling Luck, Brave, Fey Ancestry, Gnomish Cunning, Trance), never dropped.
+- **Feats (engine):** Alert (initiative proficiency), Skilled (three skill/tool proficiencies), Magic Initiate
+  (cantrips + a level 1 spell with one free cast per Long Rest, cast with the chosen ability), Savage Attacker (first
+  weapon hit per turn rolls damage dice twice, higher kept, both recorded). At ASI levels a feat may replace the
+  improvement; prerequisites (category, level, ability minimums, repeatability) are validated. Fighting Style feats
+  and Epic Boons are seeded but GM-adjudicated until their milestones.
+- **Duplicate proficiencies are re-chosen:** background skills are fixed; class/species/feat pickers exclude held
+  skills and reject duplicates.
+- **Campaign backgrounds (engine):** `define_content` kind `BACKGROUND` stores a background in the seeded shape,
+  validated against installed content; `Origins.resolveBackground` looks installed content up first and the campaign's
+  own second, so a custom background behaves like an SRD one in drafts, promotions and on the sheet.
+- **Tool proficiency in checks (engine):** `resolve_check` takes a `tool`; proficiency adds the bonus to an ability
+  check made with it, and a skill check made with a tool the actor is also proficient in has advantage, cancelling a
+  GM-imposed disadvantage instead (SRD 5.2.1 "Tools and Skills Together"). Checks are legal mid-encounter and never
+  advance the initiative order.
+- **Ritual casting (engine):** `cast_spell` with `options.ritual = true` casts a Ritual-tagged spell without a slot
+  when the caster's class has Ritual Casting (SRD 5.2.1 "Rituals"); the casting takes ten minutes longer,
+  `slot_level` is refused, and a spell without the tag or a class without the feature is `VALIDATION_FAILED`. The
+  encounter `CAST` action never casts rituals.
+- **Coin between characters (engine):** `give_money` moves an amount between two characters atomically and writes one
+  `MONEY_GIVEN` event; it never creates coin (`grant_loot`) and never prices anything (`trade`).
+
+---
+
+## 9. Travel Encounters
+
+The SRD 5.2.1 has no random-encounter tables, so the engine's are its own and are suggestions only: `move_party` may
+add one `TRAVEL_ENCOUNTER_SUGGESTED` entry to its `consequences`; nothing else happens until the GM acts on it.
+
+- **Chance.** One roll per four hours of travel, through the roller: a 1 on a d6 on wild ground, a 1 on a d12 where
+  the only wild tags on the route are roads, rivers, coasts or fords, no roll when nothing on the route is tagged wild
+  or road (streets, districts, quays, buildings, untagged nodes). Journeys under four hours never roll.
+- **Ground.** The tags (`tags_json`) and kinds of every location on the route and the destination, plus connection
+  kinds, pick a terrain table in this order: dungeon/cave/crypt, ruin/barrow, marsh/fen/swamp, mountain,
+  hills/chalk/downs, forest/wood, coast/sea/salt, river/estuary/ford, road; anything else is wilderness.
+- **Creature.** Each table lists SRD stat-block slugs; only those installed in the campaign's rulesets are candidates,
+  one is drawn with a die of the pool's size, and the wilderness table is the fallback.
+- **Size.** The party's Moderate XP budget (SRD 5.2.1 Gameplay Toolbox, "XP Budget per Character", summed over the
+  travellers by level) divided by the creature's XP value, clamped to 1..8.
+- **Hooks.** Up to two open Director `PRESSURE` seeds are quoted so the GM can fold the encounter into the campaign's
+  standing worries.

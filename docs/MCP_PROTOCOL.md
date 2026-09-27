@@ -1,39 +1,27 @@
 # RPG MCP Server — Protocol
 
-**Status:** Initial normative protocol design  
-**Purpose:** Define the authoritative contract between an AI Game Master and the RPG MCP server.  
-**Scope:** MCP capabilities, semantic operations, payload conventions, workflow constraints, canonical state, context
-retrieval, errors, atomicity, idempotency, and audit behavior.
+**Status:** Normative protocol design
+**Purpose:** The contract between an AI Game Master and the RPG MCP server: capabilities, semantic operations, payload
+conventions, workflow constraints, canonical state, context retrieval, errors, atomicity, idempotency and audit.
 
-This document translates `DESIGN.md`, `EXECUTION_MODEL.md`, and `EXECUTION_EXAMPLE.md` into an implementation-facing
-protocol. Those documents define product intent and execution rationale. This document defines how a compatible AI
-client interacts with the server.
-
-The core rule is:
+`DESIGN.md`, `EXECUTION_MODEL.md` and `EXECUTION_EXAMPLE.md` define intent and rationale. This document defines how a
+compatible AI client interacts with the server.
 
 > **Conversation proposes; protocol operations resolve and commit; narration explains.**
 
 The AI owns interpretation and narration. The server owns workflow legality, canonical facts, deterministic mechanics,
-persistence, and auditable exceptional mutations.
+persistence and auditable exceptional mutations.
 
 ---
 
 ## 1. Normative Language
 
-The words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are normative.
+**MUST/MUST NOT** define compatibility requirements. **SHOULD/SHOULD NOT** define strong defaults that may be departed
+from for a documented reason. **MAY** identifies optional behavior.
 
-- **MUST/MUST NOT** define compatibility requirements.
-- **SHOULD/SHOULD NOT** define strong defaults that may be departed from for a documented reason.
-- **MAY** identifies optional behavior.
-
-Examples use YAML-like notation for readability. Concrete MCP transport encoding uses the MCP SDK's supported
-JSON-compatible values.
-
-This document is the normative **semantic** contract: tool names, operation meaning, invariants, atomicity, and required
-behavior are normative unless explicitly marked as illustrative or future work. Example payloads show intended shapes
-but are not complete wire schemas. Versioned machine-readable schemas will define exact required fields, discriminated
-unions, and response shapes; a server MUST NOT claim complete protocol `0.1` conformance until it implements those
-schemas.
+Examples use YAML-like notation. Tool names, operation meaning, invariants, atomicity and required behavior are
+normative; example payloads show intended shapes but are not complete wire schemas. A server MUST NOT claim complete
+protocol `0.1` conformance until it implements the versioned machine-readable schemas.
 
 ---
 
@@ -41,75 +29,42 @@ schemas.
 
 ### 2.1 Semantic operations
 
-Tools express game intent rather than storage operations.
-
-Prefer:
-
-```text
-perform_action
-transfer_item
-advance_time
-record_memory
-```
-
-Do not expose generic operations such as `update_row`, `set_field`, or arbitrary SQL.
+Tools express game intent (`perform_action`, `transfer_item`, `advance_time`, `record_memory`), never storage
+operations (`update_row`, `set_field`, SQL).
 
 ### 2.2 Server-authoritative truth
 
-The server MUST be authoritative for:
-
-- harness and transaction state
-- entity identity
-- dice and deterministic resolution
-- HP, resources, conditions, inventory, money, and progression
-- encounter state and turn order
-- committed campaign, world, quest, faction, and relationship state
-- checkpoints and restoration
-- visibility and knowledge boundaries
-- the event and audit ledgers
-
-An AI statement does not become canonical merely because it appeared in narration.
+The server MUST be authoritative for harness and transaction state, entity identity, dice and deterministic resolution,
+HP, resources, conditions, inventory, money, progression, encounter state and turn order, committed campaign, world,
+quest, faction and relationship state, checkpoints and restoration, visibility and knowledge boundaries, and the event
+and audit ledgers. An AI statement does not become canonical because it appeared in narration.
 
 ### 2.3 Compact normal context, deep retrieval on demand
 
-Routine operations SHOULD return enough information for the AI to continue without immediately issuing several lookup
-calls. They MUST NOT return an unbounded campaign history.
-
-Detailed episodic history is retrieved only when relevant.
+Routine operations SHOULD return enough to continue without several lookup calls and MUST NOT return unbounded history.
+Episodic detail is retrieved only when relevant.
 
 ### 2.4 Discoverability
 
-A newly connected compatible AI MUST be able to determine:
-
-- server and protocol version
-- available capabilities
-- current harness state
-- active campaign and pending transaction, if any
-- legal next operations
-- applicable policy constraints
-
-No previous chat transcript may be required.
+A newly connected AI MUST be able to determine, with no prior transcript: server and protocol version, capabilities,
+harness state, active campaign and pending transaction, legal next operations, and applicable policy constraints.
 
 ### 2.5 Invisible machinery
 
-Technical references, tool traces, internal workflow names, and policy implementation details SHOULD remain absent from
-player-facing narration unless explanation is useful or the user explicitly requests diagnostics.
+Tool traces, workflow names and policy internals SHOULD stay out of player-facing narration unless the user asks for
+diagnostics.
 
 ---
 
 ## 3. MCP Surface
 
-The server exposes three kinds of MCP surface.
-
 ### 3.1 Tools
 
-Tools perform parameterized queries, deterministic resolution, or canonical mutations. They are the primary interface.
+Tools perform parameterized queries, deterministic resolution or canonical mutations. They are the primary interface.
 
 ### 3.2 Resources
 
-Resources expose stable, read-only protocol guidance and compact metadata that benefit from caching.
-
-Required resources:
+Read-only, cacheable protocol guidance and metadata. Required:
 
 ```text
 rpg://protocol/guide
@@ -117,29 +72,23 @@ rpg://protocol/capabilities
 rpg://rulesets
 ```
 
-`rpg://protocol/guide` contains concise instructions for an AI Game Master, including tool-use rules and the distinction
-between the Harness, GM, and Narrative Director. The guide is authored as a versioned markdown artifact in the
-repository — derived from `EXECUTION_MODEL.md` section 24 — embedded into the executable like other resources, and
-maintained alongside this protocol document.
+`rpg://protocol/guide` is the AI Game Master's instructions (tool-use rules; Harness, GM and Narrative Director roles),
+a versioned markdown artifact derived from `EXECUTION_MODEL.md` §24 and embedded in the executable.
+`rpg://protocol/capabilities` reports protocol version, optional capabilities, limits and supported features.
+`rpg://rulesets` lists installed rulesets and versions without their rules data.
 
-`rpg://protocol/capabilities` identifies protocol version, optional capabilities, limits, and supported content/rules
-features.
-
-`rpg://rulesets` lists installed rulesets and versions without returning their complete rules data.
-
-Campaign state MUST NOT be exposed as a cacheable static resource. It is retrieved through tools so freshness,
-visibility, and authorization are explicit.
+Campaign state MUST NOT be exposed as a static resource; tools keep freshness, visibility and authorization explicit.
 
 ### 3.3 Prompts
 
-MCP prompts are optional. The protocol does not depend on them. A server MAY provide reusable setup, bootstrap, or
-Director prompts, but clients MUST be able to operate from the guide resource and tool schemas alone.
+Optional. Clients MUST be able to operate from the guide resource and tool schemas alone.
 
 ---
 
 ## 4. Versioning and Capabilities
 
-The protocol uses semantic versions.
+Semantic versions. A breaking change increments the protocol major version; additive tools, fields, enum values and
+capabilities increment the minor version.
 
 ```yaml
 protocol:
@@ -165,11 +114,7 @@ limits:
   maximum_context_budget: 32000
 ```
 
-A breaking change increments the protocol major version. Additive tools, fields, enum values, and capabilities increment
-the minor version.
-
-Clients MUST ignore unknown response fields. Clients MUST NOT assume they understand unknown enum values; they should
-preserve them when possible and request supported alternatives when necessary.
+Clients MUST ignore unknown response fields and MUST NOT assume they understand unknown enum values.
 
 ---
 
@@ -177,69 +122,37 @@ preserve them when possible and request supported alternatives when necessary.
 
 ### 5.1 Typed references
 
-Persisted entities use table-scoped numeric primary keys internally and typed references at the protocol boundary:
+Persisted entities use numeric primary keys internally and typed references `<entity-type>:<positive-integer>` at the
+boundary: `campaign:1`, `character:4`, `location:7`, `event:42`, `encounter:3`, `checkpoint:2`, `content:5`.
+References are opaque; clients MUST NOT infer ordering, ownership or mutability from the number.
+
+All creatures share one character sequence: `character:1` may be the player avatar, `character:2` an innkeeper,
+`character:3` a dragon. Player control, name, role, membership and life state are mutable state, never identity.
+
+Workflow objects are typed too:
 
 ```text
-campaign:1
-character:4
-location:7
-event:42
-encounter:3
-checkpoint:2
-content:5
-```
-
-A typed reference has the grammar:
-
-```text
-<entity-type>:<positive-integer>
-```
-
-References are opaque to clients. Clients MUST NOT infer ordering, ownership, or mutability from the numeric portion.
-
-Within each entity table, numeric IDs are allocated monotonically. All characters share one character sequence:
-`character:1` may be a prospective player avatar, `character:2` an innkeeper, and `character:3` a dragon. Which
-character a player controls is a mutable campaign assignment returned by context/state operations; it is never encoded
-in the ID.
-
-Besides persisted entities, the protocol uses typed references for workflow objects:
-
-```text
-draft:3        non-character draft aggregate under construction
-seed:1         Director planning entity (e.g. a planned companion)
+draft:3        non-character draft aggregate
+seed:1         Director planning entity
 transaction:9  pending multi-step transaction
 roll:184       auditable random result
 ```
 
-A seed or non-character draft is planning state, never a canonical gameplay entity. Characters are the deliberate
-exception: character creation immediately reserves an ordinary character-table row and stable `character:` reference
-with lifecycle state `DRAFT`. Every creature — player character, companion, hireling, or monster — uses that same table
-and identity model; lifecycle state and player control are mutable state, not different entity kinds.
-
-Names, roles, party membership, control, and life state are not identity.
+Seeds and non-character drafts are planning state, never canonical. Characters are the exception: creation immediately
+reserves a character row with lifecycle `DRAFT`.
 
 ### 5.2 Stable content identifiers
 
-Rules and content definitions use stable namespaced identifiers:
+Installed content uses namespaced identifiers: `srd5e:spell/fire-bolt`, `srd5e:item/longsword`,
+`srd5e:condition/poisoned`. Display names MUST NOT be used as identifiers.
 
-```text
-srd5e:spell/fire-bolt
-srd5e:item/longsword
-srd5e:condition/poisoned
-```
-
-Display names are localized mutable metadata and MUST NOT be used as identifiers.
-
-Campaign-defined custom content receives a campaign-owned typed reference such as `content:5`. It MAY also have a
-human-readable symbolic identifier in the reserved `custom:` namespace, for example `custom:item/bellhaven-broadsheet`.
-That symbolic identifier is unique only within its owning campaign and MUST NOT be used by itself as a cross-campaign
-protocol reference. Protocol operations identify custom content by its `content:` reference, or by the compound pair
-`(campaign_ref, symbolic_id)` when resolving a name. Installed definitions continue to use globally stable ruleset
-identifiers such as `srd5e:item/longsword`.
+Custom content receives a campaign-owned `content:N` reference and MAY carry a symbolic identifier in the reserved
+`custom:` namespace (`custom:item/bellhaven-broadsheet`), unique only within its campaign. Operations identify custom
+content by `content:` reference or by the pair `(campaign_ref, symbolic_id)`.
 
 ### 5.3 Time
 
-Real timestamps use RFC 3339 UTC strings. Campaign time uses a structured game-time value:
+Real timestamps are RFC 3339 UTC. Campaign time:
 
 ```yaml
 game_time:
@@ -248,58 +161,28 @@ game_time:
   sequence: 4812
 ```
 
-`sequence` is a monotonically increasing campaign ordering value. It permits reliable ordering even when a fictional
-calendar is imprecise.
-
-Fictional order is independent of insertion order. Ledger entries carry incremental numeric IDs assigned on append; an
-event recorded retroactively (a flashback, backfilled history) receives a later ID with an earlier game time. Insertion
-order is authoritative for journal/checkpoint semantics; game time is authoritative for fictional chronology.
+`sequence` increases monotonically. Ledger IDs are assigned on append; a retroactive event has a later ID and an earlier
+game time. Insertion order governs journal and checkpoint semantics; game time governs fictional chronology.
 
 ### 5.4 Pagination
 
-Potentially large reads use opaque cursor pagination:
-
-```yaml
-page:
-  items: []
-  next_cursor: opaque-or-null
-```
-
-Clients MUST NOT parse cursors.
+Large reads use opaque cursors (`page: {items: [], next_cursor: opaque-or-null}`). Clients MUST NOT parse cursors.
 
 ### 5.5 Visibility
 
-Information returned to the AI is labeled when visibility is relevant:
-
-```yaml
-visibility: GM_ONLY
-```
-
-Initial visibility values are:
-
-- `PLAYER_KNOWN`
-- `PARTY_KNOWN`
-- `CHARACTER_KNOWN`
-- `FACTION_KNOWN`
-- `GM_ONLY`
-- `DIRECTOR_ONLY`
-
-The AI MUST NOT reveal non-player-known information merely because it was returned in GM or Director context.
+Returned information is labeled where relevant: `PLAYER_KNOWN`, `PARTY_KNOWN`, `CHARACTER_KNOWN`, `FACTION_KNOWN`,
+`GM_ONLY`, `DIRECTOR_ONLY`. The AI MUST NOT reveal non-player-known information because it appeared in GM or Director
+context.
 
 ### 5.6 Revisions
 
-Mutable aggregates expose an integer `revision`. A mutation derived from previously read aggregate state MUST include
-`expected_revision`. Commands against a pending transaction MUST include that transaction's revision. A schema MAY omit
-`expected_revision` only for an operation whose semantics are explicitly blind and commutative, or whose target revision
-is created within the same atomic call.
-
-If the aggregate changed, the server returns `CONFLICT` rather than silently applying a stale decision.
+Mutable aggregates expose an integer `revision`. A mutation derived from read state MUST include `expected_revision`;
+commands against a pending transaction MUST include its revision. A schema MAY omit `expected_revision` only for a blind,
+commutative operation or when the target is created in the same call. A stale revision returns `CONFLICT`.
 
 ---
 
 ## 6. Common Response and Error Model
-
-Successful tool responses return the operation-specific result plus common metadata where relevant:
 
 ```yaml
 result: { ... }
@@ -311,7 +194,7 @@ meta:
   suggested_next_operations: []
 ```
 
-Failures return a structured MCP tool error:
+Failures are structured tool errors:
 
 ```yaml
 error:
@@ -320,42 +203,24 @@ error:
   retryable: false
   details:
     harness_state: CHARACTER_REVIEW
-    allowed_operations:
-      - validate_character_draft
-      - commit_character_draft
-      - update_character_draft
+    allowed_operations: [validate_character_draft, commit_character_draft, update_character_draft]
 ```
 
-Required error codes:
+Required codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `OPERATION_NOT_ALLOWED`, `VALIDATION_FAILED`, `CONFLICT`,
+`INSUFFICIENT_RESOURCE`, `VISIBILITY_DENIED`, `POLICY_DENIED`, `CAPABILITY_UNAVAILABLE`, `TRANSACTION_REQUIRED`,
+`TRANSACTION_EXPIRED`, `IDEMPOTENCY_CONFLICT`, `INTERNAL_ERROR`.
 
-- `INVALID_ARGUMENT`
-- `NOT_FOUND`
-- `OPERATION_NOT_ALLOWED`
-- `VALIDATION_FAILED`
-- `CONFLICT`
-- `INSUFFICIENT_RESOURCE`
-- `VISIBILITY_DENIED`
-- `POLICY_DENIED`
-- `CAPABILITY_UNAVAILABLE`
-- `TRANSACTION_REQUIRED`
-- `TRANSACTION_EXPIRED`
-- `IDEMPOTENCY_CONFLICT`
-- `INTERNAL_ERROR`
-
-Validation failures SHOULD identify every independently actionable issue in one response.
+Validation failures SHOULD report every independently actionable issue at once:
 
 ```yaml
 error:
   code: VALIDATION_FAILED
   details:
     violations:
-      - path: ability_scores.strength
-        rule: POINT_BUY_TOTAL
-        message: "The proposed scores exceed the available point budget."
+      - {path: ability_scores.strength, rule: POINT_BUY_TOTAL, message: "The proposed scores exceed the point budget."}
 ```
 
-Errors MUST NOT partially mutate state unless a tool explicitly documents partial progress. MVP tools do not permit
-partial mutation.
+Errors MUST NOT partially mutate state. MVP tools do not permit partial mutation.
 
 ---
 
@@ -363,28 +228,18 @@ partial mutation.
 
 ### 7.1 Idempotency
 
-Every mutating tool MUST accept an `operation_id`, generated by the client and unique within the campaign (or unique
-server-wide for operations issued before a campaign exists, such as `create_campaign`):
-
-```yaml
-operation_id: "01J8..."
-```
-
-Repeating the same tool with the same `operation_id` and equivalent arguments returns the original result without
-applying the mutation twice.
-
-Reusing an `operation_id` with different arguments returns `IDEMPOTENCY_CONFLICT`.
+Every mutating tool MUST accept a client-generated `operation_id`, unique within the campaign (server-wide before a
+campaign exists). Repeating a call with the same `operation_id` and equivalent arguments returns the original result
+without re-applying; different arguments return `IDEMPOTENCY_CONFLICT`.
 
 ### 7.2 Atomicity
 
-A tool invocation is atomic. Mechanical resolution and all consequences owned by that operation commit together.
-
-For example, `perform_encounter_action` commits the roll, resource expenditure, damage, conditions, defeat transitions,
-encounter log entry, and next-turn state in one transaction.
+A tool invocation is atomic: mechanical resolution and every consequence it owns commit together (an encounter action
+commits roll, resources, damage, conditions, defeat transitions, log entry and next-turn state in one transaction).
 
 ### 7.3 Randomness
 
-All authoritative random results are generated by the server and returned with an auditable breakdown.
+All authoritative random results are server-generated and returned with a breakdown:
 
 ```yaml
 roll:
@@ -395,10 +250,8 @@ roll:
   roll_ref: roll:184
 ```
 
-The AI MUST NOT supply a desired die result to an ordinary resolution tool.
-
-Test environments MAY support an explicit deterministic seed or scripted roller. Production override behavior uses the
-audited override protocol, never hidden manipulation.
+The AI MUST NOT supply a desired die result to an ordinary resolution tool. Tests MAY use a seeded or scripted roller.
+Production overrides use the audited override protocol only.
 
 ---
 
@@ -406,50 +259,34 @@ audited override protocol, never hidden manipulation.
 
 ### 8.1 `get_server_state`
 
-This is the first tool a newly connected AI calls. It replaces separate initial calls for harness state and campaign
-listing.
-
-Input:
+The first call of a newly connected AI.
 
 ```yaml
+# input
 include_campaigns: true
 campaign_limit: 20
 campaign_cursor: null
-```
-
-Output:
-
-```yaml
+# output
 protocol_version: 0.1.0
 harness_state: CAMPAIGN_SELECTION
 active_campaign: null
 pending_transaction: null
 campaigns:
-  - ref: campaign:1
-    title: The Ashen Road
-    status: ACTIVE
-    player_character: Richard Greystone
-    last_played_at: "2026-08-31T19:14:00Z"
+  - {ref: campaign:1, title: The Ashen Road, status: ACTIVE, player_character: Richard Greystone,
+     last_played_at: "2026-08-31T19:14:00Z"}
 next_campaign_cursor: opaque-or-null
-allowed_operations:
-  - create_campaign
-  - open_campaign
+allowed_operations: [create_campaign, open_campaign]
 policy_summary: { ... }
 ```
 
-This aggregate bootstrap operation answers the execution model's initial discovery needs in one round trip. When
-`next_campaign_cursor` is non-null, the client retrieves the next page by repeating the call with that value as
-`campaign_cursor`. Campaign ordering remains stable for the lifetime of a cursor; clients MUST restart pagination after
-a cursor expires.
+A non-null `next_campaign_cursor` is passed back as `campaign_cursor` for the next page. Ordering is stable for the
+cursor's lifetime; clients MUST restart pagination after a cursor expires.
 
 ### 8.2 Legal operations
 
-Every workflow-sensitive response SHOULD include `harness_state` and `allowed_operations` when either may have changed.
-
-The list is advisory for client guidance. The server MUST still validate every request.
-
-Initial harness states are defined by `EXECUTION_MODEL.md` section 25. The implementation MAY use internal substates,
-but protocol-visible states MUST remain stable within a protocol major version.
+Workflow-sensitive responses SHOULD include `harness_state` and `allowed_operations` when either may have changed. The
+list is advisory; the server MUST still validate every request. Harness states are defined in `EXECUTION_MODEL.md` §25;
+internal substates are allowed, but protocol-visible states MUST stay stable within a major version.
 
 ---
 
@@ -457,79 +294,57 @@ but protocol-visible states MUST remain stable within a protocol major version.
 
 ### 9.1 `create_campaign`
 
-Creates a resumable setup draft, not a playable campaign.
-
-Input:
-
-```yaml
-operation_id: "..."
-title: null
-ruleset: srd5e:2024
-```
-
-Output includes the campaign reference, setup state, outstanding requirements, and the ordered `decisions` list
-described in §9.3.1.
-
-A title MAY be supplied at creation or later through `update_campaign_setup`. If a campaign is committed without one,
-the server generates a title from the committed premise so campaign listings are never unnamed.
+Creates a resumable setup draft (`operation_id`, optional `title`, `ruleset: srd5e:2024`). Returns the campaign
+reference, setup state, outstanding requirements and the `decisions` list (§9.3.1). A campaign committed without a title
+gets one generated from its premise.
 
 ### 9.2 `open_campaign`
 
-Selects an existing campaign and returns whether it should resume setup, bootstrap gameplay, resolve a checkpoint
-decision, or continue another pending workflow.
-
-Opening a campaign MUST NOT silently discard pending transactions.
+Selects a campaign and reports whether to resume setup, bootstrap gameplay, resolve a checkpoint decision or continue
+another pending workflow. Opening MUST NOT silently discard pending transactions.
 
 ### 9.3 `get_setup_state`
 
-Returns:
-
-- committed and draft setup values
-- outstanding required decisions (`outstanding`, prose) and the structured `decisions` list (§9.3.1)
-- allowed operations
-- applicable constraints and legal choices
+Returns committed and draft values, outstanding decisions (`outstanding` as prose, `decisions` structured), allowed
+operations, constraints and legal choices.
 
 #### 9.3.1 Decisions
 
-Every setting the player must decide on is returned as a **decision**: a self-describing question with every legal
-option and a one-line description of each, so the GM can put it to the player without inventing or paraphrasing
-alternatives. Setup responses (`create_campaign`, `get_setup_state`, `update_campaign_setup`) carry the campaign's
-decisions in interview order; character responses (`create_character_draft`, `update_character_draft`,
+Every setting the player must decide is a **decision**: a self-describing question with every legal option and a
+one-line description each. Setup responses (`create_campaign`, `get_setup_state`, `update_campaign_setup`) carry the
+campaign's decisions in interview order; character responses (`create_character_draft`, `update_character_draft`,
 `get_character_choices` with a draft) carry the draft's. The first entry is the one to ask now.
 
 ```yaml
 decisions:
-  - id: content_profile               # stable identifier of the decision
+  - id: content_profile               # stable identifier
     owner: PLAYER                     # PLAYER, or GM for sections the GM authors
     question: "Which content profile should the campaign use?"
     tool: update_campaign_setup       # the tool that records the answer
-    path: changes.content_profile     # the argument field, as a dotted path
-    choose: {min: 1, max: 1}          # how many options to pick
+    path: changes.content_profile     # the argument field, dotted
+    choose: {min: 1, max: 1}
     options_are: LEGAL_VALUES         # LEGAL_VALUES (closed set) or SUGGESTIONS (free text equally valid)
     options:
       - {value: PEGI_3,  label: "PEGI 3 — all ages", description: "Cartoon peril only: …"}
       - {value: PEGI_16, label: "PEGI 16", description: "Mature fantasy: …"}
       - {value: PEGI_18, label: "PEGI 18 — adult", description: "Graphic violence, horror, adult sexuality …", recommended: true}
-    recommended: PEGI_18              # the option flagged recommended, if any
+    recommended: PEGI_18
     allow_custom: false               # a free-text answer is acceptable
     allow_surprise_me: false          # SURPRISE_ME is acceptable
     optional: false                   # may be skipped; then `default` applies
     note: "..."                       # advisory guidance for the GM
 ```
 
-Options MAY carry extra structured fields (`speed`, `hit_die`, `level`, `school`, `ability`, `contents` …) that the
-GM may quote. A decision without options (a name, an age, a personality) has no `options` and `allow_custom: true`.
+Options MAY carry extra fields (`speed`, `hit_die`, `level`, `school`, `ability`, `contents`, …). A decision without
+options (a name, an age) has `allow_custom: true`.
 
-Rules:
-
-- The legal values, labels and descriptions of every closed choice live in exactly one place in the server
-  (an enum, or the installed rules content). Tool descriptions MUST NOT enumerate them; they point at `decisions`.
-- The list is derived from what the draft still lacks, so it shrinks as answers are recorded and never lists an
-  answered decision. When nothing is outstanding it holds a single review decision (`character_review`,
-  `campaign_review`) whose options are to commit or to revise.
-- The GM SHOULD ask exactly one decision per turn — the first in the list — presenting every option with its
-  description, numbered, plus a custom answer where `allow_custom` is true, and record the answer before reading the
-  list again. Question and option texts are advisory; they MUST NOT be required verbatim prompts.
+- Legal values, labels and descriptions of a closed choice live in exactly one place in the server (an enum or the
+  installed content). Tool descriptions MUST NOT enumerate them.
+- The list shrinks as answers are recorded and never lists an answered decision. When nothing is outstanding it holds one
+  review decision (`character_review`, `campaign_review`) whose options are commit or revise.
+- The GM SHOULD ask exactly one decision per turn, the first in the list, presenting every option numbered with its
+  description plus a custom answer where `allow_custom` is true, and record the answer before reading the list again.
+  Question and option texts are advisory, not required prompts.
 
 ### 9.4 `update_campaign_setup`
 
@@ -551,44 +366,26 @@ changes:
     companion_level_up: PLAYER
 ```
 
-Rule keys are fixed at commit; `apply_gm_override` kind `SET_CAMPAIGN_RULE` retunes the subset that a campaign in play
-is allowed to change (§20.1).
+Rule keys are fixed at commit; `apply_gm_override` kind `SET_CAMPAIGN_RULE` retunes the subset a campaign in play may
+change (§20.1). Creative fields MAY hold `SURPRISE_ME`; delegation is not missing input.
 
-Creative fields MAY contain an explicit `SURPRISE_ME` value. The server stores that the choice is delegated; it does not
-confuse delegation with missing required input.
-
-`experience.fantasy_style` has a definite default: when neither `fantasy_style` nor `tone` was recorded — the section
-was delegated, or the question skipped — the committed preferences carry `fantasy_style: EPIC`, a Baldur's Gate-style
-fantasy epic (DESIGN.md §4.2). The `experience.fantasy_style` decision names that default in its question and carries
-it as `default`, so the GM tells the player what "surprise me" means before they say it. The legal style names are in
-`constraints.fantasy_style`; free text remains equally valid and is never replaced by the default.
+`experience.fantasy_style` defaults to `EPIC` (a Baldur's Gate-style fantasy epic, `DESIGN.md` §4.2) when neither
+`fantasy_style` nor `tone` was recorded. The decision names that default in its question and as `default`. Legal style
+names are in `constraints.fantasy_style`; free text is equally valid and never replaced by the default.
 
 ### 9.5 `validate_campaign_setup`
 
-Validates the complete setup graph without committing it. It returns violations, warnings, unresolved delegated choices,
-and a compact review.
+Validates the whole setup graph without committing: violations, warnings, unresolved delegated choices, compact review.
 
 ### 9.6 `commit_campaign_setup`
 
-Commits validated setup and initial world/adventure state in one transaction.
+Requires `expected_revision` and `operation_id`. In one transaction it freezes the setup as canonical configuration,
+promotes finalized characters from `DRAFT` to `ACTIVE` (activating staged rules state, inventory and money), commits
+initial party, adventure and Director state, writes a setup ledger event, advances to `SESSION_BOOTSTRAP` and returns a
+compact summary. It MUST NOT return the wizard conversation.
 
-The request MUST include the expected campaign revision and `operation_id`. On success it:
-
-- freezes the setup result as canonical configuration
-- promotes every finalized setup character from `DRAFT` to `ACTIVE`, activating its staged rules state, inventory, and
-  money
-- commits the initial party/companion intentions
-- commits the initial adventure and Director state
-- writes a setup ledger event
-- advances to `SESSION_BOOTSTRAP`
-- returns a compact committed summary
-
-It MUST NOT return the complete wizard conversation.
-
-Setup characters and their proposed mechanical state are persisted before this transaction, but they are not active
-gameplay truth while their lifecycle state is `DRAFT`. Failure leaves the resumable campaign draft unchanged. Abandoning
-an uncommitted campaign marks its character rows `ARCHIVED`; character rows and allocated character IDs are never
-deleted or reused. Non-identity planning payload may then be removed according to retention policy.
+Failure leaves the draft unchanged. Abandoning an uncommitted campaign marks its character rows `ARCHIVED`; character
+IDs are never deleted or reused.
 
 ---
 
@@ -596,71 +393,51 @@ deleted or reused. Non-identity planning payload may then be removed according t
 
 ### 10.1 `create_character_draft`
 
-Creates an ordinary character-table row with a stable `character:` reference and lifecycle state `DRAFT` within the
-active setup or another authorized creation workflow. The response carries the sheet and the draft's outstanding
-`decisions` (§9.3.1), as does every `update_character_draft`.
-
-The reference is reserved permanently for that character if creation completes. Draft state is persisted and resumable,
-but it is excluded from active gameplay context, party eligibility, encounters, and ordinary world queries. During
-campaign setup the row is owned by the campaign draft until `commit_campaign_setup` succeeds.
+Creates a character row with a stable `character:` reference and lifecycle `DRAFT`. The response carries the sheet and
+the draft's outstanding `decisions` (§9.3.1), as does every `update_character_draft`. Draft state is persisted and
+resumable but excluded from gameplay context, party eligibility, encounters and world queries. During setup the row is
+owned by the campaign draft until `commit_campaign_setup` succeeds.
 
 ### 10.2 `get_character_choices`
 
-Returns legal choices for a named decision scope — `ALL`, `ABILITY_GENERATION`, `SPECIES`, `CLASS`, `BACKGROUND`,
-`FEAT`, `SKILLS`, `ALIGNMENT`, `SPELLS`, `EQUIPMENT` — every option with a one-line description drawn from the installed
-content or the server's described enums (§9.3.1). Class-dependent scopes (the class skill list, spells, starting
-equipment) take a `character`; with a draft character the response also carries that draft's ordered `decisions`.
+Legal choices for a scope: `ALL`, `ABILITY_GENERATION`, `SPECIES`, `CLASS`, `BACKGROUND`, `FEAT`, `SKILLS`, `ALIGNMENT`,
+`SPELLS`, `EQUIPMENT`, each option with a one-line description. Class-dependent scopes take a `character`; with a draft
+the response also carries its `decisions`.
 
 ### 10.3 `generate_ability_scores`
 
-The server performs the selected method, including `STANDARD_ARRAY`, `POINT_BUY`, and `ROLL_4D6_DROP_LOWEST` when
-supported by the ruleset.
-
-Rolled results include every die and dropped value. Generated scores belong to the draft and cannot be silently rerolled
-unless campaign rules permit it.
+The server performs `STANDARD_ARRAY`, `POINT_BUY` or `ROLL_4D6_DROP_LOWEST` where the ruleset supports it. Rolled
+results include every die and dropped value and cannot be silently rerolled unless campaign rules permit it.
 
 ### 10.4 `update_character_draft`
 
-Applies concept, identity, mechanical choices, appearance, personality, backstory, equipment, and other draft changes —
-including the SRD background (its ability increase, Origin feat, skills, tool and equipment), species trait choices (
-bonus skill, lineage/ancestry, origin feat) and feat choices.
-
-The server validates locally checkable constraints immediately and defers whole-character constraints to validation.
+Applies concept, identity, mechanical choices, appearance, personality, backstory and equipment, including the SRD
+background (ability increase, Origin feat, skills, tool, equipment), species trait choices (bonus skill,
+lineage/ancestry, origin feat) and feat choices. Locally checkable constraints are validated immediately;
+whole-character constraints at validation.
 
 ### 10.5 `validate_character_draft`
 
-Returns a complete validation result and a player-facing review summary. It does not finalize or activate the character.
+Complete validation result plus a player-facing review. Does not finalize.
 
 ### 10.6 `commit_character_draft`
 
-Validates and changes the existing character row from `DRAFT` to `FINALIZED_DRAFT`, so it can no longer be edited
-without explicitly reopening it. Its proposed rules state, inventory, and money remain staged and unavailable to
-gameplay.
-
-During initial setup, `commit_campaign_setup` atomically promotes finalized characters to `ACTIVE` and activates their
-staged state. In a later authorized creation workflow, the enclosing semantic operation performs the same promotion. The
-`character:` reference never changes across these lifecycle transitions.
-
-Starting wealth MUST be resolved from explicit rules and configured modifiers. Narrative background text alone cannot
-grant mechanical wealth.
+Validates and moves the row from `DRAFT` to `FINALIZED_DRAFT`; it can no longer be edited without reopening. Staged
+rules state, inventory and money stay unavailable to gameplay until `commit_campaign_setup` (or a later enclosing
+creation workflow) promotes the row to `ACTIVE`. The reference never changes. Starting wealth MUST come from explicit
+rules and configured modifiers, never from backstory text.
 
 ### 10.7 `update_party_design`
 
-Stores desired party composition, companion preferences, authored companion drafts, relationship seeds, and introduction
-intentions.
-
-An introduction intention is not a guarantee that a scene occurs. It is Director planning state.
+Stores desired composition, companion preferences, authored companion drafts, relationship seeds and introduction
+intentions. An intention is Director planning state, not a guarantee.
 
 ### 10.8 `materialize_character`
 
-Converts a template into a canonical character when it becomes relevant. Accepted sources are a Director companion
-seed (`seed:<n>`) or an installed content definition such as `srd5e:creature/bandit` — the path by which encounter
-opponents, hirelings, and ad-hoc NPCs enter play. Authored characters already have stable character rows and are
-activated through their enclosing creation workflow rather than rematerialized.
-
-The operation validates rules state, creates an ordinary character-table row, assigns a new stable `character:`
-reference, records provenance (which seed/definition it came from), and MAY create initial relationships. It MUST NOT
-predetermine emergent relationship outcomes.
+Converts a Director companion seed (`seed:<n>`) or an installed definition (`srd5e:creature/bandit`) into a canonical
+character: validates rules state, creates a row with a new `character:` reference, records provenance, MAY create
+initial relationships, MUST NOT predetermine relationship outcomes. Authored characters are activated through their
+creation workflow, not rematerialized.
 
 ---
 
@@ -668,58 +445,106 @@ predetermine emergent relationship outcomes.
 
 ### 11.1 `bootstrap_session`
 
-Creates or resumes a gameplay session and returns a bounded context package sufficient to continue play.
+Creates or resumes a session (`operation_id`, `campaign`, `context_budget`) and returns a bounded package:
 
-Input:
-
-```yaml
-operation_id: "..."
-campaign: campaign:1
-context_budget: 12000
-```
-
-Output includes:
-
-- campaign and session references
-- harness state
-- current time and location
-- player-controlled character and party summaries
-- current mechanical state
+- campaign and session references, harness state, current time and location
+- the player character's PLAY sheet, inventory reduced to one name per item
+- the party: every member's SUMMARY sheet with `membership`, `location`, `with_party`, age, presentation, a brief
+  appearance, running biography `state` entries and open `wants` (§12.7)
+- `former_members`: one entry per character whose latest membership ended with no open one (state, when, why, where)
+- compact relationships: summary and dimensions; `profile_available` names profile keys and sizes (fetch the profile
+  with the RELATIONSHIP or INTIMACY scope)
 - active quests and immediate objectives
-- nearby/relevant entities
-- compact relationship summaries
+- `chronicle`: `synopsis`, `chapters_since_synopsis`, `since_last_chapter`, `due` (§11.4)
 - recent significant events
-- applicable story seeds and visibility labels
-- pending encounter, transaction, or continuation decision
-- legal next operations
+- `campaign.house_rules` (§11.5)
+- applicable story seeds with visibility labels
+- pending encounter, transaction or continuation decision; legal next operations
+- `budget`: tokens asked for, the character target (three characters a token) and characters used
 
-The server chooses content within the requested budget. Context budgets (including `maximum_context_budget`) are
-expressed in approximate LLM tokens and MAY be treated as advisory targets. The server MUST prioritize canonical current
-state over historical color.
+Default budget 16,000 tokens, at most `maximum_context_budget`. The story section gets a third; relationship profiles and
+full inventories stay out; the digest drops its least important lines first. The server MUST prioritize current
+canonical state over historical color.
 
 ### 11.2 `get_context`
 
-Returns purpose-built context for one scope:
+Purpose-built context for one scope, with references, optional natural-language focus and a budget. Visibility and
+scope rules always apply.
 
 - `SCENE`
-- `CHARACTER`
+- `CHARACTER`: FULL sheet with biography and (PEGI_18) intimate profile, relationships with profiles, membership
+  history, recent events, location
 - `RELATIONSHIP`
-- `LOCATION`
-- `QUEST`
-- `ENCOUNTER`
-- `DIRECTOR`
-
-Input includes the scope, relevant references, optional natural-language focus, and context budget.
-
-This is not unrestricted database search. Visibility and scope rules always apply.
+- `INTIMACY`: everything needed to play one person in an intimate scene: the focal character's identity, biography
+  (voice, marks, running state, open wants, last dozen timeline entries), hit points and conditions, whereabouts, own
+  intimate profile and open `intimate_wants`; every partner (`second_ref`, or everyone with mapped preferences,
+  attraction of 3 or more, an open want naming them, or a household term naming them) with the same view and both
+  directions of the pairwise profile; the `household_terms` of anyone in the bed; intimate ledger events newest first
+  with episodic detail; content-profile guidance. Below PEGI_18 the scope returns `layer: ROMANCE_ONLY`: milestones,
+  terms, wants and hard lines only.
+- `LOCATION`, `QUEST`, `ENCOUNTER`, `DIRECTOR`
 
 ### 11.3 `suspend_session`
 
-Closes the current session atomically after validating that no prohibited transaction is left open.
+Closes the session atomically after checking no prohibited transaction is open; records location, time and events
+written. A `summary`, when given, is written as a chronicle CHAPTER exactly as `write_chronicle` would. Mid-encounter
+suspension MAY be a capability; otherwise `OPERATION_NOT_ALLOWED` with alternatives.
 
-It records a compact session summary, current location/time, important written events, and unresolved runtime state.
-Mid-encounter suspension MAY be supported as a capability; otherwise the tool returns `OPERATION_NOT_ALLOWED` with safe
-alternatives.
+Suspending is optional. `bootstrap_session` resumes an open session when the campaign was touched within the last three
+hours and otherwise closes it and opens a new one. The recap never depends on sessions.
+
+### 11.4 The chronicle: chapters, the synopsis and the digest
+
+Two bounded artifacts, written by a summarizer the client delegates to (never the server), plus a derived digest:
+
+- **CHAPTER**: an immutable prose summary (about 300 tokens, at most 3,000 characters) of a ledger span, written from
+  the raw events. Records the game time covered (`from_time` to `to_time`), the journal span, and when it was written
+  (game and wall time).
+- **SYNOPSIS**: the rolling story so far (about 1,500 tokens, at most 12,000 characters), rewritten from the previous
+  synopsis and the chapters since it: closed arcs compress, the current arc stays detailed, settled facts carry forward
+  verbatim unless a chapter contradicts one. A new synopsis supersedes the old and records the chapter ids it used.
+- **`since_last_chapter`**: built at bootstrap from the ledger without a model: every event since the last chapter,
+  grouped under a share of the budget as `critical` (with episodic detail), `major`, `notable` (one line each, dropped
+  oldest-first), `minor_by_type` (counts) and `omitted_for_budget`.
+
+Bootstrap shows the synopsis, the chapters since it (newest whole, older ones shortened to a head when the budget runs
+out) and the digest, so the story section has the same size for any campaign length.
+
+**Triggers are sizes, not counts.** `chronicle.due` reports `chapter: true` when more than 20,000 characters of
+non-minor summary and detail are uncovered, and `synopsis: true` when more than four chapters were written since the
+synopsis or a quest completed or failed since it. The notice also appears in the `consequences` of `advance_time`,
+`move_party` and `perform_rest` and in `meta.warnings` of `record_memory` and `end_encounter`. When something is due
+the GM SHOULD delegate: a fresh summarizing agent calls `get_chronicle_material`, writes in the campaign's voice at the
+target length, and calls `write_chronicle` with the material's `through` marker while play continues. The GM SHOULD open
+a resumed campaign by retelling the synopsis and the chapters since it before asking what the player does.
+
+### 11.5 `update_house_rules`
+
+Table rulings every client must see at bootstrap, stored as a list of short strings and returned in
+`campaign.house_rules` ("no firearms in this world"). `mode` is ADD (default), REMOVE or REPLACE. Each change is a
+`HOUSE_RULE` ledger event.
+
+### 11.6 `get_chronicle_material` and `write_chronicle`
+
+`get_chronicle_material {campaign, kind, cursor}` (read-only) returns:
+
+- `CHAPTER`: `previous_chapter` in full, `earlier_chapters` (two, shortened), `events` (every non-minor, non-director
+  event since the last chapter, with detail, paged at 40,000 characters by `next_cursor`), `events_uncovered`, `voice`
+  (tone and style guidance), `target` (characters, ceiling, what a chapter contains), `through.journal_id`
+- `SYNOPSIS`: `current_synopsis`, `chapters_since`, `voice`, `target`, `through.chapter_id`
+
+`write_chronicle {operation_id, campaign, kind, title, summary, through}` stores the entry. A chapter closes at
+`through` (now when omitted); later events stay uncovered for the next chapter. A stale or future marker is `CONFLICT`,
+an entry over the ceiling `INVALID_ARGUMENT`, a chapter with nothing to cover `OPERATION_NOT_ALLOWED`. A synopsis closes
+at a chapter id and supersedes the previous one. Each write is a `CHRONICLE_WRITTEN` ledger event (MINOR, GM_ONLY) and
+returns the new `due` state.
+
+### 11.7 `find`
+
+`find {campaign, kind, query, limit}` (read-only) looks up characters (`CHARACTER`, default) or places (`LOCATION`) by
+name: case-insensitive, exact name first, then prefix, then substring, then a mention in the description. Each hit is
+one line: ref, name, and for people membership state, life state and whereabouts; for places kind, materialization,
+parent and head count. Use it whenever a name is known and the ref is not; never guess a ref.
 
 ---
 
@@ -727,83 +552,78 @@ alternatives.
 
 ### 12.1 `upsert_narrative_state`
 
-Creates or updates a bounded narrative aggregate using a discriminated request type:
-
-- `QUEST`
-- `STORY_BEAT`
-- `STORY_SEED`
-- `FACTION_STATE`
-- `WORLD_EVENT`
-- `LOCATION_DETAIL`
-- `NPC_AGENDA`
-
-This consolidates closely related narrative mutations without becoming generic CRUD. Each kind has its own schema,
-validation, visibility, lifecycle, and allowed transitions.
-
-The tool MUST record provenance: `GM`, `DIRECTOR`, `MECHANICAL_CONSEQUENCE`, or `ADMINISTRATIVE_OVERRIDE`.
+Creates or updates one narrative aggregate by discriminated type: `QUEST`, `STORY_BEAT`, `STORY_SEED`,
+`FACTION_STATE`, `WORLD_EVENT`, `LOCATION_DETAIL`, `NPC_AGENDA`. Each kind has its own schema, validation, visibility,
+lifecycle and transitions. Provenance MUST be recorded: `GM`, `DIRECTOR`, `MECHANICAL_CONSEQUENCE` or
+`ADMINISTRATIVE_OVERRIDE`.
 
 ### 12.2 `materialize_location`
 
-Atomically converts a location seed or unexplored semantic node into canonical detail. It returns the created location,
-connections, known features, secrets with visibility labels, and revision.
-
-The operation MUST reject contradictions with already committed geography unless performed through an explicit override.
+Atomically converts a location seed or semantic node into canonical detail: location, connections, known features,
+secrets with visibility labels, revision. MUST reject contradictions with committed geography unless performed through
+an explicit override.
 
 ### 12.3 `advance_time`
 
-Advances the world clock and commits rules-governed consequences such as resource durations, scheduled events, rest
-effects, and trigger recommendations.
-
-The result distinguishes automatic canonical consequences from Director recommendations.
+Advances the clock and commits rules-governed consequences (resource durations, scheduled events, rest effects, trigger
+recommendations). The result separates automatic canonical consequences from Director recommendations.
 
 ### 12.4 `get_diegetic_information`
 
-Returns information currently available through a fictional channel such as newspaper, rumor, letter, town crier,
-witness, market price, or environmental evidence.
-
-The server filters by location, time, visibility, and previously committed world events. The operation does not create a
-world fact merely because the AI asks for an interesting rumor.
+What is currently available through a fictional channel (newspaper, rumor, letter, crier, witness, market price,
+environmental evidence), filtered by location, time, visibility and committed world events. It never creates a fact.
 
 ### 12.5 `move_party`
 
-Moves the party, or a named subset of characters, to a target location — a world location, a settlement node, or a
-room/area node within a dungeon graph.
+Moves the party, or named `characters`, to a world location, settlement node or dungeon area.
 
-The server validates that the destination is reachable from the current position via known connections or an authorized
-route. It advances atomically until either the party arrives or the first consequence requiring player/GM input
-interrupts travel.
+**Who travels.** Without `characters`, active members and guests whose location is the party's (or who have none yet).
+A member or guest standing elsewhere does not teleport; the result lists them in `left_behind` with where they are.
+Separated members never move. With `characters`, exactly those travel, and the campaign's current location follows the
+player character. Every party view reports each member's `location` and `with_party`.
 
-On arrival, the operation commits elapsed time, canonical locations, automatic consequences, and the movement event. On
-interruption, it commits only elapsed time and movement up to the precise intermediate location, creates a
-`TRAVEL_INTERRUPT` pending transaction, and returns the interruption context and legal next operations; it MUST NOT
-assume the remainder of the journey occurs. After resolving the interruption, the client may resume the transaction
-toward the original destination. Moving into an unmaterialized semantic node MAY require `materialize_location` first;
-the error identifies this explicitly.
+The destination must be reachable via known connections or an authorized route. Travel advances atomically until
+arrival or the first consequence needing input. On arrival it commits elapsed time, locations, automatic consequences and
+the movement event. On interruption it commits only elapsed time and movement to the intermediate location, creates a
+`TRAVEL_INTERRUPT` pending transaction and returns the interruption context; it MUST NOT assume the rest of the journey.
+Moving into an unmaterialized node MAY require `materialize_location` first; the error says so.
+
+**Travel encounters.** `consequences` carries, besides expired timed effects, at most one `TRAVEL_ENCOUNTER_SUGGESTED`
+entry (`RULES_ENGINE.md` §9): per four hours of travel one roll through the roller, a 1 on a d6 on wild ground, a 1 on
+a d12 on roads, rivers and coasts, never inside settlements or buildings. A hit names a creature from the terrain table
+for the tags crossed, a count sized from the SRD 5.2.1 Moderate XP budget for the party's levels, the hour it falls in,
+and up to two open Director pressures as hooks. Nothing is written and no encounter starts; the GM plays it with
+`materialize_character` and `start_encounter`, folds it into a pressure, or ignores it. `director_trigger.reasons`
+carries `TRAVEL_ENCOUNTER_SUGGESTED` when present.
 
 ### 12.6 `update_party_membership`
 
-Applies one typed party-membership change:
-
-- `JOIN`
-- `LEAVE`
-- `DISMISS`
-- `SEPARATE`
-- `REJOIN`
-- `GUEST_ADD`
-- `GUEST_REMOVE`
-
-The server validates the transition against current membership state, records the change and its cause in the ledger,
-and returns updated party composition. Membership is state/history on the character, never identity. Transfer of player
-control remains a separate operation (`transfer_player_control`).
+One typed change: `JOIN`, `LEAVE`, `DISMISS`, `SEPARATE`, `REJOIN`, `GUEST_ADD`, `GUEST_REMOVE`. Validated against
+current membership state, recorded with its cause in the ledger, returns the updated party. Player control is separate
+(`transfer_player_control`).
 
 ### 12.7 `update_character`
 
-Applies canonical narrative/identity changes to a committed character: name, appearance, personality summary, goals,
-backstory summary, and similar non-mechanical fields.
+Canonical narrative and identity changes to a committed character: name, appearance, personality, goals, backstory,
+age, presentation, alignment, and two merged aggregates:
 
-Identity is unaffected — renaming `character:1` changes only its display name, and all ledger events, relationships, and
-references continue to resolve. The operation records provenance and requires `expected_revision`. Mechanical state
-changes use `apply_runtime_change` or more specific tools; exceptional mutations use `apply_gm_override`.
+- `biography`: `timeline` [{game_time, note}] (clock stamped when omitted), `voice` [verbatim lines], `state`
+  [{note, since, until}] (long-running bodily state; no `until` means current, shown in every party list), `marks`,
+  and `wants` [{note, with: [character refs], since, status OPEN|DONE|ABANDONED}] (the character's drives; open wants
+  show in every party list at every detail level).
+- `intimacy`: PEGI_18 only (`POLICY_DENIED` otherwise, never returned below PEGI_18): `body`, `likes`, `dislikes`,
+  `limits`, `hard_lines`, `wants` [{note, with, since, status}], `household_terms` [{note, with}] (held by the person
+  who set them), `voice_in_bed`. This is the character's own truth; what each partner has learned stays on the pairwise
+  relationship profile.
+
+Both merge like relationship profiles (§17.2): lists append without duplicates, an entry with the same `note` replaces
+the older one (mark a want DONE, give a state its `until`), a null removes the key it sits under, `{replace: true}`
+starts over. The GM SHOULD record facts as they are established in play. The older `goals` list remains for
+compatibility; `wants` is the dated, closable form the views show.
+
+Identity is unaffected: renaming changes only the display name. The operation records provenance and requires
+`expected_revision`. Mechanical state uses `apply_runtime_change` or a more specific tool; exceptions use
+`apply_gm_override`.
 
 ---
 
@@ -811,12 +631,12 @@ changes use `apply_runtime_change` or more specific tools; exceptional mutations
 
 ### 13.1 `get_character_sheet`
 
-Returns stable identity, relevant rules features, current resources, equipment, conditions, progression, and carrying
-state. Optional detail levels are `SUMMARY`, `PLAY`, and `FULL`.
+Identity, rules features, resources, equipment, conditions, progression and carrying state at detail `SUMMARY`, `PLAY`
+or `FULL`.
 
 ### 13.2 `resolve_check`
 
-Resolves an ability check, skill check, or saving throw using authoritative current state.
+An ability check, skill check or saving throw from authoritative state:
 
 ```yaml
 operation_id: "..."
@@ -825,111 +645,113 @@ kind: SKILL_CHECK
 ability: CHARISMA
 skill: DECEPTION
 difficulty: 17
-context:
-  reason: Bluffing the magistrate
+context: {reason: Bluffing the magistrate}
 ```
 
-The server validates modifiers, advantage/disadvantage, effects, and resource use. The AI supplies the fictional intent
-and any GM-set difficulty permitted by the rules policy.
+The server validates modifiers, advantage/disadvantage, effects and resource use; the AI supplies intent and any
+GM-set difficulty the rules policy permits.
 
-`tool` names a tool used for the check (`Thieves' Tools`, `Calligrapher's Supplies`), validated against the installed
-TOOL items. An ability check made with a tool the actor is proficient with adds the proficiency bonus; a skill check made
-with a tool the actor is also proficient in has advantage, and a disadvantage the GM imposed is cancelled instead
-(SRD 5.2.1 "Tools and Skills Together"). The result reports `tool`, `tool_proficient` and, when the engine granted or
-cancelled it, `advantage_source`.
+`tool` names a tool used for the check (`Thieves' Tools`), validated against installed TOOL items. An ability check
+with a tool the actor is proficient with adds the proficiency bonus; a skill check with a tool the actor is also
+proficient in has advantage, and a GM-imposed disadvantage is cancelled instead (SRD 5.2.1 "Tools and Skills
+Together"). The result reports `tool`, `tool_proficient` and `advantage_source` when the engine granted or cancelled it.
 
-`resolve_check` is legal in `EXPLORATION` and in `ENCOUNTER` alike: a parley at the point of a spell, a shove, a lock
-picked under fire. It never advances the initiative order; the actor's encounter action is recorded separately with
-`perform_encounter_action`.
+Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 
 ### 13.3 `apply_runtime_change`
 
-Applies a named, rules-aware non-encounter operation such as healing, spending a resource, applying/removing a
-condition, or adjusting HP when no more specific semantic operation exists.
+A named, rules-aware non-encounter change (healing, resources, conditions, HP) when no more specific tool exists. Each
+kind has a schema; exceptional changes need `apply_gm_override`.
 
-This is not arbitrary mutation. Each change kind has a schema and validation rules. Exceptional changes require
-`apply_gm_override`.
+- `DAMAGE {amount | dice}`: a `dice` expression (`"2d6"`) is rolled and journaled by the server and returned as `roll`.
+- `USE_RESOURCE` / `RESTORE_RESOURCE {resource, amount}`: the tracked uses in the sheet's `resources` block (Breath
+  Weapon, Heroic Inspiration, `sorcery_points`, `innate_sorcery`).
+- `CREATE_SPELL_SLOT {slot_level}` / `CONVERT_SPELL_SLOT {slot_level}`: Font of Magic conversions (points into a slot at
+  the table's cost; a slot into points equal to its level), Bonus Actions in the fiction; the result carries the new
+  `sorcery_points` and `slot` counts.
+- `ADJUST_MAX_HP {amount, until | minutes, reason}`: a signed `max_hp` active effect applied to the stored maximum when
+  it begins and taken back when it ends, so `hp.max` is always the number in force (`hp.max_base`, `hp.max_adjustments`
+  show what is temporary). A reduction clamps current HP; a maximum of 0 kills (SRD 5.2.1 "Hit Point Maximum"). Ends
+  with a Long Rest (`until: LONG_REST`, default), after `minutes`, or only via `RESTORE_MAX_HP` (`until: RESTORED`).
+  When a bonus ends, current HP above the maximum is lost. `RESTORE_MAX_HP` lifts every reduction and leaves bonuses.
 
 ### 13.4 `perform_rest`
 
-Validates rest eligibility and advances atomically until the rest completes or the first interruption requiring input
-occurs. A completed rest advances time, processes effects, restores only the resources allowed by the rules, and records
-the result.
-
-On interruption, the operation commits elapsed time and automatic effects only up to that instant, creates a
-`REST_INTERRUPT` pending transaction, and returns whether the attempted rest qualifies for any recovery. It MUST NOT
-grant completion-only recovery or resolve an encounter/player decision implicitly. The transaction records whether and
-under what rules the rest may resume.
+Validates eligibility and advances until the rest completes or is interrupted. A completed rest advances time, processes
+effects, restores only what the rules allow and records the result. On interruption it commits elapsed time and
+automatic effects to that instant, creates a `REST_INTERRUPT` pending transaction and reports whether the attempted rest
+qualifies for any recovery. It MUST NOT grant completion-only recovery or resolve a decision implicitly.
 
 ### 13.5 `award_xp`
 
-Awards XP from an explicit source. Mechanically generated encounter XP SHOULD be awarded automatically by encounter
-completion rather than through this tool.
-
-`characters` is OPTIONAL. Omitted, the award follows the campaign's `rules.xp_policy` (`RULES_ENGINE.md` §6) and reaches
-the whole active party — that is the correct call for quests, discoveries, roleplay and clever solutions, and it is the
-only way to guarantee that party experience does not drift apart because a companion was forgotten in one call. Naming
-characters explicitly stays available for awards that genuinely belong to one person.
-
-The response reports the `xp_policy` in force, every `awarded` entry (including companions raised under `LOCKSTEP`),
-and — from `rules.companion_level_up` — either `companion_level_ups` (what the engine advanced) or
-`companions_awaiting_level_up`. Under the default `PLAYER` policy each waiting entry carries a `proposal`: the hit
-points and ability improvement the engine would have chosen, so the GM can offer the player a complete, concrete
-level-up to accept or amend rather than an open-ended set of questions. `end_encounter` reports the same three fields.
-
-Discretionary awards require a reason and campaign-policy authorization.
+Awards XP from an explicit source; encounter XP SHOULD come from `end_encounter` instead. `characters` is OPTIONAL:
+omitted, the award follows `rules.xp_policy` (`RULES_ENGINE.md` §6) and reaches the whole active party, the right call
+for quests, discoveries and roleplay. The response reports `xp_policy`, every `awarded` entry (including companions
+raised under `LOCKSTEP`) and, per `rules.companion_level_up`, `companion_level_ups` or `companions_awaiting_level_up`;
+under `PLAYER` each waiting entry carries a `proposal` (hit points and ability improvement) for the player to accept or
+amend. `end_encounter` reports the same three fields. Discretionary awards require a reason and policy authorization.
 
 ### 13.6 `search_rules`
 
-Ranked free-text search across every installed rules definition and the campaign's custom content. Returns each hit's
-`ref`, `kind`, `name`, optional `tag` and a `snippet` of the actual rules text, so a hit can be judged without a second
-call. `kind` narrows the search (`RULE`, `SPELL`, `ITEM`, `CREATURE`, `FEAT`, …); omitting the campaign searches the
-installed rules only.
+Ranked free-text search across installed rules definitions and the campaign's custom content. Each hit carries `ref`,
+`kind`, `name`, optional `tag` and a `snippet` of the rules text. `kind` narrows (`RULE`, `SPELL`, `ITEM`, `CREATURE`,
+`FEAT`, …); omitting the campaign searches installed rules only. The SRD Rules Glossary is installed as `RULE` content,
+verbatim.
 
-The SRD's Rules Glossary is installed as `RULE` content, so conditions, actions, hazards, areas of effect, cover,
-resting, movement and carrying capacity are searchable next to the spells and items they interact with. The text is
-verbatim SRD wording, not a paraphrase.
+The GM SHOULD call this before answering a rules question or adjudicating an unfamiliar situation, and cite the `ref`.
+When nothing matches, the rule is not in the SRD. Read-only, allowed in every harness state.
 
-The GM SHOULD call this **before answering a rules question or adjudicating an unfamiliar situation**, and cite the
-returned `ref`. When nothing matches, the correct answer is that the rule is not in the SRD — not a rule recalled from
-memory. It is read-only and allowed in every harness state.
+### 13.7 `get_content_definitions` and `define_content`
 
-### 13.7 `get_content_definitions`
+`get_content_definitions` returns installed definitions of a kind (`ITEM` including weapons, armor, gear, tools, mounts,
+vehicles, poisons; `SPELL`; `CREATURE`; `CONDITION`; `CLASS_FEATURE`; other ruleset kinds). Filters: tags, text, spell
+level/class, CR range, price range; cursor pagination. `SUMMARY` detail is presentable on its own (items: type and price;
+spells: level, school, classes, one-line summary; species, classes, skills: `summary`).
 
-Returns installed rules-content definitions for a requested kind:
+`define_content` creates a campaign-scoped definition with a `content:` reference and optional `custom:` symbolic id:
 
-- `ITEM` (including weapons, armor, gear, tools, mounts, vehicles, poisons)
-- `SPELL`
-- `CREATURE`
-- `CONDITION`
-- `CLASS_FEATURE`
-- other ruleset-defined kinds
+- `ITEM`: name, type, cost, weight, description, mechanical properties, tags.
+- `BACKGROUND`: SRD 5.2.1 shape: `properties.ability_scores` (three abilities), `properties.feat` (an Origin feat),
+  `properties.skills` (two), `properties.tool` (`{item}` or `{choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}`),
+  optional `feat_choices` presets and `starting_equipment` options (default fifty gold). References are validated
+  against installed content; the name must not collide with an installed or campaign background. Usable by name,
+  symbolic id or `content:` reference wherever a background is chosen (`create_character_draft` /
+  `update_character_draft` with `background`, `background_ability_scores`, `background_tool`; a companion's promotion;
+  `get_character_choices` scope `BACKGROUND`; `get_content_definitions` kind `BACKGROUND`, flagged `custom: true`).
 
-Filters include tags, text search, spell level/class, creature CR range, and price range; results use cursor pagination.
-Definitions include structured mechanical data (cost, weight, damage, AC, CR, XP value, and so on) plus rules text.
-`SUMMARY` detail is presentable on its own: items carry their type and price, spells their level, school, classes and a
-one-line summary, and species, classes and skills a one-line `summary` — enough for a GM to list alternatives. This is
-how the GM prices purchases, selects appropriate opponents, and answers rules questions without inventing content.
+Definitions are validated against their kind's schema and recorded with provenance and licensing. Defining is not
+granting: putting a custom item into play goes through `trade`, `grant_loot` or `transfer_item`.
 
-### 13.7 `define_content`
+### 13.8 `roll_dice`
 
-Creates a campaign-scoped custom content definition with a stable `content:` reference and an optional campaign-local
-symbolic identifier in the `custom:` namespace. Two kinds exist:
+A free, journaled roll for whatever no semantic tool rolls (falling damage, a table, an NPC's dice). Nothing is applied.
 
-- `ITEM` (name, type, cost, weight, description, mechanical properties, tags).
-- `BACKGROUND`: a campaign background built to the SRD 5.2.1 shape — `properties.ability_scores` (three abilities for
-  the +2/+1 or +1/+1/+1 increase), `properties.feat` (an Origin feat), `properties.skills` (two), `properties.tool`
-  (`{item}` fixed or `{choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}`), optional `feat_choices` presets and
-  `starting_equipment` options (default: fifty gold). Every reference is validated against installed content, and the
-  name must not collide with an installed or campaign background. A defined background is usable by name, symbolic id
-  or `content:` reference wherever a background is chosen: `create_character_draft` / `update_character_draft`
-  (`background`, `background_ability_scores`, `background_tool`), a companion's promotion, `get_character_choices`
-  scope `BACKGROUND` and `get_content_definitions` kind `BACKGROUND` (flagged `custom: true`).
+```yaml
+operation_id: "..."
+campaign: campaign:1
+expression: 2d6+3        # NdS with +/- constants; keep/drop (4d6dl1, 2d20kh1); several terms (1d8+1d6-1)
+actor: character:4       # optional
+reason: fall from the sea-cliff
+```
 
-The definition is validated against its kind's schema, recorded with provenance and licensing metadata, and immediately
-usable by `trade`, inventory, and encounter operations through its `content:` reference. The result returns that
-reference. Defining content is subject to campaign GM policy and is not the same as granting it to anyone: putting a
-custom item into play still goes through `trade`, `grant_loot`, or `transfer_item`.
+Returns `roll` (expression, dice, dropped, modifier, total), `total` and `roll_ref`. Legal in `EXPLORATION` and
+`ENCOUNTER`.
+
+### 13.9 `cast_spell`, `prepare_spells` and Metamagic
+
+`cast_spell {caster, spell, slot_level?, targets?, options?}` shares its casting core with the encounter `CAST` action:
+checks preparation and slots, spends the slot, rolls attacks, saves and damage, applies conditions and concentration,
+returns rules text for anything unstructured. `options` carries spell-specific choices: `ritual: true`, `damage_type`
+(Chromatic Orb), `against` (a buff aimed at one creature), `condition` (which condition a cure removes).
+
+A sorcerer adds `options.metamagic`, one name or a list (`["Empowered Spell", "Quickened Spell"]`), with the extras an
+option needs: `heightened_target` (default first target), `careful` (creatures that succeed automatically),
+`damage_type` for Transmuted, `sorcery_incarnate: true` while Innate Sorcery is active at level 7 or above. Options must
+be known (`spellcasting.metamagic.known`), applicable and paid in sorcery points before anything is rolled; the result's
+`metamagic` block reports what was used, its cost and the points left. Seeking spends its point only when a missed attack
+roll is rerolled.
+
+`prepare_spells {character, cantrips?, spells?}` replaces the class-chosen lists; species- and feat-granted spells stay.
 
 ---
 
@@ -937,25 +759,87 @@ custom item into play still goes through `trade`, `grant_loot`, or `transfer_ite
 
 ### 14.1 `transfer_item`
 
-Moves an item or quantity between characters, containers, locations, or loot sources while enforcing ownership,
-quantity, capacity, and visibility.
+Moves an item or quantity between characters, containers, locations or loot sources, enforcing ownership, quantity,
+capacity and visibility.
 
 ### 14.2 `equip_item`
 
-Equips or unequips an item and returns all resulting mechanical changes.
+Equips or unequips an item and returns the resulting mechanical changes.
 
 ### 14.3 `trade`
 
-Performs purchase, sale, or barter atomically. The server determines price from canonical merchant, market, and rules
-state unless an authorized negotiated price is supplied with provenance.
-
-The operation commits money and item transfers together. It replaces separate illustrative `purchase_item` and
-`sell_item` calls.
+Purchase, sale or barter, atomically. Price comes from canonical merchant, market and rules state unless an authorized
+negotiated price is supplied with provenance. Money and items commit together.
 
 ### 14.4 `grant_loot`
 
-Materializes and transfers rewards from an authorized encounter, quest, world source, or explicit GM grant. Arbitrary
-treasure creation is subject to campaign GM policy and audit requirements.
+Materializes and transfers rewards from an authorized encounter, quest, world source or explicit GM grant, subject to
+campaign GM policy and audit.
+
+### 14.5 `give_money`
+
+Moves coin from one character to another in one transaction. `from` and `to` are character references, `money` any form
+`trade` accepts (`'1 gp 5 sp'`, `{"gp": 15}`, copper integer), `reason` optional. The giver must hold the amount
+(`INSUFFICIENT_RESOURCE`), nobody pays themselves, the amount is positive. Writes one `MONEY_GIVEN` event naming both
+characters and returns the amount and both balances. Never creates or destroys money (that is `grant_loot` or `trade`).
+
+### 14.6 Money references, accounts, `create_account`, `transfer_money`, `get_accounts`
+
+A *money reference* is `character:n` (the purse), `account:n` (a treasury of an estate or faction) or `WORLD` (the
+bottomless outside world). Parsing is case-insensitive; an account may also be named by its unique name.
+
+- `create_account` (MUTATING): `name`, `owner_kind` (`FACTION`, `ESTATE`, `CHARACTER`, `OTHER`), optional `owner`,
+  `notes` and opening balance, recorded as a `MONEY_FLOW` from `WORLD`.
+- `transfer_money` (MUTATING, atomic): `from`, `to`, `money`, `reason` between any two money references; the source
+  must hold the amount (`INSUFFICIENT_RESOURCE`); one `MONEY_FLOW` event names both sides, characters involved become
+  actors. Between two characters `give_money` remains the idiom.
+- `get_accounts` (read-only, always allowed): every account with balance and `upcoming` cash flows, the party's
+  `purses`, the `calendar`, and `recent_runs` (last N firings with status, amount and event).
+
+### 14.7 Cash flows: `define_cash_flow`, `update_cash_flow`, `list_cash_flows`
+
+A cash flow is a rule the engine fires when the clock crosses its due point. `advance_time`, `move_party` and
+`perform_rest` run the scheduler after moving the clock and list firings under `consequences` (`type: CASH_FLOW` with
+`status`, `amount`, `from`, `to`, `due`, `event`, `next_due`, `note`).
+
+`define_cash_flow` takes one `spec`:
+
+- `name` (unique), `kind` `MONEY` (default) or `EVENT`, `description`.
+- `from`, `to`: money references (MONEY only; at least one side must not be `WORLD`).
+- `amount`: money in any form (fixed); `{"percent": 10, "of_rule": <name or ref>}` (a share of that rule's payout at the
+  same due point, firing after it; nothing if it paid nothing); `{"percent": 10, "of_inflows": "account:n"|"character:n"}`
+  (a share of every coin that bag received via `MONEY_FLOW`, `MONEY_GIVEN` or loot since this rule last ran, or since
+  it was written for the first run; fires last).
+- `cap` (MONEY only): a total; the rule is a debt. Each firing pays at most what is still owed (cap minus PAID runs;
+  UNPAID runs change nothing). When cleared the rule finishes: `next_due` null, inactive, consequence `finished: true`,
+  note "cleared: N of N paid". Views show `cap`, `paid`, `remaining`.
+- `schedule`: `{"kind": ONCE|DAILY|WEEKLY|MONTHLY|YEARLY|SEASONAL, "weekday": 1–7 or name, "day": 1–31 (clamped to the
+  month), "month": 1–12 or name, "season": SPRING|SUMMER|AUTUMN|WINTER (fires on its first day), "minute_of_day" or
+  "time": "06:00"}`; a bare string is a kind. `ONCE` fires at `start` and finishes.
+- `season`: multipliers by season of the due date (`{"WINTER": 0.2}`).
+- `condition`: `{"quest": "quest:n", "status": "ACCEPTED"}`; the run is `SKIPPED` unless the quest has that status.
+- `start`, `end`: `'Day N, HH:MM'` or `{year, month, day, minute_of_day}`; `start` defaults to now.
+
+Due points are processed in order; within one, fixed amounts fire first, then shares of a rule, then shares of inflows.
+A paid MONEY run moves the coin and writes a `MONEY_FLOW` event dated at the due point (`MINOR`, `NOTABLE` from 10 gp).
+An insufficient source writes an `UNPAID` run and a `NOTABLE` event; the engine does not carry the debt forward. An
+EVENT run writes a `WORLD_EVENT` with the description. Every run is a `cash_flow_run` row.
+
+`update_cash_flow` changes any of `name`, `from`, `to`, `amount`, `cap` (null removes), `schedule`, `season`,
+`condition`, `description`, `start`, `end`, `active` (false stops, true restarts); schedule changes recompute the next
+due point. `list_cash_flows` (read-only) lists rules soonest-due first with their last run; `include_inactive` adds
+stopped and finished ones.
+
+### 14.8 The calendar: `set_calendar`
+
+The clock is unchanged: `sequence` is minutes since campaign start and `"Day N, HH:MM"` stays the primary display.
+`set_calendar` (MUTATING, audited) fixes the date Day 1 falls on (`year`, `month`, `day`) in a 365-day year of twelve
+months with the familiar lengths, no leap years, seven-day weeks (Monday = 1; 1 January of year 1 is a Monday) and four
+seasons by month (spring March–May, summer June–August, autumn September–November, winter December–February). Without
+a calendar Day 1 is 1 March of year 1. Once set, the epoch moves only with `force`, which recomputes every weekday-,
+month- or season-bound rule. Every `game_time` from clock-moving operations then carries `date` (`year`, `month`,
+`day`, `month_name`, `weekday`, `weekday_name`, `season`, `day_of_year`, `display`) and a `display` such as
+`Day 93, 09:41 (Thursday 1 June, year 1, summer)`.
 
 ---
 
@@ -963,65 +847,38 @@ treasure creation is subject to campaign GM policy and audit requirements.
 
 ### 15.1 `start_encounter`
 
-Creates an encounter, validates participants and sides, snapshots relevant starting state, rolls initiative where
-required, and returns the first actionable turn.
-
-Encounters default to zone-level positioning (near/far, cover, marked features). When the optional `tactical_grid`
-capability is enabled, an encounter MAY instead carry a grid model in which each participant has x,y coordinates within
-the encounter area — dungeon rooms especially — and movement and range validation use those positions, like figurines on
-a tabletop map. The exact grid schema is a deferred decision.
+Creates the encounter, validates participants and sides, snapshots starting state, rolls initiative and returns the
+first actionable turn. Positioning is zone-level by default (near/far, cover, marked features). With the optional
+`tactical_grid` capability an encounter MAY carry x,y positions used for movement and range validation; the grid schema
+is deferred.
 
 ### 15.2 `get_encounter_state`
 
-Returns a bounded authoritative view containing round, turn, participants, sides, visible conditions, positions where a
-spatial model is active, available actions or action constraints, and encounter revision.
-
-Secret opponent information is omitted or marked according to visibility.
+Round, turn, participants, sides, visible conditions, positions where a spatial model is active, available actions or
+constraints, and revision. Secret opponent information is omitted or marked by visibility.
 
 ### 15.3 `perform_encounter_action`
 
-Resolves one semantic encounter action atomically.
+Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `DISENGAGE`, `DODGE`, `HELP`, `HIDE`, `READY`,
+`USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`.
 
-Action kinds initially include:
+Returns the validated interpretation, rolls and modifiers, resource expenditure, damage, healing, conditions, movement
+and other consequences, defeated/dying changes, triggered reactions or pending choices, the next turn or required
+follow-up, and the new revision. An action needing a player or GM choice creates a typed pending transaction rather
+than guessing.
 
-- `ATTACK`
-- `CAST`
-- `MOVE`
-- `DASH`
-- `DISENGAGE`
-- `DODGE`
-- `HELP`
-- `HIDE`
-- `READY`
-- `USE_ITEM`
-- `INTERACT`
-- `OTHER_RULES_ACTION`
-
-The server returns:
-
-- validated interpretation of the action
-- rolls and modifiers
-- resource expenditure
-- damage, healing, conditions, movement, and other consequences
-- defeated/dying state changes
-- triggered reactions or pending choices
-- next turn or required follow-up decision
-- updated encounter revision
-
-If an action requires a player or GM choice before resolution can finish, the server creates a typed pending transaction
-rather than guessing.
+`CAST` takes the `cast_spell` fields flattened into the action (`spell`, `targets` or `target`, `slot_level`,
+`metamagic`, `heightened_target`, `careful`, `damage_type`, …; §13.9).
 
 ### 15.4 `resolve_pending_choice`
 
-Completes a server-created pending choice using its transaction reference and one of the legal options returned by the
-server.
+Completes a server-created pending choice by transaction reference and one of the legal options returned.
 
 ### 15.5 `end_encounter`
 
-Validates the outcome, commits encounter completion, distributes mechanically defined rewards, updates quests/events as
-configured, and returns level-up eligibility and Director-trigger recommendations.
-
-An encounter cannot be ended while mandatory pending reactions or choices remain unresolved.
+Validates the outcome, commits completion, distributes mechanically defined rewards, updates quests and events as
+configured, returns level-up eligibility and Director-trigger recommendations. Cannot end while mandatory pending
+reactions or choices remain.
 
 ---
 
@@ -1029,51 +886,50 @@ An encounter cannot be ended while mandatory pending reactions or choices remain
 
 ### 16.1 `begin_level_up`
 
-Creates a pending level-up transaction based on authoritative XP and rules state.
+Creates a pending level-up transaction from authoritative XP and rules state.
 
 ### 16.2 `get_level_up_choices`
 
-Returns legal remaining choices and a preview of automatic changes.
+Legal remaining choices and a preview of automatic changes.
 
 ### 16.3 `update_level_up`
 
 Adds or revises selections without changing the live character.
 
-`feat_choices` is one object naming the feat (`{"feat": "Skilled", "proficiencies": [...]}`) or a list of such objects
-when several feats owe choices at once — a Human Sage being promoted owes both Skilled (species) and Magic Initiate
-(background). A feat committed with choices still pending is reported by `get_level_up_choices` as
-`pending_feat_choices` at every later level-up, and `feat_choices` is accepted then to complete it; with nothing pending,
-`feat_choices` outside a first class level is refused.
+`metamagic` is required when the new level raises the number of Metamagic options a sorcerer knows (two at level 2, one
+more at 10 and 17): `get_level_up_choices` reports `metamagic_choice` with the count and options, and `commit_level_up`
+refuses until exactly that many are passed (`choices.metamagic = ["Empowered Spell", "Quickened Spell"]`). A sorcerer
+who levelled before the feature was data-driven has `spellcasting.metamagic.unchosen` on the sheet;
+`apply_gm_override SET_METAMAGIC` sets the options outside a level-up.
+
+`feat_choices` is one object naming the feat (`{"feat": "Skilled", "proficiencies": [...]}`) or a list when several
+feats owe choices at once. A feat committed with choices pending is reported as `pending_feat_choices` at every later
+level-up, where `feat_choices` completes it; with nothing pending, `feat_choices` outside a first class level is refused.
 
 ### 16.4 `validate_level_up`
 
-Returns violations and a complete before/after preview.
+Violations and a complete before/after preview.
 
 ### 16.5 `commit_level_up`
 
-Atomically applies a valid level-up and writes a progression ledger event.
+Atomically applies a valid level-up and writes a progression ledger event. Abandoning or expiring the transaction leaves
+the character unchanged.
 
-Abandoning or expiring a level-up transaction leaves the live character unchanged.
+Companions and NPCs use the same transaction. `rules.companion_level_up` decides whether the engine completes them
+(`ENGINE`) or proposes them for the player (`PLAYER`, default). `get_level_up_choices` returns
+`ability_score_improvement.recommended` at every ASI level for every character; the GM SHOULD offer it as the default.
 
-Companion and NPC level-ups use the same transaction. `rules.companion_level_up` decides whether the engine completes
-them without player interaction (`ENGINE`) or proposes them for the player to accept or amend (`PLAYER`, the default).
-`get_level_up_choices` returns `ability_score_improvement.recommended` at every ASI level, for player characters as well
-as companions: the GM SHOULD offer it as a default rather than asking an open question.
+A companion materialized from a creature definition has no class, so their first `begin_level_up` opens a *promotion*:
+`class_choice` (`choices.class`), `skill_choice` (`choices.skills`) and `origin_choice` (`choices.species`,
+`choices.background`, plus `species_skill`, `species_choice`, `origin_feat`, `background_tool` and `feat_choices` as
+those ask). Class and skills are required; the origin is optional, but a companion without one cannot be inherited by a
+player. Recording the class alone is legal and yields the concrete skill list. Nothing touches the live character until
+commit. The engine never chooses a class. The stat block's actions and senses are kept; its skill and save numbers stop
+applying.
 
-A companion materialized from a creature definition has no class. Their first `begin_level_up` therefore opens a
-*promotion*: `class_choice` (answered as `choices.class`), `skill_choice` (`choices.skills`), and `origin_choice`
-(`choices.species` and `choices.background`, plus `species_skill`, `species_choice`, `origin_feat`,
-`background_tool` and `feat_choices` as those ask for them). Class and skills are required to commit; the origin is
-optional, but a companion without one is not a character a player could inherit. Recording the class alone is legal
-and is how the concrete skill list is obtained. Nothing touches the live character until commit, which applies the
-whole promotion atomically. The engine never chooses a class, under either `companion_level_up` policy. The stat
-block's actions and senses are kept, but its listed skill and save numbers stop applying: a classed character rolls
-from its own abilities and proficiencies.
-
-`get_party` reports `sheet_gaps` on any member who is not yet a full character (`class`, `species`, `background`,
-`alignment`, `inventory`), and `materialize_character` takes an `alignment` so an NPC authored as a person carries one
-from the moment they exist. `transfer_player_control` accepts any living party member — including one whose sheet is
-still a stat block — so the gaps are worth closing before they are needed.
+`get_party` reports `sheet_gaps` on any member not yet a full character (`class`, `species`, `background`, `alignment`,
+`inventory`); `materialize_character` takes an `alignment`; `transfer_player_control` accepts any living party member,
+including one whose sheet is still a stat block.
 
 ---
 
@@ -1081,36 +937,38 @@ still a stat block — so the gaps are worth closing before they are needed.
 
 ### 17.1 `get_relationship`
 
-Returns compact current relationship state and references to significant shared events. Directional and mutual
-dimensions are distinguished where the model requires it.
+Compact current state and references to significant shared events; directional and mutual dimensions distinguished
+where the model requires it. Returns the profile in both directions.
 
 ### 17.2 `update_relationship`
 
-Commits a meaningful relationship development with:
+Commits a relationship development: participants, changed dimensions or qualitative state, concise summary, cause or
+supporting event, provenance. Upsert semantics.
 
-- participants
-- changed dimensions or qualitative state
-- concise current summary
-- cause or supporting event
-- provenance
+A relationship also carries a `profile`:
 
-If no relationship exists between the participants, the operation creates it; semantics are upsert.
+- `milestones`: dated `{kind, game_time, note}` (FIRST_MEETING, PROPOSAL, WEDDING, FIRST_NIGHT, PREGNANCY, PARTING,
+  OATH, …); game time stamped when omitted
+- `terms`: standing agreements between the two
+- `preferences`: likes, dislikes and limits mapped in play; intimate detail only under PEGI_18
+- `wants` and `hard_lines`
+
+`profile_mode` MERGE (default) never loses what is stored: at every depth lists append without duplicates and maps merge
+key by key, a null removes the key it sits under, and a value of another shape joins the stored one (a map given for a
+stored list contributes its values; a plain value given for a stored map is refused). REPLACE starts over. The compact
+relationship list at bootstrap includes the profile.
 
 The tool MUST NOT silently convert a relationship seed into a predetermined outcome.
 
 ### 17.3 `record_memory`
 
-Records a significant canonical event or episodic memory.
-
-Required fields include type, participants, campaign time, location when known, concise summary, importance, visibility,
-and provenance. Rich details are optional and bounded.
-
-Mechanical operations SHOULD generate their own ledger events automatically. The AI SHOULD NOT duplicate those events
-through `record_memory`.
+Records a significant canonical event or episodic memory: type, participants, campaign time, location when known,
+summary, importance, visibility, provenance; bounded rich detail optional. Mechanical operations write their own ledger
+events; the AI SHOULD NOT duplicate them here.
 
 ### 17.4 `query_memories`
 
-Retrieves relevant events by structured filters and optional natural-language focus.
+Events by structured filters and optional focus:
 
 ```yaml
 campaign: campaign:1
@@ -1120,13 +978,13 @@ focus: proposal
 limit: 10
 ```
 
-The canonical query baseline uses structured lookup and SQLite full-text search when available. Semantic/vector search
-is an optional capability and never the source of truth.
+Baseline is structured lookup plus SQLite full-text search when available. Semantic search is optional and never the
+source of truth.
 
 ### 17.5 `query_timeline`
 
-Returns ordered events for a bounded time range, entity set, event types, and importance threshold. Ordering is by game
-time (fictional chronology) by default; ordering by insertion ID MAY be requested for audit-style views.
+Ordered events for a time range, entity set, event types and importance threshold. Ordered by game time by default;
+insertion order MAY be requested for audit views.
 
 ---
 
@@ -1134,39 +992,26 @@ time (fictional chronology) by default; ordering by insertion ID MAY be requeste
 
 ### 18.1 Trigger representation
 
-Operations that reach meaningful boundaries MAY return:
+Operations at meaningful boundaries MAY return a recommendation to invoke the Director; it mutates nothing itself:
 
 ```yaml
 director_trigger:
   recommended: true
-  reasons:
-    - MAJOR_QUEST_COMPLETED
-    - SIGNIFICANT_TIME_PASSED
+  reasons: [MAJOR_QUEST_COMPLETED, SIGNIFICANT_TIME_PASSED]
   urgency: NORMAL
 ```
 
-The trigger is a recommendation to invoke the Director. It does not itself mutate narrative plans.
-
 ### 18.2 `get_director_context`
 
-Returns a bounded Director-only view containing relevant arcs, seeds, pacing history, faction agendas, world changes,
-unresolved companion intentions, significant relationships, and invalidated plans.
+A bounded Director-only view: arcs, seeds, pacing history, faction agendas, world changes, unresolved companion
+intentions, significant relationships, invalidated plans.
 
 ### 18.3 `commit_director_changes`
 
-Validates and atomically commits a set of Director proposals using typed change schemas:
-
-- create/update/supersede story seed
-- update story beat
-- advance faction plan
-- record world event
-- schedule pressure
-- update pacing intention
-- create/supersede companion introduction intention
-
-Director output MUST NOT prescribe player choices, relationship outcomes, or unavoidable scenes.
-
-The operation MAY validly commit no changes and record that a review occurred.
+Validates and atomically commits typed proposals: create/update/supersede story seed, update story beat, advance faction
+plan, record world event, schedule pressure, update pacing intention, create/supersede companion introduction intention.
+Director output MUST NOT prescribe player choices, relationship outcomes or unavoidable scenes. It MAY commit no changes
+and record that a review occurred.
 
 ---
 
@@ -1174,46 +1019,34 @@ The operation MAY validly commit no changes and record that a review occurred.
 
 ### 19.1 `create_checkpoint`
 
-Creates a restorable canonical checkpoint when campaign policy and current workflow permit it.
-
-A checkpoint MUST capture **every campaign-owned mutable canonical aggregate**, including characters and their complete
-runtime state, inventory and money, party membership and control, relationships, custom content definitions, locations
-and connections, quests, factions, story beats and seeds, world and Director state, encounters, pending gameplay
-workflows, campaign configuration/version state, the semantic event ledger, and the game clock. The list is illustrative
-rather than limiting: a new mutable canonical aggregate is rewindable unless its specification explicitly says
-otherwise.
-
-The immutable audit lineage, idempotency records, physical checkpoint metadata, and server/installation configuration
-are explicitly outside the rewindable state. Session records remain as audit history but must identify that their former
-ending state was superseded. Under the `ENCOUNTER_RETRY` continuation policy, the server MUST create the retry
-checkpoint automatically when an encounter starts.
+Creates a restorable checkpoint when policy and workflow permit. It MUST capture every campaign-owned mutable canonical
+aggregate: characters with full runtime state, inventory and money, membership and control, relationships, custom
+content, locations and connections, quests, factions, story beats and seeds, world and Director state, encounters,
+pending workflows, campaign configuration, the event ledger and the game clock. A new mutable canonical aggregate is
+rewindable unless specified otherwise. Audit lineage, idempotency records, checkpoint metadata and server configuration
+are outside rewindable state; session records remain as audit history marked as superseded. Under `ENCOUNTER_RETRY` the
+server MUST create the retry checkpoint when an encounter starts.
 
 ### 19.2 `get_continuation_options`
 
-Returns legal options after player-character death or another terminal event, including the restorable checkpoints
-themselves. Options may include checkpoint restoration, encounter retry, transfer to a surviving character, or campaign
-completion.
-
-Where campaign policy permits voluntary rewinding, the tool MAY also be called outside terminal events — a player
-regretting a disastrous decision in `CHECKPOINT` mode is a supported flow, not an error.
+Legal options after player-character death or another terminal event, including restorable checkpoints: restoration,
+encounter retry, transfer to a surviving character, campaign completion. Where policy permits voluntary rewinding it MAY
+be called outside terminal events.
 
 ### 19.3 `restore_checkpoint`
 
-Restores the complete canonical campaign state represented by a checkpoint in one transaction and records restoration in
-an audit lineage that survives the rollback.
-
-Ordinary campaign history after the checkpoint ceases to be canonical. The audit layer preserves that a restoration
-occurred without presenting reverted events as current world truth.
+Restores the complete canonical state of a checkpoint in one transaction and records the restoration in audit lineage
+that survives it. Later history ceases to be canonical without being presented as current truth.
 
 ### 19.4 `transfer_player_control`
 
-Transfers control to an eligible existing character without changing that character's identity. The server validates
-life state, campaign policy, and eligibility.
+Transfers control to an eligible existing character without changing identity; validates life state, policy and
+eligibility.
 
 ### 19.5 `complete_campaign`
 
-Transitions the campaign to `COMPLETED`, `FAILED`, or `ABANDONED` with an explicit reason and final summary. Reopening
-behavior is administrative and outside the MVP gameplay protocol.
+Sets `COMPLETED`, `FAILED` or `ABANDONED` with a reason and final summary. Reopening is administrative and outside the
+gameplay protocol.
 
 ---
 
@@ -1221,40 +1054,25 @@ behavior is administrative and outside the MVP gameplay protocol.
 
 ### 20.1 `apply_gm_override`
 
-This is the only general exceptional mutation operation. Two kinds are campaign-level rather than character-level:
+The only general exceptional mutation. Kinds beyond character-level edits:
 
-- `SET_MAX_HP {amount|set_to}` — the only way to record a maximum granted outside the level-up path (a subclass
-  feature, a boon, a permanent injury). Raising the maximum raises current hit points by the same amount.
-- `SET_ARMOR_CLASS {armor_class}` or `{clear: true}` — a fixed Armor Class outside the equipment path, for subclass
-  features the engine does not model yet (Draconic Resilience, Unarmored Defense) and boons. Effect bonuses and floors
-  (Shield of Faith, Barkskin) still apply on top; the sheet reports the basis as a GM override. `clear` returns the
-  character to equipment-derived AC.
-- `SET_CAMPAIGN_RULE {rule, value}` — retunes one house rule on a committed campaign (`hp_progression`, `xp_policy`,
-  `companion_level_up`, `progression`, `gm_override_policy`); takes no target. Everything else in the setup draft is
-  fixed at commit.
+- `SET_MAX_HP {amount|set_to}`: a maximum granted outside level-up (subclass feature, boon, injury). Raising the maximum
+  raises current hit points by the same amount.
+- `SET_ARMOR_CLASS {armor_class}` or `{clear: true}`: a fixed AC outside the equipment path (Draconic Resilience,
+  Unarmored Defense, boons). Effect bonuses and floors still apply on top; the sheet reports the basis as a GM override.
+  `clear` returns to equipment-derived AC.
+- `SET_CAMPAIGN_RULE {rule, value}`: retunes `hp_progression`, `xp_policy`, `companion_level_up`, `progression` or
+  `gm_override_policy` on a committed campaign; takes no target. Everything else in the setup is fixed at commit.
+- `SET_METAMAGIC {options: [names]}`: replaces a sorcerer's known options, at most the number the class level allows.
 
-It requires:
-
-- campaign policy permitting the override
-- a typed override kind
-- exact target and requested effect
-- human-readable reason
-- expected revisions
-- `operation_id`
-
-The response clearly labels the result as an override. It writes an immutable audit record containing before/after
-values, actor/provenance, reason, and time.
-
-The server MUST NOT present an override as an ordinary random or rules-derived result.
-
-An implementation MAY additionally require a startup flag or administrator authorization. That deployment decision does
-not change the protocol semantics.
+Requires: policy permitting the override, a typed kind, exact target and effect, a human-readable reason, expected
+revisions, `operation_id`. The response labels the result as an override and writes an immutable audit record
+(before/after, actor, reason, time). The server MUST NOT present an override as a rules-derived or random result. An
+implementation MAY additionally require a startup flag or administrator authorization.
 
 ---
 
 ## 21. Pending Transactions
-
-Multi-step workflows use explicit pending transactions:
 
 ```yaml
 pending_transaction:
@@ -1262,54 +1080,27 @@ pending_transaction:
   kind: LEVEL_UP
   revision: 3
   status: OPEN
-  legal_operations:
-    - update_level_up
-    - validate_level_up
-    - commit_level_up
-    - abandon_transaction
+  legal_operations: [update_level_up, validate_level_up, commit_level_up, abandon_transaction]
 ```
 
-Initial transaction kinds include:
-
-- `CHARACTER_CREATION`
-- `CAMPAIGN_COMMIT`
-- `LEVEL_UP`
-- `ENCOUNTER_CHOICE`
-- `LOCATION_MATERIALIZATION`
-- `TRAVEL_INTERRUPT`
-- `REST_INTERRUPT`
-
-Only one transaction that exclusively controls the same aggregate may be open at once.
-
-`abandon_transaction` discards draft state and leaves canonical state unchanged unless the transaction explicitly
-represents an already-committed interruptible workflow.
+Kinds: `CHARACTER_CREATION`, `CAMPAIGN_COMMIT`, `LEVEL_UP`, `ENCOUNTER_CHOICE`, `LOCATION_MATERIALIZATION`,
+`TRAVEL_INTERRUPT`, `REST_INTERRUPT`. Only one transaction exclusively controlling an aggregate may be open at once.
+`abandon_transaction` discards draft state and leaves canonical state unchanged unless the transaction represents an
+already-committed interruptible workflow.
 
 ---
 
 ## 22. Policy and Content Profiles
 
-The effective operating constraint is the intersection of:
-
-```text
-server policy
-∩ campaign content profile
-∩ player constraints
-∩ AI provider policy
-```
-
-The server stores server, campaign, and player-side configuration. Provider policy remains a client responsibility and
-MUST NOT silently rewrite persisted campaign preferences.
-
-`get_server_state`, `get_setup_state`, and relevant validation errors return a compact effective policy summary.
-
-The protocol MUST NOT expose private or unnecessary personal information merely to communicate a policy decision.
-Age-derived constraints SHOULD be stored and returned in the least specific form sufficient for enforcement.
+The effective constraint is `server policy ∩ campaign content profile ∩ player constraints ∩ AI provider policy`. The
+server stores the first three; provider policy is a client responsibility and MUST NOT silently rewrite persisted
+preferences. `get_server_state`, `get_setup_state` and relevant errors return a compact effective policy summary. The
+protocol MUST NOT expose unnecessary personal information to communicate a policy decision; age-derived constraints
+SHOULD be stored in the least specific sufficient form.
 
 ---
 
 ## 23. Minimal Tool Inventory
-
-The initial coherent protocol surface consists of:
 
 ```text
 Discovery
@@ -1399,19 +1190,15 @@ Exceptional and transactional
   abandon_transaction
 ```
 
-This is a semantic inventory, not a requirement that every tool ship in the first implementation milestone. Capability
-discovery identifies which optional families are available. A server claiming complete protocol `0.1` gameplay support
-MUST implement the versioned machine-readable schemas and the lifecycle exercised by the acceptance mapping below. A
-server operating with the `director` capability disabled remains conformant for the other families; acceptance
-requirements 25.7 and 25.8 apply only when that capability is enabled.
+This is a semantic inventory, not a first-milestone requirement. A server claiming complete protocol `0.1` gameplay
+support MUST implement the machine-readable schemas and the lifecycle in §25. With the `director` capability disabled a
+server remains conformant for the other families; 25.7 and 25.8 apply only when it is enabled.
 
 ---
 
 ## 24. Execution Example Mapping
 
-The illustrative calls in `EXECUTION_EXAMPLE.md` map to the authoritative protocol as follows:
-
-| Example operation                                   | Protocol operation                                                              |
+| Example operation (`EXECUTION_EXAMPLE.md`)          | Protocol operation                                                              |
 |-----------------------------------------------------|---------------------------------------------------------------------------------|
 | `get_harness_state`                                 | `get_server_state`                                                              |
 | `set_player_age`                                    | `update_campaign_setup`                                                         |
@@ -1434,119 +1221,99 @@ The illustrative calls in `EXECUTION_EXAMPLE.md` map to the authoritative protoc
 | checkpoint calls                                    | checkpoint and continuation operations                                          |
 | `suspend_session`                                   | `suspend_session`                                                               |
 
-This mapping deliberately consolidates setters and action-specific tools where a typed semantic operation provides a
-smaller coherent surface without becoming generic database mutation.
-
 ---
 
 ## 25. Acceptance Requirements
 
 ### 25.1 Fresh campaign
 
-From an empty database, `get_server_state` advertises campaign creation, and the setup tools can produce a valid
-committed campaign.
+From an empty database, `get_server_state` advertises campaign creation and the setup tools produce a valid committed
+campaign.
 
 ### 25.2 Policy enforcement
 
-Invalid content-profile choices are rejected by the server without relying on the AI to enforce them.
+Invalid content-profile choices are rejected by the server, not by the AI.
 
 ### 25.3 Setup resumption
 
-A new AI can open an interrupted campaign and discover draft state, outstanding decisions, and legal operations.
+A new AI can open an interrupted campaign and discover draft state, outstanding decisions and legal operations.
 
 ### 25.4 Context boundary
 
-After setup commit, `bootstrap_session` provides sufficient gameplay context without setup conversation history.
+After commit, `bootstrap_session` provides sufficient context without the setup conversation.
 
 ### 25.5 Deterministic mechanics
 
-With a controlled test roller, checks and encounter actions produce state transitions and audit records that satisfy the
-rules invariants: rolls within dice bounds, damage/healing arithmetic consistent with the rolled values, resources and
-conditions correctly spent and applied. Tests assert these sanity invariants rather than exact golden transcripts, which
-would be brittle against rules-data and formatting changes. Checkpoint restoration (25.9) remains an exact-equality
-check — restore correctness is not a sanity property.
+With a controlled roller, checks and encounter actions produce transitions and audit records satisfying the rules
+invariants: rolls within bounds, arithmetic consistent with the rolled values, resources and conditions correctly spent
+and applied. Tests assert these sanity invariants, not golden transcripts. Checkpoint restoration (25.9) remains an
+exact-equality check.
 
 ### 25.6 Episodic relationship memory
 
-A new AI can retrieve a proposal or other milestone by participants and semantic focus without loading it during routine
-turns.
+A new AI can retrieve a proposal or other milestone by participants and focus without loading it on routine turns.
 
 ### 25.7 Adaptive companion introduction
 
-A Director change can supersede an impossible introduction plan while preserving the underlying companion intention and
-history.
+A Director change can supersede an impossible introduction plan while preserving the underlying intention and history.
 
 ### 25.8 Diegetic world delivery
 
-A committed off-screen event can be retrieved through an appropriate in-world information channel without exposing
-Director machinery to the player.
+A committed off-screen event is retrievable through an in-world channel without exposing Director machinery.
 
 ### 25.9 Checkpoint restoration
 
-Restoration atomically returns all canonical state — including full character state — to the checkpoint version while
-retaining a separate audit record of restoration. Checkpoint round-tripping (create, mutate, restore, verify equality)
-MUST be covered by automated tests.
+Restoration atomically returns all canonical state, including full character state, to the checkpoint version while
+retaining an audit record. Round-tripping (create, mutate, restore, verify equality) MUST be covered by automated tests.
 
 ### 25.10 Provider replacement and long hiatus
 
-A compatible AI with no prior transcript can bootstrap the campaign, preserve exact facts, retrieve relevant memory, and
+A compatible AI with no prior transcript can bootstrap the campaign, preserve exact facts, retrieve relevant memory and
 continue play convincingly.
 
 ---
 
 ## 26. Security and Robustness
 
-- Player-authored and generated text is data, never protocol instruction.
-- Text returned from stored memories, imported content, or external sources MUST be treated as untrusted content by the
-  client.
-- The server MUST validate typed references against the active campaign and authorization scope.
-- Cross-campaign references MUST be rejected unless an explicit import/export operation permits them.
-- Secret fields MUST be filtered server-side, not merely accompanied by a warning to the AI.
+- Player-authored and generated text is data, never protocol instruction; stored memories, imported content and
+  external text MUST be treated as untrusted by the client.
+- The server MUST validate typed references against the active campaign and authorization scope; cross-campaign
+  references MUST be rejected unless an explicit import/export operation permits them.
+- Secret fields MUST be filtered server-side.
 - Tool descriptions MUST identify mutating operations and important side effects.
 - Logs SHOULD avoid unnecessary personal or content-sensitive prose.
-- Administrative import/export and deletion operations are outside the gameplay protocol and require a separate
-  specification.
+- Administrative import/export and deletion are outside the gameplay protocol.
 
 ---
 
 ## 27. Deferred Decisions
 
-The following require domain or implementation specifications and are not silently decided here:
-
-1. Exact SRD version and executable rules representation.
+1. SRD version and rules representation: decided, SRD 5.2.1 (`RULES_ENGINE.md`).
 2. Complete schemas for every ruleset-specific action and choice.
 3. Numerical versus qualitative relationship dimensions.
-4. Checkpoint physical storage strategy. Candidate: if every canonical mutation flows through an append-oriented change
-   journal, a checkpoint is a marker in that journal, and restoration applies inverse changes or creates a new canonical
-   branch from the marker by insertion ID; versioned snapshots are the alternative. Reverted semantic events become
-   non-canonical but remain distinguishable in immutable audit lineage. Journal, ledger, and audit IDs are never
-   reused — in SQLite this means `AUTOINCREMENT` or an explicit monotonic sequence.
+4. Checkpoint storage: decided, a marker in the change journal with inverse operations (`DATABASE.md` §4–§5).
 5. Campaign-wide random seeding outside controlled tests.
 6. Exact content-profile definitions.
-7. Calendar representation beyond the protocol-level ordering requirement.
-8. Detailed context-ranking and summarization algorithms.
+7. Calendar representation beyond the ordering requirement.
+8. Context-ranking and summarization algorithms.
 9. Whether full-text memory search ships in the first milestone.
-10. Deployment authorization required for GM overrides.
-11. Tactical-grid representation for encounter positioning (zones vs. x,y grid, movement costs, ranges).
+10. Deployment authorization for GM overrides.
+11. Tactical-grid representation (zones vs. x,y grid, movement costs, ranges).
 
-These decisions may refine payload schemas without weakening the invariants defined here.
+These may refine payload schemas without weakening the invariants defined here.
 
 ---
 
 ## 28. Next Specifications
 
-This protocol should drive, in order:
+1. `DOMAIN_MODEL.md`: aggregates, entities, state machines, invariants, transaction boundaries.
+2. `DATABASE.md`: SQLite schema, migrations, revisions, ledgers, checkpoint storage.
+3. `RULES_ENGINE.md`: deterministic resolution, ruleset integration, SRD 5.2.1 seed import (`DESIGN.md` §25.1–25.2).
+4. `GAME_HARNESS.md`: campaign creation and runtime state machines.
+5. `CONTENT_PROFILES.md`: content/age profiles and provider-policy intersection.
+6. `ARCHITECTURE.md`: Quarkus components, MCP adapters, services, Native Image constraints.
+7. `MVP.md`: first implementation milestones.
+8. Versioned machine-readable tool schemas and protocol integration tests derived from §25.
 
-1. `DOMAIN_MODEL.md` — aggregates, entities, state machines, invariants, and transaction boundaries.
-2. `DATABASE.md` — SQLite schema, migrations, revisions, ledgers, and checkpoint storage.
-3. `RULES_ENGINE.md` — deterministic resolution, ruleset integration, and the SRD 5.2.1 seed-data import (see
-   `DESIGN.md` §25.1–25.2 for the source tables).
-4. `GAME_HARNESS.md` — campaign creation and runtime state machines.
-5. `CONTENT_PROFILES.md` — content/age profile definitions and provider-policy intersection.
-6. `ARCHITECTURE.md` — Quarkus components, MCP adapters, services, and Native Image constraints.
-7. `MVP.md` — concrete first implementation milestones.
-8. Versioned machine-readable tool schemas, published alongside this document, and protocol integration tests derived
-   from section 25.
-
-Implementation should begin with a thin vertical slice: discovery, resumable campaign setup, commit, session bootstrap,
-one deterministic check, persistence, suspension, and fresh-context resumption.
+Implementation begins with a thin vertical slice: discovery, resumable campaign setup, commit, session bootstrap, one
+deterministic check, persistence, suspension and fresh-context resumption.
