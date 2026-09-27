@@ -58,6 +58,8 @@ public final class SrdTool {
 		case "verify" -> new VerifySrd(SrdText.load(src)).run(seedDir(), Paths.get("srd_report.txt"));
 		case "build-rules" -> new BuildRules(SrdText.readRaw(src)).run(seedDir().resolve("rules.json"));
 		case "build-creatures" -> new BuildCreatures(SrdText.load(src)).run(seedDir().resolve("creatures.json"));
+		case "build-magic-items" ->
+			new BuildMagicItems(SrdText.readRaw(src)).run(seedDir().resolve("magic-items.json"));
 		default -> usage();
 		}
 	}
@@ -75,7 +77,7 @@ public final class SrdTool {
 
 	private static void usage() {
 		System.err.println(
-				"usage: SrdTool extract <pdf> | verify <pdf|srd.txt> | build-rules <pdf|srd.txt> | build-creatures <pdf|srd.txt>");
+				"usage: SrdTool extract <pdf> | verify <pdf|srd.txt> | build-rules <pdf|srd.txt> | build-creatures <pdf|srd.txt> | build-magic-items <pdf|srd.txt>");
 		System.exit(2);
 	}
 }
