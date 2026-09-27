@@ -63,6 +63,10 @@ class SeedDataTest {
 						d.id() + " has unknown type " + p.get("type"));
 				assertTrue(((Number) p.get("cost_cp")).longValue() >= 0, d.id());
 				assertTrue(((Number) p.get("weight_lb")).doubleValue() >= 0, d.id());
+				if (p.containsKey("magic")) {
+					// Magic items (MagicItemTest): a template carries no mechanics of its own.
+					continue;
+				}
 				switch (String.valueOf(p.get("type"))) {
 				case "WEAPON" -> {
 					Map<String, Object> damage = (Map<String, Object>) p.get("damage");
@@ -97,9 +101,10 @@ class SeedDataTest {
 				}
 				}
 			}
-			assertEquals(38, items.stream().filter(d -> "WEAPON".equals(d.payload().get("type"))).count(),
+			List<RulesData.Definition> mundane = items.stream().filter(d -> !d.payload().containsKey("magic")).toList();
+			assertEquals(38, mundane.stream().filter(d -> "WEAPON".equals(d.payload().get("type"))).count(),
 					"SRD 5.2.1 lists 38 weapons (10 simple melee, 4 simple ranged, 18 martial melee, 6 martial ranged)");
-			assertEquals(12, items.stream().filter(d -> "ARMOR".equals(d.payload().get("type"))).count(),
+			assertEquals(12, mundane.stream().filter(d -> "ARMOR".equals(d.payload().get("type"))).count(),
 					"SRD 5.2.1 lists 12 armors");
 			assertEquals(7, items.stream().filter(d -> "PACK".equals(d.payload().get("type"))).count());
 		}

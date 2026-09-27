@@ -299,3 +299,47 @@ add one `TRAVEL_ENCOUNTER_SUGGESTED` entry to its `consequences`; nothing else h
   travellers by level) divided by the creature's XP value, clamped to 1..8.
 - **Hooks.** Up to two open Director `PRESSURE` seeds are quoted so the GM can fold the encounter into the campaign's
   standing worries.
+
+## 10. Magic Items and Treasure
+
+The SRD 5.2.1 "Magic Items A–Z" (pp. 209–253) is seeded verbatim as `ITEM` content (`magic-items.json`, 260 entries,
+built by `SrdTool build-magic-items`; the Potions of Healing entry becomes one item per potency). Every entry carries a
+`magic` block: `category`, `rarity` (`COMMON`, `UNCOMMON`, `RARE`, `VERY_RARE`, `LEGENDARY`, `ARTIFACT`, or `VARIES`),
+`attunement` (with `attunement_by` when restricted) and `enforcement` (`ENGINE` or `GM`). `cost_cp` is the rarity's
+value from "Magic Item Rarities and Values" (p. 206), halved for consumables other than Spell Scrolls. Worn wondrous
+items carry a `slot` from their name (`BOOTS`, `CLOAK`, `BELT`, `NECK`, `HANDS`, `WRISTS`, `HEAD`, `EYES`; `BODY` for
+robes); rings are `RING`; rods, staffs and wands are held (`ONE_HAND`); the rest is carried and used from the pack.
+
+- **Templates.** Magic weapons, armor, shields and ammunition describe any base item of their kind (`template: true`,
+  `applies_to`). `grant_loot` instantiates one on a base as campaign content ("+1 Longsword", "Flame Tongue (Longsword)"):
+  the base's mechanics plus the template's magic and text, priced base + rarity value, one definition per name. A `+N`
+  template carries `bonus_by_rarity`; the requested bonus fixes the rarity. Templates cannot be bought or granted as
+  they are (`MagicItems`).
+- **GM-made enchantments.** The SRD has no Arrow of Fire; `grant_loot` makes one on a mundane base from an inline
+  `magic` spec (`name`, `rarity`, `text`, and the mechanics: `bonus`, `damage_bonus_dice` + `damage_type`, `ac_bonus`,
+  `save_bonus`, `attack_bonus`, `speed_bonus`, `resistance`, `attunement`, `slot`, `consumable: {heal}`). Extra damage
+  dice on a weapon or ammunition ride only on attacks with that item (`Combat.weapon`, `Combat.withAmmunition`), never on
+  the wearer's other attacks; the worn modifiers apply while equipped (`MagicItems.enchant`).
+- **Engine-enforced.** The +N of a weapon (attack and damage rolls), of armor and shields (AC) and of ammunition (the
+  shot it is fired with: `ATTACK` names it as `ammunition`, with any extra damage dice of its own); Ring and Cloak of Protection (`modifiers: {ac_bonus,
+  save_bonus}`, folded into `Effects.modifiers` while equipped); Bracers of Defense (`ac_bonus_unarmored`, only without
+  armor and shield); Potions of Healing (`consumable: {heal}`, rolled by `USE_ITEM` in and out of combat). Everything
+  else is GM-adjudicated from its text, which the sheet shows under `magic_items` with `adjudication: GM`.
+- **Attunement (engine).** An equipped item that requires attunement is attuned; at most three at a time (SRD
+  "Attunement"). Slots: one body armor, one shield, two rings, one of each worn slot, two hands.
+- **Weapon buffs (engine).** A spell whose mechanic has `targets: WEAPON` binds its effect to one carried weapon
+  (`options.weapon`, else the wielder's equipped weapon): the effect's `attack_bonus`, flat `damage_bonus` and damage
+  dice ride only on attacks with that weapon (`Effects.weaponModifiers`, `Combat.withBuff`), never on a fist or a second
+  blade, and stack with the weapon's own enchantment. Magic Weapon takes a nonmagical weapon (`requires_nonmagical`)
+  and its `upcast` map raises the bonus by slot (+2 at 3–5, +3 at 6+, SRD 5.2.1). Shillelagh (`weapon_kinds` Club or
+  Quarterstaff, `weapon_die` with cantrip scaling, `use_ability: SPELLCASTING`, Force at the caster's choice) and Flame
+  Blade (`conjured_weapon`: a melee spell attack by that name while the effect lasts, dice scaled by the slot) are
+  seeded verbatim. Actor-wide buffs (Bless, Divine Favor) apply to every attack as before; a flat `damage_bonus` on an
+  actor-wide effect adds to the first damage part. Re-casting a weapon buff replaces the previous one (stacking key).
+- **Treasure guidance (the engine's own; the SRD has no treasure tables).** Suggestions only, by the party's highest
+  level: levels 1–4 draw COMMON 45 / UNCOMMON 45 / RARE 10, a permanent item every second or third completed quest (a
+  Ring of Protection is a stroke of luck); 5–10 UNCOMMON 40 / RARE 45 / VERY_RARE 15, about one per completed quest or
+  major encounter; 11–16 RARE 35 / VERY_RARE 50 / LEGENDARY 15, one or two per quest; 17–20 VERY_RARE 40 / LEGENDARY 55 /
+  ARTIFACT 5. A completed quest, a major encounter (XP pool of 200 or more) and a `bootstrap_session` that finds a
+  level-3 party, or one with two completed quests, without a single magic item report `treasure` (or a warning) with
+  candidates drawn through the roller: 1d100 for the rarity, 1dN for the item (`Treasure`). Nothing is granted by itself.

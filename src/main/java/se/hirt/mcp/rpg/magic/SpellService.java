@@ -660,18 +660,76 @@ public final class SpellService {
 		}
 		case "BUFF" -> {
 			String scope = String.valueOf(mech.getOrDefault("targets", "ONE"));
-			if (targets.isEmpty() && (scope.equals("SELF") || scope.equals("ONE") || scope.startsWith("UP_TO")
-					|| scope.startsWith("PARTY"))) {
+			if (targets.isEmpty() && (scope.equals("SELF") || scope.equals("ONE") || scope.equals("WEAPON")
+					|| scope.startsWith("UP_TO") || scope.startsWith("PARTY"))) {
 				targets.add(caster);
+			}
+			if (scope.equals("WEAPON") && targets.size() > 1) {
+				throw RpgException.invalidArgument(
+						def.name() + " affects one weapon: target its wielder and name the weapon in options.weapon.");
 			}
 			Map<String, Object> modifiers = mech.get("modifiers") instanceof Map<?, ?> given
 					? new LinkedHashMap<>((Map<String, Object>) given) : new LinkedHashMap<>();
+			// A higher slot raises a fixed bonus: "upcast": {"3": "+2", "6": "+3"} (Magic Weapon).
+			if (mech.get("upcast") instanceof Map<?, ?> u) {
+				int best = 0;
+				Object value = null;
+				for (var e : ((Map<String, Object>) u).entrySet()) {
+					if (e.getKey().matches("\\d+") && Integer.parseInt(e.getKey()) <= used
+							&& Integer.parseInt(e.getKey()) > best) {
+						best = Integer.parseInt(e.getKey());
+						value = e.getValue();
+					}
+				}
+				if (value != null) {
+					int n = value instanceof Number num ? num.intValue()
+							: Integer.parseInt(value.toString().replace("+", "").trim());
+					if (modifiers.containsKey("attack_bonus")) {
+						modifiers.put("attack_bonus", n);
+					}
+					if (modifiers.containsKey("damage_bonus")) {
+						modifiers.put("damage_bonus", n);
+					}
+				}
+			}
+			// Shillelagh: the weapon's die scales with the caster's level, the spellcasting ability replaces
+			// Strength, and the damage may become Force at the caster's choice.
+			if (modifiers.get("weapon_die") instanceof String die) {
+				modifiers.put("weapon_die", scaledDice(die, mech, 0, casterLevel));
+			}
+			if ("SPELLCASTING".equals(modifiers.get("use_ability"))) {
+				modifiers.put("use_ability",
+						castingOpt.map(k -> k.ability().name())
+								.orElseThrow(() -> RpgException.validation(List.of(new Violation("spell",
+										"NO_SPELLCASTING", caster.str("name") + " has no spellcasting ability.")))));
+			}
+			if (mech.get("allows_damage_type") != null && opts.get("damage_type") != null && String
+					.valueOf(mech.get("allows_damage_type")).equalsIgnoreCase(opts.get("damage_type").toString())) {
+				modifiers.put("weapon_damage_type", opts.get("damage_type").toString().toLowerCase());
+			}
+			// A conjured weapon (Flame Blade): its dice at this slot and the caster's numbers, fixed at casting.
+			if (mech.get("conjured_weapon") instanceof Map<?, ?> cw) {
+				var conjured = new LinkedHashMap<String, Object>((Map<String, Object>) cw);
+				conjured.put("dice", scaledDice(String.valueOf(cw.get("dice")), mech, upcast, casterLevel));
+				conjured.put("attack_bonus", atk);
+				conjured.put("damage_modifier", mod);
+				modifiers.put("conjured_weapon", conjured);
+			}
 			String condition = mech.get("condition") == null ? null : mech.get("condition").toString();
 			for (Row target : targets) {
 				var mods = new LinkedHashMap<>(modifiers);
 				if (Boolean.TRUE.equals(mods.get("against_target")) && opts.get("against") != null) {
 					mods.put("against_target_id",
 							CharacterService.character(tx, campaignId, opts.get("against").toString()).id());
+				}
+				String weaponName = null;
+				if (scope.equals("WEAPON")) {
+					Row entry = boundWeapon(tx, rules, campaignId, target, def.name(), mech, opts);
+					se.hirt.mcp.rpg.content.ContentService.Item item = se.hirt.mcp.rpg.content.ContentService
+							.itemForEntry(tx, rules, entry);
+					mods.put("weapon_entry_id", entry.id());
+					mods.put("weapon_name", item.name());
+					weaponName = item.name();
 				}
 				Map<String, Object> duration = duration(tx, campaignId, mech, upcast, encounterId, round, def.name(),
 						mm);
@@ -684,6 +742,9 @@ public final class SpellService {
 				var t = targetView(target);
 				t.put("effect", mech.getOrDefault("effect", condition));
 				t.put("duration", duration);
+				if (weaponName != null) {
+					t.put("weapon", weaponName);
+				}
 				perTarget.add(t);
 			}
 		}
@@ -808,6 +869,59 @@ public final class SpellService {
 		return t;
 	}
 
+	/**
+	 * The carried weapon a WEAPON-scoped buff binds to: {@code options.weapon} (an entry ref or a
+	 * name), else the wielder's equipped weapon. Magic Weapon takes a nonmagical one
+	 * ({@code requires_nonmagical}); Shillelagh a Club or Quarterstaff ({@code weapon_kinds}).
+	 */
+	private static Row boundWeapon(
+		Tx tx, RulesData rules, long campaignId, Row wielder, String spellName, Map<String, Object> mech,
+		Map<String, Object> opts) {
+		Row entry = null;
+		if (opts.get("weapon") != null) {
+			entry = se.hirt.mcp.rpg.inventory.InventoryService.carriedEntry(tx, rules, campaignId, wielder,
+					opts.get("weapon").toString());
+		} else {
+			for (Row e : tx.query(
+					"SELECT * FROM inventory_entry WHERE character_id = ? AND equipped = 1 AND slot IN ('ONE_HAND','TWO_HANDS') ORDER BY id",
+					wielder.id())) {
+				if ("WEAPON".equals(se.hirt.mcp.rpg.content.ContentService.itemForEntry(tx, rules, e).type())) {
+					entry = e;
+					break;
+				}
+			}
+			if (entry == null) {
+				throw RpgException.validation(List.of(new Violation("options.weapon", "NO_WEAPON",
+						wielder.str("name") + " wields no weapon; name one in options.weapon.")));
+			}
+		}
+		se.hirt.mcp.rpg.content.ContentService.Item item = se.hirt.mcp.rpg.content.ContentService.itemForEntry(tx,
+				rules, entry);
+		if (!"WEAPON".equals(item.type())) {
+			throw RpgException.validation(
+					List.of(new Violation("options.weapon", "NOT_A_WEAPON", item.name() + " is not a weapon.")));
+		}
+		if (Boolean.TRUE.equals(mech.get("requires_nonmagical"))
+				&& se.hirt.mcp.rpg.inventory.MagicItems.isMagic(item.payload())) {
+			throw RpgException.validation(List.of(new Violation("options.weapon", "NONMAGICAL",
+					spellName + " affects a nonmagical weapon; " + item.name() + " is already magical.")));
+		}
+		if (mech.get("weapon_kinds") instanceof List<?> kinds) {
+			Map<String, Object> magic = se.hirt.mcp.rpg.inventory.MagicItems.magic(item.payload());
+			String baseRef = magic != null && magic.get("base_ref") != null ? String.valueOf(magic.get("base_ref"))
+					: item.contentRef();
+			String baseName = baseRef == null ? item.name()
+					: rules.find(baseRef).map(RulesData.Definition::name).orElse(item.name());
+			boolean ok = kinds.stream().anyMatch(k -> k.toString().equalsIgnoreCase(baseName));
+			if (!ok) {
+				throw RpgException.validation(List.of(new Violation("options.weapon", "WEAPON_KIND",
+						spellName + " works on a " + String.join(" or ", kinds.stream().map(Object::toString).toList())
+								+ ", not " + item.name() + ".")));
+			}
+		}
+		return entry;
+	}
+
 	private static int upcastCount(Map<String, Object> mech, String key, int upcast) {
 		if (upcast <= 0 || !(mech.get("upcast") instanceof Map<?, ?> u)) {
 			return 0;
@@ -903,8 +1017,8 @@ public final class SpellService {
 			t.put("skipped", "already dead");
 			return t;
 		}
-		Effects.Modifiers casterMods = Effects.modifiers(tx, caster.id());
-		Effects.Modifiers targetMods = Effects.modifiers(tx, target.id());
+		Effects.Modifiers casterMods = Effects.modifiers(tx, rules, caster.id());
+		Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
 		boolean unconscious = "DYING".equals(target.str("life_state"));
 		boolean advantage = unconscious || targetMods.advantageOnAttacksAgainst;
 		boolean disadvantage = targetMods.disadvantageOnAttacksAgainst || tx.count(
@@ -1011,7 +1125,7 @@ public final class SpellService {
 		if (!automatic) {
 			Ability ability = Ability.parse(saveAbility);
 			int bonus = saveBonus(tx, rules, target, ability);
-			Effects.Modifiers targetMods = Effects.modifiers(tx, target.id());
+			Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
 			bonus += targetMods.saveBonus;
 			boolean heightened = mm != null && mm.heightenedTarget() != null && mm.heightenedTarget() == target.id();
 			String d20 = heightened ? "2d20kl1" : "1d20";
@@ -1078,7 +1192,7 @@ public final class SpellService {
 				repeat = Map.of("repeat_save", spec);
 			}
 			for (String cond : conditions) {
-				if (Effects.modifiers(tx, target.id()).immuneConditions.contains(cond)) {
+				if (Effects.modifiers(tx, rules, target.id()).immuneConditions.contains(cond)) {
 					t.put("immune", cond);
 					continue;
 				}

@@ -144,7 +144,8 @@ final class BuildMagicItems {
 				// A type line may wrap onto the next one or two lines: "Uncommon (+1), Rare" / "(+2), or Very Rare (+3)".
 				String header = line;
 				int consumed = 1;
-				while (consumed < 4 && i + consumed < lines.size() && continues(header, lines.get(i + consumed).strip())) {
+				while (consumed < 4 && i + consumed < lines.size()
+						&& continues(header, lines.get(i + consumed).strip())) {
 					header = header + " " + lines.get(i + consumed).strip();
 					consumed++;
 				}
@@ -237,7 +238,8 @@ final class BuildMagicItems {
 				magic.put("consumable", true);
 			}
 			Map<String, Object> mech = MECHANICS.get(e.name());
-			magic.put("enforcement", mech != null || !bonusByRarity.isEmpty() ? "ENGINE" : "GM");
+			// A +N is applied by the engine on weapons, armor, shields and ammunition; a wand's spell-attack bonus is not.
+			magic.put("enforcement", mech != null || !bonusByRarity.isEmpty() && template ? "ENGINE" : "GM");
 
 			payload.put("type", type);
 			long value = VALUE_CP.getOrDefault(rarity, 0L);
@@ -311,7 +313,16 @@ final class BuildMagicItems {
 	/** An item name: a short title-cased line that is not a sentence. */
 	private static boolean isName(String s) {
 		return s.length() >= 3 && s.length() <= 60 && Character.isUpperCase(s.charAt(0)) && !s.endsWith(".")
-				&& !s.endsWith(",") && !s.endsWith(":") && SrdText.match(HEAD, s) == null;
+				&& !s.endsWith(",") && !s.endsWith(":") && !isTypeLine(s);
+	}
+
+	/**
+	 * A type line names a rarity; "Weapon, +1, +2, or +3" is an item name, "Weapon (Any), Uncommon"
+	 * is not.
+	 */
+	private static boolean isTypeLine(String s) {
+		Matcher m = SrdText.match(HEAD, s);
+		return m != null && SrdText.search(RARITY, m.group(3)) != null;
 	}
 
 	/** The lines between two headers, minus the next entry's name line, joined into one string. */

@@ -1745,16 +1745,6 @@
       }
     },
     {
-      "id": "srd5e:item/potion-of-healing",
-      "name": "Potion of Healing",
-      "payload": {
-        "type": "GEAR",
-        "cost_cp": 5000,
-        "weight_lb": 0.5,
-        "text": "Drink as a Bonus Action: regain 2d4 + 2 Hit Points."
-      }
-    },
-    {
       "id": "srd5e:item/pouch",
       "name": "Pouch",
       "payload": {

@@ -103,7 +103,8 @@ public final class Derived {
 			Map<String, Object> armor = (Map<String, Object>) armorObj;
 			String category = String.valueOf(armor.get("category"));
 			if (category.equals("SHIELD")) {
-				shieldBonus += ((Number) armor.getOrDefault("ac_bonus", 2)).intValue();
+				shieldBonus += ((Number) armor.getOrDefault("ac_bonus", 2)).intValue()
+						+ se.hirt.mcp.rpg.inventory.MagicItems.bonus(item);
 				shield = String.valueOf(item.getOrDefault("name", "Shield"));
 				continue;
 			}
@@ -114,11 +115,24 @@ public final class Derived {
 			case "MAX_2" -> Math.min(dexMod, 2);
 			default -> dexMod;
 			};
-			ac = base + dexPart;
+			// A magic armor's +N (SRD 5.2.1 "Armor, +1, +2, or +3").
+			int magic = se.hirt.mcp.rpg.inventory.MagicItems.bonus(item);
+			ac = base + dexPart + magic;
 			basis = item.getOrDefault("name", category) + " (" + base
-					+ (dexRule.equals("NONE") ? "" : " + DEX" + (dexRule.equals("MAX_2") ? " max 2" : "")) + ")";
+					+ (dexRule.equals("NONE") ? "" : " + DEX" + (dexRule.equals("MAX_2") ? " max 2" : ""))
+					+ (magic != 0 ? " + " + magic + " magic" : "") + ")";
 		}
-		int value = ac + shieldBonus + bonus;
+		// Bracers of Defense: a bonus while wearing no armor and using no shield (SRD 5.2.1 "Bracers of Defense").
+		int unarmoredBonus = 0;
+		if (!wearingArmor && shield == null) {
+			for (Map<String, Object> item : equipped) {
+				Map<String, Object> mods = se.hirt.mcp.rpg.inventory.MagicItems.modifiers(item);
+				if (mods.get("ac_bonus_unarmored") instanceof Number n) {
+					unarmoredBonus += n.intValue();
+				}
+			}
+		}
+		int value = ac + shieldBonus + bonus + unarmoredBonus;
 		if (floor != null && value < floor) {
 			value = floor;
 			basis = basis + ", raised to a floor of " + floor;
@@ -131,6 +145,9 @@ public final class Derived {
 		}
 		if (bonus != 0) {
 			m.put("effect_bonus", bonus);
+		}
+		if (unarmoredBonus != 0) {
+			m.put("unarmored_bonus", unarmoredBonus);
 		}
 		return m;
 	}

@@ -1184,8 +1184,9 @@ seed import should populate the database from the following SRD Equipment-chapte
   exists only as an optional house rule.
 - **Trinkets** — the d100 flavor-item table from Character Creation.
 
-Magic items (SRD Magic Items chapter) are seeded as definitions with rarity but no fixed price; monetary value is
-rules/GM-determined. The Selling Equipment rule (items sell for half cost; valuables retain full value) belongs with the
+Magic items (SRD Magic Items chapter) are seeded verbatim as definitions with rarity, attunement and the value of the
+SRD's rarity table (`magic-items.json`; `RULES_ENGINE.md` §10); magic weapons, armor, shields and ammunition are
+templates instantiated on a base item at grant time. The Selling Equipment rule (items sell for half cost; valuables retain full value) belongs with the
 economy rules.
 
 There is no Trade Goods table in SRD 5.2.1 (it existed in SRD 5.1); do not invent one for the default dataset.

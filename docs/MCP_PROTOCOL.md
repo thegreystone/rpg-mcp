@@ -557,6 +557,10 @@ Creates or updates one narrative aggregate by discriminated type: `QUEST`, `STOR
 lifecycle and transitions. Provenance MUST be recorded: `GM`, `DIRECTOR`, `MECHANICAL_CONSEQUENCE` or
 `ADMINISTRATIVE_OVERRIDE`.
 
+A `QUEST` whose status becomes `COMPLETED` returns `treasure`: the party's level band, the rarities it draws from, how
+often a magic item should turn up, and up to three candidates drawn through the roller (§14.4). It is a suggestion; the
+GM grants with `grant_loot` or ignores it.
+
 ### 12.2 `materialize_location`
 
 Atomically converts a location seed or semantic node into canonical detail: location, connections, known features,
@@ -663,6 +667,9 @@ Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 A named, rules-aware non-encounter change (healing, resources, conditions, HP) when no more specific tool exists. Each
 kind has a schema; exceptional changes need `apply_gm_override`.
 
+- `USE_ITEM {item, target}`: a consumable with an encoded effect, used outside combat. A Potion of Healing of any
+  potency heals by its dice (rolled and journaled, returned as `roll`) and one unit is consumed; an item without an
+  encoded effect is `CAPABILITY_UNAVAILABLE` and the GM narrates it.
 - `DAMAGE {amount | dice}`: a `dice` expression (`"2d6"`) is rolled and journaled by the server and returned as `roll`.
 - `USE_RESOURCE` / `RESTORE_RESOURCE {resource, amount}`: the tracked uses in the sheet's `resources` block (Breath
   Weapon, Heroic Inspiration, `sorcery_points`, `innate_sorcery`).
@@ -704,9 +711,13 @@ When nothing matches, the rule is not in the SRD. Read-only, allowed in every ha
 ### 13.7 `get_content_definitions` and `define_content`
 
 `get_content_definitions` returns installed definitions of a kind (`ITEM` including weapons, armor, gear, tools, mounts,
-vehicles, poisons; `SPELL`; `CREATURE`; `CONDITION`; `CLASS_FEATURE`; other ruleset kinds). Filters: tags, text, spell
-level/class, CR range, price range; cursor pagination. `SUMMARY` detail is presentable on its own (items: type and price;
-spells: level, school, classes, one-line summary; species, classes, skills: `summary`).
+vehicles, poisons and the SRD magic items: rings, rods, staffs, wands, potions, scrolls, wondrous items and the magic
+weapon, armor, shield and ammunition templates; `SPELL`; `CREATURE`; `CONDITION`; `CLASS_FEATURE`; other ruleset kinds).
+Filters: tags, text, spell level/class, CR range, price range, `magic` (true or false) and `rarity`; cursor pagination.
+`SUMMARY` detail is presentable on its own (items: type and price; spells: level, school, classes, one-line summary;
+species, classes, skills: `summary`). A magic item's summary carries `magic` (rarity, attunement, template and
+`applies_to`, `adjudication`, the modifiers or bonus the engine applies) and `magic_label`, plus its `summary` in place
+of the verbatim `text`, which `FULL` detail returns; the result lists `rarities`.
 
 `define_content` creates a campaign-scoped definition with a `content:` reference and optional `custom:` symbolic id:
 
@@ -751,6 +762,12 @@ be known (`spellcasting.metamagic.known`), applicable and paid in sorcery points
 `metamagic` block reports what was used, its cost and the points left. Seeking spends its point only when a missed attack
 roll is rerolled.
 
+`options.weapon` (a name or `inventory:N`) names the carried weapon a weapon-enchanting spell binds to (Magic Weapon,
+Shillelagh; default the wielder's equipped weapon): its bonus, die and damage ride only on attacks with that weapon and
+stack with the weapon's own enchantment; the slot raises Magic Weapon to +2 (level 3–5) or +3 (6+). A magical weapon is
+refused (`NONMAGICAL`), a wrong kind (`WEAPON_KIND`); each target in the result names the `weapon`. Flame Blade conjures
+a weapon: `ATTACK` with `attack: "Flame Blade"` while it lasts (RULES_ENGINE.md §10).
+
 `prepare_spells {character, cantrips?, spells?}` replaces the class-chosen lists; species- and feat-granted spells stay.
 
 ---
@@ -764,7 +781,12 @@ capacity and visibility.
 
 ### 14.2 `equip_item`
 
-Equips or unequips an item and returns the resulting mechanical changes.
+Equips or unequips a carried weapon, armor, shield, focus, ring, rod, staff, wand or worn wondrous item and returns the
+resulting mechanical changes: Armor Class before and after, the equipped set and what is attuned. Slots: one body
+armor, one shield, two hands, two rings, and one of each worn slot (`CLOAK`, `BOOTS`, `HEAD`, `NECK`, `BELT`, `HANDS`,
+`WRISTS`, `EYES`); a magic item without a slot (a Bag of Holding) is carried, not worn (`NOT_EQUIPPABLE`). An equipped
+item that requires attunement is attuned; a fourth is `ATTUNEMENT_LIMIT` (SRD 5.2.1 "Attunement"). A magic item's +N
+and modifiers apply only while equipped.
 
 ### 14.3 `trade`
 
@@ -775,6 +797,25 @@ negotiated price is supplied with provenance. Money and items commit together.
 
 Materializes and transfers rewards from an authorized encounter, quest, world source or explicit GM grant, subject to
 campaign GM policy and audit.
+
+Magic items are granted by name (`{item: "Ring of Protection"}`). A magic weapon, armor, shield or ammunition entry is a
+template made on a base item and is instantiated at grant time as campaign content: `{item: "+1 Longsword"}`,
+`{item: "Weapon, +1, +2, or +3", base: "Longsword", bonus: 2}`, or `{item: "Flame Tongue", base: "Longsword", name:
+"Ember"}`. The result names the definition (`content:N`) and its rarity; a template without a base, a base of the wrong
+kind, or a base that is itself magical is refused. One definition serves every grant of the same name.
+
+An enchantment the SRD does not list (an Arrow of Fire, a frost blade, a lucky charm) is made on a mundane base with
+`magic`: `{item: "Arrow", quantity: 10, magic: {name, rarity, text, bonus?, damage_bonus_dice? + damage_type?, ac_bonus?,
+save_bonus?, attack_bonus?, speed_bonus?, resistance?, attunement?, slot?, consumable?: {heal}}}`. `name` and `text` are
+required; the engine applies the +N, the extra damage dice on hits with that weapon or piece of ammunition, and the worn
+modifiers while equipped; the text is the GM's (`text_is_paraphrase: true`). Priced base + rarity value; one definition
+per name.
+
+**Treasure.** A completed quest (§12.1), a major encounter (§15.5) and a bootstrap that finds a party of level 3, or
+with two completed quests, without a single magic item return `treasure` (or a `meta.warnings` line): `party_level`,
+`tier`, `rarities` (weights), `frequency`, `party_magic_items` and `suggestions` drawn through the roller from the
+installed magic items (`ref`, `name`, `rarity`, `attunement`, `needs_base` for a template, `summary`). The GM SHOULD
+grant something at those moments at about the stated rate; see RULES_ENGINE.md §10 for the bands.
 
 ### 14.5 `give_money`
 
@@ -870,6 +911,11 @@ than guessing.
 `CAST` takes the `cast_spell` fields flattened into the action (`spell`, `targets` or `target`, `slot_level`,
 `metamagic`, `heightened_target`, `careful`, `damage_type`, …; §13.9).
 
+`ATTACK` may name `ammunition` ("+1 Arrow") to fire magic ammunition made on the weapon's own kind; its +N applies to
+that attack and damage roll and the result's `ammunition` reports the piece, its `bonus` and what remains. `USE_ITEM
+{item, target}` uses a carried consumable: a Potion of Healing of any potency heals by its dice; an item without an
+encoded effect is consumed and left to the GM.
+
 ### 15.4 `resolve_pending_choice`
 
 Completes a server-created pending choice by transaction reference and one of the legal options returned.
@@ -878,7 +924,8 @@ Completes a server-created pending choice by transaction reference and one of th
 
 Validates the outcome, commits completion, distributes mechanically defined rewards, updates quests and events as
 configured, returns level-up eligibility and Director-trigger recommendations. Cannot end while mandatory pending
-reactions or choices remain.
+reactions or choices remain. A major encounter (an XP pool of 200 or more, or a player character's death) also returns
+`treasure` (§14.4).
 
 ---
 

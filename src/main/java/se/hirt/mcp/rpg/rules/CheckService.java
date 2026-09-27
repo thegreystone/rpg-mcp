@@ -185,7 +185,7 @@ public final class CheckService {
 			String expression = dice + (modifier >= 0 ? "+" + modifier : Integer.toString(modifier));
 			Roll roll = roller.roll(expression);
 			long rollId = recordRoll(tx, campaignId, k.toLowerCase(), roll, actor.id(), reason);
-			Effects.Modifiers mods = Effects.modifiers(tx, actor.id());
+			Effects.Modifiers mods = Effects.modifiers(tx, rules, actor.id());
 			int total = roll.total();
 			var bonusDice = new ArrayList<Map<String, Object>>();
 			for (String bd : k.equals("SAVING_THROW") ? mods.saveBonusDice : mods.checkBonusDice) {

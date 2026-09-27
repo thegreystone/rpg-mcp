@@ -462,26 +462,31 @@ public class RpgTools {
 	// ── Content, inventory and economy ─────────────────────────────────
 
 	@Tool(name = "get_content_definitions", description = "Searches installed rules content (SRD 5.2.1) and, when a campaign is given, its custom "
-			+ "definitions. kind defaults to ITEM (weapons, armor, gear, tools, packs, ammunition, focuses, mounts…); other kinds: CLASS, SPECIES, "
+			+ "definitions. kind defaults to ITEM (weapons, armor, gear, tools, packs, ammunition, focuses, mounts, and the SRD magic items: "
+			+ "rings, rods, staffs, wands, potions, scrolls, wondrous items, and magic weapon/armor/shield/ammunition templates); other kinds: CLASS, SPECIES, "
 			+ "BACKGROUND, FEAT, SKILL, SPELL, CREATURE, TABLE. "
-			+ "Filter by item_type, free text, and price; cursor-paginated. Use this to price purchases and answer equipment questions instead of inventing them. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "Filter by item_type, free text, price, magic (true/false) and rarity; cursor-paginated. Use this to price purchases, pick level-appropriate "
+			+ "treasure (`magic: true, rarity: UNCOMMON`) and answer equipment questions instead of inventing them. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getContentDefinitions(
 		@ToolArg(description = "Campaign reference (optional; includes that campaign's custom content)")
 		Optional<String> campaign, @ToolArg(description = "Content kind (default ITEM)")
 		Optional<String> kind,
-		@ToolArg(description = "Item type filter: WEAPON, ARMOR, SHIELD, GEAR, TOOL, AMMUNITION, FOCUS, PACK, CONTAINER, MOUNT, TACK, VEHICLE")
+		@ToolArg(description = "Item type filter: WEAPON, ARMOR, SHIELD, GEAR, TOOL, AMMUNITION, FOCUS, PACK, CONTAINER, MOUNT, TACK, VEHICLE, RING, ROD, STAFF, WAND, WONDROUS, POTION, SCROLL")
 		Optional<String> item_type,
 		@ToolArg(description = "Free-text search over name/id/rules text, e.g. 'sword finesse'")
 		Optional<String> text, @ToolArg(description = "Minimum cost, e.g. '1 gp' or 100 (cp)")
 		Optional<String> min_cost, @ToolArg(description = "Maximum cost, e.g. '50 gp'")
-		Optional<String> max_cost, @ToolArg(description = "SUMMARY (default) or FULL (includes the complete payload)")
+		Optional<String> max_cost,
+		@ToolArg(description = "Magic item rarity filter: COMMON, UNCOMMON, RARE, VERY_RARE, LEGENDARY, ARTIFACT")
+		Optional<String> rarity, @ToolArg(description = "true: magic items only; false: mundane items only")
+		Optional<Boolean> magic, @ToolArg(description = "SUMMARY (default) or FULL (includes the complete payload)")
 		Optional<String> detail, @ToolArg(description = "Opaque cursor from next_cursor")
 		Optional<String> cursor, @ToolArg(description = "Page size (default 25, max 100)")
 		Optional<Integer> limit) {
 		return ToolSupport.run("get_content_definitions",
 				() -> engine.content().definitions(campaign.orElse(null), kind.orElse(null), item_type.orElse(null),
-						text.orElse(null), min_cost.orElse(null), max_cost.orElse(null), cursor.orElse(null),
-						limit.orElse(25), detail.orElse("SUMMARY")));
+						text.orElse(null), min_cost.orElse(null), max_cost.orElse(null), rarity.orElse(null),
+						magic.orElse(null), cursor.orElse(null), limit.orElse(25), detail.orElse("SUMMARY")));
 	}
 
 	@Tool(name = "search_rules", description = "READ-ONLY. Ranked free-text search across every installed rules definition and the campaign's custom content: "
@@ -554,8 +559,10 @@ public class RpgTools {
 				() -> engine.inventory().giveMoney(operation_id, campaign, from, to, money, reason.orElse(null)));
 	}
 
-	@Tool(name = "equip_item", description = "MUTATING. Equips or unequips a carried weapon, armor, shield or focus with slot validation (one body armor, "
-			+ "one shield, two hands). Returns Armor Class before/after and the equipped set.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "equip_item", description = "MUTATING. Equips (wears, wields, attunes to) or unequips a carried weapon, armor, shield, focus, ring, rod, staff, wand "
+			+ "or wearable wondrous item with slot validation: one body armor, one shield, two hands, two rings, one of each worn slot (cloak, boots, head, neck, "
+			+ "belt, hands, wrists, eyes), and at most three attuned items (SRD 5.2.1 Attunement; an equipped item that requires attunement is attuned). "
+			+ "A magic item's +N and its modifiers (a Ring of Protection) apply only while equipped. Returns Armor Class before/after, the equipped set and what is attuned.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse equipItem(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Character reference")
@@ -592,15 +599,22 @@ public class RpgTools {
 
 	@Tool(name = "grant_loot", description = "MUTATING. Materializes rewards — items and/or money — for a character or a location from an ENCOUNTER, QUEST or WORLD "
 			+ "source, or as an explicit GM_GRANT (requires a reason, is audited, and is refused when the campaign disables GM overrides). "
-			+ "Writes a LOOT_ACQUIRED ledger event.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Writes a LOOT_ACQUIRED ledger event. Magic items (get_content_definitions magic: true) are granted by name; a magic weapon, armor, shield or "
+			+ "ammunition entry is a template made on a base: {item: '+1 Longsword'}, {item: 'Weapon, +1, +2, or +3', base: 'Longsword', bonus: 2} or "
+			+ "{item: 'Flame Tongue', base: 'Longsword', name: 'Ember'}; an enchantment of your own (an Arrow of Fire, a frost blade) is {item: 'Arrow', magic: {name, rarity, damage_bonus_dice, damage_type, text}}. "
+			+ "Completed quests, major encounters and bootstrap report level-appropriate "
+			+ "`treasure` suggestions: a party that finishes a quest or a major fight usually finds something.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse grantLoot(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Recipient: 'character:N' or 'location:N'")
-	String to, @ToolArg(description = "Items: [{\"item\": \"Dagger\", \"quantity\": 2}, …]", required = false)
-	List<Map<String, Object>> items, @ToolArg(description = "Money, e.g. '25 gp' (characters only)")
-	Optional<String> money, @ToolArg(description = "ENCOUNTER, QUEST, WORLD or GM_GRANT (default)")
-	Optional<String> source, @ToolArg(description = "Why (required for GM_GRANT)")
-	Optional<String> reason) {
+	String to,
+		@ToolArg(description = "Items: [{\"item\": \"Dagger\", \"quantity\": 2}, {\"item\": \"+1 Longsword\"}, {\"item\": \"Ring of Protection\"}, {\"item\": \"Flame Tongue\", \"base\": \"Longsword\", \"name\"?: ...}]. "
+				+ "An enchantment the SRD lacks is made on a mundane base with magic: {\"item\": \"Arrow\", \"quantity\": 10, \"magic\": {\"name\": \"Arrow of Fire\", \"rarity\": \"UNCOMMON\", \"damage_bonus_dice\": \"1d6\", \"damage_type\": \"fire\", \"text\": \"...\"}} "
+				+ "(also bonus: +N, ac_bonus, save_bonus, attack_bonus, speed_bonus, resistance, attunement, slot, consumable: {heal}); the engine applies those, the text is the GM's.", required = false)
+		List<Map<String, Object>> items, @ToolArg(description = "Money, e.g. '25 gp' (characters only)")
+		Optional<String> money, @ToolArg(description = "ENCOUNTER, QUEST, WORLD or GM_GRANT (default)")
+		Optional<String> source, @ToolArg(description = "Why (required for GM_GRANT)")
+		Optional<String> reason) {
 		return ToolSupport.run("grant_loot", () -> engine.inventory().grantLoot(operation_id, campaign, to, items,
 				money.orElse(null), source.orElse(null), reason.orElse(null)));
 	}
@@ -676,9 +690,9 @@ public class RpgTools {
 
 	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: "
 			+ "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), "
-			+ "two_handed, advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
+			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
 			+ "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged); DISENGAGE; HELP; HIDE; "
-			+ "USE_ITEM {item, target} (Potion of Healing is mechanical); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
+			+ "USE_ITEM {item, target} (a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
 			+ "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters "
 			+ "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. "
 			+ "end_turn (default true) advances to the next participant, rolling death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
@@ -695,6 +709,7 @@ public class RpgTools {
 	}
 
 	@Tool(name = "end_encounter", description = "MUTATING. Ends the encounter with an outcome (PARTY_VICTORY, PARTY_DEFEAT, PARTY_FLED, ENEMIES_FLED, NEGOTIATED, OTHER): "
+			+ "a major encounter's result carries `treasure` (level-appropriate magic item suggestions for grant_loot); "
 			+ "awards the encounter's XP pool (fixed at start from every hostile participant) split among surviving party members whenever the encounter "
 			+ "was overcome — killed, captured, routed or talked down all pay the same; a defeat or flight pays nothing. Also reports level-up eligibility, advances the clock, writes the ledger event, "
 			+ "and — if the player character died — moves the harness to the continuation decision (CHECKPOINT_DECISION, or PLAYER_CHARACTER_TRANSFER under IRONMAN).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
@@ -708,7 +723,7 @@ public class RpgTools {
 				encounter.orElse(null), outcome, summary.orElse(null)));
 	}
 
-	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
+	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
 			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
 			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT / CONVERT_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, a Bonus Action); "
 			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
@@ -923,7 +938,7 @@ public class RpgTools {
 
 	// ── Narrative state and the Director ───────────────────────────────
 
-	@Tool(name = "upsert_narrative_state", description = "MUTATING. Creates or updates one bounded narrative aggregate. kind: QUEST {title, objective, status: OFFERED|ACCEPTED|COMPLETED|FAILED|ABANDONED, "
+	@Tool(name = "upsert_narrative_state", description = "MUTATING. Creates or updates one bounded narrative aggregate. Completing a QUEST returns `treasure`: level-appropriate magic item suggestions to grant with grant_loot (a completed quest usually yields one). kind: QUEST {title, objective, status: OFFERED|ACCEPTED|COMPLETED|FAILED|ABANDONED, "
 			+ "issuer, rewards, deadline, hidden_objectives, visibility}; STORY_BEAT {title, description, state: PLANNED|AVAILABLE|BLOCKED|SUPERSEDED|COMPLETED|ABANDONED, superseded_by}; "
 			+ "STORY_SEED {seed_kind: STORY_SEED|COMPANION_INTRO|PRESSURE|PACING_INTENT, intention, hooks, conditions, state, superseded_by, materialized_character}; "
 			+ "FACTION_STATE {name, goals, standing, agenda, members, secrets}; WORLD_EVENT {title, description, channels: [NEWSPAPER, RUMOR, TAVERN, TOWN_CRIER, REFUGEES, MERCHANT, PRICES, SOLDIERS, LETTER, WITNESS, ENVIRONMENT…], "
@@ -1046,8 +1061,11 @@ public class RpgTools {
 			+ "spends the slot (slot_level to upcast; cantrips are free; warlocks use pact slots), and resolves structured mechanics against the targets: spell attacks vs AC, "
 			+ "saving throws vs your DC (half/no damage, conditions with durations), healing, Magic Missile, temporary HP, buffs (Mage Armor, Bless, Shield of Faith…), cures, "
 			+ "resurrection. Concentration is enforced (a new concentration spell ends the previous one; damage forces a CON save). Utility spells return their rules text for you to adjudicate. "
-			+ "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb, {condition} for cures, "
-			+ "{ritual: true} to cast a spell with the Ritual tag as a ritual (a class with Ritual Casting; ten minutes longer, no slot spent).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb (and Force for Shillelagh), {condition} for cures, "
+			+ "{ritual: true} to cast a spell with the Ritual tag as a ritual (a class with Ritual Casting; ten minutes longer, no slot spent), "
+			+ "{weapon: 'Longsword' | 'inventory:N'} for a spell that enchants one carried weapon (Magic Weapon, Shillelagh; default the wielder's equipped weapon): "
+			+ "its bonus, die and damage ride only on attacks with that weapon, stack with the weapon's own enchantment, and the slot raises Magic Weapon to +2 (level 3-5) or +3 (6+). "
+			+ "Flame Blade conjures a weapon: attack with it by name.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse castSpell(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Caster reference")

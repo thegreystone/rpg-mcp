@@ -78,6 +78,15 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
 - Commerce: you narrate the haggling, the engine does the accounting. Look prices up with
   `get_content_definitions`; never invent money or treasure — `grant_loot` exists for that and is audited. Coin passing between two characters (a tip, a wage, a debt) is `give_money`: one
   ledger event both remember, nothing created.
+- Treasure: the party should find magic items. A completed quest, a major fight and a bootstrap that finds a party
+  without one return `treasure`: the level's rarity mix, how often something should turn up, and candidates drawn by
+  the engine. Grant one with `grant_loot` (`+1 Longsword`, `Ring of Protection`, `{item: 'Flame Tongue', base:
+  'Longsword'}`) or pick another with `get_content_definitions {magic: true, rarity}`; an item the SRD lacks (an
+  Arrow of Fire) is `{item: 'Arrow', magic: {name, rarity, damage_bonus_dice: '1d6', damage_type: 'fire', text}}`. A beginner very rarely finds a
+  Rare item; a mid-level party finds one per quest or so; a high-level party finds the exotic. `equip_item` wears or
+  attunes (three at most); the +N, a Ring of Protection and potions are enforced, everything else is played from the
+  item's text on the sheet (`magic_items`). Spells that enchant a weapon (Magic Weapon, Shillelagh) take
+  `options.weapon` and ride only on that weapon, stacking with its own +N; Flame Blade is attacked with by name.
 - Estate and calendar: a treasury that is not a purse (the House, a keep) is an `account` (`create_account`,
   `transfer_money`, `get_accounts`); rents, tolls, stipends, tithes, debts and dated happenings are cash flows
   (`define_cash_flow`: fixed or percent-of amounts, weekly/monthly/yearly/seasonal schedules, season multipliers, a

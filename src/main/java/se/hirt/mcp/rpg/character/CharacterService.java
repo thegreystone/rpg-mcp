@@ -903,6 +903,12 @@ public final class CharacterService {
 		Biography.appendBrief(c, m);
 		m.put("location", Ref.ofNullable(Ref.LOCATION, c.lng("location_id")));
 		if (detail.equals("SUMMARY")) {
+			List<String> magicNames = InventoryService.magicItems(tx, rules, c.id()).stream().map(
+					i -> String.valueOf(i.get("name")) + (Boolean.TRUE.equals(i.get("attuned")) ? " (attuned)" : ""))
+					.toList();
+			if (!magicNames.isEmpty()) {
+				m.put("magic_items", magicNames);
+			}
 			return m;
 		}
 		var abilities = new LinkedHashMap<String, Object>();
@@ -977,6 +983,10 @@ public final class CharacterService {
 							: InventoryService.armorClass(tx, rules, c));
 			m.put("carrying", InventoryService.carrying(tx, rules, c));
 			m.put("inventory", InventoryService.entries(tx, rules, c.id()));
+			List<Map<String, Object>> magicItems = InventoryService.magicItems(tx, rules, c.id());
+			if (!magicItems.isEmpty()) {
+				m.put("magic_items", magicItems);
+			}
 		} else {
 			m.put("starting_equipment", startingEquipmentPreview(tx, c));
 		}

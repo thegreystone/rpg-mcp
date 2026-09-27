@@ -74,11 +74,16 @@ public final class NarrativeService {
 	private final Database db;
 	private final SessionService sessions;
 	private final CharacterService characters;
+	private final se.hirt.mcp.rpg.content.RulesData rules;
+	private final se.hirt.mcp.rpg.dice.RollService roller;
 
-	public NarrativeService(Database db, SessionService sessions, CharacterService characters) {
+	public NarrativeService(Database db, SessionService sessions, CharacterService characters,
+			se.hirt.mcp.rpg.content.RulesData rules, se.hirt.mcp.rpg.dice.RollService roller) {
 		this.db = db;
 		this.sessions = sessions;
 		this.characters = characters;
+		this.rules = rules;
+		this.roller = roller;
 	}
 
 	// ── upsert_narrative_state ─────────────────────────────────────────
@@ -95,7 +100,16 @@ public final class NarrativeService {
 		String prov = provenance == null || provenance.isBlank() ? "GM" : provenance.toUpperCase();
 		return db.mutate(Database.Mutation.of("upsert_narrative_state", campaignId, operationId, prov, args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "upsert_narrative_state");
+			boolean quest = "QUEST".equalsIgnoreCase(kind);
+			Row before = quest && ref != null && !ref.isBlank() ? existing(tx, campaignId, "quest", ref, "quest")
+					: null;
 			Map<String, Object> result = applyOne(tx, campaignId, kind, ref, changes, prov);
+			if (quest && "COMPLETED".equals(result.get("status"))
+					&& (before == null || !"COMPLETED".equals(before.str("status")))) {
+				// A completed quest is where a level-appropriate magic item turns up (RULES_ENGINE.md §10).
+				result.put("treasure",
+						se.hirt.mcp.rpg.inventory.Treasure.nudge(tx, rules, roller, campaignId, "QUEST_COMPLETED", 3));
+			}
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});

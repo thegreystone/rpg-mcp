@@ -54,7 +54,10 @@ import java.util.*;
 public final class InventoryService {
 
 	public static final Set<String> LOOT_SOURCES = Set.of("ENCOUNTER", "QUEST", "WORLD", "GM_GRANT");
-	private static final Set<String> EQUIPPABLE = Set.of("WEAPON", "ARMOR", "SHIELD", "FOCUS");
+	private static final Set<String> EQUIPPABLE = Set.of("WEAPON", "ARMOR", "SHIELD", "FOCUS", "RING", "ROD", "STAFF",
+			"WAND", "WONDROUS");
+	/** Held things take a hand; everything else worn is one per slot, rings two. */
+	private static final Set<String> HELD = Set.of("WEAPON", "FOCUS", "ROD", "STAFF", "WAND");
 
 	private final Database db;
 	private final RulesData rules;
@@ -88,6 +91,12 @@ public final class InventoryService {
 			m.put("equipped", true);
 			m.put("slot", e.str("slot"));
 		}
+		if (MagicItems.isMagic(item.payload())) {
+			m.put("magic", MagicItems.label(item.payload()));
+			if (e.bool("equipped") && MagicItems.requiresAttunement(item.payload())) {
+				m.put("attuned", true);
+			}
+		}
 		m.put("weight_lb", round1(item.unitWeightLb() * qty));
 		if (!e.isNull("charges_json")) {
 			m.put("charges", e.map("charges_json"));
@@ -108,7 +117,8 @@ public final class InventoryService {
 	}
 
 	public static Map<String, Object> armorClass(Tx tx, RulesData rules, Row character) {
-		se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, character.id());
+		se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
+				character.id());
 		if (!character.isNull("armor_class_override")) {
 			// apply_gm_override SET_ARMOR_CLASS (MCP_PROTOCOL.md §20.1): a fixed base instead of the equipment.
 			int base = character.integer("armor_class_override");
@@ -451,31 +461,51 @@ public final class InventoryService {
 			Map<String, Object> acBefore = armorClass(tx, rules, character);
 			var warnings = new ArrayList<String>();
 			if (equipped && !entry.bool("equipped")) {
-				if (!EQUIPPABLE.contains(item.type())) {
-					throw RpgException.validation(List.of(new Violation("entry", "NOT_EQUIPPABLE",
-							item.name() + " (" + item.type() + ") cannot be equipped.")));
+				String slot = item.payload().get("slot") == null ? null : String.valueOf(item.payload().get("slot"));
+				if (slot == null && HELD.contains(item.type())) {
+					slot = "ONE_HAND";
 				}
-				String slot = String.valueOf(
-						item.payload().getOrDefault("slot", item.type().equals("FOCUS") ? "ONE_HAND" : "ONE_HAND"));
+				// Worn things (a ring, a cloak, boots) carry a slot; a Bag of Holding has none and works from the pack.
+				if (!EQUIPPABLE.contains(item.type()) && slot == null || slot == null) {
+					throw RpgException.validation(List.of(new Violation("entry", "NOT_EQUIPPABLE", item.name() + " ("
+							+ item.type() + ") cannot be equipped"
+							+ (MagicItems.isMagic(item.payload()) ? "; it is carried and used, not worn." : "."))));
+				}
 				List<Row> current = tx.query("SELECT * FROM inventory_entry WHERE character_id = ? AND equipped = 1",
 						character.id());
 				int hands = 0;
+				int rings = 0;
+				int attuned = 0;
 				for (Row c : current) {
 					String s = c.str("slot");
-					if ("BODY".equals(s) && "BODY".equals(slot)) {
-						throw RpgException.validation(
-								List.of(new Violation("entry", "SLOT_OCCUPIED", "Body armor is already equipped ("
-										+ Ref.of(Ref.INVENTORY, c.id()) + "); unequip it first.")));
-					}
-					if ("SHIELD".equals(s) && "SHIELD".equals(slot)) {
-						throw RpgException.validation(
-								List.of(new Violation("entry", "SLOT_OCCUPIED", "A shield is already equipped.")));
+					if ("RING".equals(s)) {
+						rings++;
+					} else if (s != null && s.equals(slot) && handsFor(s) == 0) {
+						throw RpgException.validation(List.of(new Violation("entry", "SLOT_OCCUPIED",
+								("BODY".equals(s) ? "Body armor"
+										: "SHIELD".equals(s) ? "A shield" : "Something worn on the " + s.toLowerCase())
+										+ " is already equipped (" + Ref.of(Ref.INVENTORY, c.id())
+										+ "); unequip it first.")));
 					}
 					hands += handsFor(s);
+					if (MagicItems.requiresAttunement(ContentService.itemForEntry(tx, rules, c).payload())) {
+						attuned++;
+					}
+				}
+				if ("RING".equals(slot) && rings >= 2) {
+					throw RpgException.validation(List.of(new Violation("entry", "SLOT_OCCUPIED",
+							"A ring is worn on each hand already; remove one first.")));
 				}
 				if (hands + handsFor(slot) > 2) {
 					throw RpgException.validation(List
 							.of(new Violation("entry", "HANDS", "Not enough free hands to hold " + item.name() + ".")));
+				}
+				// Attunement (SRD 5.2.1): at most three attuned items; wearing or wielding one attunes to it.
+				if (MagicItems.requiresAttunement(item.payload()) && attuned >= MagicItems.ATTUNEMENT_LIMIT) {
+					throw RpgException.validation(List.of(new Violation("entry", "ATTUNEMENT_LIMIT",
+							character.str("name") + " is attuned to " + MagicItems.ATTUNEMENT_LIMIT
+									+ " items already (SRD 5.2.1 \"Attunement\"); unequip one before attuning to "
+									+ item.name() + ".")));
 				}
 				if (item.payload().get("armor") instanceof Map<?, ?> armor
 						&& armor.get("strength_requirement") instanceof Number req
@@ -510,8 +540,10 @@ public final class InventoryService {
 			result.put("equipped", equipped);
 			result.put("armor_class_before", acBefore.get("value"));
 			result.put("armor_class", acAfter);
-			result.put("equipped_items", entries(tx, rules, character.id()).stream()
-					.filter(e -> Boolean.TRUE.equals(e.get("equipped"))).toList());
+			List<Map<String, Object>> all = entries(tx, rules, character.id());
+			result.put("equipped_items", all.stream().filter(e -> Boolean.TRUE.equals(e.get("equipped"))).toList());
+			result.put("attuned",
+					all.stream().filter(e -> Boolean.TRUE.equals(e.get("attuned"))).map(e -> e.get("name")).toList());
 			result.put("meta", Harness.meta(campaign, warnings));
 			return result;
 		});
@@ -519,6 +551,80 @@ public final class InventoryService {
 
 	private static int handsFor(String slot) {
 		return "TWO_HANDS".equals(slot) ? 2 : "ONE_HAND".equals(slot) || "SHIELD".equals(slot) ? 1 : 0;
+	}
+
+	// ── magic items ────────────────────────────────────────────────────
+
+	/** Every magic item a character carries, with what the engine applies and what the GM plays. */
+	public static List<Map<String, Object>> magicItems(Tx tx, RulesData rules, long characterId) {
+		var out = new ArrayList<Map<String, Object>>();
+		for (Row e : tx.query("SELECT * FROM inventory_entry WHERE character_id = ? ORDER BY equipped DESC, id",
+				characterId)) {
+			Item item = ContentService.itemForEntry(tx, rules, e);
+			Map<String, Object> magic = MagicItems.view(item.payload());
+			if (magic == null) {
+				continue;
+			}
+			var m = new LinkedHashMap<String, Object>();
+			m.put("ref", Ref.of(Ref.INVENTORY, e.id()));
+			m.put("item", item.display());
+			m.put("name", item.name());
+			m.put("quantity", e.lng("quantity"));
+			m.put("equipped", e.bool("equipped"));
+			if (e.bool("equipped") && MagicItems.requiresAttunement(item.payload())) {
+				m.put("attuned", true);
+			}
+			m.putAll(magic);
+			m.put("summary", item.payload().get("summary"));
+			if (!"engine".equals(magic.get("adjudication"))) {
+				m.put("note",
+						"GM-adjudicated: play the item's text (get_content_definitions detail FULL for the wording).");
+			}
+			out.add(m);
+		}
+		return out;
+	}
+
+	/** The inventory entry a character carries for {@code inventory:N} or an item name. */
+	public static Row carriedEntry(Tx tx, RulesData rules, long campaignId, Row character, String text) {
+		if (text.startsWith(Ref.INVENTORY + ":")) {
+			Row e = entry(tx, campaignId, text);
+			if (e.lng("character_id") == null || e.lng("character_id") != character.id()) {
+				throw RpgException.invalidArgument(text + " is not carried by " + character.str("name") + ".");
+			}
+			return e;
+		}
+		Item item = ContentService.resolveItem(tx, rules, campaignId, text);
+		Optional<Row> found = item.custom() ? tx.queryOne(
+				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY id LIMIT 1",
+				character.id(), item.customId())
+				: tx.queryOne(
+						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id LIMIT 1",
+						character.id(), item.contentRef());
+		return found.orElseThrow(() -> RpgException.validation(List.of(new Violation("item", "NOT_CARRIED",
+				character.str("name") + " does not carry a " + item.name() + "."))));
+	}
+
+	/**
+	 * Uses a consumable with an encoded effect: a Potion of Healing of any potency heals by its
+	 * dice (SRD 5.2.1 "Potions of Healing"). One unit is consumed. Returns null when the item has
+	 * no encoded effect, which is the GM's to narrate.
+	 */
+	public static Map<String, Object> useConsumable(
+		Tx tx, RulesData rules, long campaignId, se.hirt.mcp.rpg.dice.RollService roller, Row entry, Item item,
+		Row target) {
+		if (!(item.payload().get("consumable") instanceof Map<?, ?> c) || c.get("heal") == null) {
+			return null;
+		}
+		se.hirt.mcp.rpg.dice.Roll roll = roller.roll(String.valueOf(c.get("heal")));
+		se.hirt.mcp.rpg.character.CharacterService.recordRoll(tx, campaignId, item.name().toLowerCase(), roll);
+		removeQuantity(tx, entry, 1);
+		var out = new LinkedHashMap<String, Object>(
+				se.hirt.mcp.rpg.character.RuntimeService.heal(tx, target, roll.total(), item.name()));
+		out.put("roll", roll.toMap());
+		out.put("target", Ref.of(Ref.CHARACTER, target.id()));
+		out.put("consumed", true);
+		return out;
 	}
 
 	// ── trade ──────────────────────────────────────────────────────────
@@ -558,6 +664,7 @@ public final class InventoryService {
 			result.put("character", Ref.of(Ref.CHARACTER, character.id()));
 			if (k.equals("BUY")) {
 				Item item = ContentService.resolveItem(tx, rules, campaignId, itemText);
+				MagicItems.requireConcrete(item, "a purchase");
 				long units = quantity == null ? 1 : quantity;
 				if (units <= 0) {
 					throw RpgException.invalidArgument("quantity must be positive.");
@@ -723,8 +830,8 @@ public final class InventoryService {
 					var granted = new ArrayList<Map<String, Object>>();
 					if (items != null) {
 						for (Map<String, Object> spec : items) {
-							Item item = ContentService.resolveItem(tx, rules, campaignId,
-									String.valueOf(spec.get("item")));
+							// A magic template ("Weapon, +1, +2, or +3", "Flame Tongue") is instantiated on its base here.
+							Item item = MagicItems.resolve(tx, rules, campaignId, spec);
 							long qty = spec.get("quantity") instanceof Number n ? n.longValue() : 1;
 							if (item.type().equals("PACK") && toCharacter != null) {
 								granted.addAll(grantBundle(tx, rules, campaignId, toCharacter, List.of(spec), null));
@@ -736,6 +843,9 @@ public final class InventoryService {
 							g.put("item", item.display());
 							g.put("name", item.name());
 							g.put("quantity", qty);
+							if (MagicItems.isMagic(item.payload())) {
+								g.put("magic", MagicItems.label(item.payload()));
+							}
 							granted.add(g);
 						}
 					}

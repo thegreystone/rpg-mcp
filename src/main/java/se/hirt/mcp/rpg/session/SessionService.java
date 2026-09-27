@@ -143,7 +143,12 @@ public final class SessionService {
 			Map<String, Object> context = context(tx, current, contextBudget == null ? DEFAULT_BUDGET : contextBudget);
 			context.put("session", Ref.of(Ref.SESSION, sessionId));
 			context.put("session_resumed", resumed);
-			context.put("meta", Harness.meta(current, null));
+			var warnings = new java.util.ArrayList<String>();
+			String treasure = se.hirt.mcp.rpg.inventory.Treasure.bootstrapWarning(tx, rules, campaignId);
+			if (treasure != null) {
+				warnings.add(treasure);
+			}
+			context.put("meta", Harness.meta(current, warnings.isEmpty() ? null : warnings));
 			return context;
 		});
 	}

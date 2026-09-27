@@ -70,24 +70,47 @@ public final class Combat {
 	 * A weapon attack for a character wielding an item definition (SRD 5.2.1 "Attack Rolls",
 	 * "Damage Rolls").
 	 */
-	@SuppressWarnings("unchecked")
 	public static AttackProfile weapon(
 		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded) {
+		return weapon(character, name, payload, proficiencyBonus, twoHanded, null, null, null);
+	}
+
+	/**
+	 * A weapon attack with the overrides a spell bound to the weapon imposes (Shillelagh: the
+	 * spellcasting ability's modifier, a d8, Force damage); null keeps the weapon's own.
+	 */
+	@SuppressWarnings("unchecked")
+	public static AttackProfile weapon(
+		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded,
+		Integer abilityModOverride, String diceOverride, String typeOverride) {
 		List<Object> props = payload.get("properties") instanceof List<?> l ? (List<Object>) l : List.of();
 		boolean rangedCategory = String.valueOf(payload.get("category")).endsWith("RANGED");
 		boolean finesse = props.contains("finesse");
 		int str = Rules.modifier(character.intOr("str_score", 10));
 		int dex = Rules.modifier(character.intOr("dex_score", 10));
 		// Melee weapons use Strength; ranged weapons use Dexterity; finesse lets you pick the better one.
-		int abilityMod = rangedCategory ? dex : finesse ? Math.max(str, dex) : str;
+		int abilityMod = abilityModOverride != null ? abilityModOverride
+				: rangedCategory ? dex : finesse ? Math.max(str, dex) : str;
 		Map<String, Object> damage = (Map<String, Object>) payload.get("damage");
 		String dice = String.valueOf(damage.get("dice"));
 		if (twoHanded && payload.get("versatile") != null) {
 			dice = String.valueOf(payload.get("versatile"));
 		}
+		if (diceOverride != null) {
+			dice = diceOverride;
+		}
 		boolean ammo = props.contains("ammunition");
-		return new AttackProfile(name, rangedCategory, abilityMod + proficiencyBonus,
-				List.of(new DamagePart(dice, abilityMod, String.valueOf(damage.get("type")))), ammo,
+		// A magic weapon's +N applies to attack and damage rolls (SRD 5.2.1 "Weapon, +1, +2, or +3").
+		int magic = se.hirt.mcp.rpg.inventory.MagicItems.bonus(payload);
+		var parts = new ArrayList<DamagePart>();
+		parts.add(new DamagePart(dice, abilityMod + magic,
+				typeOverride != null ? typeOverride : String.valueOf(damage.get("type"))));
+		// Extra damage bound to the weapon itself (an enchanted blade's fire): its own dice and type.
+		Map<String, String> extra = se.hirt.mcp.rpg.inventory.MagicItems.extraDamage(payload);
+		if (extra != null) {
+			parts.add(new DamagePart(extra.get("dice"), 0, extra.get("type")));
+		}
+		return new AttackProfile(name, rangedCategory, abilityMod + proficiencyBonus + magic, parts, ammo,
 				ammo ? String.valueOf(payload.get("ammunition")) : null,
 				payload.get("range") instanceof Map<?, ?> r ? (Map<String, Object>) r : null, "weapon", finesse);
 	}
@@ -114,6 +137,64 @@ public final class Combat {
 				((Number) action.getOrDefault("attack_bonus", 0)).intValue(), parts, false, null,
 				action.get("range") instanceof Map<?, ?> r ? (Map<String, Object>) r : null, "creature",
 				action.get("finesse") instanceof Boolean fin && fin);
+	}
+
+	/**
+	 * The same attack with the modifiers of the spells bound to this weapon: Magic Weapon's +N on
+	 * attack and damage rolls, and any extra damage dice.
+	 */
+	public static AttackProfile withBuff(AttackProfile p, Effects.Modifiers w) {
+		if (w.attackBonus == 0 && w.damageBonusFlat == 0 && w.damageBonus.isEmpty()) {
+			return p;
+		}
+		var parts = new ArrayList<DamagePart>();
+		boolean first = true;
+		for (DamagePart d : p.damage()) {
+			parts.add(new DamagePart(d.dice(), d.modifier() + (first ? w.damageBonusFlat : 0), d.type()));
+			first = false;
+		}
+		for (Map<String, Object> extra : w.damageBonus) {
+			parts.add(new DamagePart(String.valueOf(extra.get("dice")), 0, String.valueOf(extra.get("type"))));
+		}
+		return new AttackProfile(p.name(), p.ranged(), p.attackBonus() + w.attackBonus, parts, p.usesAmmunition(),
+				p.ammunitionRef(), p.range(), p.source(), p.finesse());
+	}
+
+	/**
+	 * A weapon a spell conjured (Flame Blade): a melee spell attack with its own dice and the
+	 * caster's modifier.
+	 */
+	public static AttackProfile conjured(Map<String, Object> w) {
+		int attackBonus = w.get("attack_bonus") instanceof Number n ? n.intValue() : 0;
+		int modifier = w.get("damage_modifier") instanceof Number n ? n.intValue() : 0;
+		return new AttackProfile(String.valueOf(w.get("name")), false, attackBonus,
+				List.of(new DamagePart(String.valueOf(w.get("dice")), modifier,
+						String.valueOf(w.getOrDefault("type", "fire")))),
+				false, null, null, "spell", false);
+	}
+
+	/** The same attack with a flat bonus to attack and damage rolls (magic ammunition's +N). */
+	public static AttackProfile withBonus(AttackProfile p, int bonus) {
+		return withAmmunition(p, bonus, null);
+	}
+
+	/**
+	 * The same attack fired with a piece of ammunition: its +N on attack and damage rolls and its
+	 * own extra damage ({@code {dice, type}}: an Arrow of Fire's fire), if any.
+	 */
+	public static AttackProfile withAmmunition(AttackProfile p, int bonus, Map<String, String> extra) {
+		if (bonus == 0 && extra == null) {
+			return p;
+		}
+		var parts = new ArrayList<DamagePart>();
+		for (DamagePart d : p.damage()) {
+			parts.add(new DamagePart(d.dice(), d.modifier() + bonus, d.type()));
+		}
+		if (extra != null) {
+			parts.add(new DamagePart(extra.get("dice"), 0, extra.get("type")));
+		}
+		return new AttackProfile(p.name(), p.ranged(), p.attackBonus() + bonus, parts, p.usesAmmunition(),
+				p.ammunitionRef(), p.range(), p.source(), p.finesse());
 	}
 
 	/** Doubles every dice term of an expression (critical hits roll the damage dice twice). */

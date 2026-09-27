@@ -15,6 +15,7 @@
     "services.json",
     "creatures.json",
     "spells.json",
-    "rules.json"
+    "rules.json",
+    "magic-items.json"
   ]
 }

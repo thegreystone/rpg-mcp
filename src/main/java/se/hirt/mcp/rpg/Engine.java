@@ -96,7 +96,7 @@ public final class Engine implements AutoCloseable {
 		this.levelUps = new LevelUpService(db, rules, this.roller, characters);
 		this.party = new PartyService(db, rules, sessions);
 		this.world = new WorldService(db, rules, this.roller);
-		this.narrative = new NarrativeService(db, sessions, characters);
+		this.narrative = new NarrativeService(db, sessions, characters, rules, this.roller);
 		this.rest = new RestService(db, rules, this.roller, characters);
 		this.spells = new SpellService(db, rules, this.roller, characters);
 		this.accounts = new se.hirt.mcp.rpg.economy.AccountService(db);

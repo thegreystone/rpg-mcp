@@ -202,7 +202,7 @@ public final class RuntimeService {
 			}
 			if (change == null || change.get("kind") == null) {
 				throw RpgException.invalidArgument(
-						"change.kind is required: HEAL, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, USE_RESOURCE, RESTORE_RESOURCE, REDUCE_MAX_HP, RESTORE_MAX_HP, CREATE_SPELL_SLOT, CONVERT_SPELL_SLOT.");
+						"change.kind is required: HEAL, USE_ITEM, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, USE_RESOURCE, RESTORE_RESOURCE, REDUCE_MAX_HP, RESTORE_MAX_HP, CREATE_SPELL_SLOT, CONVERT_SPELL_SLOT.");
 			}
 			String kind = String.valueOf(change.get("kind")).toUpperCase();
 			String reason = change.get("reason") == null ? null : change.get("reason").toString();
@@ -213,6 +213,28 @@ public final class RuntimeService {
 			case "HEAL" -> {
 				int amount = amount(change, "amount");
 				result.putAll(heal(tx, c, amount, reason));
+			}
+			case "USE_ITEM" -> {
+				// A potion drunk outside combat: the same consumable core the encounter USE_ITEM action uses.
+				String text = change.get("item") == null ? null : change.get("item").toString();
+				if (text == null || text.isBlank()) {
+					throw RpgException.invalidArgument(
+							"change.item is required for USE_ITEM ('Potion of Healing' or 'inventory:12').");
+				}
+				Row entry = se.hirt.mcp.rpg.inventory.InventoryService.carriedEntry(tx, rules, campaignId, c, text);
+				se.hirt.mcp.rpg.content.ContentService.Item item = se.hirt.mcp.rpg.content.ContentService
+						.itemForEntry(tx, rules, entry);
+				Row target = change.get("target") == null ? c
+						: CharacterService.character(tx, campaignId, change.get("target").toString());
+				Map<String, Object> used = se.hirt.mcp.rpg.inventory.InventoryService.useConsumable(tx, rules,
+						campaignId, roller, entry, item, target);
+				if (used == null) {
+					throw RpgException.capabilityUnavailable(item.name()
+							+ " has no encoded effect; narrate it, apply the outcome with HEAL, ADD_CONDITION or the like, and remove it with transfer_item if it was used up.");
+				}
+				result.put("item", item.display());
+				result.put("name", item.name());
+				result.putAll(used);
 			}
 			case "DAMAGE" -> {
 				// Either a fixed amount or a dice expression the server rolls and journals ("2d6" for a fall,
@@ -557,7 +579,7 @@ public final class RuntimeService {
 		long campaignId = c.lng("campaign_id");
 		var out = new LinkedHashMap<String, Object>();
 		// Death Ward: the first drop to 0 becomes 1 HP instead and the ward is spent (SRD 5.2.1 "Death Ward").
-		if (dr.droppedToZero() && se.hirt.mcp.rpg.rules.Effects.modifiers(tx, c.id()).deathWard) {
+		if (dr.droppedToZero() && se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules, c.id()).deathWard) {
 			for (Row e : tx.query(
 					"SELECT * FROM active_effect WHERE character_id = ? AND modifier_json LIKE '%death_ward%'",
 					c.id())) {
@@ -897,7 +919,7 @@ public final class RuntimeService {
 	public static int armorClass(Tx tx, RulesData rules, Row c) {
 		if (!c.isNull("armor_class_override")) {
 			// apply_gm_override SET_ARMOR_CLASS: fixed by fiat, effect bonuses and floors still apply.
-			se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, c.id());
+			se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules, c.id());
 			int value = c.integer("armor_class_override") + mods.acBonus;
 			return mods.acFloor != null ? Math.max(value, mods.acFloor) : value;
 		}
@@ -905,7 +927,8 @@ public final class RuntimeService {
 			Optional<Integer> ac = rules.find(c.str("origin_content_ref")).map(d -> d.payload().get("ac"))
 					.map(a -> ((Number) a).intValue());
 			if (ac.isPresent()) {
-				se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, c.id());
+				se.hirt.mcp.rpg.rules.Effects.Modifiers mods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
+						c.id());
 				int value = ac.get() + mods.acBonus;
 				return mods.acFloor != null ? Math.max(value, mods.acFloor) : value;
 			}

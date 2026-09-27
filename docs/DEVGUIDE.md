@@ -26,7 +26,7 @@ plus the change journal, checkpoints and the semantic ledger, which define the p
 | Progression            | `begin_level_up`, `get_level_up_choices`, `update_level_up`, `validate_level_up`, `commit_level_up`, `abandon_transaction`                                                                                                                                              |
 | Party & relationships  | `update_party_membership` (membership as history), `get_relationship`, `update_relationship` (dimensions −5..+5, profiles, linked events)                                                                                                                              |
 | Creatures & encounters | `materialize_character` (330 SRD stat blocks from `tools` `build-creatures`), `start_encounter`, `get_encounter_state`, `perform_encounter_action`, `end_encounter` (XP split, level-up eligibility), `apply_runtime_change`, `award_xp`, `transfer_player_control`      |
-| Content & economy      | `get_content_definitions`, `define_content`, `trade`, `transfer_item`, `give_money`, `equip_item`, `grant_loot` (SRD 5.2.1 equipment seed, starting-equipment bundles, AC, carrying capacity)                                                                           |
+| Content & economy      | `get_content_definitions`, `define_content`, `trade`, `transfer_item`, `give_money`, `equip_item`, `grant_loot` (SRD 5.2.1 equipment seed, starting-equipment bundles, AC, carrying capacity; the 260 SRD magic items from `tools` `build-magic-items`: +N weapons/armor/shields/ammunition instantiated on a base, protection items, potions, wearable slots and attunement, level-appropriate `treasure` suggestions on completed quests, major encounters and bootstrap) |
 | Calendar & estate      | `set_calendar`, `create_account`, `transfer_money`, `get_accounts`, `define_cash_flow`, `update_cash_flow`, `list_cash_flows` (scheduled rules fired whenever `advance_time`, `move_party` or `perform_rest` moves the clock)                                             |
 | Memory & chronicle     | `record_memory`, `query_memories`, `query_timeline`, `get_chronicle_material`, `write_chronicle`                                                                                                                                                                        |
 | Continuation           | `create_checkpoint`, `get_continuation_options`, `restore_checkpoint`                                                                                                                                                                                                  |
@@ -51,7 +51,7 @@ the SRD PDF and what remains paraphrased.
 ## Seed tooling
 
 [`tools/`](../tools) is a standalone Maven project (Java 25, PDFBox, Jackson), deliberately not a module of the
-server pom so the release workflow never sees it. Its entry point `SrdTool` has three commands. The SRD 5.2.1
+server pom so the release workflow never sees it. Its entry point `SrdTool` has five commands. The SRD 5.2.1
 PDF (CC-BY-4.0) downloads from `https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf`.
 
 ```bash
@@ -64,6 +64,11 @@ mvn -q -f tools/pom.xml compile exec:java -Dexec.args="verify path/to/srd.txt"
 
 # Regenerate seed/srd5e/rules.json (the Rules Glossary, lifted verbatim) after an SRD revision.
 mvn -q -f tools/pom.xml compile exec:java -Dexec.args="build-rules path/to/srd.txt"
+
+# Regenerate seed/srd5e/creatures.json (the stat blocks) and seed/srd5e/magic-items.json (Magic Items A-Z, verbatim,
+# with the engine-applied mechanics overlay kept in BuildMagicItems).
+mvn -q -f tools/pom.xml compile exec:java -Dexec.args="build-creatures path/to/srd.txt"
+mvn -q -f tools/pom.xml compile exec:java -Dexec.args="build-magic-items path/to/srd.txt"
 ```
 
 Run them from the repository root; the seed directory is resolved relative to the working directory. In

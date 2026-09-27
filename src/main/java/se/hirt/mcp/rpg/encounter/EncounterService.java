@@ -811,6 +811,9 @@ public final class EncounterService {
 			} else {
 				profile = Combat.unarmed(actor, prof);
 			}
+		} else if (named != null && se.hirt.mcp.rpg.rules.Effects.conjuredWeapon(tx, actor.id(), named).isPresent()) {
+			// A weapon a spell conjured (Flame Blade): a melee spell attack for as long as the effect lasts.
+			profile = Combat.conjured(se.hirt.mcp.rpg.rules.Effects.conjuredWeapon(tx, actor.id(), named).get());
 		} else if (named != null) {
 			// A classed character attacks with what it carries. An action of the stat block it was
 			// materialized from (a Priest's Radiant Flame, a Scout's Longbow it never owned) stays reachable
@@ -838,7 +841,18 @@ public final class EncounterService {
 		if (!weaponEntry.bool("equipped")) {
 			warnings.add(item.name() + " was not equipped; treating the draw as part of the attack.");
 		}
-		return Combat.weapon(actor, item.name(), item.payload(), prof, Boolean.TRUE.equals(action.get("two_handed")));
+		// Spells bound to this weapon (Magic Weapon's +N, Shillelagh's ability and die) ride only on attacks with it.
+		se.hirt.mcp.rpg.rules.Effects.Modifiers bound = se.hirt.mcp.rpg.rules.Effects.weaponModifiers(tx, actor.id(),
+				weaponEntry.id());
+		Integer abilityOverride = null;
+		if (bound.useAbility != null) {
+			abilityOverride = se.hirt.mcp.rpg.rules.Rules
+					.modifier(actor.intOr(se.hirt.mcp.rpg.rules.Ability.parse(bound.useAbility).column(), 10));
+		}
+		Combat.AttackProfile profile = Combat.weapon(actor, item.name(), item.payload(), prof,
+				Boolean.TRUE.equals(action.get("two_handed")), abilityOverride, bound.weaponDie,
+				bound.weaponDamageType);
+		return Combat.withBuff(profile, bound);
 	}
 
 	/**
@@ -874,13 +888,47 @@ public final class EncounterService {
 		// Ammunition (SRD 5.2.1 "Ammunition" property): one piece per attack.
 		Map<String, Object> ammoUsed = null;
 		if (profile.usesAmmunition()) {
-			Row ammo = tx.queryOne(
-					"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id LIMIT 1",
-					actor.id(), profile.ammunitionRef())
-					.orElseThrow(() -> RpgException.validation(List.of(new Violation("action.weapon", "NO_AMMUNITION",
-							actor.str("name") + " has no ammunition for " + profile.name() + "."))));
+			String weaponName = profile.name();
+			String ammoRef = profile.ammunitionRef();
+			Row ammo;
+			if (action.get("ammunition") != null) {
+				// Named ammunition, e.g. "+1 Arrow": magic ammunition made on the weapon's own kind.
+				ammo = carriedAny(tx, actor, action.get("ammunition").toString());
+				ContentService.Item named = ContentService.itemForEntry(tx, rules, ammo);
+				Map<String, Object> magic = se.hirt.mcp.rpg.inventory.MagicItems.magic(named.payload());
+				String base = magic == null || magic.get("base_ref") == null ? null
+						: String.valueOf(magic.get("base_ref"));
+				if (!ammoRef.equals(named.contentRef()) && !ammoRef.equals(base)) {
+					throw RpgException.validation(List.of(new Violation("action.ammunition", "WRONG_AMMUNITION",
+							named.name() + " is not ammunition for " + weaponName + ".")));
+				}
+			} else {
+				ammo = tx.queryOne(
+						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id LIMIT 1",
+						actor.id(), ammoRef)
+						.orElseThrow(() -> RpgException.validation(List.of(new Violation("action.weapon",
+								"NO_AMMUNITION", actor.str("name") + " has no ammunition for " + weaponName + "."))));
+			}
+			ContentService.Item ammoItem = ContentService.itemForEntry(tx, rules, ammo);
+			int ammoBonus = se.hirt.mcp.rpg.inventory.MagicItems.bonus(ammoItem.payload());
 			InventoryService.removeQuantity(tx, ammo, 1);
-			ammoUsed = Map.of("item", profile.ammunitionRef(), "remaining", ammo.lng("quantity") - 1);
+			var used = new LinkedHashMap<String, Object>();
+			used.put("item", ammoItem.display());
+			used.put("name", ammoItem.name());
+			used.put("remaining", ammo.lng("quantity") - 1);
+			Map<String, String> ammoExtra = se.hirt.mcp.rpg.inventory.MagicItems.extraDamage(ammoItem.payload());
+			if (ammoBonus != 0 || ammoExtra != null) {
+				// Magic ammunition's +N applies to this attack and damage roll (SRD 5.2.1 "Ammunition, +1, +2, or +3");
+				// an enchanted piece may add damage of its own (an Arrow of Fire).
+				if (ammoBonus != 0) {
+					used.put("bonus", ammoBonus);
+				}
+				if (ammoExtra != null) {
+					used.put("extra_damage", ammoExtra);
+				}
+				profile = Combat.withAmmunition(profile, ammoBonus, ammoExtra);
+			}
+			ammoUsed = used;
 		}
 		// Advantage / disadvantage sources: explicit, Dodge on the target, unconscious target, effects.
 		String adv = action.get("advantage") == null ? "NONE" : action.get("advantage").toString().toUpperCase();
@@ -901,8 +949,10 @@ public final class EncounterService {
 			advantage = true;
 			reasons.add("target is unconscious");
 		}
-		se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, actor.id());
-		se.hirt.mcp.rpg.rules.Effects.Modifiers targetMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, target.id());
+		se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
+				actor.id());
+		se.hirt.mcp.rpg.rules.Effects.Modifiers targetMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
+				target.id());
 		if (targetMods.disadvantageOnAttacksAgainst) {
 			disadvantage = true;
 			reasons.add("target is protected (e.g. Blur)");
@@ -1023,7 +1073,8 @@ public final class EncounterService {
 		String label = (reaction ? "opportunity attack with " : "") + profile.name();
 		String summary;
 		if (hit) {
-			se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, actor.id());
+			se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
+					actor.id());
 			var damages = new ArrayList<>(Combat.rollDamage(roller, profile, critical));
 			// Savage Attacker: once per turn on a weapon hit, roll the weapon's damage dice twice and use
 			// the better total (SRD 5.2.1 "Feats"); both rolls are recorded.
@@ -1070,6 +1121,13 @@ public final class EncounterService {
 						: String.valueOf(extra.get("dice"));
 				Roll r = roller.roll(expr);
 				damages.add(new Combat.RolledDamage(String.valueOf(extra.get("type")), r, Math.max(0, r.total())));
+			}
+			if (actorMods.damageBonusFlat != 0 && !damages.isEmpty()) {
+				// A flat bonus to damage rolls from an effect on the attacker (not bound to one weapon).
+				Combat.RolledDamage head = damages.get(0);
+				damages.set(0, new Combat.RolledDamage(head.type(), head.roll(),
+						Math.max(0, head.amount() + actorMods.damageBonusFlat)));
+				out.put("flat_damage_bonus", actorMods.damageBonusFlat);
 			}
 			for (Combat.RolledDamage d : damages) {
 				CharacterService.recordRoll(tx, campaignId, "damage " + profile.name() + " (" + d.type() + ")",
@@ -1481,15 +1539,11 @@ public final class EncounterService {
 		String targetRef = action.get("target") == null ? Ref.of(Ref.CHARACTER, actor.id())
 				: action.get("target").toString();
 		Row target = CharacterService.character(tx, campaignId, targetRef);
-		if (item.contentRef() != null && item.contentRef().equals("srd5e:item/potion-of-healing")) {
-			Roll roll = roller.roll("2d4+2");
-			CharacterService.recordRoll(tx, campaignId, "potion of healing", roll);
-			InventoryService.removeQuantity(tx, entry, 1);
-			out.putAll(RuntimeService.heal(tx, target, roll.total(), "Potion of Healing"));
-			out.put("roll", roll.toMap());
-			out.put("target", Ref.of(Ref.CHARACTER, target.id()));
-			log(tx, campaignId, encounter.id(), round, actor.id(), "USE_ITEM", actor.str("name")
-					+ " uses a Potion of Healing on " + target.str("name") + ": +" + out.get("healed") + " HP.", null);
+		Map<String, Object> used = InventoryService.useConsumable(tx, rules, campaignId, roller, entry, item, target);
+		if (used != null) {
+			out.putAll(used);
+			log(tx, campaignId, encounter.id(), round, actor.id(), "USE_ITEM", actor.str("name") + " uses a "
+					+ item.name() + " on " + target.str("name") + ": +" + out.get("healed") + " HP.", null);
 		} else {
 			boolean consume = action.get("consume") == null || Boolean.TRUE.equals(action.get("consume"));
 			if (consume) {
@@ -1934,6 +1988,11 @@ public final class EncounterService {
 			result.put("director_trigger", trigger);
 			result.put("note",
 					"Loot is not automatic: use grant_loot with source ENCOUNTER for what the fallen carried.");
+			if (major) {
+				// A major encounter is where a level-appropriate magic item turns up (RULES_ENGINE.md §10).
+				result.put("treasure",
+						se.hirt.mcp.rpg.inventory.Treasure.nudge(tx, rules, roller, campaignId, "MAJOR_ENCOUNTER", 2));
+			}
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), due == null ? null : List.of(due)));
 			return result;

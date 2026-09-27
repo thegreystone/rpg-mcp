@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The generic effects system (DESIGN.md §14, DOMAIN_MODEL.md §9): active effects carry a condition
@@ -71,16 +72,98 @@ public final class Effects {
 		 * Life Drain −16).
 		 */
 		public int maxHp;
+		/** Flat bonus to damage rolls (a weapon-bound Magic Weapon's +N, folded per weapon). */
+		public int damageBonusFlat;
+		/**
+		 * Overrides a weapon-bound spell imposes (Shillelagh): the die, the ability used, the
+		 * damage type.
+		 */
+		public String weaponDie;
+		public String useAbility;
+		public String weaponDamageType;
 	}
 
-	@SuppressWarnings("unchecked")
+	/**
+	 * Modifiers from active effects alone; {@link #modifiers(Tx, RulesData, long)} adds equipped
+	 * magic items.
+	 */
 	public static Modifiers modifiers(Tx tx, long characterId) {
+		return modifiers(tx, null, characterId);
+	}
+
+	/**
+	 * Merged modifiers from every active effect plus every equipped magic item whose definition
+	 * carries {@code modifiers} in the same vocabulary (a Ring of Protection's AC and saving-throw
+	 * bonus; RULES_ENGINE.md §10). With {@code rules} null the items are skipped.
+	 */
+	public static Modifiers modifiers(Tx tx, se.hirt.mcp.rpg.content.RulesData rules, long characterId) {
 		var m = new Modifiers();
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ?", characterId)) {
 			if (e.isNull("modifier_json")) {
 				continue;
 			}
 			Map<String, Object> mod = e.map("modifier_json");
+			if (mod.get("weapon_entry_id") != null) {
+				continue; // bound to one carried weapon: see weaponModifiers
+			}
+			fold(m, mod, e.str("source_description"));
+		}
+		if (rules != null) {
+			for (Row e : tx.query("SELECT * FROM inventory_entry WHERE character_id = ? AND equipped = 1 ORDER BY id",
+					characterId)) {
+				var item = se.hirt.mcp.rpg.content.ContentService.itemForEntry(tx, rules, e);
+				// Damage dice on a weapon or ammunition ride on attacks with that item (Combat), not on everything the
+				// wearer does; the rest (AC, saves, speed, resistance) applies while the item is equipped.
+				var mod = new LinkedHashMap<>(se.hirt.mcp.rpg.inventory.MagicItems.modifiers(item.payload()));
+				mod.remove("damage_bonus_dice");
+				mod.remove("damage_bonus_type");
+				if (!mod.isEmpty()) {
+					fold(m, mod, item.name());
+				}
+			}
+		}
+		return m;
+	}
+
+	/**
+	 * Modifiers of the effects bound to one carried weapon (Magic Weapon on that sword, Shillelagh
+	 * on that staff): they ride only on attacks with it, never on the wielder's other attacks.
+	 */
+	public static Modifiers weaponModifiers(Tx tx, long characterId, long entryId) {
+		var m = new Modifiers();
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? ORDER BY id", characterId)) {
+			if (e.isNull("modifier_json")) {
+				continue;
+			}
+			Map<String, Object> mod = e.map("modifier_json");
+			if (mod.get("weapon_entry_id") instanceof Number n && n.longValue() == entryId) {
+				fold(m, mod, e.str("source_description"));
+			}
+		}
+		return m;
+	}
+
+	/**
+	 * A weapon a spell conjured for the character (Flame Blade), by name, while the effect lasts.
+	 */
+	@SuppressWarnings("unchecked")
+	public static Optional<Map<String, Object>> conjuredWeapon(Tx tx, long characterId, String name) {
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? ORDER BY id", characterId)) {
+			if (e.isNull("modifier_json")) {
+				continue;
+			}
+			Map<String, Object> mod = e.map("modifier_json");
+			if (mod.get("conjured_weapon") instanceof Map<?, ?> w
+					&& name.equalsIgnoreCase(String.valueOf(((Map<String, Object>) w).get("name")))) {
+				return Optional.of((Map<String, Object>) w);
+			}
+		}
+		return Optional.empty();
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void fold(Modifiers m, Map<String, Object> mod, String source) {
+		{
 			if (mod.get("ac_base") instanceof Number n) {
 				m.acBase = m.acBase == null ? n.intValue() : Math.max(m.acBase, n.intValue());
 			}
@@ -110,7 +193,7 @@ public final class Effects {
 				d.put("dice", s);
 				d.put("type", mod.getOrDefault("damage_bonus_type", "force"));
 				d.put("against", mod.get("against_target_id"));
-				d.put("source", e.str("source_description"));
+				d.put("source", source);
 				m.damageBonus.add(d);
 			}
 			if (Boolean.TRUE.equals(mod.get("disadvantage_on_attacks_against"))) {
@@ -136,8 +219,19 @@ public final class Effects {
 			if (mod.get("max_hp") instanceof Number n) {
 				m.maxHp += n.intValue();
 			}
+			if (mod.get("damage_bonus") instanceof Number n) {
+				m.damageBonusFlat += n.intValue();
+			}
+			if (mod.get("weapon_die") instanceof String s) {
+				m.weaponDie = s;
+			}
+			if (mod.get("use_ability") instanceof String s) {
+				m.useAbility = s;
+			}
+			if (mod.get("weapon_damage_type") instanceof String s) {
+				m.weaponDamageType = s;
+			}
 		}
-		return m;
 	}
 
 	/**

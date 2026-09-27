@@ -51,7 +51,10 @@ public final class ContentService {
 
 	public static final Set<String> ITEM_TYPES = Set.of("WEAPON", "ARMOR", "SHIELD", "GEAR", "TOOL", "AMMUNITION",
 			"FOCUS", "PACK", "CONTAINER", "MOUNT", "TACK", "VEHICLE", "POISON", "TRINKET", "VALUABLE", "CONSUMABLE",
-			"DOCUMENT", "OTHER");
+			"DOCUMENT", "OTHER",
+			// Magic item categories (SRD 5.2.1 "Magic Items"); magic weapons, armor, shields and ammunition keep
+			// the mundane type and carry a `magic` block (RULES_ENGINE.md §10).
+			"RING", "ROD", "STAFF", "WAND", "WONDROUS", "POTION", "SCROLL");
 
 	/** A resolved item definition, installed or custom. */
 	public record Item(boolean custom, String contentRef, Long customId, String name, Map<String, Object> payload) {
@@ -94,12 +97,20 @@ public final class ContentService {
 			}
 			m.put("weight_lb", payload.get("weight_lb"));
 			for (String k : List.of("category", "damage", "versatile", "properties", "mastery", "range", "armor",
-					"ability", "tool_kind", "focus_kind", "capacity_lb", "carrying_capacity_lb", "contents")) {
+					"ability", "tool_kind", "focus_kind", "capacity_lb", "carrying_capacity_lb", "contents", "slot")) {
 				if (payload.containsKey(k)) {
 					m.put(k, payload.get(k));
 				}
 			}
-			if (payload.get("text") != null) {
+			Map<String, Object> magic = se.hirt.mcp.rpg.inventory.MagicItems.view(payload);
+			if (magic != null) {
+				m.put("magic", magic);
+				m.put("magic_label", se.hirt.mcp.rpg.inventory.MagicItems.label(payload));
+			}
+			if (magic != null && payload.get("summary") != null) {
+				// The verbatim text of a magic item runs to pages; the summary lists, FULL detail carries the text.
+				m.put("summary", payload.get("summary"));
+			} else if (payload.get("text") != null) {
 				m.put("text", payload.get("text"));
 			}
 			if (payload.get("description") != null) {
@@ -317,12 +328,27 @@ public final class ContentService {
 		return (from > 0 ? "…" : "") + text.substring(from, to).trim() + (to < text.length() ? "…" : "");
 	}
 
+	/**
+	 * {@link #definitions(String, String, String, String, Object, Object, String, Boolean, String, int, String)}
+	 * without the magic filters.
+	 */
 	public Map<String, Object> definitions(
 		String campaignRef, String kind, String itemType, String text, Object minCost, Object maxCost, String cursor,
 		int limit, String detail) {
+		return definitions(campaignRef, kind, itemType, text, minCost, maxCost, null, null, cursor, limit, detail);
+	}
+
+	public Map<String, Object> definitions(
+		String campaignRef, String kind, String itemType, String text, Object minCost, Object maxCost, String rarity,
+		Boolean magic, String cursor, int limit, String detail) {
 		int max = Math.max(1, Math.min(limit <= 0 ? 25 : limit, 100));
 		String k = kind == null || kind.isBlank() ? "ITEM" : kind.toUpperCase();
 		String type = itemType == null || itemType.isBlank() ? null : itemType.toUpperCase();
+		String rar = rarity == null || rarity.isBlank() ? null : rarity.trim().toUpperCase().replace(' ', '_');
+		if (rar != null && !se.hirt.mcp.rpg.inventory.MagicItems.RARITIES.contains(rar) && !rar.equals("VARIES")) {
+			throw RpgException
+					.invalidArgument("rarity must be one of " + se.hirt.mcp.rpg.inventory.MagicItems.RARITIES + ".");
+		}
 		Long min = minCost == null ? null : Money.parseCp(minCost);
 		Long maxC = maxCost == null ? null : Money.parseCp(maxCost);
 		String needle = text == null || text.isBlank() ? null : text.trim().toLowerCase();
@@ -332,7 +358,7 @@ public final class ContentService {
 			var all = new ArrayList<Map<String, Object>>();
 			for (RulesData.Definition d : rules.ofKind(k)) {
 				Map<String, Object> entry = k.equals("ITEM") ? fromDefinition(d).summary() : genericSummary(d);
-				if (matches(entry, d.payload(), type, needle, min, maxC)) {
+				if (matches(entry, d.payload(), type, needle, min, maxC, rar, magic)) {
 					all.add(full ? withPayload(entry, d.payload()) : entry);
 				}
 			}
@@ -342,7 +368,7 @@ public final class ContentService {
 					if (k.equals("ITEM")) {
 						Item item = fromCustomRow(row);
 						Map<String, Object> entry = item.summary();
-						if (matches(entry, item.payload(), type, needle, min, maxC)) {
+						if (matches(entry, item.payload(), type, needle, min, maxC, rar, magic)) {
 							all.add(full ? withPayload(entry, item.payload()) : entry);
 						}
 						continue;
@@ -351,7 +377,7 @@ public final class ContentService {
 							row.map("payload_json"));
 					Map<String, Object> entry = genericSummary(d);
 					entry.put("custom", true);
-					if (matches(entry, d.payload(), type, needle, min, maxC)) {
+					if (matches(entry, d.payload(), type, needle, min, maxC, rar, magic)) {
 						all.add(full ? withPayload(entry, d.payload()) : entry);
 					}
 				}
@@ -365,6 +391,7 @@ public final class ContentService {
 			result.put("next_cursor", offset + max < all.size() ? encodeCursor(offset + max) : null);
 			if (k.equals("ITEM")) {
 				result.put("item_types", ITEM_TYPES.stream().sorted().toList());
+				result.put("rarities", se.hirt.mcp.rpg.inventory.MagicItems.RARITIES);
 			}
 			if (campaign != null) {
 				result.put("meta", Harness.meta(campaign, null));
@@ -414,13 +441,21 @@ public final class ContentService {
 	}
 
 	private static boolean matches(
-		Map<String, Object> entry, Map<String, Object> payload, String type, String needle, Long min, Long max) {
+		Map<String, Object> entry, Map<String, Object> payload, String type, String needle, Long min, Long max,
+		String rarity, Boolean magic) {
 		if (type != null && !type.equals(String.valueOf(payload.get("type")))) {
+			return false;
+		}
+		if (magic != null && magic != se.hirt.mcp.rpg.inventory.MagicItems.isMagic(payload)) {
+			return false;
+		}
+		if (rarity != null && !rarity.equals(se.hirt.mcp.rpg.inventory.MagicItems.rarity(payload))) {
 			return false;
 		}
 		if (needle != null) {
 			String hay = (entry.get("name") + " " + entry.get("id") + " " + payload.getOrDefault("text", "") + " "
 					+ payload.getOrDefault("description", "") + " " + payload.getOrDefault("properties", "") + " "
+					+ payload.getOrDefault("summary", "") + " " + payload.getOrDefault("magic", "") + " "
 					+ payload.getOrDefault("category", "") + " " + payload.getOrDefault("classes", "")
 					+ (payload.get("level") == null ? "" : " level " + payload.get("level") + " ")
 					+ payload.getOrDefault("school", "")).toLowerCase();
