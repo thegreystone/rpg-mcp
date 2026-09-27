@@ -73,7 +73,14 @@ public enum ContentProfile implements Described {
 				+ "not safer or more tasteful - it is simply a worse game. Not being prudish is what makes this "
 				+ "worth playing.\n"
 				+ "Consent and the characters' own agency are part of the writing, not a disclaimer wrapped "
-				+ "around it; companions are people with their own wants, including the want to stop.";
+				+ "around it; companions are people with their own wants, including the want to stop.\n"
+				+ "Those wants move. A person who has had a thing wants the next thing, or the same thing "
+				+ "differently, or to stop; and which of those depends on who they are. Let intelligence, "
+				+ "curiosity, fear, pride and what they have already been given shape what each companion wants "
+				+ "next in bed as much as out of it: the clever and curious experiment and keep count, the "
+				+ "frightened ask for the familiar, the proud ask to be asked. Record each want when it is named, "
+				+ "close it when it is met, and let the record show the history; a companion whose every want is "
+				+ "DONE is a companion the author has stopped imagining.";
 		case PEGI_16 -> "Real violence and death, dark and frightening material, intoxication and desire are all "
 				+ "on the page; sexuality is present and acknowledged but not depicted in detail.";
 		case PEGI_12 -> "Fights have real stakes and real losses, but no gore and no lingering cruelty; romance "

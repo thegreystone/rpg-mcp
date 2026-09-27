@@ -632,6 +632,19 @@ public final class NarrativeService {
 
 	// ── Director ───────────────────────────────────────────────────────
 
+	/**
+	 * The {@code director_trigger} shape every boundary operation returns (MCP_PROTOCOL.md §18.1):
+	 * recommended when there is at least one reason.
+	 */
+	public static Map<String, Object> trigger(List<String> reasons) {
+		var m = new LinkedHashMap<String, Object>();
+		boolean any = reasons != null && !reasons.isEmpty();
+		m.put("recommended", any);
+		m.put("reasons", any ? List.copyOf(reasons) : List.of());
+		m.put("urgency", any ? "NORMAL" : "NONE");
+		return m;
+	}
+
 	public Map<String, Object> directorContext(String campaignRef, String scope) {
 		return db.read(tx -> {
 			Row campaign = Harness.campaign(tx, campaignRef);
@@ -710,11 +723,65 @@ public final class NarrativeService {
 						.map(r -> Map.of("journal_id", r.id(), "game_seq",
 								r.lng("game_seq") == null ? 0 : r.lng("game_seq"), "recorded_at", r.str("recorded_at")))
 						.orElse(null));
-		ctx.put("guidance", List.of(
+		Long sinceSeq = lastReview.map(r -> r.lng("game_seq")).orElse(null);
+		boolean explicit = Biography.intimacyAllowed(tx, campaignId);
+		ctx.put("companion_wants", companionWants(tx, campaignId, sinceSeq, explicit));
+		var guidance = new ArrayList<String>(List.of(
 				"Create seeds, pressures and world facts — never scenes the player must play or outcomes the player must feel.",
 				"A review may legitimately change nothing.",
-				"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally."));
+				"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally.",
+				"People are the plot: read companion_wants. A companion whose want closed since the last review should leave "
+						+ "this review with a next want proposed in character, drawn from their personality, abilities, biography "
+						+ "and what just happened, carrying origin: director; it is a proposal for the GM to voice, never an outcome. "
+						+ "Keep the NPC_AGENDA current_plan of anyone the party will meet soon in step with their open wants."));
+		if (explicit) {
+			guidance.add(
+					"Under PEGI_18 intimate wants evolve like any other and belong in the same review: let curiosity, intelligence, "
+							+ "fear, pride and what a person has already had decide what they want next. A curious or clever companion "
+							+ "wants to try the thing not yet tried and to itemise it; a frightened one wants the same thing again, "
+							+ "safely; a proud one wants to be asked. The want to stop, to slow, or to keep one thing off the table is "
+							+ "as real a want as any and is proposed the same way. Read done_at: a want fulfilled tonight is not asked "
+							+ "for again tomorrow; it grows.");
+		}
+		ctx.put("guidance", guidance);
 		return ctx;
+	}
+
+	/**
+	 * The people the Director is asked to keep alive: every present party member with their
+	 * personality line, the abilities that shape temperament, their open drives and (PEGI_18) open
+	 * intimate wants, and the wants closed since the last review, so a settled want gets a next
+	 * one.
+	 */
+	private List<Map<String, Object>> companionWants(Tx tx, long campaignId, Long sinceSeq, boolean explicit) {
+		var out = new ArrayList<Map<String, Object>>();
+		for (Row c : tx.query("SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
+				+ "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') AND c.lifecycle = 'ACTIVE' ORDER BY m.id",
+				campaignId)) {
+			var w = new LinkedHashMap<String, Object>();
+			w.put("character", Ref.of(Ref.CHARACTER, c.id()));
+			w.put("name", c.str("name"));
+			if (!c.isNull("personality")) {
+				w.put("personality", c.str("personality"));
+			}
+			var abilities = new LinkedHashMap<String, Object>();
+			for (String col : List.of("int_score", "wis_score", "cha_score")) {
+				Integer score = c.integer(col);
+				if (score != null) {
+					abilities.put(col.substring(0, 3).toUpperCase(), score);
+				}
+			}
+			if (!abilities.isEmpty()) {
+				w.put("abilities", abilities);
+			}
+			w.put("open_wants", Biography.openWants(c));
+			if (explicit) {
+				w.put("open_intimate_wants", Biography.openIntimateWants(c));
+			}
+			w.put("closed_since_last_review", Biography.closedWantsSince(c, sinceSeq, explicit));
+			out.add(w);
+		}
+		return out;
 	}
 
 	/**

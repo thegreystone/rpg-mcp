@@ -613,8 +613,9 @@ age, presentation, alignment, and two merged aggregates:
 
 - `biography`: `timeline` [{game_time, note}] (clock stamped when omitted), `voice` [verbatim lines], `state`
   [{note, since, until}] (long-running bodily state; no `until` means current, shown in every party list), `marks`,
-  and `wants` [{note, with: [character refs], since, status OPEN|DONE|ABANDONED}] (the character's drives; open wants
-  show in every party list at every detail level).
+  and `wants` [{note, with: [character refs], since, status OPEN|DONE|ABANDONED, done_at}] (the character's drives;
+  open wants show in every party list at every detail level; a want closed without a `done_at` is stamped with the
+  clock, so fulfilled wants keep their history).
 - `intimacy`: PEGI_18 only (`POLICY_DENIED` otherwise, never returned below PEGI_18): `body`, `likes`, `dislikes`,
   `limits`, `hard_lines`, `wants` [{note, with, since, status}], `household_terms` [{note, with}] (held by the person
   who set them), `voice_in_bed`. This is the character's own truth; what each partner has learned stays on the pairwise
@@ -1048,10 +1049,19 @@ director_trigger:
   urgency: NORMAL
 ```
 
+Reasons include `MAJOR_ENCOUNTER_COMPLETED`, `PLAYER_CHARACTER_DIED`, `SIGNIFICANT_TIME_PASSED`, `WANT_CLOSED`
+(an `update_character` or `update_relationship` marked a want DONE or ABANDONED), `INTIMATE_MILESTONE` (a
+`record_memory` of type INTIMACY, ROMANCE, FIRST_KISS, FIRST_NIGHT or WEDDING_NIGHT) and `RELATIONSHIP_MILESTONE`
+(a MAJOR or CRITICAL RELATIONSHIP_MILESTONE, PROPOSAL or WEDDING).
+
 ### 18.2 `get_director_context`
 
 A bounded Director-only view: arcs, seeds, pacing history, faction agendas, world changes, unresolved companion
-intentions, significant relationships, invalidated plans.
+intentions, significant relationships, invalidated plans, and `companion_wants`: for every present party member
+their personality line, INT/WIS/CHA, open wants, open intimate wants (PEGI_18 only) and the wants closed since the
+last review (`done_at` after the review's game time). The `guidance` list asks the Director to leave no
+companion with a settled want and no next one, proposing the next in character (`origin: director`), and under
+PEGI_18 to let intimate wants evolve with temperament in the same review.
 
 ### 18.3 `commit_director_changes`
 

@@ -29,6 +29,7 @@
 package se.hirt.mcp.rpg.party;
 
 import se.hirt.mcp.rpg.character.CharacterService;
+import se.hirt.mcp.rpg.character.Biography;
 import se.hirt.mcp.rpg.character.DeepMerge;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
@@ -452,6 +453,8 @@ public final class PartyService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("relationships", updated);
 			result.put("event", Ref.of(Ref.EVENT, eventId));
+			result.put("director_trigger", se.hirt.mcp.rpg.narrative.NarrativeService
+					.trigger(Biography.closesAWant(profile) ? List.of("WANT_CLOSED") : List.of()));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
@@ -532,6 +535,21 @@ public final class PartyService {
 		return m;
 	}
 
+	/**
+	 * A relationship want given as a map with status DONE or ABANDONED is stamped with the game
+	 * time it closed ({@code done_at}) when the caller gave none; bare strings and open wants pass
+	 * unchanged.
+	 */
+	private static Object closedWant(Tx tx, long campaignId, Object item) {
+		if (!Biography.isClosed(item)) {
+			return item;
+		}
+		var out = new LinkedHashMap<String, Object>();
+		((Map<?, ?>) item).forEach((k, v) -> out.put(String.valueOf(k), v));
+		Biography.stampClosed(out, GameTime.render(GameTime.currentSeq(tx, campaignId)));
+		return out;
+	}
+
 	/** The stored profile of a relationship row, empty when none. */
 	static Map<String, Object> profile(Row relationship) {
 		if (relationship == null || relationship.isNull("profile_json")) {
@@ -559,7 +577,7 @@ public final class PartyService {
 				continue;
 			}
 			UnaryOperator<Object> normalize = "milestones".equals(key) ? item -> milestone(tx, campaignId, item)
-					: UnaryOperator.identity();
+					: "wants".equals(key) ? item -> closedWant(tx, campaignId, item) : UnaryOperator.identity();
 			out.put(key, DeepMerge.merge(out.get(key), v, key, normalize, DeepMerge.NO_KEY));
 		}
 		return out;

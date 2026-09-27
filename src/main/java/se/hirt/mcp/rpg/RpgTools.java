@@ -970,6 +970,7 @@ public class RpgTools {
 
 	@Tool(name = "get_director_context", description = "DIRECTOR-ONLY view for the slow narrative loop (invoke at meaningful boundaries, not every turn): premise and background truth, "
 			+ "open seeds and companion intentions, story beats (incl. blocked/invalidated plans), quests, factions, world events, party, relationships, NPC agendas, recent major events, "
+			+ "companion_wants (each present member's personality, INT/WIS/CHA, open wants, open intimate wants under PEGI_18, and the wants closed since the last review: a settled want should get a next one proposed in character), "
 			+ "pacing composition and when the last review happened. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getDirectorContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "INITIAL_CAMPAIGN, SESSION_START or CAMPAIGN_REVIEW (default)")

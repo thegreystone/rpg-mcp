@@ -771,6 +771,7 @@ public final class CharacterService {
 						.invalidArgument("changes must contain at least one field. Known: " + NARRATIVE_FIELDS + ".");
 			}
 			var cols = new LinkedHashMap<String, Object>();
+			boolean wantClosed = false;
 			for (var e : changes.entrySet()) {
 				String key = e.getKey();
 				Object value = e.getValue();
@@ -778,6 +779,11 @@ public final class CharacterService {
 					throw RpgException.invalidArgument("'" + key + "' is not a narrative field. Known: "
 							+ NARRATIVE_FIELDS
 							+ ". Mechanical state changes go through their own operations or an audited override.");
+				}
+				if (value instanceof Map<?, ?> given && ("biography".equals(key) || "intimacy".equals(key))) {
+					@SuppressWarnings("unchecked")
+					Map<String, Object> g = (Map<String, Object>) given;
+					wantClosed |= Biography.closesAWant(g);
 				}
 				switch (key) {
 				case "goals" -> cols.put("goals_json",
@@ -831,6 +837,9 @@ public final class CharacterService {
 			result.put("changed", changes.keySet());
 			result.put("revision", updated.lng("revision"));
 			result.put("sheet", sheet(tx, updated, "FULL"));
+			// A settled want leaves a person without a next one: the Director should look.
+			result.put("director_trigger", se.hirt.mcp.rpg.narrative.NarrativeService
+					.trigger(wantClosed ? List.of("WANT_CLOSED") : List.of()));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});

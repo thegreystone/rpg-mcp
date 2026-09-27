@@ -157,8 +157,53 @@ public final class Biography {
 				throw RpgException.invalidArgument("A want's status is OPEN, DONE or ABANDONED.");
 			}
 			out.put("status", status);
+			stampClosed(out, GameTime.render(GameTime.currentSeq(tx, campaignId)));
 		}
 		return out;
+	}
+
+	/**
+	 * A want that is DONE or ABANDONED carries the game time it closed in {@code done_at}; the
+	 * clock stamps it when the caller gave none, so the history of fulfilled wants keeps its dates
+	 * without anyone remembering to write them.
+	 */
+	public static void stampClosed(Map<String, Object> want, String now) {
+		if (isClosed(want) && (want.get("done_at") == null || want.get("done_at").toString().isBlank())) {
+			want.put("done_at", now);
+		}
+	}
+
+	/** True for a want entry whose status is DONE or ABANDONED. */
+	public static boolean isClosed(Object want) {
+		return want instanceof Map<?, ?> m && m.get("status") != null
+				&& !"OPEN".equalsIgnoreCase(String.valueOf(m.get("status")).trim());
+	}
+
+	/**
+	 * True when the given aggregate changes close at least one want: a biography or intimacy update
+	 * whose {@code wants} carry an entry with status DONE or ABANDONED. Used to recommend a
+	 * Director review, since a person whose want has just been settled needs a next one.
+	 */
+	public static boolean closesAWant(Map<String, Object> given) {
+		if (given == null) {
+			return false;
+		}
+		for (var e : given.entrySet()) {
+			if (!"wants".equalsIgnoreCase(e.getKey().trim())) {
+				continue;
+			}
+			Object v = e.getValue();
+			if (v instanceof List<?> list) {
+				for (Object o : list) {
+					if (isClosed(o)) {
+						return true;
+					}
+				}
+			} else if (isClosed(v)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static Map<String, Object> copy(Map<?, ?> m) {
@@ -196,6 +241,48 @@ public final class Biography {
 	/** The open drives that concern intimacy (PEGI_18: the intimate profile's wants). */
 	public static List<Map<String, Object>> openIntimateWants(Row c) {
 		return open(intimacy(c).get("wants"));
+	}
+
+	/**
+	 * The character's closed drives (biography and, when allowed, intimate wants that are DONE or
+	 * ABANDONED) whose {@code done_at} falls after {@code sinceSeq}; every closed want when
+	 * {@code sinceSeq} is null. Each entry is tagged {@code kind: general|intimate}.
+	 */
+	public static List<Map<String, Object>> closedWantsSince(Row c, Long sinceSeq, boolean includeIntimate) {
+		var out = new ArrayList<Map<String, Object>>();
+		closed(biography(c).get("wants"), "general", sinceSeq, out);
+		if (includeIntimate) {
+			closed(intimacy(c).get("wants"), "intimate", sinceSeq, out);
+		}
+		return out;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void closed(Object wants, String kind, Long sinceSeq, List<Map<String, Object>> out) {
+		if (!(wants instanceof List<?> list)) {
+			return;
+		}
+		for (Object o : list) {
+			if (!isClosed(o)) {
+				continue;
+			}
+			var w = new LinkedHashMap<String, Object>((Map<String, Object>) o);
+			if (sinceSeq != null) {
+				Object at = w.get("done_at");
+				if (at == null) {
+					continue;
+				}
+				try {
+					if (GameTime.parse(at.toString()) <= sinceSeq) {
+						continue;
+					}
+				} catch (RuntimeException unparsable) {
+					continue;
+				}
+			}
+			w.put("kind", kind);
+			out.add(w);
+		}
 	}
 
 	@SuppressWarnings("unchecked")

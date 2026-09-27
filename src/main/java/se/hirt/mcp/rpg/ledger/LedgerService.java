@@ -165,6 +165,16 @@ public final class LedgerService {
 					fictional == null ? GameTime.currentSeq(tx, campaignId) : fictional));
 			// A long session learns here, not only at bootstrap, that the chronicle is owed a chapter.
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
+			// A milestone between people is when their wants move: recommend a Director look.
+			String t = type.toUpperCase();
+			var reasons = new ArrayList<String>();
+			if (Set.of("INTIMACY", "ROMANCE", "FIRST_KISS", "FIRST_NIGHT", "WEDDING_NIGHT").contains(t)) {
+				reasons.add("INTIMATE_MILESTONE");
+			} else if (Set.of("RELATIONSHIP_MILESTONE", "PROPOSAL", "WEDDING").contains(t)
+					&& Set.of("MAJOR", "CRITICAL").contains(imp)) {
+				reasons.add("RELATIONSHIP_MILESTONE");
+			}
+			result.put("director_trigger", se.hirt.mcp.rpg.narrative.NarrativeService.trigger(reasons));
 			result.put("meta", Harness.meta(campaign, due == null ? null : List.of(due)));
 			return result;
 		});
