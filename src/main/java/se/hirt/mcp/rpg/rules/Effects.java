@@ -357,6 +357,9 @@ public final class Effects {
 				return m;
 			}
 			if (m.get("expires_seq") instanceof Number || m.get("expires_round") instanceof Number) {
+				if (m.get("expires_round") instanceof Number && encounterId != null) {
+					m.putIfAbsent("encounter", encounterId);
+				}
 				m.putIfAbsent("label", label);
 				return m;
 			}
@@ -445,14 +448,22 @@ public final class Effects {
 		return removed;
 	}
 
-	/** Removes round-scoped effects of an encounter that expire at or before the given round. */
+	/**
+	 * Removes round-scoped effects of an encounter that expire at or before the given round. The
+	 * duration owns the scope even when its recipient has left the encounter or never joined it.
+	 * Older untagged durations fall back to the encounter's persistent participant records.
+	 */
 	public static int expireByRound(Tx tx, long encounterId, long round) {
 		int removed = 0;
+		long campaignId = tx.get("encounter", encounterId).lng("campaign_id");
 		for (Row e : tx.query(
-				"SELECT a.* FROM active_effect a JOIN character c ON c.id = a.character_id WHERE c.encounter_id = ? AND a.duration_json IS NOT NULL",
-				encounterId)) {
+				"SELECT a.*, p.id AS round_participant_id FROM active_effect a LEFT JOIN encounter_participant p ON p.character_id = a.character_id AND p.encounter_id = ? WHERE a.campaign_id = ? AND a.duration_json IS NOT NULL",
+				encounterId, campaignId)) {
 			Map<String, Object> d = e.map("duration_json");
-			if (d.get("expires_round") instanceof Number n && n.longValue() <= round) {
+			Object scope = d.get("encounter");
+			boolean belongs = scope == null ? !e.isNull("round_participant_id")
+					: scope instanceof Number n && n.longValue() == encounterId;
+			if (belongs && d.get("expires_round") instanceof Number n && n.longValue() <= round) {
 				end(tx, e);
 				removed++;
 			}

@@ -77,8 +77,8 @@ public final class EncounterService {
 	private static final List<String> INCAPACITATING_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
 			"UNCONSCIOUS", "PETRIFIED");
 	/** Conditions that set Speed to 0 (SRD 5.2.1), so neither moving nor dashing goes anywhere. */
-	private static final List<String> SPEED_ZERO_CONDITIONS = List.of("PARALYZED", "STUNNED", "UNCONSCIOUS",
-			"PETRIFIED", "GRAPPLED", "RESTRAINED");
+	private static final List<String> SPEED_ZERO_CONDITIONS = List.of("PARALYZED", "UNCONSCIOUS", "PETRIFIED",
+			"GRAPPLED", "RESTRAINED");
 	public static final Set<String> NPC_REACTION_POLICIES = Set.of("AUTO", "ASK");
 	private static final int SECONDS_PER_ROUND = 6;
 
@@ -1894,8 +1894,7 @@ public final class EncounterService {
 			long defeatedXp = 0;
 			var defeated = new ArrayList<String>();
 			var recipients = new ArrayList<Row>();
-			// Round-scoped effects die with the encounter. This must run while the participants still carry
-			// the encounter id, which the loop below clears and the expiry query joins on.
+			// Round-scoped effects die with their encounter, including those on removed participants.
 			se.hirt.mcp.rpg.rules.Effects.expireByRound(tx, encounter.id(), Long.MAX_VALUE);
 			for (Row p : participants) {
 				Row c = tx.get("character", p.lng("character_id"));

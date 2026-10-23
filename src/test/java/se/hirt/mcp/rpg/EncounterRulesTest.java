@@ -102,6 +102,40 @@ class EncounterRulesTest {
 	}
 
 	@Test
+	void aStunnedActorCanMoveButCannotAct() throws Exception {
+		Path db = tempDb("enc-stunned");
+		try (Engine engine = engine(db)) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String bandit = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
+			Map<String, Object> started = engine.encounters().start(op(), campaign,
+					map("party", List.of(pc), "road", List.of(bandit)), null, map(pc, "gate", bandit, "road"), null,
+					null, null);
+			String encounter = (String) started.get("encounter");
+			String actor = (String) m(started.get("turn")).get("character");
+			String other = actor.equals(pc) ? bandit : pc;
+			engine.runtime().applyRuntimeChange(op(), campaign, actor, map("kind", "ADD_CONDITION", "condition",
+					"STUNNED", "duration", map("rounds", 3), "reason", "stunned"));
+
+			// SRD 5.2.1 Stunned includes Incapacitated, but leaves normal movement available.
+			for (String kind : List.of("ATTACK", "DASH", "DODGE")) {
+				RpgException denied = assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign,
+						encounter, actor, map("kind", kind, "target", other, "zone", "far"), false));
+				assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, denied.code());
+				assertTrue(denied.getMessage().contains("STUNNED"), denied.getMessage());
+			}
+			Map<String, Object> moved = engine.encounters().perform(op(), campaign, encounter, actor,
+					map("kind", "MOVE", "zone", "far"), false);
+			assertEquals("far", moved.get("zone"));
+			Map<String, Object> ended = engine.encounters().perform(op(), campaign, encounter, actor,
+					map("kind", "END_TURN"), false);
+			assertEquals(other, m(ended.get("next_turn")).get("character"));
+		}
+	}
+
+	@Test
 	void multiattackKeepsTheTurnOpenUntilTheAttacksAreUsed() throws Exception {
 		Path db = tempDb("enc-multiattack");
 		try (Engine engine = engine(db)) {
