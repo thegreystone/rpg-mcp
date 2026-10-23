@@ -401,6 +401,120 @@ class MagicItemTest {
 		}
 	}
 
+	@Test
+	void carriedWeaponsCannotBypassAttunement() throws Exception {
+		try (Engine engine = engine(tempDb("magic-carried-attunement"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String ring = grant(engine, campaign, pc, map("item", "Ring of Protection"));
+			engine.inventory().equip(op(), campaign, pc, ring, true);
+			for (String item : List.of("Cloak of Protection", "Bracers of Defense")) {
+				engine.inventory().equip(op(), campaign, pc, grant(engine, campaign, pc, map("item", item)), true);
+			}
+			grant(engine, campaign, pc, map("item", "Longsword"));
+			String sword = grant(engine, campaign, pc,
+					map("item", "Longsword", "magic",
+							map("name", "Forbidden Frost", "bonus", 3, "attunement", true, "damage_bonus_dice", "1d6",
+									"damage_type", "cold", "text",
+									"Requires attunement for +3 and extra cold damage.")));
+			RpgException fourth = assertThrows(RpgException.class,
+					() -> engine.inventory().equip(op(), campaign, pc, sword, true));
+			assertEquals(ErrorCode.VALIDATION_FAILED, fourth.code());
+			assertEquals("ATTUNEMENT_LIMIT", l(fourth.details().get("violations")).getFirst().get("rule"));
+
+			String ogre = (String) engine.runtime()
+					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)), null, null, null, null, null)
+					.get("encounter");
+			if (!pc.equals(
+					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
+				engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			}
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(19, 4);
+			Map<String, Object> plain = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Longsword", "target", ogre), true);
+			assertEquals(Boolean.TRUE, plain.get("hit"));
+			int plainModifier = ((Number) m(plain.get("attack_roll")).get("modifier")).intValue();
+			Object inventory = engine.characters().characterSheet(campaign, pc, "FULL").get("inventory");
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			dice.queue(19, 4);
+			Map<String, Object> unattuned = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Forbidden Frost", "target", ogre), true);
+			assertEquals(plainModifier, ((Number) m(unattuned.get("attack_roll")).get("modifier")).intValue(),
+					"a refused fourth attunement cannot be bypassed by naming the carried weapon");
+			assertEquals(plain.get("breakdown"), unattuned.get("breakdown"), "only mundane weapon damage applies");
+			assertTrue(dealtType(unattuned, "slashing"));
+			assertFalse(dealtType(unattuned, "cold"));
+			assertTrue(String.valueOf(unattuned.get("warnings")).contains("attunement"));
+			assertEquals(inventory, engine.characters().characterSheet(campaign, pc, "FULL").get("inventory"),
+					"drawing a weapon must not equip it or change attunement");
+
+			engine.inventory().equip(op(), campaign, pc, ring, false);
+			Map<String, Object> equipped = engine.inventory().equip(op(), campaign, pc, sword, true);
+			assertEquals(3, l(equipped.get("attuned")).size());
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			dice.queue(19, 4, 2);
+			Map<String, Object> attuned = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Forbidden Frost", "target", ogre), true);
+			assertEquals(plainModifier + 3, ((Number) m(attuned.get("attack_roll")).get("modifier")).intValue());
+			assertEquals(((Number) l(plain.get("breakdown")).getFirst().get("rolled")).intValue() + 3,
+					((Number) l(attuned.get("breakdown")).getFirst().get("rolled")).intValue());
+			assertTrue(dealtType(attuned, "cold"), "attuning restores the weapon's intrinsic magic");
+
+			engine.inventory().equip(op(), campaign, pc, sword, false);
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			dice.queue(19, 4);
+			Map<String, Object> removed = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Forbidden Frost", "target", ogre), true);
+			assertEquals(plainModifier, ((Number) m(removed.get("attack_roll")).get("modifier")).intValue());
+			assertEquals(plain.get("breakdown"), removed.get("breakdown"));
+		}
+	}
+
+	@Test
+	void carriedAmmunitionCannotBypassAttunement() throws Exception {
+		try (Engine engine = engine(tempDb("magic-ammo-attunement"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			engine.inventory().grantLoot(op(), campaign, pc, List.of(map("item", "Shortbow"), map("item", "Arrow"), map(
+					"item", "Arrow", "quantity", 2, "magic",
+					map("name", "Bound Arrow", "bonus", 3, "attunement", true, "damage_bonus_dice", "1d6",
+							"damage_type", "cold", "text", "Requires attunement for +3 and extra cold damage."))),
+					null, "QUEST", null);
+			String ogre = (String) engine.runtime()
+					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)), null, null, null, null, null)
+					.get("encounter");
+			if (!pc.equals(
+					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
+				engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			}
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(19, 4);
+			Map<String, Object> plain = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Shortbow", "target", ogre), true);
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			dice.queue(19, 4);
+			Map<String, Object> unattuned = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Shortbow", "target", ogre, "ammunition", "Bound Arrow"), true);
+			assertEquals(m(plain.get("attack_roll")).get("modifier"), m(unattuned.get("attack_roll")).get("modifier"));
+			assertEquals(plain.get("breakdown"), unattuned.get("breakdown"));
+			assertTrue(dealtType(unattuned, "piercing"));
+			assertFalse(dealtType(unattuned, "cold"));
+			assertTrue(String.valueOf(unattuned.get("warnings")).contains("attunement"));
+			Map<String, Object> used = m(unattuned.get("ammunition"));
+			assertEquals("Bound Arrow", used.get("name"));
+			assertEquals(1L, ((Number) used.get("remaining")).longValue(), "the mundane shot still consumes an arrow");
+			assertNull(used.get("bonus"));
+			assertNull(used.get("extra_damage"));
+		}
+	}
+
 	// ── potions ────────────────────────────────────────────────────────
 
 	@Test
@@ -649,6 +763,7 @@ class MagicItemTest {
 			assertTrue(dealtType(shot, "fire"), "the arrow's fire is rolled and applied: " + shot);
 			assertTrue(dealtType(shot, "piercing"), String.valueOf(shot));
 
+			engine.inventory().equip(op(), campaign, pc, (String) g.get(2).get("entry"), true);
 			engine.encounters().perform(op(), campaign, encounter, bandit, map("kind", "END_TURN"), true);
 			dice.queue(20);
 			Map<String, Object> slash = engine.encounters().perform(op(), campaign, encounter, pc,

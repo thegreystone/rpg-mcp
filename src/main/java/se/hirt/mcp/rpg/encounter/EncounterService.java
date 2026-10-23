@@ -38,6 +38,7 @@ import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.harness.HarnessState;
 import se.hirt.mcp.rpg.inventory.InventoryService;
+import se.hirt.mcp.rpg.inventory.MagicItems;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.persistence.Row;
@@ -849,10 +850,24 @@ public final class EncounterService {
 			abilityOverride = se.hirt.mcp.rpg.rules.Rules
 					.modifier(actor.intOr(se.hirt.mcp.rpg.rules.Ability.parse(bound.useAbility).column(), 10));
 		}
-		Combat.AttackProfile profile = Combat.weapon(actor, item.name(), item.payload(), prof,
-				Boolean.TRUE.equals(action.get("two_handed")), abilityOverride, bound.weaponDie,
+		Combat.AttackProfile profile = Combat.weapon(actor, item.name(), attackPayload(weaponEntry, item, warnings),
+				prof, Boolean.TRUE.equals(action.get("two_handed")), abilityOverride, bound.weaponDie,
 				bound.weaponDamageType);
 		return Combat.withBuff(profile, bound);
+	}
+
+	/** An unattuned item still has its mundane properties (SRD 5.2.1 "Attunement"). */
+	private static Map<String, Object> attackPayload(Row entry, ContentService.Item item, List<String> warnings) {
+		Map<String, Object> payload = item.payload();
+		// equip_item owns attunement and enforces its limit; drawing a carried item does not attune it.
+		if (entry.bool("equipped") || !MagicItems.requiresAttunement(payload)) {
+			return payload;
+		}
+		var mundane = new LinkedHashMap<>(payload);
+		mundane.remove("magic");
+		mundane.remove("modifiers");
+		warnings.add(item.name() + " requires attunement; using only its nonmagical properties.");
+		return mundane;
 	}
 
 	/**
@@ -910,13 +925,14 @@ public final class EncounterService {
 								"NO_AMMUNITION", actor.str("name") + " has no ammunition for " + weaponName + "."))));
 			}
 			ContentService.Item ammoItem = ContentService.itemForEntry(tx, rules, ammo);
-			int ammoBonus = se.hirt.mcp.rpg.inventory.MagicItems.bonus(ammoItem.payload());
+			Map<String, Object> ammoPayload = attackPayload(ammo, ammoItem, setup.warnings());
+			int ammoBonus = MagicItems.bonus(ammoPayload);
 			InventoryService.removeQuantity(tx, ammo, 1);
 			var used = new LinkedHashMap<String, Object>();
 			used.put("item", ammoItem.display());
 			used.put("name", ammoItem.name());
 			used.put("remaining", ammo.lng("quantity") - 1);
-			Map<String, String> ammoExtra = se.hirt.mcp.rpg.inventory.MagicItems.extraDamage(ammoItem.payload());
+			Map<String, String> ammoExtra = MagicItems.extraDamage(ammoPayload);
 			if (ammoBonus != 0 || ammoExtra != null) {
 				// Magic ammunition's +N applies to this attack and damage roll (SRD 5.2.1 "Ammunition, +1, +2, or +3");
 				// an enchanted piece may add damage of its own (an Arrow of Fire).
