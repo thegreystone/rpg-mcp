@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exercises SQLite, migrations and the seed import inside the native image).
  * <p>
  * Skipped unless {@code native.image.path} is set, e.g.
- * {@code mvn test-compile failsafe:integration-test -Dnative.image.path=target/rpg-mcp-server-0.1.0-runner.exe}.
+ * {@code mvn test-compile failsafe:integration-test failsafe:verify -Dnative.image.path=target/<binary>.exe}.
  */
 class NativeImageSanityIT {
 

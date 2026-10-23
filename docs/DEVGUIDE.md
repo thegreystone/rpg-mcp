@@ -101,11 +101,12 @@ with `native-image`; on Windows also Visual Studio 2022 with the "Desktop develo
 ```bash
 mvn package                      # uber-jar: target/rpg-mcp-server-<version>-runner.jar
 mvn package -Dnative -DskipTests # native executable: target/rpg-mcp-server-<version>-runner[.exe]
-mvn test-compile failsafe:integration-test -Dnative.image.path=target/rpg-mcp-server-<version>-runner.exe
+mvn test-compile failsafe:integration-test failsafe:verify -Dnative.image.path=target/rpg-mcp-server-<version>-runner.exe
 ```
 
 The last command runs `NativeImageSanityIT`, which launches the binary over STDIO and drives a real MCP
-handshake. It is the only check that catches native-image reflection and resource regressions.
+handshake, then verifies the results so a test failure stops the build. It is the only check that catches
+native-image reflection and resource regressions.
 
 To point an MCP client at a development build, use the release configuration with the path under `target/`,
 and set `RPG_DATA_DIR` to a scratch directory so you do not play against your real campaign database.
