@@ -40,10 +40,13 @@ import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Derived;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,7 +56,7 @@ import java.util.regex.Pattern;
  * {@code bonus_by_rarity}, {@code modifiers} or {@code consumable} mechanic; RULES_ENGINE.md §10).
  * <p>
  * A magic weapon, armor, shield or ammunition entry in the SRD describes <em>any</em> base item of
- * its kind ("Weapon, +1, +2, or +3", "Flame Tongue (Any Sword)"), so such entries are
+ * its kind ("Weapon, +1, +2, or +3", "Flame Tongue (Any Melee Weapon)"), so such entries are
  * <em>templates</em>: they are never granted as they are but instantiated on a base item into a
  * campaign-owned definition ("+1 Longsword", "Flame Tongue (Longsword)") that carries the base's
  * mechanics plus the template's magic. Everything else (rings, wondrous items, potions, staffs…) is
@@ -266,7 +269,7 @@ public final class MagicItems {
 					+ template.type().toLowerCase() + "; " + base.name() + " is " + base.type().toLowerCase() + ".")));
 		}
 		String appliesTo = String.valueOf(tm.getOrDefault("applies_to", "Any"));
-		if (!appliesTo.startsWith("Any") && !appliesTo.toLowerCase().contains(base.name().toLowerCase())) {
+		if (!matchesBase(appliesTo, base)) {
 			throw RpgException.validation(List.of(new Violation("base", "BASE_KIND",
 					template.name() + " is made on " + appliesTo + ", not on " + base.name() + ".")));
 		}
@@ -345,6 +348,26 @@ public final class MagicItems {
 		long id = tx.insert("custom_content", cols);
 		tx.touched(Ref.of(Ref.CONTENT, id), 0);
 		return ContentService.fromCustomRow(tx.get("custom_content", id));
+	}
+
+	/** Matches the category restrictions and exact named alternatives used by the SRD templates. */
+	private static boolean matchesBase(String appliesTo, Item base) {
+		String restriction = appliesTo.trim().toLowerCase(Locale.ROOT);
+		String weaponCategory = String.valueOf(base.payload().get("category"));
+		String armorCategory = base.payload().get("armor") instanceof Map<?, ?> armor
+				? String.valueOf(armor.get("category")) : "";
+		return switch (restriction) {
+		case "any" -> true;
+		case "any ammunition" -> base.type().equals("AMMUNITION");
+		case "any simple or martial" ->
+			Set.of("SIMPLE_MELEE", "SIMPLE_RANGED", "MARTIAL_MELEE", "MARTIAL_RANGED").contains(weaponCategory);
+		case "any melee weapon" -> Set.of("SIMPLE_MELEE", "MARTIAL_MELEE").contains(weaponCategory);
+		case "any light, medium, or heavy" -> Set.of("LIGHT", "MEDIUM", "HEAVY").contains(armorCategory);
+		case "any medium or heavy, except hide armor" ->
+			Set.of("MEDIUM", "HEAVY").contains(armorCategory) && !base.name().equalsIgnoreCase("Hide Armor");
+		default -> Arrays.stream(restriction.split(",\\s*(?:or\\s+)?|\\s+or\\s+"))
+				.anyMatch(choice -> choice.trim().equalsIgnoreCase(base.name()));
+		};
 	}
 
 	/**

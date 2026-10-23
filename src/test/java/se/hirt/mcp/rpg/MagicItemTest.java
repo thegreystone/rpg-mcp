@@ -203,7 +203,7 @@ class MagicItemTest {
 									"SUMMARY")
 							.get("items")).stream().filter(d -> "+1 Longsword".equals(d.get("name"))).count());
 
-			// Wrong bases are refused: Flame Tongue is made on a sword, a +N needs a mundane base.
+			// Named templates restrict their bases, and the +N form must agree with an explicit base.
 			RpgException wrongKind = assertThrows(RpgException.class, () -> engine.inventory().grantLoot(op(), campaign,
 					pc, List.of(map("item", "Dagger of Venom", "base", "Longsword")), null, "QUEST", null));
 			assertEquals(ErrorCode.VALIDATION_FAILED, wrongKind.code());
@@ -243,6 +243,63 @@ class MagicItemTest {
 			assertEquals(7, withArrow.attackBonus());
 			assertEquals(5, withArrow.damage().get(0).modifier());
 			assertSame(bow, Combat.withBonus(bow, 0));
+		}
+	}
+
+	@Test
+	void magicTemplatesRejectDisallowedCategoriesExclusionsAndPartialNames() throws Exception {
+		try (Engine engine = engine(tempDb("magic-base-rejections"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			Map<String, Object> before = engine.characters().characterSheet(campaign, pc, "FULL");
+			long definitions = engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM custom_content"));
+			List<Map<String, Object>> invalid = List.of(map("item", "Flame Tongue", "base", "Longbow"),
+					map("item", "Flame Tongue", "base", "Shortbow"), map("item", "Defender", "base", "Dart"),
+					map("item", "Adamantine Armor", "base", "Leather Armor"),
+					map("item", "Adamantine Armor", "base", "Hide Armor"),
+					map("item", "Mithral Armor", "base", "Leather Armor"),
+					map("item", "Mithral Armor", "base", "Hide Armor"),
+					map("item", "Glamoured Studded Leather", "base", "Leather Armor"),
+					map("item", "Thunderous Greatclub", "base", "Club"));
+			for (Map<String, Object> spec : invalid) {
+				RpgException rejected = assertThrows(RpgException.class, () -> engine.inventory().grantLoot(op(),
+						campaign, pc, List.of(map("item", "+1 Club"), spec), "1 gp", "QUEST", null),
+						String.valueOf(spec));
+				assertEquals(ErrorCode.VALIDATION_FAILED, rejected.code(), String.valueOf(spec));
+				Map<String, Object> violation = l(rejected.details().get("violations")).getFirst();
+				assertEquals("base", violation.get("path"));
+				assertEquals("BASE_KIND", violation.get("rule"));
+			}
+			Map<String, Object> after = engine.characters().characterSheet(campaign, pc, "FULL");
+			assertEquals(before.get("money"), after.get("money"));
+			assertEquals(before.get("inventory"), after.get("inventory"), "invalid loot rolls back the whole grant");
+			long remainingDefinitions = engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM custom_content"));
+			assertEquals(definitions, remainingDefinitions, "rejected grants leave no instantiated definitions");
+		}
+	}
+
+	@Test
+	void magicTemplatesAcceptAllowedCategoriesAndEveryNamedListPosition() throws Exception {
+		try (Engine engine = engine(tempDb("magic-base-acceptance"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			List<Map<String, Object>> valid = List.of(map("item", "Flame Tongue", "base", "Longsword"),
+					map("item", "Flame Tongue", "base", "Javelin"), map("item", "Flame Tongue", "base", "Handaxe"),
+					map("item", "Defender", "base", "Club"), map("item", "Adamantine Armor", "base", "Chain Shirt"),
+					map("item", "Adamantine Armor", "base", "Plate Armor"),
+					map("item", "Mithral Armor", "base", "Chain Shirt"),
+					map("item", "Mithral Armor", "base", "Chain Mail"),
+					map("item", "Berserker Axe", "base", "Battleaxe"), map("item", "Berserker Axe", "base", "Greataxe"),
+					map("item", "Berserker Axe", "base", "Halberd"), map("item", "Energy Bow", "base", "Shortbow"),
+					map("item", "Glamoured Studded Leather", "base", "Studded Leather Armor"),
+					map("item", "Thunderous Greatclub", "base", "Greatclub"), map("item", "+1 Club"),
+					map("item", "+1 Shortbow"), map("item", "+1 Longsword"), map("item", "+1 Longbow"),
+					map("item", "+1 Leather Armor"), map("item", "+1 Hide Armor"), map("item", "+1 Plate Armor"),
+					map("item", "+1 Shield"), map("item", "+1 Arrow"), map("item", "+1 Bolt"));
+			Map<String, Object> granted = engine.inventory().grantLoot(op(), campaign, pc, valid, null, "QUEST", null);
+			assertEquals(valid.size(), l(granted.get("granted")).size());
 		}
 	}
 
