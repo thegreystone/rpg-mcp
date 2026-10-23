@@ -224,6 +224,9 @@ final class BuildMagicItems {
 				ObjectNode b = magic.putObject("bonus_by_rarity");
 				bonusByRarity.forEach(b::put);
 			}
+			if (e.name().equals("Ammunition, +1, +2, or +3")) {
+				magic.put("value_quantity", 10);
+			}
 			magic.put("attunement", attunement != null);
 			if (attunement != null && attunement.length() > "Requires Attunement".length()) {
 				magic.put("attunement_by", attunement.substring("Requires Attunement by ".length()).strip());

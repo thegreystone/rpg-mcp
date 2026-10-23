@@ -275,8 +275,8 @@ class EconomyTest {
 			String arrow = (String) list(loot.get("granted")).getFirst().get("entry");
 			Map<String, Object> sold = engine.inventory().trade(op(), campaign, pc, "SELL", null, arrow, 1, null, null,
 					null);
-			assertEquals("5 gp 2 cp", sold.get("price_received"), "one +1 arrow retains its proportional value");
-			assertEquals(start + 502, m(sold.get("money")).get("total_cp"));
+			assertEquals("10 gp 2 cp", sold.get("price_received"), "one +1 arrow retains its proportional value");
+			assertEquals(start + 1002, m(sold.get("money")).get("total_cp"));
 
 			String beads = (String) engine.content()
 					.define(op(), campaign, "ITEM", "Pearl Beads", "custom:item/pearl-beads",
@@ -297,7 +297,7 @@ class EconomyTest {
 					null, null);
 			assertEquals(5L, rest.get("quantity"), "an omitted SELL quantity sells the remaining pieces");
 			assertEquals("2 sp 5 cp", rest.get("price_received"));
-			assertEquals(start + 502 + 15 + 50 + 25, m(rest.get("money")).get("total_cp"));
+			assertEquals(start + 1002 + 15 + 50 + 25, m(rest.get("money")).get("total_cp"));
 		}
 	}
 

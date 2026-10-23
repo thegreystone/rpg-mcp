@@ -323,11 +323,8 @@ public final class MagicItems {
 		payload.put("summary", template.payload().get("summary"));
 		payload.put("text", template.payload().get("text"));
 		payload.put("text_is_paraphrase", false);
-		long value = VALUE_CP.getOrDefault(rarity, 0L);
-		if (Boolean.TRUE.equals(tm.get("consumable"))) {
-			value /= 2;
-		}
-		long costCp = base.costCp() + value;
+		int valueQuantity = tm.get("value_quantity") instanceof Number n ? n.intValue() : 1;
+		long costCp = costCp(base, rarity, Boolean.TRUE.equals(tm.get("consumable")), valueQuantity);
 		payload.put("cost_cp", costCp);
 		double lb = base.payload().get("weight_lb") instanceof Number w ? w.doubleValue() : 0;
 
@@ -474,11 +471,7 @@ public final class MagicItems {
 		payload.put("summary", text.length() > 200 ? text.substring(0, 200) + "…" : text);
 		payload.put("text", text);
 		payload.put("text_is_paraphrase", true);
-		long value = VALUE_CP.getOrDefault(rarity, 0L);
-		if (consumable) {
-			value /= 2;
-		}
-		long costCp = base.costCp() + value;
+		long costCp = costCp(base, rarity, consumable, 1);
 		payload.put("cost_cp", costCp);
 		double lb = base.payload().get("weight_lb") instanceof Number w ? w.doubleValue() : 0;
 
@@ -498,6 +491,22 @@ public final class MagicItems {
 		long id = tx.insert("custom_content", cols);
 		tx.touched(Ref.of(Ref.CONTENT, id), 0);
 		return ContentService.fromCustomRow(tx.get("custom_content", id));
+	}
+
+	/** Adds the mundane bundle cost to the magic value of the pieces in that bundle. */
+	private static long costCp(Item base, String rarity, boolean consumable, int valueQuantity) {
+		if (valueQuantity <= 0) {
+			throw RpgException.invalidArgument("A magic item's value_quantity must be positive.");
+		}
+		long value = VALUE_CP.getOrDefault(rarity, 0L) / (consumable ? 2 : 1);
+		if (base.type().equals("AMMUNITION")) {
+			value = value * base.bundleSize() / valueQuantity;
+		}
+		try {
+			return Math.addExact(base.costCp(), value);
+		} catch (ArithmeticException tooLarge) {
+			throw RpgException.invalidArgument("The enchanted item's price is too large to represent in copper.");
+		}
 	}
 
 	/**

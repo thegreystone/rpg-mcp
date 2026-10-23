@@ -71,6 +71,7 @@
             "RARE": 2,
             "VERY_RARE": 3
           },
+          "value_quantity": 10,
           "attunement": false,
           "template": true,
           "applies_to": "Any Ammunition",

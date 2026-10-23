@@ -315,6 +315,13 @@ robes); rings are `RING`; rods, staffs and wands are held (`ONE_HAND`); the rest
   the base's mechanics plus the template's magic and text, priced base + rarity value, one definition per name. A `+N`
   template carries `bonus_by_rarity`; the requested bonus fixes the rarity. Templates cannot be bought or granted as
   they are (`MagicItems`).
+- **Ammunition values.** `cost_cp` prices a purchase bundle; inventory and loot quantities count individual pieces.
+  The +1/+2/+3 ammunition template carries `value_quantity: 10`: ten pieces have the magic value of a potion of the
+  same rarity (half the rarity table value). Other ammunition, including Ammunition of Slaying and GM-made
+  enchantments, uses the general consumable value per piece. The magic value is scaled to the base's bundle size,
+  then the mundane bundle cost is added once. For example, twenty +1 Arrows cost 401 GP (400 GP magic + 1 GP arrows);
+  selling one at half value yields 10 GP 2 CP after rounding down. Existing campaign definitions retain their stored
+  prices; the calculation applies when a definition is first created.
 - **GM-made enchantments.** The SRD has no Arrow of Fire; `grant_loot` makes one on a mundane base from an inline
   `magic` spec (`name`, `rarity`, `text`, and the mechanics: `bonus`, `damage_bonus_dice` + `damage_type`, `ac_bonus`,
   `save_bonus`, `attack_bonus`, `speed_bonus`, `resistance`, `attunement`, `slot`, `consumable: {heal}`). Extra damage
