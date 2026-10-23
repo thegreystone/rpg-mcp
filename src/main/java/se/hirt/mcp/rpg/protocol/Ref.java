@@ -53,6 +53,7 @@ public record Ref(String type, long id) {
 	public static final String ROLL = "roll";
 	public static final String STORY_BEAT = "story_beat";
 	public static final String INVENTORY = "inventory";
+	public static final String WANT = "want";
 
 	public static Ref parse(String text) {
 		if (text == null || text.isBlank()) {

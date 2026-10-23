@@ -30,6 +30,7 @@ package se.hirt.mcp.rpg.narrative;
 
 import se.hirt.mcp.rpg.character.Biography;
 import se.hirt.mcp.rpg.character.CharacterService;
+import se.hirt.mcp.rpg.character.WantLookup;
 import se.hirt.mcp.rpg.choice.ContentProfile;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
@@ -776,11 +777,11 @@ public final class NarrativeService {
 			if (!abilities.isEmpty()) {
 				w.put("abilities", abilities);
 			}
-			w.put("open_wants", Biography.openWants(c));
+			w.put("open_wants", Biography.openWants(tx, c));
 			if (explicit) {
-				w.put("open_intimate_wants", Biography.openIntimateWants(c));
+				w.put("open_intimate_wants", Biography.openIntimateWants(tx, c));
 			}
-			w.put("closed_since_last_review", Biography.closedWantsSince(c, sinceJournalId, sinceSeq, explicit));
+			w.put("closed_since_last_review", Biography.closedWantsSince(tx, c, sinceJournalId, sinceSeq, explicit));
 			out.add(w);
 		}
 		return out;
@@ -851,6 +852,10 @@ public final class NarrativeService {
 			Map<String, Object> ctx;
 			switch (s) {
 			case "SCENE" -> ctx = sessions.context(tx, campaign, b);
+			case "WANT" -> {
+				ctx = new LinkedHashMap<>();
+				ctx.put("want", WantLookup.get(tx, campaignId, required(ref, "ref (want)")));
+			}
 			case "CHARACTER" -> {
 				Row c = CharacterService.character(tx, campaignId, required(ref, "ref (character)"));
 				ctx = new LinkedHashMap<>();
@@ -927,7 +932,7 @@ public final class NarrativeService {
 			}
 			case "DIRECTOR" -> ctx = directorView(tx, campaign, "CAMPAIGN_REVIEW");
 			default -> throw RpgException.invalidArgument(
-					"scope must be SCENE, CHARACTER, RELATIONSHIP, INTIMACY, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
+					"scope must be SCENE, CHARACTER, WANT, RELATIONSHIP, INTIMACY, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
 			}
 			ctx.put("scope", s);
 			ctx.put("meta", Harness.meta(campaign, null));
@@ -989,10 +994,10 @@ public final class NarrativeService {
 					partnerIds.add(other);
 				}
 			}
-			for (Map<String, Object> w : Biography.openIntimateWants(focal)) {
+			for (Map<String, Object> w : Biography.openIntimateWants(tx, focal)) {
 				namedRefs(w.get("with")).forEach(partnerIds::add);
 			}
-			if (Biography.intimacy(focal).get("household_terms") instanceof List<?> terms) {
+			if (Biography.publicIntimacy(tx, focal).get("household_terms") instanceof List<?> terms) {
 				for (Object t : terms) {
 					if (t instanceof Map<?, ?> m) {
 						namedRefs(m.get("with")).forEach(partnerIds::add);
@@ -1087,13 +1092,13 @@ public final class NarrativeService {
 		m.put("presentation", c.str("presentation"));
 		m.put("appearance", c.str("appearance"));
 		m.put("personality", c.str("personality"));
-		Map<String, Object> bio = Biography.biography(c);
+		Map<String, Object> bio = Biography.publicBiography(tx, c);
 		if (!bio.isEmpty()) {
 			var b = new LinkedHashMap<String, Object>();
 			b.put("voice", bio.get("voice"));
 			b.put("marks", bio.get("marks"));
 			b.put("state", Biography.currentState(c));
-			b.put("wants", Biography.openWants(c));
+			b.put("wants", Biography.openWants(tx, c));
 			if (focal && bio.get("timeline") instanceof List<?> t) {
 				b.put("timeline", t.size() <= 12 ? t : t.subList(t.size() - 12, t.size()));
 			}
@@ -1107,12 +1112,12 @@ public final class NarrativeService {
 			m.put("with_party", partyLocation == null || partyLocation.equals(c.lng("location_id")));
 		}
 		if (explicit) {
-			Map<String, Object> intimacy = Biography.intimacy(c);
+			Map<String, Object> intimacy = Biography.publicIntimacy(tx, c);
 			intimacy.remove("household_terms");
 			if (!intimacy.isEmpty()) {
 				m.put("intimate_profile", intimacy);
 			}
-			List<Map<String, Object>> wants = Biography.openIntimateWants(c);
+			List<Map<String, Object>> wants = Biography.openIntimateWants(tx, c);
 			if (!wants.isEmpty()) {
 				m.put("intimate_wants", wants);
 			}

@@ -800,7 +800,7 @@ public final class CharacterService {
 								+ Biography.BIOGRAPHY_KEYS.stream().sorted().toList() + " (or null to clear).");
 					}
 					@SuppressWarnings("unchecked")
-					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId,
+					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId, c.id(),
 							Biography.biography(c), (Map<String, Object>) value, Biography.BIOGRAPHY_KEYS, "biography");
 					cols.put("biography_json", merged.isEmpty() ? null : Json.write(merged));
 				}
@@ -814,7 +814,7 @@ public final class CharacterService {
 								+ Biography.INTIMACY_KEYS.stream().sorted().toList() + " (or null to clear).");
 					}
 					@SuppressWarnings("unchecked")
-					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId,
+					Map<String, Object> merged = value == null ? Map.of() : Biography.merge(tx, campaignId, c.id(),
 							Biography.intimacy(c), (Map<String, Object>) value, Biography.INTIMACY_KEYS, "intimacy");
 					cols.put("intimacy_json", merged.isEmpty() ? null : Json.write(merged));
 				}
@@ -909,7 +909,7 @@ public final class CharacterService {
 			hp.put("max", null);
 		}
 		m.put("hp", hp);
-		Biography.appendBrief(c, m);
+		Biography.appendBrief(tx, c, m);
 		m.put("location", Ref.ofNullable(Ref.LOCATION, c.lng("location_id")));
 		if (detail.equals("SUMMARY")) {
 			List<String> magicNames = InventoryService.magicItems(tx, rules, c.id()).stream().map(
@@ -1012,13 +1012,13 @@ public final class CharacterService {
 		m.put("goals", c.isNull("goals_json") ? List.of() : c.list("goals_json"));
 		m.put("age", c.integer("age"));
 		m.put("presentation", c.str("presentation"));
-		Map<String, Object> biography = Biography.biography(c);
+		Map<String, Object> biography = Biography.publicBiography(tx, c);
 		if (!biography.isEmpty()) {
 			m.put("biography", biography);
 		}
 		if (!c.isNull("intimacy_json") && Biography.intimacyAllowed(tx, c.lng("campaign_id"))) {
-			m.put("intimacy",
-					Map.of("visibility", "GM_ONLY", "content_profile", "PEGI_18", "profile", Biography.intimacy(c)));
+			m.put("intimacy", Map.of("visibility", "GM_ONLY", "content_profile", "PEGI_18", "profile",
+					Biography.publicIntimacy(tx, c)));
 		}
 		m.put("creation", c.map("creation_json"));
 		if (!c.isNull("agenda_json")) {

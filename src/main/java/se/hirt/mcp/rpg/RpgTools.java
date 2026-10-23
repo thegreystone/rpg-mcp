@@ -250,7 +250,7 @@ public class RpgTools {
 	// ── Session and context ────────────────────────────────────────────
 
 	@Tool(name = "bootstrap_session", description = "MUTATING (opens/resumes a session). Returns the bounded context package to continue play: "
-			+ "campaign config and house rules, game time, location, the player character's sheet (inventory as names), the party with each member's whereabouts, "
+			+ "campaign config and house rules, game time, location, the player character's sheet (inventory as names), the party with each member's whereabouts and compact open wants {ref, note}, "
 			+ "compact relationships (profiles are fetched with get_context RELATIONSHIP/INTIMACY), story beats, quests, adventure premise (+ GM_ONLY truth), "
 			+ "recent events, and `chronicle`: the synopsis (the story so far), the chapters since it, a digest of the ledger since the last chapter, and `due` "
 			+ "(when a chapter or synopsis is owed, delegate it: a summarizing agent calls get_chronicle_material and write_chronicle while play continues). "
@@ -277,10 +277,11 @@ public class RpgTools {
 
 	@Tool(name = "find", description = "Lookup by name: kind CHARACTER or LOCATION, a case-insensitive query matched against the name first (exact, prefix, "
 			+ "substring) and the description second. Each hit is one line: ref, name, and for people their membership, life state and whereabouts; "
-			+ "for places kind, parent and who is there. Use it whenever a name is known but the ref is not. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "for places kind, parent and who is there. Kind WANT searches wants by note and returns stable want:N refs; intimate wants require PEGI_18. "
+			+ "Use get_context WANT for full want details. Use find whenever a name or note is known but the ref is not. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse find(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "CHARACTER (default) or LOCATION")
-	Optional<String> kind, @ToolArg(description = "Name or part of a name, e.g. 'Hollin'")
+	String campaign, @ToolArg(description = "CHARACTER (default), LOCATION or WANT")
+	Optional<String> kind, @ToolArg(description = "Name or want note, or part of one, e.g. 'Hollin'")
 	String query, @ToolArg(description = "Max hits (default 20)")
 	Optional<Integer> limit) {
 		return ToolSupport.run("find",
@@ -304,7 +305,7 @@ public class RpgTools {
 			+ "(about 300 tokens, at most 3000 characters) of the ledger since the last chapter, closed at `through` (the material's through.journal_id; now when omitted). "
 			+ "kind SYNOPSIS: the rolling story so far (about 1500 tokens, at most 12000 characters) rewritten from the previous synopsis and the chapters since, "
 			+ "closed at `through` (the material's through.chapter_id); it supersedes the previous synopsis. Both record the game time covered and the game time written. "
-			+ "Never invent: a chapter says only what the ledger says.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Never invent: a chapter says only what the ledger says. Prose may cite a stable want:N inline; resolve its details with get_context WANT.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse writeChronicle(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "CHAPTER (default) or SYNOPSIS")
@@ -330,10 +331,13 @@ public class RpgTools {
 	@Tool(name = "update_character", description = "MUTATING. Applies canonical narrative/identity changes to a committed character: name, description, "
 			+ "appearance, personality, backstory, goals (list), age (number), presentation, alignment; plus two merged aggregates: `biography` "
 			+ "{timeline: [{game_time?, note}], voice: [verbatim lines], state: [{note, since?, until?}] (carrying a child, an arm in a sling; give until to end one), "
-			+ "marks: [..], wants: [{note, with: [refs]?, status OPEN|DONE|ABANDONED}] (the character's drives: what they are working toward; open wants show in every "
+			+ "marks: [..], wants: [{ref?, note?, with: [character refs]?, status OPEN|DONE|ABANDONED, resolved_by?: event:N}] (the character's drives; "
+			+ "the server assigns stable want:N refs; new wants need note; patch an existing want by ref without repeating note, preserving omitted fields, or use existing note-based input; open wants are {ref, note} in every "
 			+ "party list so the NPC is played toward the same things every scene)} and, under PEGI_18 only, `intimacy` {body, likes, dislikes, limits, hard_lines, "
-			+ "wants: [{note, with, status}] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. Lists append without duplicates and maps merge key by key at every depth, nothing stored is lost; "
-			+ "an entry with the same note replaces the old one (mark a want DONE, end a state); a null removes the key it sits under; {replace: true} starts over. Record facts as they "
+			+ "wants: [the same referenced want entries] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. "
+			+ "Optional resolved_by must name an existing event in the same campaign. Want refs must belong to this character and the matching general/intimate list. "
+			+ "Other lists append without duplicates and maps merge key by key at every depth; an entry with the same note replaces the old one (end a state); "
+			+ "a null removes the key it sits under; {replace: true} starts over. Record facts as they "
 			+ "are established in play: an age, a line worth keeping, a pregnancy, a scar, what someone wants. Mechanical state is never changed here. Drafts use update_character_draft.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateCharacter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
@@ -983,7 +987,7 @@ public class RpgTools {
 
 	@Tool(name = "get_director_context", description = "DIRECTOR-ONLY view for the slow narrative loop (invoke at meaningful boundaries, not every turn): premise and background truth, "
 			+ "open seeds and companion intentions, story beats (incl. blocked/invalidated plans), quests, factions, world events, party, relationships, NPC agendas, recent major events, "
-			+ "companion_wants (each present member's personality, INT/WIS/CHA, open wants, open intimate wants under PEGI_18, and the wants closed since the last review: a settled want should get a next one proposed in character), "
+			+ "companion_wants (each present member's personality, INT/WIS/CHA, open wants with stable refs, open intimate wants under PEGI_18, and the wants closed since the last review: a settled want should get a next one proposed in character), "
 			+ "pacing composition and when the last review happened. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getDirectorContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "INITIAL_CAMPAIGN, SESSION_START or CAMPAIGN_REVIEW (default)")
@@ -1008,7 +1012,9 @@ public class RpgTools {
 			+ "relationships with profiles, membership history), RELATIONSHIP {ref, second_ref}, INTIMACY {ref, second_ref optional} (everything needed to play one "
 			+ "person believably in a bed: biography, voice, state, open wants, their own intimate profile and intimate wants, every partner with both directions of the pairwise "
 			+ "profile, the household terms, the intimate ledger events with detail, and the PEGI 18 guidance; below PEGI_18 the romance layer only), "
-			+ "LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR. Visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "WANT {ref: want:N} returns {want: {full want fields, character: character:N, kind: general|intimate}}, including optional resolved_by, "
+			+ "with private closure-order markers omitted; intimate wants require PEGI_18. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR. "
+			+ "Visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Scope")
 	String scope, @ToolArg(description = "Primary reference for the scope")

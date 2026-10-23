@@ -29,6 +29,8 @@
 package se.hirt.mcp.rpg.session;
 
 import se.hirt.mcp.rpg.character.CharacterService;
+import se.hirt.mcp.rpg.character.Biography;
+import se.hirt.mcp.rpg.character.WantLookup;
 import se.hirt.mcp.rpg.choice.ContentProfile;
 import se.hirt.mcp.rpg.choice.FantasyStyle;
 import se.hirt.mcp.rpg.harness.Harness;
@@ -223,10 +225,10 @@ public final class SessionService {
 	// ── find ───────────────────────────────────────────────────────────
 
 	/**
-	 * Lookup by name for characters and locations: case-insensitive, exact name first, then a name
-	 * prefix, then a substring of the name, then a mention in the description. Each hit is one
-	 * line: ref, name and what the reader needs to pick the right one (membership, life state and
-	 * whereabouts for people; kind and parent for places).
+	 * Lookup by name for characters, locations and wants: case-insensitive, exact name first, then
+	 * a name prefix, then a substring of the name, then a mention in the description. Each hit is
+	 * one line: ref, name and what the reader needs to pick the right one (membership, life state
+	 * and whereabouts for people; kind and parent for places).
 	 */
 	public Map<String, Object> find(String campaignRef, String kind, String query, Integer limit) {
 		return db.read(tx -> {
@@ -304,7 +306,30 @@ public final class SessionService {
 					}
 				}
 			}
-			default -> throw RpgException.invalidArgument("kind must be CHARACTER or LOCATION.");
+			case "WANT" -> {
+				boolean includeIntimate = Biography.intimacyAllowed(tx, campaignId);
+				for (Row c : tx.query("SELECT * FROM character WHERE campaign_id = ? ORDER BY id", campaignId)) {
+					for (Map<String, Object> want : WantLookup.forCharacter(tx, c, includeIntimate)) {
+						int score = q.equals(want.get("ref")) ? 40
+								: score(q, String.valueOf(want.get("note")), null, null);
+						if (score > 0) {
+							var hit = new LinkedHashMap<String, Object>(want);
+							hit.put("name", want.get("note"));
+							scored.add(new Object[] {score, hit});
+						}
+					}
+				}
+				scored.sort((a, b) -> Integer.compare((Integer) b[0], (Integer) a[0]));
+				for (Object[] result : scored) {
+					@SuppressWarnings("unchecked")
+					Map<String, Object> hit = (Map<String, Object>) result[1];
+					hits.add(hit);
+					if (hits.size() >= max) {
+						break;
+					}
+				}
+			}
+			default -> throw RpgException.invalidArgument("kind must be CHARACTER, LOCATION or WANT.");
 			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("kind", k);

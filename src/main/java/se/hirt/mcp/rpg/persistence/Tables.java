@@ -57,7 +57,7 @@ public final class Tables {
 			"event_causal", "relationship_event", "resource_state", "encounter_participant", "cash_flow_run");
 
 	public static final Set<String> NOT_REWINDABLE = Set.of("schema_version", "installed_ruleset", "installed_content",
-			"session", "journal_entry", "checkpoint", "audit_record");
+			"session", "journal_entry", "checkpoint", "audit_record", "want_identity");
 
 	private Tables() {
 	}

@@ -106,6 +106,7 @@ capabilities:
   checkpoints: true
   director: true
   relationship_memory: true
+  want_references: true
 optional_capabilities:
   full_text_memory_search: false
   semantic_memory_search: false
@@ -125,8 +126,12 @@ Clients MUST ignore unknown response fields and MUST NOT assume they understand 
 ### 5.1 Typed references
 
 Persisted entities use numeric primary keys internally and typed references `<entity-type>:<positive-integer>` at the
-boundary: `campaign:1`, `character:4`, `location:7`, `event:42`, `encounter:3`, `checkpoint:2`, `content:5`.
+boundary: `campaign:1`, `character:4`, `location:7`, `event:42`, `encounter:3`, `checkpoint:2`, `content:5`, `want:8`.
 References are opaque; clients MUST NOT infer ordering, ownership or mutability from the number.
+
+The server assigns each character want a stable `want:N` reference, independent of its note, status or position in a
+profile list. References are never reused, including after checkpoint restoration. General and intimate wants keep
+separate identities; intimate wants remain subject to the campaign's PEGI_18 policy.
 
 All creatures share one character sequence: `character:1` may be the player avatar, `character:2` an innkeeper,
 `character:3` a dragon. Player control, name, role, membership and life state are mutable state, never identity.
@@ -488,6 +493,9 @@ scope rules always apply.
 - `SCENE`
 - `CHARACTER`: FULL sheet with biography and (PEGI_18) intimate profile, relationships with profiles, membership
   history, recent events, location
+- `WANT`: `ref: want:N` returns `{want: {...want fields, character: character:N, kind: general|intimate}}`, including
+  the note, status, dates, `with` and optional `resolved_by`. Campaign isolation and PEGI_18 gating apply; internal
+  closure-order bookkeeping is omitted.
 - `RELATIONSHIP`
 - `INTIMACY`: everything needed to play one person in an intimate scene: the focal character's identity, biography
   (voice, marks, running state, open wants, last dozen timeline entries), hit points and conditions, whereabouts, own
@@ -553,12 +561,20 @@ an entry over the ceiling `INVALID_ARGUMENT`, a chapter with nothing to cover `O
 at a chapter id and supersedes the previous one. Each write is a `CHRONICLE_WRITTEN` ledger event (MINOR, GM_ONLY) and
 returns the new `due` state.
 
+Chronicle prose may cite a stable `want:N` inline when it helps connect a drive to its later outcome. Resolve the
+reference with `get_context` scope `WANT`; `write_chronicle` still accepts the prose `summary`, without a separate
+structured references field.
+
 ### 11.7 `find`
 
 `find {campaign, kind, query, limit}` (read-only) looks up characters (`CHARACTER`, default) or places (`LOCATION`) by
 name: case-insensitive, exact name first, then prefix, then substring, then a mention in the description. Each hit is
 one line: ref, name, and for people membership state, life state and whereabouts; for places kind, materialization,
 parent and head count. Use it whenever a name is known and the ref is not; never guess a ref.
+
+Kind `WANT` searches character wants by note. Each hit identifies its stable `ref`, note as `name`, owning
+`character`, and `kind: general|intimate`. It includes general wants and, under PEGI_18 only, intimate wants.
+Use `get_context` scope `WANT` to retrieve the full entry.
 
 ---
 
@@ -627,18 +643,32 @@ age, presentation, alignment, and two merged aggregates:
 
 - `biography`: `timeline` [{game_time, note}] (clock stamped when omitted), `voice` [verbatim lines], `state`
   [{note, since, until}] (long-running bodily state; no `until` means current, shown in every party list), `marks`,
-  and `wants` [{note, with: [character refs], since, status OPEN|DONE|ABANDONED, done_at}] (the character's drives;
-  open wants show in every party list at every detail level; a want closed without a `done_at` is stamped with the
-  clock, so fulfilled wants keep their history).
+  and `wants` [{ref, note, with: [character refs], since, status OPEN|DONE|ABANDONED, done_at, resolved_by}] (the
+  character's drives). The server assigns `ref: want:N`; party summaries show open wants as `{ref, note}` at every
+  detail level. A want closed without a `done_at` is stamped with the clock, so fulfilled wants keep their history.
 - `intimacy`: PEGI_18 only (`POLICY_DENIED` otherwise, never returned below PEGI_18): `body`, `likes`, `dislikes`,
-  `limits`, `hard_lines`, `wants` [{note, with, since, status}], `household_terms` [{note, with}] (held by the person
-  who set them), `voice_in_bed`. This is the character's own truth; what each partner has learned stays on the pairwise
-  relationship profile.
+  `limits`, `hard_lines`, `wants` (the same entry shape as biography wants, with separate identities),
+  `household_terms` [{note, with}] (held by the person who set them), `voice_in_bed`. This is the character's own
+  truth; what each partner has learned stays on the pairwise relationship profile.
 
-Both merge like relationship profiles (§17.2): lists append without duplicates, an entry with the same `note` replaces
-the older one (mark a want DONE, give a state its `until`), a null removes the key it sits under, `{replace: true}`
-starts over. The GM SHOULD record facts as they are established in play. The older `goals` list remains for
+Patch an existing want by `ref`, supplying only the fields that change; its `note` need not be repeated. For example,
+`changes: {biography: {wants: [{ref: "want:8", status: "DONE", resolved_by: "event:42"}]}}` closes that want and
+preserves its other fields. `resolved_by` is optional and MUST reference an existing event in the same campaign.
+`with` continues to name the characters involved, not the want's identity. The same patch form applies to intimate
+wants under `intimacy`. A reference must belong to the supplied character and the matching general or intimate list.
+
+The existing note-based input remains supported: a new note creates a want and a matching note updates its existing
+entry. If several wants share the same wording, a note-only update is ambiguous and must use a reference instead.
+Reopening a want clears its previous closure date and, unless explicitly replaced, its resolution event and explanation.
+Other biography/intimacy fields merge like relationship profiles (§17.2): lists append without duplicates,
+an entry with the same `note` replaces the older one (for example, give a state its `until`), a null removes the key it
+sits under, and `{replace: true}` starts over. Internal closure-order markers are server-owned and never appear in
+public want views. The GM SHOULD record facts as they are established in play. The older `goals` list remains for
 compatibility; `wants` is the dated, closable form the views show.
+
+On upgrade, references are overlaid on legacy profile JSON using the identity registry, including notes preserved in
+historical checkpoint before-images. Existing JSON is not rewritten; an entry gains its stored ref when it is next
+updated or closed. Old campaigns and checkpoints remain usable.
 
 Identity is unaffected: renaming changes only the display name. The operation records provenance and requires
 `expected_revision`. Mechanical state uses `apply_runtime_change` or a more specific tool; exceptions use
@@ -1098,9 +1128,9 @@ Creates a restorable checkpoint when policy and workflow permit. It MUST capture
 aggregate: characters with full runtime state, inventory and money, membership and control, relationships, custom
 content, locations and connections, quests, factions, story beats and seeds, world and Director state, encounters,
 pending workflows, campaign configuration, the event ledger and the game clock. A new mutable canonical aggregate is
-rewindable unless specified otherwise. Audit lineage, idempotency records, checkpoint metadata and server configuration
-are outside rewindable state; session records remain as audit history marked as superseded. Under `ENCOUNTER_RETRY` the
-server MUST create the retry checkpoint when an encounter starts.
+rewindable unless specified otherwise. Audit lineage, idempotency records, checkpoint metadata, server configuration
+and immutable want identities are outside rewindable state; session records remain as audit history marked as
+superseded. Under `ENCOUNTER_RETRY` the server MUST create the retry checkpoint when an encounter starts.
 
 ### 19.2 `get_continuation_options`
 

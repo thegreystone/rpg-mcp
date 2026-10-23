@@ -37,7 +37,8 @@ PRAGMA busy_timeout = 5000;
 - `snake_case` names; table names singular (`character`, not `characters`).
 - Every table: `id INTEGER PRIMARY KEY AUTOINCREMENT`. IDs are never reused after deletion (I-1, I-45, I-49).
 - Campaign-scoped tables carry an indexed `campaign_id INTEGER NOT NULL REFERENCES campaign(id)`; all queries filter
-  by it.
+  by it. The immutable `want_identity` registry stores ownership IDs without foreign keys into rewindable tables
+  (§3.3), so restoration cannot remove identities.
 - Mutable aggregate roots carry `revision INTEGER NOT NULL DEFAULT 0` (domain model §2.5).
 - Enums are `TEXT` with `CHECK (col IN (...))`.
 - Real timestamps are RFC 3339 UTC `TEXT` (`created_at`, `updated_at` where useful).
@@ -118,6 +119,20 @@ force. `Effects.removeAll` ends every effect on death or revival by fiat.
 
 Staged (pre-`ACTIVE`) rules state, inventory and money live in the same columns and tables as active state; every
 gameplay query gates on `lifecycle = 'ACTIVE'` (I-6).
+
+**want_identity** (V009) — immutable reference registry: `id`, `campaign_id`, `character_id`,
+`kind CHECK (IN ('general','intimate'))`, `legacy_note TEXT COLLATE NOCASE NULL`.
+Unique `(character_id, kind, legacy_note)`; indexed `(campaign_id, character_id, kind)`. Its ID is the public
+`want:N`. It has no foreign keys into rewindable state and is not rewindable itself: a want on a discarded branch
+must never lend its reference to another want. Text, status, `with`, dates and optional `resolved_by: event:N` remain
+canonical in `character.biography_json` or `intimacy_json`; public views hide private closure-order bookkeeping.
+Newly written entries carry private `_engine` metadata distinguishing server-issued references from legacy
+free-form fields. Public views emit the stable `ref` and omit that metadata.
+
+V009 maps notes in both current profiles and historical character before-images in `journal_entry.undo_json`.
+It leaves those JSON values untouched. Reads overlay stable references on old entries; only an entry subsequently
+updated or closed is persisted in the new referenced form. Thus restoring an old checkpoint does not require
+rewriting its before-images or allocating a new identity for an existing legacy want.
 
 **character_class** — `id`, `character_id`, `class_ref`, `subclass_ref NULL`, `level INTEGER CHECK (level >= 1)`. Unique
 `(character_id, class_ref)`.
@@ -285,7 +300,7 @@ The journal stores **before-images**, not forward deltas. `undo_json` is an orde
   importer and the migration runner.
 
 **Rewindable tables:** everything campaign-owned except `audit_record`, `journal_entry`, `checkpoint`,
-`installed_ruleset`, `installed_content` and `schema_version` (I-50/I-51).
+`installed_ruleset`, `installed_content`, `want_identity` and `schema_version` (I-50/I-51).
 
 ---
 
@@ -354,6 +369,9 @@ installed_content(kind, spell_level), (kind, cr_times_8), (kind, cost_cp)
   encoded in migrations.
 - V008 adds nullable columns to `character` and a new rewindable table; older before-images restore the new columns as
   NULL, so pre-existing checkpoints stay valid.
+- V009 adds the non-rewindable `want_identity` registry and backfills mappings from current and historical want
+  notes without rewriting profile JSON or checkpoint before-images (§3.3). Existing profiles are enriched on reads;
+  only a later update or closure persists a want's ref in its profile entry.
 - A schema change to a rewindable table must state its effect on stored `undo_json`: a migration that renames or
   retypes a column must rewrite stored before-images, or the release notes must invalidate pre-existing checkpoints
   explicitly. A test restores a fixture checkpoint created on the previous schema version.

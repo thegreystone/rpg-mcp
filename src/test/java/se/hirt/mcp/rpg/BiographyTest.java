@@ -98,7 +98,10 @@ class BiographyTest {
 					map("biography", map("state", List.of(map("note", "a sprained wrist", "until", "Day 9, 08:00")))));
 			Map<String, Object> summary = engine.characters().characterSheet(campaign, ilsa, "SUMMARY");
 			assertEquals(List.of("palms marked and always warm"), summary.get("state"), "ended states leave the brief");
-			assertEquals(List.of("a house with her name in the book"), summary.get("wants"), "open drives ride along");
+			assertEquals(List.of("a house with her name in the book"),
+					list(summary.get("wants")).stream().map(w -> w.get("note")).toList(), "open drives ride along");
+			assertEquals(list(bio.get("wants")).get(0).get("ref"), list(summary.get("wants")).get(0).get("ref"),
+					"compact drives retain the identity needed to update them");
 			assertEquals(21, summary.get("age"));
 			assertEquals("A low bun with two pens in it.", summary.get("appearance_brief"));
 			assertEquals("location:1", summary.get("location"));

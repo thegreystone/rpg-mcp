@@ -30,12 +30,14 @@ package se.hirt.mcp.rpg.character;
 
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
+import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.session.GameTime;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.UnaryOperator;
@@ -48,8 +50,9 @@ import java.util.function.UnaryOperator;
  * <b>intimate profile</b> (the character's own body, likes, dislikes, limits, hard lines, the wants
  * that concern intimacy, the standing terms of their household, and how they talk in bed). Both are
  * JSON maps of lists merged the way relationship profiles are: lists append without duplicates, an
- * entry with the same {@code note} replaces the older one (so a want can be marked done and a state
- * given an end), a null removes a key, {@code replace: true} starts over.
+ * entry with the same {@code note} updates the older one, a null removes a key,
+ * {@code replace: true} starts over. Wants additionally have stable references and merge partial
+ * updates by reference, so their wording can change without losing their identity or history.
  */
 public final class Biography {
 
@@ -69,7 +72,9 @@ public final class Biography {
 
 	/** A want is OPEN until it is DONE or ABANDONED. */
 	public static final Set<String> WANT_STATUS = Set.of("OPEN", "DONE", "ABANDONED");
+	private static final String ENGINE = "_engine";
 	private static final String CLOSED_JOURNAL_ID = "_closed_journal_id";
+	private static final String ENGINE_CLOSED_JOURNAL_ID = "closed_journal_id";
 
 	private Biography() {
 	}
@@ -84,6 +89,44 @@ public final class Biography {
 				: new LinkedHashMap<>(c.map("intimacy_json"));
 	}
 
+	/** Narrative output carries usable want references, without engine closure bookkeeping. */
+	public static Map<String, Object> publicBiography(Tx tx, Row c) {
+		return publicProfile(tx, c, false);
+	}
+
+	/** The caller is responsible for admitting intimate detail under the campaign policy. */
+	public static Map<String, Object> publicIntimacy(Tx tx, Row c) {
+		return publicProfile(tx, c, true);
+	}
+
+	private static Map<String, Object> publicProfile(Tx tx, Row c, boolean intimate) {
+		Map<String, Object> out = intimate ? intimacy(c) : biography(c);
+		if (out.get("wants") instanceof List<?>) {
+			out.put("wants", wants(tx, c, intimate));
+		}
+		return out;
+	}
+
+	/** All current wants, including closed ones, with stable public references where available. */
+	public static List<Map<String, Object>> wants(Tx tx, Row c, boolean intimate) {
+		var out = new ArrayList<Map<String, Object>>();
+		Object value = (intimate ? intimacy(c) : biography(c)).get("wants");
+		if (value instanceof List<?> list) {
+			for (Object entry : list) {
+				Map<String, Object> want = wantMap(entry);
+				String ref = wantRef(tx, c.id(), intimate ? "intimate" : "general", entry);
+				want.remove("ref");
+				if (ref != null) {
+					want.put("ref", ref);
+				}
+				want.remove(ENGINE);
+				want.remove(CLOSED_JOURNAL_ID);
+				out.add(want);
+			}
+		}
+		return out;
+	}
+
 	/** True when the campaign's content profile admits intimate detail (PEGI_18). */
 	public static boolean intimacyAllowed(Tx tx, long campaignId) {
 		return tx.queryOne("SELECT content_profile FROM policy_state WHERE campaign_id = ?", campaignId)
@@ -93,14 +136,15 @@ public final class Biography {
 	/**
 	 * Merges {@code given} into {@code current} under the allowed keys. Lists append without
 	 * duplicates at every depth; an entry that is a map with a {@code note} replaces an existing
-	 * entry with the same note; entries of dated lists are stamped with the current game time when
+	 * entry with the same note. Wants instead merge partial updates by ref, falling back to a note
+	 * match for older clients. Entries of dated lists are stamped with the current game time when
 	 * the caller gave none; maps merge key by key; a null value removes the key it sits under;
 	 * {@code replace: true} starts from an empty aggregate. Nothing stored is dropped by a value of
 	 * another shape ({@link DeepMerge}).
 	 */
 	public static Map<String, Object> merge(
-		Tx tx, long campaignId, Map<String, Object> current, Map<String, Object> given, Set<String> allowed,
-		String what) {
+		Tx tx, long campaignId, long characterId, Map<String, Object> current, Map<String, Object> given,
+		Set<String> allowed, String what) {
 		if (given == null) {
 			return current;
 		}
@@ -120,22 +164,209 @@ public final class Biography {
 				out.remove(key);
 				continue;
 			}
+			if ("wants".equals(key)) {
+				out.put(key, mergeWants(tx, campaignId, characterId, what.equals("intimacy") ? "intimate" : "general",
+						current.get(key), out.get(key), v));
+				continue;
+			}
 			// A single entry given for a dated list is that list's one new entry.
 			if (v instanceof Map<?, ?> && STAMPED.containsKey(key) && !(out.get(key) instanceof Map<?, ?>)) {
 				v = List.of(v);
 			}
-			UnaryOperator<Object> normalize = item -> normalize(tx, campaignId, key, item, current.get(key));
+			UnaryOperator<Object> normalize = item -> normalize(tx, campaignId, key, item);
 			Object merged = DeepMerge.merge(out.get(key), v, key, normalize, Biography::noteOf);
 			out.put(key, merged instanceof String s ? s.trim() : merged);
 		}
 		return out;
 	}
 
+	/** Wants merge by stable ref, with the original case-insensitive note match as a fallback. */
+	private static List<Object> mergeWants(
+		Tx tx, long campaignId, long characterId, String kind, Object original, Object old, Object given) {
+		var out = new ArrayList<Object>();
+		if (old instanceof List<?> list) {
+			out.addAll(list);
+		} else if (old != null) {
+			out.add(old);
+		}
+		List<?> entries = given instanceof List<?> list ? list : List.of(given);
+		for (Object entry : entries) {
+			if (entry == null) {
+				continue;
+			}
+			Map<String, Object> patch = wantMap(entry);
+			Object previous = null;
+			String ref = patch.get("ref") == null ? null : Ref.parse(patch.get("ref").toString(), "want").toString();
+			if (ref != null) {
+				previous = findWant(tx, characterId, kind, out, ref, null);
+				if (previous == null && original instanceof List<?> list) {
+					previous = findWant(tx, characterId, kind, list, ref, null);
+				}
+				if (previous == null) {
+					throw RpgException.invalidArgument(
+							"Want '" + ref + "' does not belong to this character's " + kind + " wants.");
+				}
+			} else {
+				String note = noteOf(patch);
+				if (note != null) {
+					previous = findWant(tx, characterId, kind, out, null, note);
+					if (previous == null && original instanceof List<?> list) {
+						previous = findWant(tx, characterId, kind, list, null, note);
+					}
+				}
+			}
+			Map<String, Object> want = previous == null ? new LinkedHashMap<>() : wantMap(previous);
+			for (var field : patch.entrySet()) {
+				if (ENGINE.equals(field.getKey()) || CLOSED_JOURNAL_ID.equals(field.getKey())
+						|| "ref".equals(field.getKey())) {
+					continue;
+				}
+				if (field.getValue() == null) {
+					want.remove(field.getKey());
+				} else {
+					want.put(field.getKey(), field.getValue());
+				}
+			}
+			if (want.get("note") == null || want.get("note").toString().isBlank()) {
+				throw RpgException.invalidArgument("Every entry of 'wants' needs a note, or an existing want ref.");
+			}
+			want.put("note", want.get("note").toString().trim());
+			String status = want.get("status") == null ? "OPEN"
+					: want.get("status").toString().trim().toUpperCase(Locale.ROOT);
+			if (!WANT_STATUS.contains(status)) {
+				throw RpgException.invalidArgument("A want's status is OPEN, DONE or ABANDONED.");
+			}
+			want.put("status", status);
+			String now = GameTime.render(GameTime.currentSeq(tx, campaignId));
+			if (want.get("since") == null) {
+				want.put("since", now);
+			}
+			if (!isClosed(want) && isClosed(previous)) {
+				want.remove("done_at");
+				if (!patch.containsKey("resolved_by")) {
+					want.remove("resolved_by");
+				}
+				if (!patch.containsKey("done_note")) {
+					want.remove("done_note");
+				}
+			}
+			validateResolution(tx, campaignId, want);
+			if (ref == null && previous != null) {
+				ref = wantRef(tx, characterId, kind, previous);
+			}
+			if (ref == null) {
+				var columns = new LinkedHashMap<String, Object>();
+				columns.put("campaign_id", campaignId);
+				columns.put("character_id", characterId);
+				columns.put("kind", kind);
+				if (previous != null) {
+					columns.put("legacy_note", wantMap(previous).get("note"));
+				}
+				ref = Ref.of("want", tx.insert("want_identity", columns));
+			}
+			want.put("ref", ref);
+			want.remove(CLOSED_JOURNAL_ID);
+			var engine = new LinkedHashMap<String, Object>();
+			engine.put("ref", ref);
+			if (isClosed(want)) {
+				if (isClosed(previous)) {
+					Number cursor = closureCursor(previous);
+					if (cursor != null) {
+						engine.put(ENGINE_CLOSED_JOURNAL_ID, cursor);
+					}
+				} else {
+					engine.put(ENGINE_CLOSED_JOURNAL_ID, tx.journalId());
+				}
+				stampClosed(want, now);
+			}
+			want.put(ENGINE, engine);
+			Object matched = previous;
+			String identity = ref;
+			out.removeIf(o -> o == matched || identity.equals(wantRef(tx, characterId, kind, o)));
+			out.add(want);
+		}
+		return out;
+	}
+
+	private static Object findWant(Tx tx, long characterId, String kind, List<?> wants, String ref, String note) {
+		Object found = null;
+		for (Object want : wants) {
+			if (ref != null ? ref.equals(wantRef(tx, characterId, kind, want)) : note.equals(noteOf(wantMap(want)))) {
+				if (found != null && ref == null) {
+					throw RpgException
+							.invalidArgument("Several wants have that note; update the intended want by its ref.");
+				}
+				found = want;
+			}
+		}
+		return found;
+	}
+
+	private static Map<String, Object> wantMap(Object value) {
+		return value instanceof Map<?, ?> map ? copy(map)
+				: new LinkedHashMap<>(Map.of("note", value.toString().trim()));
+	}
+
+	private static String wantRef(Tx tx, long characterId, String kind, Object value) {
+		if (value instanceof Map<?, ?> map && map.get(ENGINE) instanceof Map<?, ?> engine
+				&& engine.get("ref") != null) {
+			Ref candidate = null;
+			try {
+				candidate = Ref.parse(engine.get("ref").toString(), "want");
+			} catch (RpgException legacyField) {
+				// Only engine-managed references participate in identity; legacy notes use the registry.
+			}
+			if (candidate != null && tx.queryOne(
+					"SELECT w.id FROM want_identity w JOIN character c ON c.id = w.character_id WHERE w.id = ? AND w.character_id = ? AND w.kind = ? AND w.campaign_id = c.campaign_id",
+					candidate.id(), characterId, kind).isPresent()) {
+				return candidate.toString();
+			}
+		}
+		Object note = wantMap(value).get("note");
+		if (note != null) {
+			for (Row identity : tx.query(
+					"SELECT w.id, w.legacy_note FROM want_identity w JOIN character c ON c.id = w.character_id WHERE w.character_id = ? AND w.kind = ? AND w.campaign_id = c.campaign_id AND w.legacy_note IS NOT NULL ORDER BY w.id",
+					characterId, kind)) {
+				if (identity.str("legacy_note").trim().equalsIgnoreCase(note.toString().trim())) {
+					return Ref.of("want", identity.id());
+				}
+			}
+		}
+		return null;
+	}
+
+	/** Reads current metadata and the older flat cursor without rewriting stored legacy entries. */
+	private static Number closureCursor(Object value) {
+		if (value instanceof Map<?, ?> want) {
+			if (want.get(ENGINE) instanceof Map<?, ?> engine
+					&& engine.get(ENGINE_CLOSED_JOURNAL_ID) instanceof Number cursor) {
+				return cursor;
+			}
+			if (want.get(CLOSED_JOURNAL_ID) instanceof Number cursor) {
+				return cursor;
+			}
+		}
+		return null;
+	}
+
+	private static void validateResolution(Tx tx, long campaignId, Map<String, Object> want) {
+		if (want.get("resolved_by") == null) {
+			return;
+		}
+		Ref event = Ref.parse(want.get("resolved_by").toString(), Ref.EVENT);
+		Row row = tx.find("event", event.id()).orElseThrow(() -> RpgException
+				.invalidArgument("A want's resolved_by must reference an existing event in this campaign."));
+		if (row.lng("campaign_id") == null || row.lng("campaign_id") != campaignId) {
+			throw RpgException.invalidArgument("A want's resolved_by event must belong to this campaign.");
+		}
+		want.put("resolved_by", event.toString());
+	}
+
 	/**
 	 * A dated list's entry becomes a map stamped with the game time; a bare string is its
 	 * {@code note}.
 	 */
-	private static Object normalize(Tx tx, long campaignId, String key, Object item, Object previous) {
+	private static Object normalize(Tx tx, long campaignId, String key, Object item) {
 		String stamp = STAMPED.get(key);
 		if (stamp == null) {
 			return item instanceof Map<?, ?> m ? copy(m) : item.toString().trim();
@@ -152,38 +383,7 @@ public final class Biography {
 		if (!out.containsKey(stamp)) {
 			out.put(stamp, GameTime.render(GameTime.currentSeq(tx, campaignId)));
 		}
-		if ("wants".equals(key)) {
-			String status = out.get("status") == null ? "OPEN" : out.get("status").toString().trim().toUpperCase();
-			if (!WANT_STATUS.contains(status)) {
-				throw RpgException.invalidArgument("A want's status is OPEN, DONE or ABANDONED.");
-			}
-			out.put("status", status);
-			stampClosureOrder(tx, out, previous);
-			stampClosed(out, GameTime.render(GameTime.currentSeq(tx, campaignId)));
-		}
 		return out;
-	}
-
-	/** Closure order belongs to the engine; resubmitting a closed want does not close it again. */
-	private static void stampClosureOrder(Tx tx, Map<String, Object> want, Object previous) {
-		want.remove(CLOSED_JOURNAL_ID);
-		if (!isClosed(want)) {
-			return;
-		}
-		if (previous instanceof List<?> wants) {
-			for (Object entry : wants) {
-				if (entry instanceof Map<?, ?> old && isClosed(old) && noteOf(want).equals(noteOf(old))) {
-					if (old.get(CLOSED_JOURNAL_ID) instanceof Number journal) {
-						want.put(CLOSED_JOURNAL_ID, journal.longValue());
-					}
-					if (want.get("done_at") == null || want.get("done_at").toString().isBlank()) {
-						want.put("done_at", old.get("done_at"));
-					}
-					return;
-				}
-			}
-		}
-		want.put(CLOSED_JOURNAL_ID, tx.journalId());
 	}
 
 	/**
@@ -238,7 +438,7 @@ public final class Biography {
 
 	private static String noteOf(Object o) {
 		if (o instanceof Map<?, ?> m && m.get("note") != null) {
-			return m.get("note").toString().trim().toLowerCase();
+			return m.get("note").toString().trim().toLowerCase(Locale.ROOT);
 		}
 		return null;
 	}
@@ -258,13 +458,13 @@ public final class Biography {
 	}
 
 	/** The character's open drives (biography wants that are neither DONE nor ABANDONED). */
-	public static List<Map<String, Object>> openWants(Row c) {
-		return open(biography(c).get("wants"));
+	public static List<Map<String, Object>> openWants(Tx tx, Row c) {
+		return open(wants(tx, c, false));
 	}
 
 	/** The open drives that concern intimacy (PEGI_18: the intimate profile's wants). */
-	public static List<Map<String, Object>> openIntimateWants(Row c) {
-		return open(intimacy(c).get("wants"));
+	public static List<Map<String, Object>> openIntimateWants(Tx tx, Row c) {
+		return open(wants(tx, c, true));
 	}
 
 	/**
@@ -274,18 +474,18 @@ public final class Biography {
 	 * entry is tagged {@code kind: general|intimate}.
 	 */
 	public static List<Map<String, Object>> closedWantsSince(
-		Row c, Long sinceJournalId, Long sinceSeq, boolean includeIntimate) {
+		Tx tx, Row c, Long sinceJournalId, Long sinceSeq, boolean includeIntimate) {
 		var out = new ArrayList<Map<String, Object>>();
-		closed(biography(c).get("wants"), "general", sinceJournalId, sinceSeq, out);
+		closed(tx, c, biography(c).get("wants"), "general", sinceJournalId, sinceSeq, out);
 		if (includeIntimate) {
-			closed(intimacy(c).get("wants"), "intimate", sinceJournalId, sinceSeq, out);
+			closed(tx, c, intimacy(c).get("wants"), "intimate", sinceJournalId, sinceSeq, out);
 		}
 		return out;
 	}
 
 	@SuppressWarnings("unchecked")
 	private static void closed(
-		Object wants, String kind, Long sinceJournalId, Long sinceSeq, List<Map<String, Object>> out) {
+		Tx tx, Row c, Object wants, String kind, Long sinceJournalId, Long sinceSeq, List<Map<String, Object>> out) {
 		if (!(wants instanceof List<?> list)) {
 			return;
 		}
@@ -294,7 +494,8 @@ public final class Biography {
 				continue;
 			}
 			var w = new LinkedHashMap<String, Object>((Map<String, Object>) o);
-			if (sinceJournalId != null && w.get(CLOSED_JOURNAL_ID) instanceof Number journal) {
+			Number journal = closureCursor(o);
+			if (sinceJournalId != null && journal != null) {
 				if (journal.longValue() <= sinceJournalId) {
 					continue;
 				}
@@ -311,7 +512,13 @@ public final class Biography {
 					continue;
 				}
 			}
+			w.remove(ENGINE);
 			w.remove(CLOSED_JOURNAL_ID);
+			String ref = wantRef(tx, c.id(), kind, o);
+			w.remove("ref");
+			if (ref != null) {
+				w.put("ref", ref);
+			}
 			w.put("kind", kind);
 			out.add(w);
 		}
@@ -350,7 +557,7 @@ public final class Biography {
 	 * an arm in a sling) and the open wants, so an NPC is played toward the same things in every
 	 * scene.
 	 */
-	public static void appendBrief(Row c, Map<String, Object> m) {
+	public static void appendBrief(Tx tx, Row c, Map<String, Object> m) {
 		if (!c.isNull("age")) {
 			m.put("age", c.integer("age"));
 		}
@@ -365,9 +572,16 @@ public final class Biography {
 		if (!state.isEmpty()) {
 			m.put("state", state.stream().map(s -> s.get("note")).toList());
 		}
-		List<Map<String, Object>> wants = openWants(c);
+		List<Map<String, Object>> wants = openWants(tx, c);
 		if (!wants.isEmpty()) {
-			m.put("wants", wants.stream().map(w -> w.get("note")).toList());
+			m.put("wants", wants.stream().map(w -> {
+				var entry = new LinkedHashMap<String, Object>();
+				if (w.get("ref") != null) {
+					entry.put("ref", w.get("ref"));
+				}
+				entry.put("note", w.get("note"));
+				return entry;
+			}).toList());
 		}
 	}
 }

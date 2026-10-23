@@ -53,6 +53,9 @@ class RpgToolsTest {
 	@Inject
 	RpgResources resources;
 
+	@Inject
+	Engine engine;
+
 	private static Map<String, Object> json(ToolResponse response) {
 		return Json.readMap(((TextContent) response.firstContent()).text());
 	}
@@ -120,12 +123,43 @@ class RpgToolsTest {
 	}
 
 	@Test
+	void wantsCanBeFoundAndClosedByReferenceThroughTools() {
+		String campaign = TestCampaigns.committedCampaign(engine);
+		engine.sessions().bootstrap(TestCampaigns.op(), campaign, null);
+		ToolResponse created = tools.updateCharacter(TestCampaigns.op(), campaign, "character:1", Optional.empty(),
+				Map.of("biography", Map.of("wants", List.of(Map.of("note", "Visit the observatory")))));
+		assertFalse(created.isError(), () -> json(created).toString());
+		ToolResponse found = tools.find(campaign, Optional.of("WANT"), "observatory", Optional.empty());
+		assertFalse(found.isError(), () -> json(found).toString());
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> hits = (List<Map<String, Object>>) ((Map<?, ?>) json(found).get("result"))
+				.get("hits");
+		String ref = (String) hits.getFirst().get("ref");
+		assertTrue(ref.startsWith("want:"));
+		ToolResponse closed = tools.updateCharacter(TestCampaigns.op(), campaign, "character:1", Optional.empty(),
+				Map.of("biography", Map.of("wants", List.of(Map.of("ref", ref, "status", "DONE")))));
+		assertFalse(closed.isError(), () -> json(closed).toString());
+		ToolResponse context = tools.getContext(campaign, "WANT", Optional.of(ref), Optional.empty(), Optional.empty(),
+				Optional.empty());
+		assertFalse(context.isError(), () -> json(context).toString());
+		Map<?, ?> want = (Map<?, ?>) ((Map<?, ?>) json(context).get("result")).get("want");
+		assertEquals(ref, want.get("ref"));
+		assertEquals("Visit the observatory", want.get("note"));
+		assertEquals("DONE", want.get("status"));
+		assertFalse(want.containsKey("_closed_journal_id"));
+	}
+
+	@Test
 	void resourcesAreServed() {
 		assertTrue(text(resources.guide()).contains("engine owns the truth"));
 		assertTrue(text(resources.rulesets()).contains("CC-BY-4.0"));
 		assertTrue(text(resources.capabilities()).contains("\"checkpoints\":true"));
 		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
 				.contains("get_instructions"));
+		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
+				.contains("update_character"));
+		assertEquals(Boolean.TRUE,
+				((Map<?, ?>) Json.readMap(text(resources.capabilities())).get("capabilities")).get("want_references"));
 	}
 
 	private static String text(io.quarkiverse.mcp.server.ResourceResponse response) {

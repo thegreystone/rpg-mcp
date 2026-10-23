@@ -60,6 +60,10 @@ engine interprets the structured fields; the prose rules text rides along for th
   validates ranges and rolls.
 - Situational spell semantics not structurally expressible (`DESIGN.md` §13).
 - Improvised actions, environmental rulings, social consequences, NPC tactics.
+- Whether a character's want has been fulfilled or abandoned. The GM patches its stable `want:N` through
+  `update_character`, optionally linking the outcome with `resolved_by: event:N`; the engine checks identity,
+  ownership, campaign isolation and PEGI_18 access for intimate wants. A closure does not require repeating the note.
+  Want status is narrative state and does not award XP or alter mechanics by itself.
 - Anything the GM cannot decide mechanically becomes a resolved check request or an audited override, never a silently
   invented result.
 

@@ -21,7 +21,7 @@ checkpoint restoration is verified by exact equality.
 ### 2.1 Identity
 
 Every persisted entity has a table-scoped, monotonically increasing numeric primary key, rendered at the protocol
-boundary as a typed reference (`character:1`, `location:7`, `event:42`). Identity is stable; name, role, control,
+boundary as a typed reference (`character:1`, `location:7`, `event:42`, `want:8`). Identity is stable; name, role, control,
 membership and life state are mutable.
 
 - **I-1** An entity's numeric ID never changes and is never reused within its table. Character IDs come from one
@@ -154,7 +154,20 @@ Two merged aggregates ride with them so a client can play the person after a con
 timeline, verbatim voice lines, bodily state with a since and an until, marks, and **wants**: dated, closable drives
 shown open in every party list) and, in PEGI_18 campaigns only, the **intimate profile** (body, likes, dislikes,
 limits, hard lines, intimate wants and with whom, household terms, voice in bed). The profile is the character's own
-truth; what a partner has learned stays on the relationship profile (§7). Neither is returned below PEGI_18.
+truth; what a partner has learned stays on the relationship profile (§7). The intimate profile is never returned
+below PEGI_18.
+
+Each general or intimate want has a server-assigned `want:N` identity, a note, the involved characters in `with`,
+dates, and status `OPEN`, `DONE` or `ABANDONED`. Optional `resolved_by` links to an event in the same campaign.
+Updating a want by reference is a partial patch: omitted fields, including its note, survive. Note-based input
+remains supported. Compact party views carry open wants as `{ref, note}`; `get_context` scope `WANT` resolves the full
+entry together with its owner and `kind: general|intimate`. The intimate kind preserves PEGI_18 gating.
+
+Want identity is immutable and separate from its rewindable character profile. A reference is not recycled when a
+want is removed or a branch is restored away. Legacy notes in current profiles and historical before-images acquire
+stable mappings on upgrade without changing stored JSON; reads overlay the references, and later updates persist
+them for the changed entry. Closure-order bookkeeping remains private to the server. Chronicle prose can use a
+`want:N` to connect a drive to its outcome without making the note its identity.
 
 ### 5.2 Rules identity (slow-changing, rules-validated)
 
@@ -368,8 +381,8 @@ undo information and the `operation_id`. **Checkpoints are marker entries in thi
   versioned configuration, the semantic ledger and the clock. New mutable aggregates are rewindable unless specified
   otherwise.
 - **I-51** Checkpoint round-tripping (create → mutate → restore) yields exact equality for rewindable state. Audit
-  lineage, idempotency records, checkpoint metadata, installation configuration and session records are excluded. This
-  is the one exact-match state test in the suite.
+  lineage, idempotency records, checkpoint metadata, immutable want identities, installation configuration and session
+  records are excluded. This is the one exact-match state test in the suite.
 - **I-52** Ledger events recorded after the marker become non-canonical on restoration because recording them was
   journaled. Their IDs are never reused; audit lineage can still show that the branch existed.
 

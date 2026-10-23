@@ -115,8 +115,13 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
   presentation; a `biography` of dated timeline entries, verbatim `voice` lines worth keeping, running `state`
   (carrying a child, an arm in a sling; end it with `until`), marks, and `wants`: the drives the person is working
   toward, closed with DONE or ABANDONED when the story settles them — open wants ride in every party list, so play
-  each NPC toward theirs in every scene; and under PEGI_18 an `intimacy` profile of the character's own body, likes,
-  limits, hard lines, the wants that concern intimacy and the terms of their household. Before
+  each NPC toward theirs in every scene. Each has a stable `want:N`; compact lists show `{ref, note}`. Look up full
+  details with `get_context WANT {ref}`, or find the ref by note with `find` kind WANT. Patch a want through
+  `update_character` using its ref and only the fields that change: `{biography: {wants: [{ref: 'want:8', status: 'DONE',
+  resolved_by: 'event:42'}]}}` needs no repeated note; the optional event must belong to the same campaign. `with`
+  still means the characters involved. Existing note-based input also works. Under PEGI_18 an `intimacy` profile
+  holds the character's own body, likes, limits, hard lines, the wants that concern intimacy and the terms of their
+  household. Before
   an intimate scene call `get_context INTIMACY {ref}`: it gathers the person, every partner, both directions of every
   pairwise profile, the household terms and the nights on the ledger, so the scene is played from what happened and
   not from what you would guess. Refs are looked up by name with `find`; never guess one.
@@ -126,7 +131,8 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
   `meta.warnings`) says a chapter or synopsis is owed, do not write it yourself: delegate a fresh summarizing agent
   that calls `get_chronicle_material`, writes in the campaign's voice at the target length, and calls
   `write_chronicle` with the material's `through` marker, while play continues. A `suspend_session` summary becomes
-  a chapter too. `campaign.house_rules` are the table's standing rulings (record new ones with `update_house_rules`),
+  a chapter too. Internal chronicle prose may cite a `want:N` to connect a drive to its outcome; retrieve it with
+  `get_context WANT`. `campaign.house_rules` are the table's standing rulings (record new ones with `update_house_rules`),
   `former_members` says where the people who left are now, and every party member carries `location` and
   `with_party`: a default `move_party` takes only those who are with the party.
 - Level-ups are transactions: `begin_level_up` → present choices → `update_level_up` → `commit_level_up`.
