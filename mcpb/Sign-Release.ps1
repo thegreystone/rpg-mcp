@@ -99,6 +99,7 @@ Invoke-SignAndVerify $exe $binary
 
 # 3. Re-pack the bundle around the signed binary. The manifest carries no file hashes, so this is a valid bundle.
 Write-Host "Re-packing $bundle..."
+Copy-Item 'docs\assets\rpg-mcp-icon.png' (Join-Path $work 'mcpb\icon.png')
 Copy-Item $exe (Join-Path $work "mcpb\server\$binary")
 $manifest = Get-Content 'mcpb\manifest.json' -Raw -Encoding UTF8
 $manifest = $manifest.Replace('__VERSION__', $Version).Replace('__BINARY__', $binary).Replace('__PLATFORM__', 'win32')

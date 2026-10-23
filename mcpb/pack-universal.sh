@@ -24,6 +24,7 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/server"
+cp "$HERE/../docs/assets/rpg-mcp-icon.png" "$STAGE/icon.png"
 for suffix in linux-x86_64 macos-aarch64 windows-x86_64.exe; do
 	name="rpg-mcp-server-${VERSION}-${suffix}"
 	if [ ! -f "$SRC/$name" ]; then

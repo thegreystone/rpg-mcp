@@ -16,6 +16,7 @@
   "homepage": "https://github.com/thegreystone/rpg-mcp",
   "documentation": "https://github.com/thegreystone/rpg-mcp/blob/master/README.md",
   "support": "https://github.com/thegreystone/rpg-mcp/issues",
+  "icon": "icon.png",
   "license": "BSD-3-Clause",
   "keywords": ["rpg", "dungeon-master", "srd", "5e", "campaign", "game", "dice"],
   "server": {
