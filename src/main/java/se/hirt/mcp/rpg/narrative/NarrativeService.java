@@ -1104,7 +1104,7 @@ public final class NarrativeService {
 		if (!c.isNull("location_id")) {
 			tx.find("location", c.lng("location_id"))
 					.ifPresent(l -> m.put("location", Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
-			m.put("with_party", partyLocation == null || c.lng("location_id") == partyLocation);
+			m.put("with_party", partyLocation == null || partyLocation.equals(c.lng("location_id")));
 		}
 		if (explicit) {
 			Map<String, Object> intimacy = Biography.intimacy(c);

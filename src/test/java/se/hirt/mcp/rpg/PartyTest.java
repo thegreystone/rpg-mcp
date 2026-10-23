@@ -31,6 +31,7 @@ package se.hirt.mcp.rpg;
 import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.persistence.Database;
+import se.hirt.mcp.rpg.protocol.Ref;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -138,5 +139,79 @@ class PartyTest {
 			// And the individual sheet of the dead character remains readable in full.
 			assertEquals("DEAD", engine.characters().characterSheet(campaign, pc, "FULL").get("life_state"));
 		}
+	}
+
+	@Test
+	void presenceUsesLocationValuesAndPreservesUnknownLocations() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("party-presence"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			long campaignId = Ref.id(campaign, Ref.CAMPAIGN);
+			String pc = "character:1";
+			engine.sessions().bootstrap(op(), campaign, null);
+			String mara = (String) engine.runtime()
+					.materialize(op(), campaign, "Guard", "Mara", null, null, null, null, false).get("character");
+			engine.party().updateMembership(op(), campaign, mara, "JOIN", "travelling together");
+			engine.db().mutate(Database.Mutation.of("test_locations", campaignId, op(), "GM", null), tx -> {
+				// Both IDs are outside the Long cache, which must not determine physical presence.
+				for (long id : List.of(1000L, 1001L)) {
+					tx.insert("location", map("id", id, "campaign_id", campaignId, "kind", "SITE", "name", "Camp " + id,
+							"materialization", "MATERIALIZED"));
+				}
+				return map("ok", true);
+			});
+
+			engine.world().move(op(), campaign, "location:1000", null, true, 1, "a nearby campsite");
+			assertPresence(engine, campaign, pc, mara, true, true);
+			engine.world().move(op(), campaign, "location:1001", List.of(pc), true, 1, "scouting ahead");
+			assertPresence(engine, campaign, pc, mara, false, false);
+			engine.world().move(op(), campaign, "location:1000", List.of(pc), false, null, "returning to Mara");
+			assertPresence(engine, campaign, pc, mara, true, true);
+
+			engine.db().mutate(Database.Mutation.of("test_unknown_character_location", campaignId, op(), "GM", null),
+					tx -> {
+						tx.update("character", Ref.id(mara, Ref.CHARACTER), map("location_id", null));
+						return map("ok", true);
+					});
+			assertPresence(engine, campaign, pc, mara, true, null);
+			engine.db().mutate(Database.Mutation.of("test_unknown_party_location", campaignId, op(), "GM", null),
+					tx -> {
+						tx.update("character", Ref.id(mara, Ref.CHARACTER), map("location_id", 1001L));
+						tx.update("campaign", campaignId, map("current_location_id", null));
+						return map("ok", true);
+					});
+			assertPresence(engine, campaign, pc, mara, true, true);
+		}
+	}
+
+	private static void assertPresence(
+		Engine engine, String campaign, String pc, String companion, boolean withParty, Boolean intimatePresence) {
+		Map<String, Object> party = engine.sessions().party(campaign, "SUMMARY");
+		Map<String, Object> bootstrap = engine.sessions().bootstrap(op(), campaign, null);
+		Map<String, Object> scene = engine.narrative().context(campaign, "SCENE", null, null, null, null);
+		Map<String, Object> intimacy = engine.narrative().context(campaign, "INTIMACY", pc, companion, null, null);
+		assertAll(() -> assertPartyPresence(list(party.get("members")), pc, companion, withParty, "party"),
+				() -> assertPartyPresence(list(bootstrap.get("party")), pc, companion, withParty, "bootstrap"),
+				() -> assertPartyPresence(list(scene.get("party")), pc, companion, withParty, "scene"),
+				() -> assertEquals(true, m(intimacy.get("character")).get("with_party"), "intimacy focal"), () -> {
+					Map<String, Object> partner = list(intimacy.get("partners")).get(0);
+					assertEquals(companion, partner.get("ref"));
+					if (intimatePresence == null) {
+						assertFalse(partner.containsKey("with_party"), "unknown partner whereabouts stay unspecified");
+					} else {
+						assertEquals(intimatePresence, partner.get("with_party"), "intimacy partner");
+					}
+				});
+	}
+
+	private static void assertPartyPresence(
+		List<Map<String, Object>> members, String pc, String companion, boolean withParty, String view) {
+		assertEquals(2, members.size(), view);
+		assertAll(
+				() -> assertEquals(true,
+						members.stream().filter(m -> pc.equals(m.get("ref"))).findFirst().orElseThrow()
+								.get("with_party"),
+						view + " player"),
+				() -> assertEquals(withParty, members.stream().filter(m -> companion.equals(m.get("ref"))).findFirst()
+						.orElseThrow().get("with_party"), view + " companion"));
 	}
 }

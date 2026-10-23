@@ -454,7 +454,7 @@ public final class SessionService {
 
 	/** True when the character stands where the party stands (or has no location yet). */
 	static boolean withParty(Row c, Long partyLocationId) {
-		return partyLocationId == null || c.isNull("location_id") || c.lng("location_id") == partyLocationId;
+		return partyLocationId == null || c.isNull("location_id") || partyLocationId.equals(c.lng("location_id"));
 	}
 
 	/**
