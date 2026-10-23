@@ -179,16 +179,18 @@ public final class Combat {
 	}
 
 	/**
-	 * The same attack fired with a piece of ammunition: its +N on attack and damage rolls and its
-	 * own extra damage ({@code {dice, type}}: an Arrow of Fire's fire), if any.
+	 * The same attack fired with a piece of ammunition: its +N on the attack roll and base weapon
+	 * damage, plus its own extra damage ({@code {dice, type}}: an Arrow of Fire's fire), if any.
 	 */
 	public static AttackProfile withAmmunition(AttackProfile p, int bonus, Map<String, String> extra) {
 		if (bonus == 0 && extra == null) {
 			return p;
 		}
 		var parts = new ArrayList<DamagePart>();
+		boolean first = true;
 		for (DamagePart d : p.damage()) {
-			parts.add(new DamagePart(d.dice(), d.modifier() + bonus, d.type()));
+			parts.add(new DamagePart(d.dice(), d.modifier() + (first ? bonus : 0), d.type()));
+			first = false;
 		}
 		if (extra != null) {
 			parts.add(new DamagePart(extra.get("dice"), 0, extra.get("type")));

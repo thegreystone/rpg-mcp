@@ -143,6 +143,62 @@ class WeaponBuffTest {
 	}
 
 	@Test
+	void ammunitionAddsItsFlatBonusOnceAcrossElementalDamageAndCriticalHits() throws Exception {
+		try (Engine engine = engine(tempDb("buff-elemental-ammo"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			engine.inventory().grantLoot(
+					op(), campaign, pc, List.of(
+							map("item", "Shortbow", "magic",
+									map("name", "Ember Bow", "bonus", 1, "damage_bonus_dice", "1d6", "damage_type",
+											"fire", "text", "A +1 bow that deals an extra 1d6 fire damage.")),
+							map("item", "+2 Arrow"),
+							map("item", "Arrow", "magic",
+									map("name", "Frost Arrow", "damage_bonus_dice", "1d4", "damage_type", "cold",
+											"text", "Deals an extra 1d4 cold damage.")),
+							map("item", "Arrow", "magic",
+									map("name", "Charged Frost Arrow", "bonus", 2, "damage_bonus_dice", "1d4",
+											"damage_type", "cold", "text",
+											"A +2 arrow that deals an extra 1d4 cold damage."))),
+					null, "QUEST", null);
+			String[] f = fight(engine, campaign, pc);
+			String encounter = f[0], ogre = f[1];
+
+			// Extra-only ammunition preserves the bow's existing modifiers and adds its own damage.
+			Map<String, Object> frost = hit(engine, campaign, encounter, pc, ogre,
+					map("kind", "ATTACK", "attack", "Ember Bow", "target", ogre, "ammunition", "Frost Arrow"));
+			int baseDamageModifier = ((Number) m(part(frost, "piercing").get("roll")).get("modifier")).intValue();
+			assertEquals("1d6", expression(part(frost, "fire")));
+			assertEquals("1d4", expression(part(frost, "cold")));
+			assertEquals(3, breakdown(frost).size());
+			assertEquals(0L, m(frost.get("ammunition")).get("remaining"));
+
+			// A +2 arrow adds two to the attack and base damage, without increasing the bow's fire.
+			Map<String, Object> enchanted = hit(engine, campaign, encounter, pc, ogre,
+					map("kind", "ATTACK", "attack", "Ember Bow", "target", ogre, "ammunition", "+2 Arrow"));
+			assertEquals(attackModifier(frost) + 2, attackModifier(enchanted));
+			assertEquals("1d6+" + (baseDamageModifier + 2), expression(part(enchanted, "piercing")));
+			assertEquals("1d6", expression(part(enchanted, "fire")));
+			assertEquals(2, breakdown(enchanted).size());
+			assertEquals(0L, m(enchanted.get("ammunition")).get("remaining"));
+
+			// Criticals double all dice, while the flat bonus still applies only once.
+			((ScriptedRollService) engine.roller()).queue(20);
+			Map<String, Object> critical = engine.encounters().perform(op(), campaign, encounter, pc,
+					map("kind", "ATTACK", "attack", "Ember Bow", "target", ogre, "ammunition", "Charged Frost Arrow"),
+					true);
+			assertEquals(Boolean.TRUE, critical.get("critical"));
+			assertEquals(attackModifier(frost) + 2, attackModifier(critical));
+			assertEquals("2d6+" + (baseDamageModifier + 2), expression(part(critical, "piercing")));
+			assertEquals("2d6", expression(part(critical, "fire")));
+			assertEquals("2d4", expression(part(critical, "cold")));
+			assertEquals(3, breakdown(critical).size());
+			assertEquals(0L, m(critical.get("ammunition")).get("remaining"));
+		}
+	}
+
+	@Test
 	void blessAndDivineFavorStackOnAnEnchantedBlade() throws Exception {
 		try (Engine engine = engine(tempDb("buff-paladin"))) {
 			String[] ids = caster(engine, "Paladin",
