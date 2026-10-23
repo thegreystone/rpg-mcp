@@ -808,6 +808,10 @@ and modifiers apply only while equipped.
 Purchase, sale or barter, atomically. Price comes from canonical merchant, market and rules state unless an authorized
 negotiated price is supplied with provenance. Money and items commit together.
 
+For `BUY`, `quantity` counts items or ammunition bundles and defaults to one. For `SELL`, it counts individual
+pieces and defaults to the entire carried stack. Sales return half list value (full value for valuables), prorated
+by the pieces sold and rounded down to whole copper. A negotiated price overrides the total payment.
+
 ### 14.4 `grant_loot`
 
 Materializes and transfers rewards from an authorized encounter, quest, world source or explicit GM grant, subject to

@@ -217,6 +217,120 @@ class EconomyTest {
 		}
 	}
 
+	@Test
+	void partialBundleSalesArePricedBeforeRoundingToCopper() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("partial-bundle-sales"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			Map<String, Object> bought = engine.inventory().trade(op(), campaign, pc, "BUY", "Arrow", null, 3, null,
+					null, null);
+			assertEquals(60L, bought.get("quantity"), "buy quantities still count bundles of 20");
+			assertEquals("3 gp", bought.get("price_paid"));
+			String entry = (String) bought.get("entry");
+			long balance = ((Number) m(bought.get("money")).get("total_cp")).longValue();
+			int remaining = 60;
+			Integer[] quantities = {1, 3, 20, 21, null};
+			long[] proceeds = {2, 7, 50, 52, 37};
+			for (int i = 0; i < quantities.length; i++) {
+				String operation = op();
+				int pieces = quantities[i] == null ? remaining : quantities[i];
+				Map<String, Object> sold = engine.inventory().trade(operation, campaign, pc, "SELL", null, entry,
+						quantities[i], null, null, null);
+				balance += proceeds[i];
+				remaining -= pieces;
+				assertEquals((long) pieces, sold.get("quantity"));
+				assertEquals(Money.format(proceeds[i]), sold.get("list_price"));
+				assertEquals(Money.format(proceeds[i]), sold.get("price_received"));
+				assertEquals(balance, m(sold.get("money")).get("total_cp"));
+				List<Map<String, Object>> arrows = list(
+						engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory")).stream()
+						.filter(e -> "Arrow".equals(e.get("name"))).toList();
+				assertEquals(remaining == 0 ? 0 : 1, arrows.size());
+				if (remaining > 0) {
+					assertEquals((long) remaining, arrows.getFirst().get("quantity"));
+				}
+				Map<String, Object> replay = engine.inventory().trade(operation, campaign, pc, "SELL", null, entry,
+						quantities[i], null, null, null);
+				assertEquals(sold.get("price_received"), replay.get("price_received"));
+				assertEquals(balance,
+						m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money")).get("total_cp"),
+						"replaying a sale must not pay twice");
+			}
+			long sales = engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM event WHERE type = 'ITEM_SOLD'"));
+			assertEquals(5L, sales);
+		}
+	}
+
+	@Test
+	void partialSalesPreserveMagicValueValuablesAndNegotiatedTotals() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("partial-magic-sales"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			long start = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("money"))
+					.get("total_cp")).longValue();
+			Map<String, Object> loot = engine.inventory().grantLoot(op(), campaign, pc,
+					List.of(map("item", "+1 Arrow", "quantity", 2)), null, "QUEST", null);
+			String arrow = (String) list(loot.get("granted")).getFirst().get("entry");
+			Map<String, Object> sold = engine.inventory().trade(op(), campaign, pc, "SELL", null, arrow, 1, null, null,
+					null);
+			assertEquals("5 gp 2 cp", sold.get("price_received"), "one +1 arrow retains its proportional value");
+			assertEquals(start + 502, m(sold.get("money")).get("total_cp"));
+
+			String beads = (String) engine.content()
+					.define(op(), campaign, "ITEM", "Pearl Beads", "custom:item/pearl-beads",
+							"Twenty beads per strand.", "GEAR", "1 gp 1 cp", 0.1,
+							map("bundle_size", 20, "valuable", true), null, "GM")
+					.get("content");
+			Map<String, Object> granted = engine.inventory().grantLoot(op(), campaign, pc,
+					List.of(map("item", beads, "quantity", 10)), null, "QUEST", null);
+			String entry = (String) list(granted.get("granted")).getFirst().get("entry");
+			Map<String, Object> valuable = engine.inventory().trade(op(), campaign, pc, "SELL", null, entry, 3, null,
+					null, null);
+			assertEquals("1 sp 5 cp", valuable.get("price_received"), "valuables retain full proportional value");
+			Map<String, Object> haggled = engine.inventory().trade(op(), campaign, pc, "SELL", null, entry, 2, null,
+					"5 sp", "the merchant wants these beads");
+			assertEquals("1 sp", haggled.get("list_price"));
+			assertEquals("5 sp", haggled.get("price_received"), "a negotiated price remains the total payment");
+			Map<String, Object> rest = engine.inventory().trade(op(), campaign, pc, "SELL", null, entry, null, null,
+					null, null);
+			assertEquals(5L, rest.get("quantity"), "an omitted SELL quantity sells the remaining pieces");
+			assertEquals("2 sp 5 cp", rest.get("price_received"));
+			assertEquals(start + 502 + 15 + 50 + 25, m(rest.get("money")).get("total_cp"));
+		}
+	}
+
+	@Test
+	void proratingALargeBundlePriceDoesNotOverflowBeforeDivision() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("large-bundle-sale"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String item = (String) engine.content()
+					.define(op(), campaign, "ITEM", "Priceless Bolts", "custom:item/priceless-bolts", null,
+							"AMMUNITION", Long.MAX_VALUE, 0.1, map("bundle_size", 20), null, "GM")
+					.get("content");
+			Map<String, Object> granted = engine.inventory().grantLoot(op(), campaign, pc,
+					List.of(map("item", item, "quantity", 20)), null, "QUEST", null);
+			String entry = (String) list(granted.get("granted")).getFirst().get("entry");
+			Map<String, Object> sold = engine.inventory().trade(op(), campaign, pc, "SELL", null, entry, 20, null, null,
+					null);
+			assertEquals(Money.format(Long.MAX_VALUE / 2), sold.get("price_received"));
+
+			Map<String, Object> more = engine.inventory().grantLoot(op(), campaign, pc,
+					List.of(map("item", item, "quantity", 60)), null, "QUEST", null);
+			String largeEntry = (String) list(more.get("granted")).getFirst().get("entry");
+			Map<String, Object> before = engine.characters().characterSheet(campaign, pc, "FULL");
+			RpgException tooLarge = assertThrows(RpgException.class,
+					() -> engine.inventory().trade(op(), campaign, pc, "SELL", null, largeEntry, 60, null, null, null));
+			assertEquals(ErrorCode.INVALID_ARGUMENT, tooLarge.code());
+			Map<String, Object> after = engine.characters().characterSheet(campaign, pc, "FULL");
+			assertEquals(before.get("money"), after.get("money"));
+			assertEquals(before.get("inventory"), after.get("inventory"), "a price overflow must not remove items");
+		}
+	}
+
 	private static String locationOf(Engine engine, String campaign) {
 		return engine
 				.db().read(

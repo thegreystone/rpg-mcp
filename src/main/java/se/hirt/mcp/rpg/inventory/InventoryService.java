@@ -44,6 +44,7 @@ import se.hirt.mcp.rpg.rules.Derived;
 import se.hirt.mcp.rpg.rules.Money;
 
 import java.time.Instant;
+import java.math.BigInteger;
 import java.util.*;
 
 /**
@@ -714,9 +715,7 @@ public final class InventoryService {
 					throw RpgException.insufficientResource(
 							character.str("name") + " carries " + have + " × " + item.name() + ", not " + pieces + ".");
 				}
-				long bundles = pieces / item.bundleSize();
-				long listPrice = Boolean.TRUE.equals(item.payload().get("valuable")) ? item.costCp() * bundles
-						: item.costCp() * bundles / 2;
+				long listPrice = salePrice(item, pieces);
 				long price = negotiated != null ? negotiated : listPrice;
 				removeQuantity(tx, entry, pieces);
 				tx.update("character", character.id(),
@@ -735,6 +734,18 @@ public final class InventoryService {
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	/** Prorates the bundle price, then rounds the total proceeds down to whole copper. */
+	private static long salePrice(Item item, long pieces) {
+		long divisor = item.bundleSize() * (Boolean.TRUE.equals(item.payload().get("valuable")) ? 1L : 2L);
+		try {
+			// The intermediate product can exceed long even when the prorated price fits.
+			return BigInteger.valueOf(item.costCp()).multiply(BigInteger.valueOf(pieces))
+					.divide(BigInteger.valueOf(divisor)).longValueExact();
+		} catch (ArithmeticException tooLarge) {
+			throw RpgException.invalidArgument("The sale price is too large to represent in copper.");
+		}
 	}
 
 	private static String describe(Item item, long pieces) {

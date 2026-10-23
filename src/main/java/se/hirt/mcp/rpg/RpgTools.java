@@ -586,7 +586,8 @@ public class RpgTools {
 	}
 
 	@Tool(name = "trade", description = "MUTATING, atomic. BUY an item from the market/merchant at its list price (ammunition is sold in bundles: quantity "
-			+ "counts bundles) or SELL a carried stack for half its list price. Money and items move together; insufficient funds fail with "
+			+ "counts bundles) or SELL carried pieces at half list price (valuables retain full value). Partial bundles are priced proportionally, "
+			+ "rounded down to whole copper. Money and items move together; insufficient funds fail with "
 			+ "INSUFFICIENT_RESOURCE. A negotiated_price (from a successful Persuasion check, say) requires a reason and is recorded with GM provenance.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse trade(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
@@ -597,7 +598,7 @@ public class RpgTools {
 		Optional<String> item,
 		@ToolArg(description = "For SELL: a specific inventory entry reference instead of an item name")
 		Optional<String> entry,
-		@ToolArg(description = "Quantity (default 1; for BUY of ammunition this is the number of bundles)")
+		@ToolArg(description = "BUY: number of items or ammunition bundles (default 1). SELL: individual pieces (default the entire stack).")
 		Optional<Integer> quantity,
 		@ToolArg(description = "Merchant character reference, if the merchant is a persisted NPC")
 		Optional<String> merchant, @ToolArg(description = "Negotiated total price, e.g. '12 gp' (requires reason)")
