@@ -1077,8 +1077,8 @@ Reasons include `MAJOR_ENCOUNTER_COMPLETED`, `PLAYER_CHARACTER_DIED`, `SIGNIFICA
 A bounded Director-only view: arcs, seeds, pacing history, faction agendas, world changes, unresolved companion
 intentions, significant relationships, invalidated plans, and `companion_wants`: for every present party member
 their personality line, INT/WIS/CHA, open wants, open intimate wants (PEGI_18 only) and the wants closed since the
-last review (`done_at` after the review's game time). The `guidance` list asks the Director to leave no
-companion with a settled want and no next one, proposing the next in character (`origin: director`), and under
+last review (by recorded operation order, even when game time is unchanged). The `guidance` list asks the Director
+to leave no companion with a settled want and no next one, proposing the next in character (`origin: director`), and under
 PEGI_18 to let intimate wants evolve with temperament in the same review.
 
 ### 18.3 `commit_director_changes`

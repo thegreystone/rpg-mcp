@@ -69,6 +69,7 @@ public final class Biography {
 
 	/** A want is OPEN until it is DONE or ABANDONED. */
 	public static final Set<String> WANT_STATUS = Set.of("OPEN", "DONE", "ABANDONED");
+	private static final String CLOSED_JOURNAL_ID = "_closed_journal_id";
 
 	private Biography() {
 	}
@@ -123,7 +124,7 @@ public final class Biography {
 			if (v instanceof Map<?, ?> && STAMPED.containsKey(key) && !(out.get(key) instanceof Map<?, ?>)) {
 				v = List.of(v);
 			}
-			UnaryOperator<Object> normalize = item -> normalize(tx, campaignId, key, item);
+			UnaryOperator<Object> normalize = item -> normalize(tx, campaignId, key, item, current.get(key));
 			Object merged = DeepMerge.merge(out.get(key), v, key, normalize, Biography::noteOf);
 			out.put(key, merged instanceof String s ? s.trim() : merged);
 		}
@@ -134,7 +135,7 @@ public final class Biography {
 	 * A dated list's entry becomes a map stamped with the game time; a bare string is its
 	 * {@code note}.
 	 */
-	private static Object normalize(Tx tx, long campaignId, String key, Object item) {
+	private static Object normalize(Tx tx, long campaignId, String key, Object item, Object previous) {
 		String stamp = STAMPED.get(key);
 		if (stamp == null) {
 			return item instanceof Map<?, ?> m ? copy(m) : item.toString().trim();
@@ -157,9 +158,32 @@ public final class Biography {
 				throw RpgException.invalidArgument("A want's status is OPEN, DONE or ABANDONED.");
 			}
 			out.put("status", status);
+			stampClosureOrder(tx, out, previous);
 			stampClosed(out, GameTime.render(GameTime.currentSeq(tx, campaignId)));
 		}
 		return out;
+	}
+
+	/** Closure order belongs to the engine; resubmitting a closed want does not close it again. */
+	private static void stampClosureOrder(Tx tx, Map<String, Object> want, Object previous) {
+		want.remove(CLOSED_JOURNAL_ID);
+		if (!isClosed(want)) {
+			return;
+		}
+		if (previous instanceof List<?> wants) {
+			for (Object entry : wants) {
+				if (entry instanceof Map<?, ?> old && isClosed(old) && noteOf(want).equals(noteOf(old))) {
+					if (old.get(CLOSED_JOURNAL_ID) instanceof Number journal) {
+						want.put(CLOSED_JOURNAL_ID, journal.longValue());
+					}
+					if (want.get("done_at") == null || want.get("done_at").toString().isBlank()) {
+						want.put("done_at", old.get("done_at"));
+					}
+					return;
+				}
+			}
+		}
+		want.put(CLOSED_JOURNAL_ID, tx.journalId());
 	}
 
 	/**
@@ -245,20 +269,23 @@ public final class Biography {
 
 	/**
 	 * The character's closed drives (biography and, when allowed, intimate wants that are DONE or
-	 * ABANDONED) whose {@code done_at} falls after {@code sinceSeq}; every closed want when
-	 * {@code sinceSeq} is null. Each entry is tagged {@code kind: general|intimate}.
+	 * ABANDONED) recorded after {@code sinceJournalId}. Legacy wants without a closure cursor use
+	 * {@code done_at} after {@code sinceSeq}; with no review, every closed want is included. Each
+	 * entry is tagged {@code kind: general|intimate}.
 	 */
-	public static List<Map<String, Object>> closedWantsSince(Row c, Long sinceSeq, boolean includeIntimate) {
+	public static List<Map<String, Object>> closedWantsSince(
+		Row c, Long sinceJournalId, Long sinceSeq, boolean includeIntimate) {
 		var out = new ArrayList<Map<String, Object>>();
-		closed(biography(c).get("wants"), "general", sinceSeq, out);
+		closed(biography(c).get("wants"), "general", sinceJournalId, sinceSeq, out);
 		if (includeIntimate) {
-			closed(intimacy(c).get("wants"), "intimate", sinceSeq, out);
+			closed(intimacy(c).get("wants"), "intimate", sinceJournalId, sinceSeq, out);
 		}
 		return out;
 	}
 
 	@SuppressWarnings("unchecked")
-	private static void closed(Object wants, String kind, Long sinceSeq, List<Map<String, Object>> out) {
+	private static void closed(
+		Object wants, String kind, Long sinceJournalId, Long sinceSeq, List<Map<String, Object>> out) {
 		if (!(wants instanceof List<?> list)) {
 			return;
 		}
@@ -267,7 +294,11 @@ public final class Biography {
 				continue;
 			}
 			var w = new LinkedHashMap<String, Object>((Map<String, Object>) o);
-			if (sinceSeq != null) {
+			if (sinceJournalId != null && w.get(CLOSED_JOURNAL_ID) instanceof Number journal) {
+				if (journal.longValue() <= sinceJournalId) {
+					continue;
+				}
+			} else if (sinceSeq != null) {
 				Object at = w.get("done_at");
 				if (at == null) {
 					continue;
@@ -280,6 +311,7 @@ public final class Biography {
 					continue;
 				}
 			}
+			w.remove(CLOSED_JOURNAL_ID);
 			w.put("kind", kind);
 			out.add(w);
 		}

@@ -724,8 +724,9 @@ public final class NarrativeService {
 								r.lng("game_seq") == null ? 0 : r.lng("game_seq"), "recorded_at", r.str("recorded_at")))
 						.orElse(null));
 		Long sinceSeq = lastReview.map(r -> r.lng("game_seq")).orElse(null);
+		Long sinceJournalId = lastReview.map(Row::id).orElse(null);
 		boolean explicit = Biography.intimacyAllowed(tx, campaignId);
-		ctx.put("companion_wants", companionWants(tx, campaignId, sinceSeq, explicit));
+		ctx.put("companion_wants", companionWants(tx, campaignId, sinceJournalId, sinceSeq, explicit));
 		var guidance = new ArrayList<String>(List.of(
 				"Create seeds, pressures and world facts — never scenes the player must play or outcomes the player must feel.",
 				"A review may legitimately change nothing.",
@@ -753,7 +754,8 @@ public final class NarrativeService {
 	 * intimate wants, and the wants closed since the last review, so a settled want gets a next
 	 * one.
 	 */
-	private List<Map<String, Object>> companionWants(Tx tx, long campaignId, Long sinceSeq, boolean explicit) {
+	private List<Map<String, Object>> companionWants(
+		Tx tx, long campaignId, Long sinceJournalId, Long sinceSeq, boolean explicit) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row c : tx.query("SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
 				+ "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') AND c.lifecycle = 'ACTIVE' ORDER BY m.id",
@@ -778,7 +780,7 @@ public final class NarrativeService {
 			if (explicit) {
 				w.put("open_intimate_wants", Biography.openIntimateWants(c));
 			}
-			w.put("closed_since_last_review", Biography.closedWantsSince(c, sinceSeq, explicit));
+			w.put("closed_since_last_review", Biography.closedWantsSince(c, sinceJournalId, sinceSeq, explicit));
 			out.add(w);
 		}
 		return out;
