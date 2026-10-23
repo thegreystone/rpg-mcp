@@ -1,4 +1,8 @@
-# RPG MCP Server
+<h1 align="center">
+  <img src="docs/assets/rpg-mcp-mark-dark.svg" alt="" width="128">
+  <br>
+  RPG MCP Server
+</h1>
 
 [![Build](https://github.com/thegreystone/rpg-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/thegreystone/rpg-mcp/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/thegreystone/rpg-mcp)](https://github.com/thegreystone/rpg-mcp/releases/latest)
@@ -7,19 +11,19 @@
 [![GraalVM Native](https://img.shields.io/badge/GraalVM-native--image-orange)](https://www.graalvm.org/)
 [![License: BSD-3](https://img.shields.io/badge/License-BSD--3-green)](https://opensource.org/licenses/BSD-3-Clause)
 
-This is quite frankly the most fun gaming experience I've had in a long time. This MCP server transform your AI harness to 
-into a fully fledged Dungeon Master, running immense campaigns for you, where everything and anything is 
-possible. 
+This is quite frankly the most fun gaming experience I've had in a long time. This MCP server turns your AI
+assistant into a fully fledged Dungeon Master, running immense campaigns for you, where everything and anything
+is possible.
 
-The mcp server provides a persistent, rules-aware RPG engine. An AI agent acts as game master, narrator and
+The MCP server provides a persistent, rules-aware RPG engine. An AI agent acts as game master, narrator and
 world-builder; this server owns the truth — HP, money, XP, inventory, time, party, relationships,
 events, checkpoints — in one local SQLite file, so a campaign can run for years across many AI
 conversations without any chat transcript.
 
 > **The AI improvises the fiction; the engine owns the truth.**
 
-There are just two steps to start playing: **install the binary**, then **tell your AI to read the guide and start a 
-campaign**.
+To start playing, [install RPG MCP](#1-install), then [start a campaign](#2-get-a-campaign-started).
+Already have an adventure underway? [Continue your campaign](#coming-back-weeks-later).
 
 ---
 
@@ -113,10 +117,8 @@ Or let the CLI write it for you:
 codex mcp add rpg -- /path/to/rpg-mcp-server-0.1.2-linux-x86_64 -Dquarkus.mcp.server.stdio.enabled=true
 ```
 
-Then `codex mcp list` should show `rpg`. If your Codex version surfaces MCP tools but not MCP *resources*,
-it cannot read `rpg://protocol/guide` directly — start a campaign with *"Start a new RPG campaign — call
-`get_server_state` first and follow the instructions it returns"* instead. Every response carries the
-harness state and the allowed operations, so the model is guided turn by turn either way.
+Then `codex mcp list` should show `rpg`. You are ready to [start a campaign](#2-get-a-campaign-started)
+using the same prompt as in any other client.
 
 ### Add it to Claude Desktop
 
@@ -157,8 +159,9 @@ install, no network access, no account.
 
 ### Check it works
 
-Ask your AI: *"Call `get_server_state` and tell me what it says."* You should get back a protocol
-version, a harness state of `NO_CAMPAIGN` on a fresh install, and an empty campaign list.
+Ask your AI: **"Is RPG MCP ready to play?"**
+
+It should check the connection and tell you whether you have saved campaigns or are ready to create your first.
 
 ---
 
@@ -166,11 +169,9 @@ version, a harness state of `NO_CAMPAIGN` on a fresh install, and an empty campa
 
 Open a **new conversation** and say:
 
-> **"Read rpg://protocol/guide, then start a new campaign for me."**
+> **"Start a new campaign using RPG MCP"**
 
-That one sentence is the entire bootstrap. The guide resource teaches the AI how to be the Game Master —
-tool-use rules, the role split, the setup → play → suspend lifecycle — so you never have to explain any
-of it. (In Codex, say *"Start a new RPG campaign, beginning with `get_server_state`"* instead.)
+Your AI loads the Game Master instructions and begins setting up your campaign for you.
 
 ### The setup interview
 
@@ -192,14 +193,14 @@ Roughly in order, you will be asked about:
   equipment and spells, built as a draft you can revise.
 - **The party** — who travels with you.
 
-Nothing is canonical until the setup is committed, so you can change your mind about anything up to that
-point. After the commit the setup conversation is disposable — the campaign lives in the database.
+You can change your mind about anything until you approve the setup. Once approved, your campaign is saved
+and ready to play.
 
 ### Playing
 
-Say **"Let's play"**. The AI calls `bootstrap_session`, gets the full state back and narrates you into
-the opening scene. From there it is a normal conversation: you describe what you do, the AI narrates, and
-it calls tools whenever a fact has to be authoritative — a die roll, a purchase, a fight, a level-up.
+Say **"Let's play"**. Your AI picks up the saved campaign and narrates you into the opening scene. From
+there it is a normal conversation: you describe what you do, the AI narrates, and RPG MCP tracks the rolls,
+purchases, fights and level-ups.
 
 - **You can always ask how you are doing.** *"How am I holding up? How's the party?"* works in every
   state, including mid-combat and after a death — HP, conditions, spell slots, money, inventory, all of it.
@@ -207,16 +208,16 @@ it calls tools whenever a fact has to be authoritative — a die roll, a purchas
   audited GM override, and you are told when one happens.
 - **Checkpoints** can be made before dangerous scenes and restored later; everything after the checkpoint
   is rolled back in one transaction.
-- **End the session** by saying so. The AI calls `suspend_session` with a summary, which becomes the
-  recap the next session opens with.
+- **End the session** by saying so. Your AI saves a summary for the next session's recap.
 
 ### Coming back, weeks later
 
-Open any new conversation — different machine, different client, no chat history — and say:
+Open a new conversation in any AI client connected to your saved campaign data and say:
 
-> **"Continue my campaign."**
+> **"Please continue my campaign using RPG MCP"**
 
-The engine reconstructs everything. Chat transcripts are never required. You can also try "Read rpg://protocol/guide and continue my campaign".
+Your AI loads the Game Master instructions, finds your saved campaign and picks up where you left off.
+If several campaigns are available, it asks which one you want. Chat transcripts are never required.
 
 ### Tips
 
@@ -230,10 +231,15 @@ The engine reconstructs everything. Chat transcripts are never required. You can
 - **The tools do not appear** — make sure `-Dquarkus.mcp.server.stdio.enabled=true` is in the arguments,
   and for the jar that it comes *before* `-jar`. Then reconnect (`/mcp` in Claude Code, restart Claude
   Desktop, `codex mcp list` for Codex).
+- **The readiness check fails** — ask the AI to call `get_instructions`, then `get_server_state`.
+  Load the guide once per conversation; later state checks stay compact. A fresh install should report
+  `CAMPAIGN_SELECTION` and no campaigns. If `get_instructions` is missing, rebuild the server from
+  [current source](docs/DEVGUIDE.md#building-from-source) and reconnect the client.
 - **No log output** — logs go to `rpg-mcp-server.log` in the data directory (`~/.rpg-mcp` by default),
   never to stdout/stderr, so they cannot corrupt the STDIO transport. Check that file first.
-- **The AI improvises mechanics instead of calling tools** — it did not read the guide. Say
-  *"Read rpg://protocol/guide"* and start the session again; every session should begin with it.
+- **The AI improvises mechanics instead of calling tools** — ask it to call `get_instructions` and follow
+  the guide, using the RPG tools for rolls and canonical state. Every new conversation should load those
+  instructions before starting or continuing a campaign.
 - **The AI batches setup questions** — tell it to follow the guide and ask one decision per turn, listing
   every option. `get_setup_state` returns the ordered `decisions` list it should be walking.
 - **Starting over** — `~/.rpg-mcp/rpg.db` holds everything. Move it aside for a clean slate (and keep it
