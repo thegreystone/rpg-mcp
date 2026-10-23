@@ -29,6 +29,8 @@
 package se.hirt.mcp.rpg;
 
 import org.junit.jupiter.api.Test;
+import se.hirt.mcp.rpg.protocol.ErrorCode;
+import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -37,6 +39,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
@@ -54,6 +57,48 @@ class EncounterRulesTest {
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> m(Object o) {
 		return (Map<String, Object>) o;
+	}
+
+	@Test
+	void anIncapacitatedActorCannotActButStillEndsItsTurn() throws Exception {
+		Path db = tempDb("enc-incapacitated");
+		try (Engine engine = engine(db)) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String bandit = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
+			Map<String, Object> started = engine.encounters().start(op(), campaign,
+					map("party", List.of(pc), "road", List.of(bandit)), null, map(bandit, "near"), null, null, null);
+			String encounter = (String) started.get("encounter");
+			String actor = (String) m(started.get("turn")).get("character");
+			String other = actor.equals(pc) ? bandit : pc;
+
+			// Held on its own turn (Hold Person by fiat): no attack, no step, but the turn still passes.
+			engine.runtime().applyRuntimeChange(op(), campaign, actor, map("kind", "ADD_CONDITION", "condition",
+					"PARALYZED", "duration", map("rounds", 3), "reason", "held"));
+			RpgException attack = assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign,
+					encounter, actor, map("kind", "ATTACK", "target", other), actor.equals(pc)));
+			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, attack.code());
+			assertTrue(attack.getMessage().contains("PARALYZED"), attack.getMessage());
+			RpgException move = assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign,
+					encounter, actor, map("kind", "MOVE", "zone", "far"), actor.equals(pc)));
+			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, move.code());
+			assertTrue(move.getMessage().contains("Speed 0"), move.getMessage());
+			Map<String, Object> ended = engine.encounters().perform(op(), campaign, encounter, actor,
+					map("kind", "END_TURN"), actor.equals(pc));
+			assertEquals(other, m(ended.get("next_turn")).get("character"), "the turn passes to the other side");
+
+			// Incapacitated alone leaves Speed untouched: the other one may still move, but not act.
+			engine.runtime().applyRuntimeChange(op(), campaign, other, map("kind", "ADD_CONDITION", "condition",
+					"INCAPACITATED", "duration", map("rounds", 3), "reason", "dazed"));
+			RpgException dodge = assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign,
+					encounter, other, map("kind", "DODGE"), other.equals(pc)));
+			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, dodge.code());
+			Map<String, Object> moved = engine.encounters().perform(op(), campaign, encounter, other,
+					map("kind", "MOVE", "zone", "far"), other.equals(pc));
+			assertEquals("far", moved.get("zone"));
+		}
 	}
 
 	@Test

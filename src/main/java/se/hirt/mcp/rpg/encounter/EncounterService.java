@@ -71,10 +71,14 @@ public final class EncounterService {
 	private static final String SHIELD_SPELL_REF = "srd5e:effect/shield-spell";
 	private static final String SHIELD_SPELL = "srd5e:spell/shield";
 	/**
-	 * Conditions that deny reactions (SRD 5.2.1 Incapacitated and the conditions that include it).
+	 * Conditions that deny actions and reactions (SRD 5.2.1 Incapacitated and the conditions that
+	 * include it). The turn itself remains: an end-of-turn save may shake the condition off.
 	 */
-	private static final List<String> NO_REACTION_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
+	private static final List<String> INCAPACITATING_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
 			"UNCONSCIOUS", "PETRIFIED");
+	/** Conditions that set Speed to 0 (SRD 5.2.1), so neither moving nor dashing goes anywhere. */
+	private static final List<String> SPEED_ZERO_CONDITIONS = List.of("PARALYZED", "STUNNED", "UNCONSCIOUS",
+			"PETRIFIED", "GRAPPLED", "RESTRAINED");
 	public static final Set<String> NPC_REACTION_POLICIES = Set.of("AUTO", "ASK");
 	private static final int SECONDS_PER_ROUND = 6;
 
@@ -524,6 +528,20 @@ public final class EncounterService {
 			if (!"ACTIVE".equals(participant.str("status")) || !"ALIVE".equals(actor.str("life_state"))) {
 				throw RpgException.notAllowed(actor.str("name") + " cannot act (" + actor.str("life_state") + ").");
 			}
+			// Incapacitated denies every action but not movement; the speed-0 conditions deny that too. The turn
+			// stays open either way, so END_TURN always stands (and rolls any end-of-turn save).
+			if (!"END_TURN".equals(kind) && !"MOVE".equals(kind)) {
+				conditionAmong(tx, actor, INCAPACITATING_CONDITIONS).ifPresent(cond -> {
+					throw RpgException.notAllowed(actor.str("name") + " is " + cond
+							+ " and cannot take actions (SRD 5.2.1 \"Incapacitated\"); END_TURN passes the turn.");
+				});
+			}
+			if ("MOVE".equals(kind) || "DASH".equals(kind)) {
+				conditionAmong(tx, actor, SPEED_ZERO_CONDITIONS).ifPresent(cond -> {
+					throw RpgException.notAllowed(
+							actor.str("name") + " is " + cond + ": Speed 0, no movement (SRD 5.2.1 \"" + cond + "\").");
+				});
+			}
 			long round = encounter.lng("round");
 			var result = new LinkedHashMap<String, Object>();
 			result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
@@ -736,8 +754,8 @@ public final class EncounterService {
 						continue;
 					}
 					Row ally = tx.get("character", p.lng("character_id"));
-					if (!"ALIVE".equals(ally.str("life_state"))
-							|| RuntimeService.conditions(tx, ally.id()).stream().anyMatch(cond -> NO_REACTION_CONDITIONS
+					if (!"ALIVE".equals(ally.str("life_state")) || RuntimeService.conditions(tx, ally.id()).stream()
+							.anyMatch(cond -> INCAPACITATING_CONDITIONS
 									.contains(String.valueOf(cond.get("condition")).toUpperCase()))) {
 						continue;
 					}
@@ -1226,13 +1244,18 @@ public final class EncounterService {
 				|| !"ALIVE".equals(c.str("life_state"))) {
 			return false;
 		}
-		for (String cond : NO_REACTION_CONDITIONS) {
+		return conditionAmong(tx, c, INCAPACITATING_CONDITIONS).isEmpty();
+	}
+
+	/** The first of the given conditions the character currently has, if any. */
+	private static Optional<String> conditionAmong(Tx tx, Row c, List<String> conditions) {
+		for (String cond : conditions) {
 			if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
 					RuntimeService.conditionRef(cond)) > 0) {
-				return false;
+				return Optional.of(cond);
 			}
 		}
-		return true;
+		return Optional.empty();
 	}
 
 	private boolean canCastShield(Tx tx, Row target, Row targetParticipant) {
