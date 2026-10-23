@@ -85,18 +85,20 @@ public final class Harness {
 				"update_party_membership", "update_relationship", "update_house_rules", "materialize_location",
 				"move_party", "upsert_narrative_state", "commit_director_changes", "perform_rest", "apply_gm_override",
 				"cast_spell", "prepare_spells", "suspend_session", "complete_campaign", "write_chronicle"));
-		case LEVEL_UP ->
-			ops.addAll(List.of("get_level_up_choices", "update_level_up", "validate_level_up", "commit_level_up",
-					"abandon_transaction", "get_character_sheet", "get_party", "record_memory", "complete_campaign"));
-		case ENCOUNTER -> ops.addAll(List.of("get_encounter_state", "perform_encounter_action",
+		// bootstrap_session is legal in every play state: a conversation that ends mid-fight, mid-level-up or at a
+		// continuation decision must be able to rebuild its context, and bootstrap keeps that state.
+		case LEVEL_UP -> ops.addAll(List.of("bootstrap_session", "get_level_up_choices", "update_level_up",
+				"validate_level_up", "commit_level_up", "abandon_transaction", "get_character_sheet", "get_party",
+				"record_memory", "complete_campaign"));
+		case ENCOUNTER -> ops.addAll(List.of("bootstrap_session", "get_encounter_state", "perform_encounter_action",
 				"resolve_pending_choice", "end_encounter", "resolve_check", "roll_dice", "apply_runtime_change",
 				"equip_item", "update_relationship", "update_house_rules", "materialize_character",
 				"get_character_sheet", "record_memory", "get_continuation_options", "restore_checkpoint",
 				"transfer_player_control", "apply_gm_override", "complete_campaign", "write_chronicle"));
-		case CHECKPOINT_DECISION -> ops.addAll(List.of("get_continuation_options", "restore_checkpoint",
+		case CHECKPOINT_DECISION -> ops.addAll(List.of("bootstrap_session", "get_continuation_options",
+				"restore_checkpoint", "transfer_player_control", "complete_campaign"));
+		case PLAYER_CHARACTER_TRANSFER -> ops.addAll(List.of("bootstrap_session", "get_continuation_options",
 				"transfer_player_control", "complete_campaign"));
-		case PLAYER_CHARACTER_TRANSFER ->
-			ops.addAll(List.of("get_continuation_options", "transfer_player_control", "complete_campaign"));
 		case CAMPAIGN_COMPLETED, CAMPAIGN_FAILED, CAMPAIGN_ABANDONED -> ops.addAll(
 				List.of("get_instructions", "get_server_state", "open_campaign", "query_memories", "query_timeline"));
 		default -> {

@@ -121,10 +121,16 @@ public final class SessionService {
 			boolean encounterRunning = tx.count(
 					"SELECT COUNT(*) FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE')",
 					campaignId) > 0;
+			// Bootstrap rebuilds context; it never abandons what the campaign is in the middle of: a running
+			// encounter, an open level-up, or a continuation decision.
+			boolean levelUpOpen = stateBefore == HarnessState.LEVEL_UP
+					&& tx.count("SELECT COUNT(*) FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'",
+							campaignId) > 0;
 			HarnessState next = encounterRunning ? HarnessState.ENCOUNTER
-					: (stateBefore == HarnessState.CHECKPOINT_DECISION
-							|| stateBefore == HarnessState.PLAYER_CHARACTER_TRANSFER) ? stateBefore
-									: HarnessState.EXPLORATION;
+					: levelUpOpen ? HarnessState.LEVEL_UP
+							: (stateBefore == HarnessState.CHECKPOINT_DECISION
+									|| stateBefore == HarnessState.PLAYER_CHARACTER_TRANSFER) ? stateBefore
+											: HarnessState.EXPLORATION;
 			var cols = new LinkedHashMap<String, Object>();
 			cols.put("status", "ACTIVE");
 			cols.put("harness_state", next.name());

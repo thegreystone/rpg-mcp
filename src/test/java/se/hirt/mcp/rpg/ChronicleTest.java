@@ -118,6 +118,10 @@ class ChronicleTest {
 			Map<String, Object> tail = m(chronicle.get("since_last_chapter"));
 			assertEquals(1, tail.get("events"), "only the rider is uncovered");
 			assertTrue(tail.toString().contains("rider"));
+			// The same digest from a read: get_context reserves no journal entry, yet sees the whole ledger.
+			Map<String, Object> scene = engine.narrative().context(campaign, "SCENE", null, null, null, null);
+			assertEquals(1, m(m(scene.get("chronicle")).get("since_last_chapter")).get("events"),
+					"a read-only context shows the same uncovered tail as bootstrap");
 
 			// A stale or future marker is refused; a chapter that says nothing new is refused; so is a bloated one.
 			RpgException stale = assertThrows(RpgException.class,

@@ -464,7 +464,10 @@ creation workflow, not rematerialized.
 
 ### 11.1 `bootstrap_session`
 
-Creates or resumes a session (`operation_id`, `campaign`, `context_budget`) and returns a bounded package:
+Creates or resumes a session (`operation_id`, `campaign`, `context_budget`) and returns a bounded package. It is
+legal in every play state: a conversation that ended mid-encounter, mid-level-up or at a continuation decision
+resumes with `bootstrap_session`, which keeps that state rather than returning the campaign to exploration.
+The package holds:
 
 - campaign and session references, harness state, current time and location
 - the player character's PLAY sheet, inventory reduced to one name per item

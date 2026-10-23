@@ -82,6 +82,45 @@ class SessionGapsTest {
 	}
 
 	@Test
+	void aNewConversationResumesMidEncounter() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("gaps-resume-encounter"))) {
+			String campaign = setup(engine);
+			String pc = playableCriminal(engine, campaign);
+			String bandit = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc), "camp", List.of(bandit)), null, null,
+							"A hollow at dusk", List.of("Take the camp"), null)
+					.get("encounter");
+
+			// The conversation hits its limit mid-fight. The next one opens the campaign and bootstraps.
+			assertEquals("BOOTSTRAP_SESSION", engine.campaigns().open(campaign).get("resume"));
+			Map<String, Object> boot = engine.sessions().bootstrap(op(), campaign, null);
+			Map<String, Object> meta = m(boot.get("meta"));
+			assertEquals("ENCOUNTER", meta.get("harness_state"), "bootstrap keeps the running fight");
+			assertTrue(list(meta.get("allowed_operations")).contains("perform_encounter_action"));
+			assertEquals("RUNNING", engine.encounters().encounterState(campaign, encounter, 3).get("status"));
+		}
+	}
+
+	@Test
+	void aNewConversationResumesAnOpenLevelUp() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("gaps-resume-level-up"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			engine.runtime().awardXp(op(), campaign, null, 300, "QUEST", "enough for level 2");
+			String transaction = (String) m(engine.levelUps().begin(op(), campaign, pc).get("transaction")).get("ref");
+
+			Map<String, Object> boot = engine.sessions().bootstrap(op(), campaign, null);
+			Map<String, Object> meta = m(boot.get("meta"));
+			assertEquals("LEVEL_UP", meta.get("harness_state"), "bootstrap keeps the open level-up");
+			assertTrue(list(meta.get("allowed_operations")).contains("commit_level_up"));
+			assertEquals(transaction, m(engine.campaigns().open(campaign).get("pending_transaction")).get("ref"));
+		}
+	}
+
+	@Test
 	void checksAreLegalDuringAnEncounter() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("gaps-encounter-check"))) {
 			String campaign = setup(engine);
