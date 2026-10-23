@@ -1871,6 +1871,9 @@ public final class EncounterService {
 			long defeatedXp = 0;
 			var defeated = new ArrayList<String>();
 			var recipients = new ArrayList<Row>();
+			// Round-scoped effects die with the encounter. This must run while the participants still carry
+			// the encounter id, which the loop below clears and the expiry query joins on.
+			se.hirt.mcp.rpg.rules.Effects.expireByRound(tx, encounter.id(), Long.MAX_VALUE);
 			for (Row p : participants) {
 				Row c = tx.get("character", p.lng("character_id"));
 				if (p.str("side").equals(partySide)) {
@@ -1913,9 +1916,6 @@ public final class EncounterService {
 			long newSeq = clock.lng("seq") + minutes;
 			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
 			se.hirt.mcp.rpg.rules.Effects.expireByTime(tx, campaignId, newSeq);
-			for (Row p : participants) {
-				se.hirt.mcp.rpg.rules.Effects.expireByRound(tx, encounter.id(), Long.MAX_VALUE);
-			}
 
 			var cols = new LinkedHashMap<String, Object>();
 			cols.put("status", "ENDED");

@@ -239,8 +239,10 @@ public final class ChronicleService {
 		}
 		out.put("chapters_since_synopsis", shown);
 		left = Math.max(2_000, left - used);
-		Map<String, Object> tail = LedgerService.digest(tx, campaignId, coveredThrough(tx, campaignId), tx.journalId(),
-				left);
+		// A read transaction reserves no journal entry (its id is -1): the digest then runs to the end of
+		// the ledger, while a mutation's own entry is the natural upper bound.
+		long through = tx.journalId() < 0 ? Long.MAX_VALUE : tx.journalId();
+		Map<String, Object> tail = LedgerService.digest(tx, campaignId, coveredThrough(tx, campaignId), through, left);
 		tail.put("note", "The ledger since the last chapter, by importance; older detail is one query_memories away.");
 		out.put("since_last_chapter", tail);
 		out.put("due", due(tx, campaignId));

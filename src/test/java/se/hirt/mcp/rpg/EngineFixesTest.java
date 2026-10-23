@@ -197,6 +197,32 @@ class EngineFixesTest {
 	}
 
 	@Test
+	void roundScopedConditionsEndWithTheEncounter() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("rounds-end-with-encounter"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			String wolf = (String) engine.runtime()
+					.materialize(op(), campaign, "Wolf", null, null, null, null, null, false).get("character");
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("party", List.of(pc), "beasts", List.of(wolf)), null, null, null, null, null).get("encounter");
+			Map<String, Object> blinded = engine.runtime().applyRuntimeChange(op(), campaign, pc, map("kind",
+					"ADD_CONDITION", "condition", "BLINDED", "duration", map("rounds", 10), "reason", "sand"));
+			assertEquals("ROUNDS",
+					m(list(blinded.get("conditions")).stream().filter(c -> "BLINDED".equals(c.get("condition")))
+							.findFirst().orElseThrow().get("duration")).get("kind"),
+					"inside an encounter the duration is counted in rounds");
+
+			// The fight ends in round 1, long before round 11: the condition must not outlive it.
+			engine.encounters().end(op(), campaign, encounter, "PARTY_VICTORY", "the wolf flees");
+			List<Map<String, Object>> left = list(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("conditions"));
+			assertTrue(left.stream().noneMatch(c -> "BLINDED".equals(c.get("condition"))),
+					"round-scoped conditions die with the encounter: " + left);
+		}
+	}
+
+	@Test
 	void alliesNeverThreatenEachOtherWithOpportunityAttacks() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("ally-oa"))) {
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
