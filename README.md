@@ -233,8 +233,8 @@ If several campaigns are available, it asks which one you want. Chat transcripts
   Desktop, `codex mcp list` for Codex).
 - **The readiness check fails** — ask the AI to call `get_instructions`, then `get_server_state`.
   Load the guide once per conversation; later state checks stay compact. A fresh install should report
-  `CAMPAIGN_SELECTION` and no campaigns. If `get_instructions` is missing, rebuild the server from
-  [current source](docs/DEVGUIDE.md#building-from-source) and reconnect the client.
+  `CAMPAIGN_SELECTION` and no campaigns. If `get_instructions` is missing, upgrade to version 0.1.8
+  or later and reconnect the client.
 - **No log output** — logs go to `rpg-mcp-server.log` in the data directory (`~/.rpg-mcp` by default),
   never to stdout/stderr, so they cannot corrupt the STDIO transport. Check that file first.
 - **The AI improvises mechanics instead of calling tools** — ask it to call `get_instructions` and follow

@@ -51,11 +51,11 @@ public final class Harness {
 			"update_character_draft", "validate_character_draft", "commit_character_draft", "update_party_design",
 			"define_content", "complete_campaign");
 
-	private static final List<String> READ_TOOLS = List.of("get_server_state", "open_campaign", "get_character_sheet",
-			"query_memories", "query_timeline", "get_continuation_options", "get_content_definitions", "search_rules",
-			"get_encounter_state", "get_party", "get_relationship", "get_level_up_choices", "validate_level_up",
-			"get_context", "get_diegetic_information", "get_director_context", "get_accounts", "list_cash_flows",
-			"find", "get_chronicle_material");
+	private static final List<String> READ_TOOLS = List.of("get_instructions", "get_server_state", "open_campaign",
+			"get_character_sheet", "query_memories", "query_timeline", "get_continuation_options",
+			"get_content_definitions", "search_rules", "get_encounter_state", "get_party", "get_relationship",
+			"get_level_up_choices", "validate_level_up", "get_context", "get_diegetic_information",
+			"get_director_context", "get_accounts", "list_cash_flows", "find", "get_chronicle_material");
 
 	private Harness() {
 	}
@@ -63,7 +63,8 @@ public final class Harness {
 	public static List<String> allowedOperations(HarnessState state) {
 		var ops = new ArrayList<String>();
 		switch (state) {
-		case CAMPAIGN_SELECTION -> ops.addAll(List.of("get_server_state", "create_campaign", "open_campaign"));
+		case CAMPAIGN_SELECTION ->
+			ops.addAll(List.of("get_instructions", "get_server_state", "create_campaign", "open_campaign"));
 		case CAMPAIGN_REVIEW -> {
 			ops.addAll(SETUP_TOOLS);
 			ops.add("commit_campaign_setup");
@@ -96,13 +97,13 @@ public final class Harness {
 				"transfer_player_control", "complete_campaign"));
 		case PLAYER_CHARACTER_TRANSFER ->
 			ops.addAll(List.of("get_continuation_options", "transfer_player_control", "complete_campaign"));
-		case CAMPAIGN_COMPLETED, CAMPAIGN_FAILED, CAMPAIGN_ABANDONED ->
-			ops.addAll(List.of("get_server_state", "open_campaign", "query_memories", "query_timeline"));
+		case CAMPAIGN_COMPLETED, CAMPAIGN_FAILED, CAMPAIGN_ABANDONED -> ops.addAll(
+				List.of("get_instructions", "get_server_state", "open_campaign", "query_memories", "query_timeline"));
 		default -> {
 			if (state.isSetup()) {
 				ops.addAll(SETUP_TOOLS);
 			} else {
-				ops.addAll(List.of("get_server_state", "open_campaign"));
+				ops.addAll(List.of("get_instructions", "get_server_state", "open_campaign"));
 			}
 		}
 		}

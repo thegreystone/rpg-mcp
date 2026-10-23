@@ -68,6 +68,7 @@ class RpgToolsTest {
 		assertNotNull(result.get("harness_state"));
 		assertNotNull(result.get("campaigns"));
 		assertTrue(((List<?>) result.get("allowed_operations")).contains("create_campaign"));
+		assertTrue(((List<?>) result.get("allowed_operations")).contains("get_instructions"));
 		assertFalse(result.containsKey("guide"));
 		assertTrue(((String) result.get("instruction_hint")).contains("get_instructions"));
 	}
