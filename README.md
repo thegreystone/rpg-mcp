@@ -46,8 +46,7 @@ The examples below use version `0.1.2` — substitute the version you downloaded
 | macOS Apple Silicon | `rpg-mcp-server-0.1.2-macos-aarch64`      |
 | Windows x86_64      | `rpg-mcp-server-0.1.2-windows-x86_64.exe` |
 
-These are native images — no Java required, and they start in milliseconds, which matters because your
-MCP client launches the server on every conversation.
+These are native images — no Java required, and they start in milliseconds.
 
 On Linux and macOS, make it executable:
 
@@ -215,9 +214,14 @@ it calls tools whenever a fact has to be authoritative — a die roll, a purchas
 
 Open any new conversation — different machine, different client, no chat history — and say:
 
-> **"Read rpg://protocol/guide and continue my campaign."**
+> **"Continue my campaign."**
 
-The engine reconstructs everything. Chat transcripts are never required.
+The engine reconstructs everything. Chat transcripts are never required. You can also try "Read rpg://protocol/guide and continue my campaign".
+
+### Tips
+
+* In Claude, don't hesitate to make it produce an artifact with the campaign state. It will gladly update it later on request.
+* ChatGPT is very good at character portraits. Ask your AI to describe the character and simply ask for a portrait. You can ask Claude to include them in the artifact. 
 
 ---
 
