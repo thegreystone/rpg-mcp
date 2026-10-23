@@ -56,7 +56,14 @@ public class RpgTools {
 
 	// ── Discovery ──────────────────────────────────────────────────────
 
-	@Tool(name = "get_server_state", description = "Call this FIRST in every new conversation. Returns protocol/server version, "
+	@Tool(name = "get_instructions", description = "Call this FIRST once in every new conversation before starting or continuing a campaign. "
+			+ "Returns the Game Master guide: read and follow it, then call get_server_state to discover campaigns and legal next operations. "
+			+ "No need to read it again while it remains in this conversation's context. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	ToolResponse getInstructions() {
+		return ToolSupport.run("get_instructions", () -> Map.of("guide", RpgResources.classpath("protocol/guide.md")));
+	}
+
+	@Tool(name = "get_server_state", description = "In a new conversation, call get_instructions once before this tool. Returns protocol/server version, "
 			+ "the current harness state, the active campaign (if one was opened in this process), pending transactions, "
 			+ "a page of existing campaigns with their player character and last-played time, legal next operations, and the policy summary. "
 			+ "No chat history is ever needed: everything canonical is reconstructed from the server. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
@@ -64,8 +71,13 @@ public class RpgTools {
 	Optional<Boolean> include_campaigns, @ToolArg(description = "Max campaigns per page (default 20, max 100)")
 	Optional<Integer> campaign_limit, @ToolArg(description = "Opaque cursor from a previous next_campaign_cursor")
 	Optional<String> campaign_cursor) {
-		return ToolSupport.run("get_server_state", () -> engine.campaigns().serverState(include_campaigns.orElse(true),
-				campaign_limit.orElse(20), campaign_cursor.orElse(null)));
+		return ToolSupport.run("get_server_state", () -> {
+			var result = engine.campaigns().serverState(include_campaigns.orElse(true), campaign_limit.orElse(20),
+					campaign_cursor.orElse(null));
+			result.put("instruction_hint",
+					"If you have not read get_instructions in this conversation, call it before starting or continuing a campaign.");
+			return result;
+		});
 	}
 
 	// ── Campaign setup ─────────────────────────────────────────────────

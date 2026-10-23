@@ -74,6 +74,7 @@ rpg://rulesets
 
 `rpg://protocol/guide` is the AI Game Master's instructions (tool-use rules; Harness, GM and Narrative Director roles),
 a versioned markdown artifact derived from `EXECUTION_MODEL.md` §24 and embedded in the executable.
+The same text is returned as `guide` by `get_instructions`, so clients can start through tools alone.
 `rpg://protocol/capabilities` reports protocol version, optional capabilities, limits and supported features.
 `rpg://rulesets` lists installed rulesets and versions without their rules data.
 
@@ -81,7 +82,8 @@ Campaign state MUST NOT be exposed as a static resource; tools keep freshness, v
 
 ### 3.3 Prompts
 
-Optional. Clients MUST be able to operate from the guide resource and tool schemas alone.
+Optional. Clients MUST be able to operate from the guide returned by `get_instructions` and tool schemas alone.
+Reading the guide resource is an alternative for clients that expose MCP resources.
 
 ---
 
@@ -257,9 +259,18 @@ Production overrides use the audited override protocol only.
 
 ## 8. Harness Discovery
 
-### 8.1 `get_server_state`
+### 8.1 `get_instructions`
 
-The first call of a newly connected AI.
+The first call in each new conversation, before starting or continuing a campaign. Read-only, with no
+arguments. Returns `guide`, the full Game Master instructions from the embedded `protocol/guide.md`, identical
+to the `rpg://protocol/guide` resource. No resource read is required. After loading these instructions into
+the current conversation, the AI calls `get_server_state` and follows the guide. It does not need to reload
+the guide for later state checks in the same conversation.
+
+### 8.2 `get_server_state`
+
+Returns compact state for discovery and later state checks. A new conversation MUST first load the guide
+with `get_instructions` (or the equivalent guide resource).
 
 ```yaml
 # input
@@ -282,7 +293,10 @@ policy_summary: { ... }
 A non-null `next_campaign_cursor` is passed back as `campaign_cursor` for the next page. Ordering is stable for the
 cursor's lifetime; clients MUST restart pagination after a cursor expires.
 
-### 8.2 Legal operations
+The response does not contain the full guide. It includes a short `instruction_hint` reminding a new
+conversation to call `get_instructions` if the guide has not yet been loaded.
+
+### 8.3 Legal operations
 
 Workflow-sensitive responses SHOULD include `harness_state` and `allowed_operations` when either may have changed. The
 list is advisory; the server MUST still validate every request. Harness states are defined in `EXECUTION_MODEL.md` §25;
@@ -1161,6 +1175,7 @@ SHOULD be stored in the least specific sufficient form.
 
 ```text
 Discovery
+  get_instructions
   get_server_state
 
 Campaign setup

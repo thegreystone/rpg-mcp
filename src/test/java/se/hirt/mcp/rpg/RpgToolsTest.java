@@ -35,6 +35,7 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.protocol.Json;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -66,6 +67,21 @@ class RpgToolsTest {
 		assertEquals("0.1.0", result.get("protocol_version"));
 		assertNotNull(result.get("harness_state"));
 		assertNotNull(result.get("campaigns"));
+		assertTrue(((List<?>) result.get("allowed_operations")).contains("create_campaign"));
+		assertFalse(result.containsKey("guide"));
+		assertTrue(((String) result.get("instruction_hint")).contains("get_instructions"));
+	}
+
+	@Test
+	void instructionsAreAvailableWithoutReadingAResource() {
+		ToolResponse response = tools.getInstructions();
+		assertFalse(response.isError());
+		@SuppressWarnings("unchecked")
+		Map<String, Object> result = (Map<String, Object>) json(response).get("result");
+		String guide = (String) result.get("guide");
+		assertNotNull(guide);
+		assertTrue(guide.contains("engine owns the truth"));
+		assertEquals(text(resources.guide()), guide);
 	}
 
 	@Test
@@ -107,6 +123,8 @@ class RpgToolsTest {
 		assertTrue(text(resources.guide()).contains("engine owns the truth"));
 		assertTrue(text(resources.rulesets()).contains("CC-BY-4.0"));
 		assertTrue(text(resources.capabilities()).contains("\"checkpoints\":true"));
+		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
+				.contains("get_instructions"));
 	}
 
 	private static String text(io.quarkiverse.mcp.server.ResourceResponse response) {

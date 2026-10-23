@@ -13,7 +13,7 @@ plus the change journal, checkpoints and the semantic ledger, which define the p
 
 | Family                 | Tools                                                                                                                                                                                                                                                                  |
 |------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Discovery              | `get_server_state`                                                                                                                                                                                                                                                     |
+| Discovery              | `get_instructions`, `get_server_state`                                                                                                                                                                                                                                 |
 | Campaign setup         | `create_campaign`, `open_campaign`, `get_setup_state`, `update_campaign_setup`, `validate_campaign_setup`, `commit_campaign_setup`, `complete_campaign`                                                                                                                 |
 | Character design       | `create_character_draft`, `get_character_choices`, `generate_ability_scores`, `update_character_draft`, `validate_character_draft`, `commit_character_draft`, `update_party_design`                                                                                      |
 | Session                | `bootstrap_session`, `suspend_session`, `get_character_sheet`, `get_party` (the last two always available)                                                                                                                                                             |
@@ -31,6 +31,10 @@ plus the change journal, checkpoints and the semantic ledger, which define the p
 | Memory & chronicle     | `record_memory`, `query_memories`, `query_timeline`, `get_chronicle_material`, `write_chronicle`                                                                                                                                                                        |
 | Continuation           | `create_checkpoint`, `get_continuation_options`, `restore_checkpoint`                                                                                                                                                                                                  |
 | Resources              | `rpg://protocol/guide`, `rpg://protocol/capabilities`, `rpg://rulesets`                                                                                                                                                                                                |
+
+Each new conversation starts with `get_instructions`, which loads the full Game Master guide into context,
+followed by `get_server_state`, which returns compact state and allowed operations. Later state checks do
+not repeat the guide. Startup requires no MCP resource reader or client-specific prompt.
 
 Not yet implemented (`CAPABILITY_UNAVAILABLE`, or `false` in `rpg://protocol/capabilities`): Counterspell, Ready
 and other reactions; travel and rest interruptions (travel encounters are suggested, never forced); subclasses
@@ -175,18 +179,26 @@ marketplace entry can reference one bundle for every platform; direct downloads 
 executable bits); the Bundles workflow's *universal* choice re-packs it, and the Windows signing script
 dispatches that automatically.
 
-**Marketplace.** The `rpg-mcp` plugin in [`thegreystone/claude-plugins`](https://github.com/thegreystone/claude-plugins)
-ships a committed copy of the universal bundle as `rpg-mcp/rpg-mcp-server.mcpb`, referenced by relative path,
-because Claude Desktop rejects a URL there ("MCPB URL references are not allowed in plugins because the target
-can change after review"). **After every release, once the universal bundle is re-packed, run
-`scripts/update-bundle.sh <version>` in the marketplace repo and commit the result**: it replaces the copy and
-bumps `version` in `.claude-plugin/marketplace.json` and `rpg-mcp/.claude-plugin/plugin.json`. The plugin also
-ships the `/rpg` skill (`rpg-mcp/skills/rpg/SKILL.md`); keep it in step with the protocol guide.
+**Marketplace distribution.** Use [`ai-plugins`](https://github.com/thegreystone/ai-plugins) for Claude Code
+and Codex, following Mnemic's separate packages. Keep plugin source, skills and icons alongside the server
+code; publish native executables and `.mcpb` archives as GitHub Release assets. Do not commit executables or
+bundle archives to either repository.
 
-**User-facing docs never send people to the marketplace.** A catalogue install skips the bundle's
-`user_config` page, so the data directory can never be chosen. The README sends users to the per-platform
-`.mcpb` on the release, installed directly in Claude Desktop. The marketplace entry stays for the `/rpg` skill
-and for Claude Code.
+When adding RPG MCP to the marketplace, use Mnemic's layout:
+
+- `plugin/`: a Claude Code manifest referencing a versioned universal bundle URL, the RPG skill and the icon.
+- `plugin-codex/`: a Codex manifest, the icon, and a setup workflow and launcher that download a pinned native
+  executable for the user's platform and configure `RPG_DATA_DIR`.
+- Marketplace entries in `ai-plugins` pointing at those source directories in this repository.
+
+RPG MCP does not yet provide those packages or marketplace entries; the README documents direct bundle and
+manual binary installation. Once the packages exist, update their release pins after publishing and signing
+a release, keeping the RPG skill in step with the protocol guide.
+
+**Claude Desktop installation.** The README sends Desktop users to the per-platform `.mcpb` on the release,
+installed directly in Claude Desktop, where the bundle's `user_config` form lets them choose a campaign data
+directory. Keep this direct bundle installation path separate from the Claude Code and Codex marketplace
+packages.
 
 To try a bundle locally (Git Bash on Windows):
 
