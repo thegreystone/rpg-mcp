@@ -153,8 +153,8 @@
         "prerequisite": "Fighting Style Feature",
         "summary": "Add your ability modifier to the damage of the extra Light-weapon attack.",
         "text": "When you make an extra attack as a result of using a weapon that has the Light property, you can add your ability modifier to the damage of that attack if you aren't already adding it to the damage.",
-        "enforcement": "GM",
-        "gm_note": "Fighting Style features are not yet wired into the damage pipeline; the GM adjusts via apply_gm_override until that milestone."
+        "enforcement": "ENGINE",
+        "light_attack_ability_modifier": true
       }
     },
     {

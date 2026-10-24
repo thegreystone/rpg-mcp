@@ -209,6 +209,12 @@ public final class Origins {
 				f -> featDefinition(rules, f).map(d -> d.payload().get("damage_reroll") != null).orElse(false));
 	}
 
+	/** True when a feat adds the ability modifier to the extra attack of the Light property. */
+	public static boolean twoWeaponFighting(Tx tx, RulesData rules, Row c) {
+		return featRows(tx, c).stream().anyMatch(f -> featDefinition(rules, f)
+				.map(d -> Boolean.TRUE.equals(d.payload().get("light_attack_ability_modifier"))).orElse(false));
+	}
+
 	public static Optional<RulesData.Definition> featDefinition(RulesData rules, Row featRow) {
 		return rules.find(baseFeatRef(featRow.str("content_ref")));
 	}

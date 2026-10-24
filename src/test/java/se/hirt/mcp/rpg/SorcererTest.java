@@ -31,6 +31,7 @@ package se.hirt.mcp.rpg;
 import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
+import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.util.List;
@@ -110,6 +111,50 @@ class SorcererTest {
 			}
 			engine.levelUps().commit(op(), campaign, t, null);
 		}
+	}
+
+	private record LightEncounter(Engine engine, String campaign, String pc, String ref, String target, String dagger,
+			String handaxe) {
+		private Map<String, Object> perform(Map<String, Object> action) {
+			return engine.encounters().perform(op(), campaign, ref, pc, action, false);
+		}
+
+		private Map<String, Object> attack(boolean extra) {
+			return perform(map("kind", "ATTACK", "weapon", extra ? handaxe : dagger, "target", target,
+					"light_extra_attack", extra));
+		}
+
+		private void nextTurn() {
+			engine.encounters().perform(op(), campaign, ref, pc, map("kind", "END_TURN"), true);
+			Map<String, Object> ended = engine.encounters().perform(op(), campaign, ref, target,
+					map("kind", "END_TURN"), true);
+			assertEquals(pc, m(ended.get("next_turn")).get("character"));
+		}
+	}
+
+	private static LightEncounter lightEncounter(Engine engine, String campaign, String pc) {
+		List<Map<String, Object>> granted = list(engine.inventory().grantLoot(op(), campaign, pc,
+				List.of(map("item", "Dagger"), map("item", "Handaxe")), null, "QUEST", null).get("granted"));
+		String dagger = (String) engine.inventory()
+				.equip(op(), campaign, pc, (String) granted.get(0).get("entry"), true).get("entry");
+		String handaxe = (String) engine.inventory()
+				.equip(op(), campaign, pc, (String) granted.get(1).get("entry"), true).get("entry");
+		String target = (String) engine.runtime()
+				.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
+		ScriptedRollService dice = (ScriptedRollService) engine.roller();
+		dice.queue(20, 100, 1, 1);
+		Map<String, Object> started = engine.encounters().start(op(), campaign,
+				map("party", List.of(pc), "foes", List.of(target)), null, null, null, null, null);
+		assertEquals(pc, m(started.get("turn")).get("character"));
+		assertTrue(dice.exhausted());
+		return new LightEncounter(engine, campaign, pc, (String) started.get("encounter"), target, dagger, handaxe);
+	}
+
+	private static void assertBonusActionRejected(Engine engine, String campaign, Runnable action) {
+		Map<String, List<Map<String, Object>>> before = engine.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN));
+		assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, assertThrows(RpgException.class, action::run).code());
+		assertEquals(before, engine.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)),
+				"a rejected Bonus Action preserves resources, hit points and turn state");
 	}
 
 	@Test
@@ -213,6 +258,112 @@ class SorcererTest {
 			assertEquals(List.of("Quickened Spell"), m(again.get("metamagic")).get("options"));
 			assertEquals(2, m(again.get("metamagic")).get("points_spent"));
 			assertEquals(1, m(m(again.get("metamagic")).get("sorcery_points")).get("current"));
+		}
+	}
+
+	@Test
+	void quickenedCastingAndTheLightExtraAttackShareOneBonusActionPerTurn() throws Exception {
+		try (Engine engine = engine(tempDb("sorc-quickened-light"))) {
+			String[] ids = sorcerer(engine);
+			String campaign = ids[0], pc = ids[1];
+			levelTo(engine, campaign, pc, 4, List.of("Quickened Spell", "Subtle Spell"));
+			LightEncounter encounter = lightEncounter(engine, campaign, pc);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			Map<String, Object> quickened = map("kind", "CAST", "spell", "Fire Bolt", "target", encounter.target,
+					"metamagic", "Quickened Spell");
+
+			dice.queue(19, 2);
+			encounter.attack(false);
+			dice.queue(19, 2);
+			Map<String, Object> cast = encounter.perform(quickened);
+			assertEquals("BONUS_ACTION", cast.get("action_cost"));
+			assertEquals(2, m(m(cast.get("metamagic")).get("sorcery_points")).get("current"));
+			assertBonusActionRejected(engine, campaign, () -> encounter.attack(true));
+
+			encounter.nextTurn();
+			dice.queue(19, 2);
+			encounter.attack(false);
+			dice.queue(19, 3);
+			assertEquals("BONUS_ACTION", encounter.attack(true).get("action_cost"));
+			assertBonusActionRejected(engine, campaign, () -> encounter.perform(quickened));
+
+			encounter.nextTurn();
+			dice.queue(19, 2);
+			Map<String, Object> nextCast = encounter.perform(quickened);
+			assertEquals("BONUS_ACTION", nextCast.get("action_cost"));
+			assertEquals(0, m(m(nextCast.get("metamagic")).get("sorcery_points")).get("current"),
+					"the rejected casting kept the two points needed on the next turn");
+			assertTrue(dice.exhausted());
+		}
+	}
+
+	@Test
+	void creatingASpellSlotAndTheLightExtraAttackShareOneBonusActionPerTurn() throws Exception {
+		try (Engine engine = engine(tempDb("sorc-create-slot-light"))) {
+			String[] ids = sorcerer(engine);
+			String campaign = ids[0], pc = ids[1];
+			levelTo(engine, campaign, pc, 4, List.of("Subtle Spell", "Distant Spell"));
+			LightEncounter encounter = lightEncounter(engine, campaign, pc);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			Map<String, Object> creation = map("kind", "CREATE_SPELL_SLOT", "slot_level", 1, "reason", "test");
+
+			dice.queue(19, 2);
+			encounter.attack(false);
+			Map<String, Object> created = engine.runtime().applyRuntimeChange(op(), campaign, pc, creation);
+			assertEquals("BONUS_ACTION", created.get("action_cost"));
+			assertBonusActionRejected(engine, campaign, () -> encounter.attack(true));
+
+			encounter.nextTurn();
+			dice.queue(19, 2);
+			encounter.attack(false);
+			dice.queue(19, 3);
+			assertEquals("BONUS_ACTION", encounter.attack(true).get("action_cost"));
+			assertBonusActionRejected(engine, campaign,
+					() -> engine.runtime().applyRuntimeChange(op(), campaign, pc, creation));
+
+			encounter.nextTurn();
+			Map<String, Object> nextCreation = engine.runtime().applyRuntimeChange(op(), campaign, pc, creation);
+			assertEquals("BONUS_ACTION", nextCreation.get("action_cost"));
+			assertEquals(0, m(nextCreation.get("sorcery_points")).get("current"),
+					"the rejected creation preserves both points and slots");
+			assertTrue(dice.exhausted());
+		}
+	}
+
+	@Test
+	void convertingSpellSlotsNeedsNoActionBeforeOrAfterTheLightExtraAttack() throws Exception {
+		try (Engine engine = engine(tempDb("sorc-convert-slot-light"))) {
+			String[] ids = sorcerer(engine);
+			String campaign = ids[0], pc = ids[1];
+			levelTo(engine, campaign, pc, 4, List.of("Subtle Spell", "Distant Spell"));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "USE_RESOURCE", "resource", "sorcery_points", "amount", 4, "reason", "test"));
+			LightEncounter encounter = lightEncounter(engine, campaign, pc);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			Map<String, Object> conversion = map("kind", "CONVERT_SPELL_SLOT", "slot_level", 1, "reason", "test");
+
+			Map<String, Object> beforeAttack = engine.runtime().applyRuntimeChange(op(), campaign, pc, conversion);
+			assertEquals("NONE", beforeAttack.get("action_cost"));
+			assertEquals(1, m(beforeAttack.get("sorcery_points")).get("current"));
+			dice.queue(19, 2);
+			encounter.attack(false);
+			dice.queue(19, 3);
+			assertEquals("BONUS_ACTION", encounter.attack(true).get("action_cost"));
+			Map<String, Object> afterAttack = engine.runtime().applyRuntimeChange(op(), campaign, pc, conversion);
+			assertEquals("NONE", afterAttack.get("action_cost"));
+			assertEquals(2, m(afterAttack.get("sorcery_points")).get("current"));
+			assertEquals(2, m(afterAttack.get("slot")).get("current"));
+
+			encounter.nextTurn();
+			Map<String, Object> beforeCreation = engine.runtime().applyRuntimeChange(op(), campaign, pc, conversion);
+			assertEquals("NONE", beforeCreation.get("action_cost"));
+			assertEquals(3, m(beforeCreation.get("sorcery_points")).get("current"));
+			Map<String, Object> created = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "CREATE_SPELL_SLOT", "slot_level", 1, "reason", "test"));
+			assertEquals("BONUS_ACTION", created.get("action_cost"));
+			assertEquals(1, m(created.get("sorcery_points")).get("current"));
+			assertEquals(2, m(created.get("slot")).get("current"));
+			assertTrue(dice.exhausted());
 		}
 	}
 

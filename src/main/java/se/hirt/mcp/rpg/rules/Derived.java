@@ -103,9 +103,13 @@ public final class Derived {
 			Map<String, Object> armor = (Map<String, Object>) armorObj;
 			String category = String.valueOf(armor.get("category"));
 			if (category.equals("SHIELD")) {
-				shieldBonus += ((Number) armor.getOrDefault("ac_bonus", 2)).intValue()
+				int candidate = ((Number) armor.getOrDefault("ac_bonus", 2)).intValue()
 						+ se.hirt.mcp.rpg.inventory.MagicItems.bonus(item);
-				shield = String.valueOf(item.getOrDefault("name", "Shield"));
+				// Only one shield benefits AC, including legacy inventories with multiple shields equipped.
+				if (shield == null || candidate > shieldBonus) {
+					shieldBonus = candidate;
+					shield = String.valueOf(item.getOrDefault("name", "Shield"));
+				}
 				continue;
 			}
 			int base = ((Number) armor.get("base_ac")).intValue();

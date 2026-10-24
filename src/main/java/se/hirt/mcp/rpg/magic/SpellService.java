@@ -45,6 +45,7 @@ import se.hirt.mcp.rpg.rules.Ability;
 import se.hirt.mcp.rpg.rules.Combat;
 import se.hirt.mcp.rpg.rules.Effects;
 import se.hirt.mcp.rpg.rules.Rules;
+import se.hirt.mcp.rpg.rules.TurnEconomy;
 
 import java.util.*;
 
@@ -542,6 +543,19 @@ public final class SpellService {
 		Long concentrator = concentration ? caster.id() : null;
 		// Metamagic (Sorcerer): validated against this spell and paid for before anything is rolled.
 		Metamagic.Plan mm = Metamagic.plan(tx, rules, campaignId, caster, opts, def, mech, targets);
+		boolean bonusAction = "1 bonus action".equalsIgnoreCase(String.valueOf(p.get("casting_time")))
+				|| mm != null && mm.has("quickened");
+		if (bonusAction) {
+			Long turnEncounterId = encounterId == null ? caster.lng("encounter_id") : encounterId;
+			if (turnEncounterId != null) {
+				Row turnEncounter = tx.get("encounter", turnEncounterId);
+				if (encounterId != null || "RUNNING".equals(turnEncounter.str("status"))
+						|| "WAITING_CHOICE".equals(turnEncounter.str("status"))) {
+					TurnEconomy.spendBonusAction(tx, turnEncounter, caster.id(), def.name());
+				}
+			}
+			result.put("action_cost", "BONUS_ACTION");
+		}
 		int casterLevel = castingOpt.map(Casting::level)
 				.orElse(Math.max(1, se.hirt.mcp.rpg.character.Origins.characterLevel(tx, caster)));
 		switch (kind) {

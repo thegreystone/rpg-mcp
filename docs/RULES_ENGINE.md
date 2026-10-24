@@ -166,6 +166,15 @@ Maps `DESIGN.md` §33 to rules work. E = engine code, D = data, G = GM.
 A mechanic not yet implemented is never approximated: operations needing it return `CAPABILITY_UNAVAILABLE` or fall to
 GM interpretation explicitly.
 
+The Light property's extra attack is engine-enforced: after an Attack action with a Light weapon, use
+`ATTACK {weapon: "inventory:N", target, light_extra_attack: true}` with a different Light weapon. The extra attack
+uses the turn's Bonus Action and omits a positive ability modifier from damage unless Two-Weapon Fighting applies;
+negative ability modifiers, magic and other damage bonuses remain. Eligibility and expenditure are journaled on the
+participant, including misses and attacks awaiting a Shield choice. Bonus-action spells, Quickened Spell and Font
+of Magic slot creation share that Bonus Action; converting a slot to sorcery points takes no action. Weapon mastery
+(including Nick) and acquiring Fighting Style feats
+remain under GM adjudication; an already-recorded Two-Weapon Fighting feat is honored.
+
 ---
 
 ## 6. Deviations and House Rules
@@ -229,8 +238,9 @@ The engine ships with zero deviations from SRD 5.2.1. Campaign-configured varian
    Seeking may join it. Empowered rerolls the lowest damage dice of the casting's first damage roll; Seeking rerolls a
    missed attack roll and spends its point only then; Heightened gives the target's save Disadvantage; Careful marks
    the named creatures as automatic successes taking no damage; Transmuted swaps an elemental type; Extended doubles a
-   minute-or-longer duration to at most 24 hours. Quickened, Distant, Subtle and Twinned are paid and reported; the
-   engine does not track action economy, range or components.
+   minute-or-longer duration to at most 24 hours. Quickened spends the shared Bonus Action during encounters.
+   Distant, Subtle and Twinned are paid and reported; the engine does not otherwise track general Action economy,
+   range or components.
 
    **Sneak Attack**: on a hit with a Finesse or Ranged weapon, when the roll had Advantage, or when an ally is beside
    the target and the roll did not have Disadvantage. Once per turn, tracked on the participant. With zones instead
@@ -345,7 +355,9 @@ robes); rings are `RING`; rods, staffs and wands are held (`ONE_HAND`); the rest
   armor and shield); Potions of Healing (`consumable: {heal}`, rolled by `USE_ITEM` in and out of combat). Everything
   else is GM-adjudicated from its text, which the sheet shows under `magic_items` with `adjudication: GM`.
 - **Attunement (engine).** An equipped item that requires attunement is attuned; at most three at a time (SRD
-  "Attunement"). Slots: one body armor, one shield, two rings, one of each worn slot, two hands.
+  "Attunement"). Slots: one body armor, one shield, two rings, one of each worn slot, two hands. A shield
+  uses one hand; equipping another shield is refused. If an older campaign already has several equipped,
+  only the strongest shield's AC bonus applies.
 - **Weapon buffs (engine).** A spell whose mechanic has `targets: WEAPON` binds its effect to one carried weapon
   (`options.weapon`, else the wielder's equipped weapon): the effect's `attack_bonus`, flat `damage_bonus` and damage
   dice ride only on attacks with that weapon (`Effects.weaponModifiers`, `Combat.withBuff`), never on a fist or a second

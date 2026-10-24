@@ -35,7 +35,9 @@ import se.hirt.mcp.rpg.dice.DiceExpression;
 import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.inventory.MagicItems;
 import se.hirt.mcp.rpg.inventory.Treasure;
+import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
+import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.rules.Combat;
 
@@ -343,6 +345,108 @@ class MagicItemTest {
 	}
 
 	// ── armor class, saves, slots and attunement ───────────────────────
+
+	@Test
+	void aSecondShieldIsRejectedWithoutSplittingItsStack() throws Exception {
+		try (Engine engine = engine(tempDb("magic-one-shield"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			int unarmored = ac(engine, campaign, pc);
+			String shields = grant(engine, campaign, pc, map("item", "Shield", "quantity", 3));
+			Map<String, Object> first = engine.inventory().equip(op(), campaign, pc, shields, true);
+			String heldShield = (String) first.get("entry");
+			assertNotEquals(shields, heldShield, "equipping the first shield splits one from the stack");
+			assertEquals(unarmored + 2, ac(engine, campaign, pc));
+			assertEquipRejectedWithoutChanges(engine, campaign, pc, shields, "SLOT_OCCUPIED");
+
+			String magicShields = grant(engine, campaign, pc,
+					map("item", "Shield, +1, +2, or +3", "base", "Shield", "bonus", 2, "quantity", 2));
+			assertEquipRejectedWithoutChanges(engine, campaign, pc, magicShields, "SLOT_OCCUPIED");
+			List<Map<String, Object>> inventory = l(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"));
+			assertEquals(2L, ((Number) inventory.stream().filter(i -> shields.equals(i.get("ref"))).findFirst()
+					.orElseThrow().get("quantity")).longValue());
+			assertEquals(2L, ((Number) inventory.stream().filter(i -> magicShields.equals(i.get("ref"))).findFirst()
+					.orElseThrow().get("quantity")).longValue());
+
+			engine.inventory().equip(op(), campaign, pc, heldShield, false);
+			Map<String, Object> swapped = engine.inventory().equip(op(), campaign, pc, magicShields, true);
+			String heldMagicShield = (String) swapped.get("entry");
+			assertNotEquals(magicShields, heldMagicShield, "a successful swap may split the magic shield stack");
+			assertEquals(unarmored + 4, ac(engine, campaign, pc));
+			assertEquipRejectedWithoutChanges(engine, campaign, pc, heldShield, "SLOT_OCCUPIED");
+			String sword = grant(engine, campaign, pc, map("item", "Longsword"));
+			engine.inventory().equip(op(), campaign, pc, sword, true);
+			assertEquals(unarmored + 4, ac(engine, campaign, pc),
+					"a one-handed weapon and shield remain legal together");
+
+			engine.inventory().equip(op(), campaign, pc, sword, false);
+			String greatsword = grant(engine, campaign, pc, map("item", "Greatsword"));
+			assertEquipRejectedWithoutChanges(engine, campaign, pc, greatsword, "HANDS");
+			engine.inventory().equip(op(), campaign, pc, heldMagicShield, false);
+			engine.inventory().equip(op(), campaign, pc, greatsword, true);
+			assertEquipRejectedWithoutChanges(engine, campaign, pc, heldShield, "HANDS");
+			engine.inventory().equip(op(), campaign, pc, greatsword, false);
+			engine.inventory().equip(op(), campaign, pc, heldShield, true);
+			assertEquals(unarmored + 2, ac(engine, campaign, pc),
+					"the mundane shield can be wielded again after swapping back");
+
+			engine.inventory().equip(op(), campaign, pc, heldShield, false);
+			engine.inventory().equip(op(), campaign, pc, sword, true);
+			String dagger = grant(engine, campaign, pc, map("item", "Dagger"));
+			Map<String, Object> dualWeapons = engine.inventory().equip(op(), campaign, pc, dagger, true);
+			assertEquals(2L,
+					l(dualWeapons.get("equipped_items")).stream().filter(i -> "WEAPON".equals(i.get("type"))).count(),
+					"two ONE_HAND weapons remain legal: shield exclusivity must not reserve every hand slot");
+		}
+	}
+
+	private static void assertEquipRejectedWithoutChanges(
+		Engine engine, String campaign, String pc, String entry, String code) {
+		Map<String, Object> before = engine.characters().characterSheet(campaign, pc, "PLAY");
+		RpgException rejected = assertThrows(RpgException.class,
+				() -> engine.inventory().equip(op(), campaign, pc, entry, true));
+		assertEquals(ErrorCode.VALIDATION_FAILED, rejected.code());
+		assertTrue(l(rejected.details().get("violations")).stream().anyMatch(v -> code.equals(v.get("rule"))),
+				rejected.details().toString());
+		Map<String, Object> after = engine.characters().characterSheet(campaign, pc, "PLAY");
+		assertEquals(before.get("inventory"), after.get("inventory"),
+				"a rejected equip must not split or equip any stack");
+		assertEquals(before.get("armor_class"), after.get("armor_class"), "a rejected equip preserves armor class");
+	}
+
+	@Test
+	void legacyMultipleShieldsUseOnlyTheStrongestBonusAndItsLabelInEitherOrder() throws Exception {
+		for (boolean strongestFirst : List.of(true, false)) {
+			try (Engine engine = engine(tempDb("magic-legacy-shields"))) {
+				String campaign = committedCampaign(engine);
+				engine.sessions().bootstrap(op(), campaign, null);
+				String pc = "character:1";
+				int unarmored = ac(engine, campaign, pc);
+				Map<String, Object> magic = map("item", "Shield, +1, +2, or +3", "base", "Shield", "bonus", 2);
+				Map<String, Object> plain = map("item", "Shield");
+				String first = grant(engine, campaign, pc, strongestFirst ? magic : plain);
+				String second = grant(engine, campaign, pc, strongestFirst ? plain : magic);
+				engine.db().mutate(Database.Mutation.of("legacy_multiple_shields_fixture",
+						Ref.id(campaign, Ref.CAMPAIGN), op(), "GM", null), tx -> {
+							tx.update("inventory_entry", Ref.id(first, Ref.INVENTORY),
+									map("equipped", 1, "slot", "SHIELD"));
+							tx.update("inventory_entry", Ref.id(second, Ref.INVENTORY),
+									map("equipped", 1, "slot", "SHIELD"));
+							return Map.of();
+						});
+				Map<String, Object> armor = m(
+						engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class"));
+				assertEquals(unarmored + 4, ((Number) armor.get("value")).intValue(),
+						"legacy multiple shields do not stack their mundane or magic armor bonuses");
+				assertEquals("+2 Shield (+4)", armor.get("shield"), "the label names the shield whose bonus was used");
+				assertEquals(2L, l(engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory")).stream()
+						.filter(i -> Boolean.TRUE.equals(i.get("equipped")) && "SHIELD".equals(i.get("slot"))).count(),
+						"reading an old campaign does not rewrite its inventory");
+			}
+		}
+	}
 
 	@Test
 	void wornMagicChangesArmorClassAndSavesWhileEquipped() throws Exception {

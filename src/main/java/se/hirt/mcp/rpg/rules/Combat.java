@@ -111,17 +111,28 @@ public final class Combat {
 	 */
 	public static AttackProfile weapon(
 		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded) {
-		return weapon(character, name, payload, proficiencyBonus, twoHanded, null, null, null);
+		return weapon(character, name, payload, proficiencyBonus, twoHanded, null, null, null, false);
 	}
 
 	/**
 	 * A weapon attack with the overrides a spell bound to the weapon imposes (Shillelagh: the
 	 * spellcasting ability's modifier, a d8, Force damage); null keeps the weapon's own.
 	 */
-	@SuppressWarnings("unchecked")
 	public static AttackProfile weapon(
 		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded,
 		Integer abilityModOverride, String diceOverride, String typeOverride) {
+		return weapon(character, name, payload, proficiencyBonus, twoHanded, abilityModOverride, diceOverride,
+				typeOverride, false);
+	}
+
+	/**
+	 * The extra attack of the Light property omits a positive ability modifier from damage unless a
+	 * feature restores it. The attack bonus, negative ability modifiers and magic bonuses stay.
+	 */
+	@SuppressWarnings("unchecked")
+	public static AttackProfile weapon(
+		Row character, String name, Map<String, Object> payload, int proficiencyBonus, boolean twoHanded,
+		Integer abilityModOverride, String diceOverride, String typeOverride, boolean omitPositiveAbilityDamage) {
 		List<Object> props = payload.get("properties") instanceof List<?> l ? (List<Object>) l : List.of();
 		boolean rangedCategory = String.valueOf(payload.get("category")).endsWith("RANGED");
 		boolean finesse = props.contains("finesse");
@@ -141,8 +152,9 @@ public final class Combat {
 		boolean ammo = props.contains("ammunition");
 		// A magic weapon's +N applies to attack and damage rolls (SRD 5.2.1 "Weapon, +1, +2, or +3").
 		int magic = se.hirt.mcp.rpg.inventory.MagicItems.bonus(payload);
+		int damageAbility = omitPositiveAbilityDamage ? Math.min(0, abilityMod) : abilityMod;
 		var parts = new ArrayList<DamagePart>();
-		parts.add(new DamagePart(dice, abilityMod + magic,
+		parts.add(new DamagePart(dice, damageAbility + magic,
 				typeOverride != null ? typeOverride : String.valueOf(damage.get("type"))));
 		// Extra damage bound to the weapon itself (an enchanted blade's fire): its own dice and type.
 		Map<String, String> extra = se.hirt.mcp.rpg.inventory.MagicItems.extraDamage(payload);

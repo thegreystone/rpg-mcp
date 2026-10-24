@@ -49,6 +49,7 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Combat;
 import se.hirt.mcp.rpg.rules.Rules;
+import se.hirt.mcp.rpg.rules.TurnEconomy;
 import se.hirt.mcp.rpg.session.GameTime;
 
 import java.util.*;
@@ -374,6 +375,11 @@ public final class EncounterService {
 			}
 			pm.put("current_turn", turnId != null && turnId == p.id());
 			pm.put("reaction_available", reactionAvailable(tx, p, c));
+			pm.put("bonus_action_available", TurnEconomy.bonusActionAvailable(tx, encounter, c.id()));
+			List<String> lightWeapons = lightExtraWeapons(tx, encounter, c);
+			if (!lightWeapons.isEmpty()) {
+				pm.put("light_extra_attack_available", lightWeapons);
+			}
 			pm.put("attacks", attackOptions(tx, c));
 			participants.add(pm);
 		}
@@ -514,6 +520,13 @@ public final class EncounterService {
 				throw RpgException.invalidArgument("action.kind is required: " + ACTIONS.stream().sorted().toList());
 			}
 			String kind = String.valueOf(action.get("kind")).toUpperCase();
+			if (action.containsKey("light_extra_attack") && !(action.get("light_extra_attack") instanceof Boolean)) {
+				throw RpgException.invalidArgument("action.light_extra_attack must be a boolean.");
+			}
+			boolean lightExtra = Boolean.TRUE.equals(action.get("light_extra_attack"));
+			if (lightExtra && !"ATTACK".equals(kind)) {
+				throw RpgException.invalidArgument("action.light_extra_attack is only valid for ATTACK.");
+			}
 			if (!ACTIONS.contains(kind)) {
 				throw RpgException.invalidArgument(
 						"Unknown action kind '" + kind + "'; legal kinds: " + ACTIONS.stream().sorted().toList());
@@ -547,6 +560,7 @@ public final class EncounterService {
 			result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
 			result.put("actor", Ref.of(Ref.CHARACTER, actor.id()));
 			result.put("kind", kind);
+			result.put("turn_advanced", false);
 			if (!turnsSkipped.isEmpty()) {
 				result.put("turns_skipped", turnsSkipped);
 			}
@@ -630,13 +644,19 @@ public final class EncounterService {
 			}
 			// A stat block that says "makes two attacks" gets two attacks: the turn does not end under the
 			// actor while attacks remain (SRD 5.2.1 "Multiattack"). END_TURN always ends it.
-			int remaining = kind.equals("ATTACK") ? attacksRemaining(tx, encounter, actor, round) : 0;
+			int remaining = kind.equals("ATTACK") ? attacksRemaining(tx, encounter, actor, round, !lightExtra) : 0;
 			if (remaining > 0) {
 				result.put("attacks_remaining", remaining);
 				result.put("next_step", actor.str("name") + " has " + remaining
 						+ " attack(s) left this turn: attack again, or END_TURN to finish.");
 			}
-			boolean advance = kind.equals("END_TURN") || (endTurn && remaining == 0);
+			List<String> lightWeapons = kind.equals("END_TURN") ? List.of() : lightExtraWeapons(tx, encounter, actor);
+			if (!lightWeapons.isEmpty()) {
+				result.put("light_extra_attack_available", lightWeapons);
+				result.put("next_step", (remaining > 0 ? result.get("next_step") + " " : "") + actor.str("name")
+						+ " can make an extra Light-weapon attack: ATTACK with light_extra_attack:true and a listed weapon ref, or END_TURN.");
+			}
+			boolean advance = kind.equals("END_TURN") || (endTurn && remaining == 0 && lightWeapons.isEmpty());
 			List<Map<String, Object>> pending = pendingChoices(tx, encounter.id());
 			if (!pending.isEmpty()) {
 				// I-33: the action is on hold until every choice is resolved; the turn advances afterwards if requested.
@@ -665,11 +685,11 @@ public final class EncounterService {
 	}
 
 	/**
-	 * How many attacks the actor still has this turn, counting the one just made. Zero for anyone
-	 * without a Multiattack, so ordinary attackers behave exactly as before.
+	 * How many attacks the actor still has this turn, optionally counting the one just made. Zero
+	 * for anyone without a Multiattack, so ordinary attackers behave exactly as before.
 	 */
 	@SuppressWarnings("unchecked")
-	private int attacksRemaining(Tx tx, Row encounter, Row actor, long round) {
+	private int attacksRemaining(Tx tx, Row encounter, Row actor, long round, boolean countAttack) {
 		if (!RuntimeService.usesStatBlock(tx, actor)) {
 			return 0;
 		}
@@ -689,10 +709,12 @@ public final class EncounterService {
 				: new LinkedHashMap<>(p.map("once_per_turn_json"));
 		int used = turnKey.equals(flags.get("attacks_turn")) && flags.get("attacks_used") instanceof Number n
 				? n.intValue() : 0;
-		used++;
-		flags.put("attacks_turn", turnKey);
-		flags.put("attacks_used", used);
-		tx.update("encounter_participant", p.id(), Map.of("once_per_turn_json", Json.write(flags)));
+		if (countAttack) {
+			used++;
+			flags.put("attacks_turn", turnKey);
+			flags.put("attacks_used", used);
+			tx.update("encounter_participant", p.id(), Map.of("once_per_turn_json", Json.write(flags)));
+		}
 		return Math.max(0, count - used);
 	}
 
@@ -804,7 +826,7 @@ public final class EncounterService {
 	 * The attack profile resolved from the action: creature action, carried weapon, or unarmed
 	 * strike.
 	 */
-	private record Setup(Combat.AttackProfile profile, List<String> warnings) {
+	private record Setup(Combat.AttackProfile profile, List<String> warnings, Long weaponEntryId, boolean light) {
 	}
 
 	private Setup resolveProfile(Tx tx, Row actor, Map<String, Object> action) {
@@ -826,7 +848,7 @@ public final class EncounterService {
 			if (creatureAction.isPresent()) {
 				profile = Combat.creatureAction(creatureAction.get());
 			} else if (named != null) {
-				profile = carriedProfile(tx, actor, named, prof, action, warnings);
+				return carriedProfile(tx, actor, named, prof, action, warnings);
 			} else {
 				profile = Combat.unarmed(actor, prof);
 			}
@@ -839,7 +861,7 @@ public final class EncounterService {
 			// by name when no carried weapon answers to it.
 			Optional<Map<String, Object>> creatureAction = creatureAction(actor, named);
 			try {
-				profile = carriedProfile(tx, actor, named, prof, action, warnings);
+				return carriedProfile(tx, actor, named, prof, action, warnings);
 			} catch (RpgException notCarried) {
 				if (creatureAction.isEmpty()) {
 					throw notCarried;
@@ -850,10 +872,10 @@ public final class EncounterService {
 		} else {
 			profile = Combat.unarmed(actor, prof);
 		}
-		return new Setup(profile, warnings);
+		return new Setup(profile, warnings, null, false);
 	}
 
-	private Combat.AttackProfile carriedProfile(
+	private Setup carriedProfile(
 		Tx tx, Row actor, String named, int prof, Map<String, Object> action, List<String> warnings) {
 		Row weaponEntry = carriedWeapon(tx, actor, named);
 		ContentService.Item item = ContentService.itemForEntry(tx, rules, weaponEntry);
@@ -870,8 +892,78 @@ public final class EncounterService {
 		}
 		Combat.AttackProfile profile = Combat.weapon(actor, item.name(), attackPayload(weaponEntry, item, warnings),
 				prof, Boolean.TRUE.equals(action.get("two_handed")), abilityOverride, bound.weaponDie,
-				bound.weaponDamageType);
-		return Combat.withBuff(profile, bound);
+				bound.weaponDamageType, Boolean.TRUE.equals(action.get("light_extra_attack"))
+						&& !se.hirt.mcp.rpg.character.Origins.twoWeaponFighting(tx, rules, actor));
+		return new Setup(Combat.withBuff(profile, bound), warnings, weaponEntry.id(), lightWeapon(item.payload()));
+	}
+
+	private static boolean lightWeapon(Map<String, Object> payload) {
+		return "WEAPON".equals(payload.get("type")) && payload.get("properties") instanceof List<?> properties
+				&& properties.contains("light");
+	}
+
+	/** The Light property needs a different physical weapon after an Attack action this turn. */
+	private void trackLightAttack(Tx tx, Row encounter, Row actor, Row participant, Setup setup, boolean extra) {
+		String turnKey = TurnEconomy.turnKey(encounter);
+		Row fresh = tx.get("encounter_participant", participant.id());
+		Map<String, Object> flags = fresh.isNull("once_per_turn_json") ? new LinkedHashMap<>()
+				: new LinkedHashMap<>(fresh.map("once_per_turn_json"));
+		var weapons = new ArrayList<Long>();
+		if (turnKey.equals(flags.get("light_attack_turn"))
+				&& flags.get("light_attack_weapons") instanceof List<?> ids) {
+			for (Object id : ids) {
+				weapons.add(((Number) id).longValue());
+			}
+		}
+		if (extra) {
+			if (!setup.light() || setup.weaponEntryId() == null) {
+				throw RpgException.validation(List.of(new Violation("action.weapon", "NOT_LIGHT",
+						"The extra attack requires a carried weapon with the Light property.")));
+			}
+			if (weapons.stream().noneMatch(id -> !id.equals(setup.weaponEntryId()))) {
+				throw RpgException.notAllowed("First take the Attack action with a different Light weapon this turn.");
+			}
+			if (turnKey.equals(flags.get("light_extra_attack_turn"))) {
+				throw RpgException.notAllowed("The extra Light-weapon attack has already been used this turn.");
+			}
+			TurnEconomy.spendBonusAction(tx, encounter, actor.id(), "extra Light-weapon attack");
+			// Spending the Bonus Action writes the same flags; keep that update and any other turn features.
+			flags = new LinkedHashMap<>(tx.get("encounter_participant", participant.id()).map("once_per_turn_json"));
+			flags.put("light_extra_attack_turn", turnKey);
+		} else if (setup.light() && setup.weaponEntryId() != null) {
+			if (!weapons.contains(setup.weaponEntryId())) {
+				weapons.add(setup.weaponEntryId());
+			}
+			flags.put("light_attack_turn", turnKey);
+			flags.put("light_attack_weapons", weapons);
+		} else {
+			return;
+		}
+		tx.update("encounter_participant", participant.id(), Map.of("once_per_turn_json", Json.write(flags)));
+	}
+
+	private List<String> lightExtraWeapons(Tx tx, Row encounter, Row actor) {
+		if (!TurnEconomy.bonusActionAvailable(tx, encounter, actor.id())
+				|| conditionAmong(tx, actor, INCAPACITATING_CONDITIONS).isPresent()) {
+			return List.of();
+		}
+		Row p = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+				encounter.id(), actor.id()).orElseThrow();
+		Map<String, Object> flags = p.isNull("once_per_turn_json") ? Map.of() : p.map("once_per_turn_json");
+		String turnKey = TurnEconomy.turnKey(encounter);
+		if (!turnKey.equals(flags.get("light_attack_turn")) || turnKey.equals(flags.get("light_extra_attack_turn"))
+				|| !(flags.get("light_attack_weapons") instanceof List<?> ids)) {
+			return List.of();
+		}
+		var out = new ArrayList<String>();
+		for (Row entry : tx.query("SELECT * FROM inventory_entry WHERE character_id = ? ORDER BY equipped DESC, id",
+				actor.id())) {
+			ContentService.Item item = ContentService.itemForEntry(tx, rules, entry);
+			if (lightWeapon(item.payload()) && ids.stream().anyMatch(id -> ((Number) id).longValue() != entry.id())) {
+				out.add(Ref.of(Ref.INVENTORY, entry.id()));
+			}
+		}
+		return out;
 	}
 
 	/** An unattuned item still has its mundane properties (SRD 5.2.1 "Attunement"). */
@@ -911,6 +1003,13 @@ public final class EncounterService {
 		boolean reaction = Boolean.TRUE.equals(action.get("reaction"));
 		Setup setup = resolveProfile(tx, actor, action);
 		Combat.AttackProfile profile = setup.profile();
+		boolean lightExtra = Boolean.TRUE.equals(action.get("light_extra_attack"));
+		if (lightExtra && (opportunity || reaction)) {
+			throw RpgException.notAllowed("An extra Light-weapon attack is taken on your turn, not as a reaction.");
+		}
+		if (!opportunity && !reaction) {
+			trackLightAttack(tx, encounter, actor, participant, setup, lightExtra);
+		}
 		if (reaction && profile.ranged()) {
 			throw RpgException.validation(List
 					.of(new Violation("choice.weapon", "NOT_MELEE", "An Opportunity Attack must be a melee attack.")));
@@ -1065,6 +1164,10 @@ public final class EncounterService {
 		var out = new LinkedHashMap<String, Object>();
 		out.put("target", Ref.of(Ref.CHARACTER, ((Number) ctx.get("target")).longValue()));
 		out.put("attack", profile.name());
+		if (ctx.get("action") instanceof Map<?, ?> action && Boolean.TRUE.equals(action.get("light_extra_attack"))) {
+			out.put("light_extra_attack", true);
+			out.put("action_cost", "BONUS_ACTION");
+		}
 		if (Boolean.TRUE.equals(ctx.get("reaction"))) {
 			out.put("reaction", "OPPORTUNITY_ATTACK");
 		}

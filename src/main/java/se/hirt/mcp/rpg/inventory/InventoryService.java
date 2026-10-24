@@ -481,7 +481,7 @@ public final class InventoryService {
 					String s = c.str("slot");
 					if ("RING".equals(s)) {
 						rings++;
-					} else if (s != null && s.equals(slot) && handsFor(s) == 0) {
+					} else if (s != null && s.equals(slot) && ("SHIELD".equals(s) || handsFor(s) == 0)) {
 						throw RpgException.validation(List.of(new Violation("entry", "SLOT_OCCUPIED",
 								("BODY".equals(s) ? "Body armor"
 										: "SHIELD".equals(s) ? "A shield" : "Something worn on the " + s.toLowerCase())

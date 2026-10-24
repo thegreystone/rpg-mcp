@@ -953,7 +953,7 @@ constraints, and revision. Secret opponent information is omitted or marked by v
 ### 15.3 `perform_encounter_action`
 
 Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `DISENGAGE`, `DODGE`, `HELP`, `HIDE`, `READY`,
-`USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`.
+`USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`, `END_TURN`.
 
 Returns the validated interpretation, rolls and modifiers, resource expenditure, damage, healing, conditions, movement
 and other consequences, defeated/dying changes, triggered reactions or pending choices, the next turn or required
@@ -964,8 +964,21 @@ than guessing.
 `metamagic`, `heightened_target`, `careful`, `damage_type`, …; §13.9).
 
 `ATTACK` may name `ammunition` ("+1 Arrow") to fire magic ammunition made on the weapon's own kind; its +N applies to
-that attack and damage roll and the result's `ammunition` reports the piece, its `bonus` and what remains. `USE_ITEM
-{item, target}` uses a carried consumable: a Potion of Healing of any potency heals by its dice; an item without an
+that attack and damage roll and the result's `ammunition` reports the piece, its `bonus` and what remains.
+
+After an Attack action with a Light weapon, `ATTACK {target, weapon: "inventory:N", light_extra_attack: true}`
+makes the Light property's extra attack with a different carried Light weapon. It spends the turn's Bonus Action;
+positive ability damage modifiers are omitted unless the character has Two-Weapon Fighting. Negative ability
+modifiers, magic bonuses and other damage bonuses still apply. Two separate inventory entries of the same weapon
+qualify; the same entry does not. Equipping items from a stack splits individual weapons into separate entries.
+The initiating attack reports `light_extra_attack_available` with eligible weapon refs and keeps the turn open
+even with `end_turn: true`. Take the extra attack or use `END_TURN` to skip it. The extra attack reports
+`light_extra_attack: true` and `action_cost: BONUS_ACTION`; it cannot be repeated that turn. Encounter state reports
+`bonus_action_available` and any eligible Light weapons for the current participant. Bonus-action spells, Quickened
+Spell and Font of Magic slot creation share this allowance. Converting a slot to sorcery points takes no action.
+Nick mastery remains GM-adjudicated.
+
+`USE_ITEM {item, target}` uses a carried consumable: a Potion of Healing of any potency heals by its dice; an item without an
 encoded effect is consumed and left to the GM.
 
 ### 15.4 `resolve_pending_choice`

@@ -40,6 +40,7 @@ import se.hirt.mcp.rpg.progression.ClassFeatures;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Rules;
+import se.hirt.mcp.rpg.rules.TurnEconomy;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -54,8 +55,8 @@ import java.util.Set;
  * definition's feature blocks:
  * <ul>
  * <li>{@code FONT_OF_MAGIC}: sorcery points as a tracked resource (one per sorcerer level, back on
- * a Long Rest) and the two Bonus-Action conversions, points into a spell slot ({@code slot_costs})
- * and a slot into points.</li>
+ * a Long Rest), creating a slot from points as a Bonus Action ({@code slot_costs}), and converting
+ * a slot into points with no action required.</li>
  * <li>{@code METAMAGIC}: the options the class knows ({@code options}, each with its point cost),
  * how many a sorcerer has at a given level ({@code options_known}), and the rule that only one
  * option shapes a spell unless the option says otherwise (Empowered, Seeking).</li>
@@ -70,9 +71,9 @@ import java.util.Set;
  * damage dice once per casting, Seeking rerolls a missed spell attack (one point per reroll, spent
  * when used), Heightened gives one target Disadvantage on its save, Careful lets named creatures
  * succeed automatically and take no damage, Transmuted swaps the element, Extended doubles a
- * duration of a minute or more (to at most 24 hours); Distant, Quickened, Subtle and Twinned are
- * bookkeeping the fiction honours (range, casting time, components, an extra target), reported in
- * the result.
+ * duration of a minute or more (to at most 24 hours); Quickened spends the encounter's Bonus
+ * Action. Distant, Subtle and Twinned are bookkeeping the fiction honours (range, components, an
+ * extra target), reported in the result.
  */
 public final class Metamagic {
 
@@ -272,7 +273,7 @@ public final class Metamagic {
 			});
 			points.put("slot_costs", font.spec().getOrDefault("slot_costs", defaultSlotCosts()));
 			points.put("note",
-					"apply_runtime_change CREATE_SPELL_SLOT {slot_level} and CONVERT_SPELL_SLOT {slot_level} are the Font of Magic conversions (Bonus Action).");
+					"Font of Magic: apply_runtime_change CREATE_SPELL_SLOT {slot_level} spends a Bonus Action; CONVERT_SPELL_SLOT {slot_level} turns a slot into points with no action required.");
 			m.put("sorcery_points", points);
 		});
 		feature(tx, rules, c).ifPresent(mm -> {
@@ -313,9 +314,9 @@ public final class Metamagic {
 	/**
 	 * {@code CREATE_SPELL_SLOT}: sorcery points become one spell slot of {@code slot_level} (1-5)
 	 * at the table's cost; {@code CONVERT_SPELL_SLOT}: one unexpended slot becomes points equal to
-	 * its level, never above the maximum. Both are Bonus Actions in the fiction. A created slot
-	 * must be of a level the character can normally cast: created slots live in the same pool and
-	 * vanish at the Long Rest that refills it (RULES_ENGINE.md §6).
+	 * its level, never above the maximum, with no action required. Creating a slot spends the Bonus
+	 * Action. A created slot must be of a level the character can normally cast: created slots live
+	 * in the same pool and vanish at the Long Rest that refills it (RULES_ENGINE.md §6).
 	 */
 	@SuppressWarnings("unchecked")
 	public static Map<String, Object> fontOfMagic(
@@ -379,6 +380,13 @@ public final class Metamagic {
 					Map.of("current", points.intOr("current", 0) + gained, "max", points.intOr("max", 0)));
 			result.put("slot",
 					Map.of("slot_level", level, "current", slot.intOr("current", 0) - 1, "max", slot.intOr("max", 0)));
+		}
+		result.put("action_cost", kind.equals("CREATE_SPELL_SLOT") ? "BONUS_ACTION" : "NONE");
+		if (kind.equals("CREATE_SPELL_SLOT") && c.lng("encounter_id") != null) {
+			Row encounter = tx.get("encounter", c.lng("encounter_id"));
+			if ("RUNNING".equals(encounter.str("status")) || "WAITING_CHOICE".equals(encounter.str("status"))) {
+				TurnEconomy.spendBonusAction(tx, encounter, c.id(), "creating a spell slot");
+			}
 		}
 		tx.update("character", c.id(), Map.of("revision", c.lng("revision") + 1));
 		return result;

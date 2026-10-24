@@ -707,19 +707,19 @@ public class RpgTools {
 
 	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: "
 			+ "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), "
-			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
+			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
 			+ "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged); DISENGAGE; HELP; HIDE; "
 			+ "USE_ITEM {item, target} (a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
 			+ "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters "
 			+ "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. "
-			+ "end_turn (default true) advances to the next participant, rolling death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "end_turn (default true) advances to the next participant unless Multiattack attacks or an extra Light attack remain; END_TURN skips them. Rolls death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performEncounterAction(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Acting character reference (must be the current turn)")
 	String actor, @ToolArg(description = "The action object; see description")
 	Map<String, Object> action, @ToolArg(description = "Encounter reference (default: the running encounter)")
 	Optional<String> encounter,
-		@ToolArg(description = "Advance to the next turn after this action (default true); pass false for multi-part turns")
+		@ToolArg(description = "Advance after this action when no Multiattack or extra Light attack remains (default true); false keeps a multi-part turn open; END_TURN always passes")
 		Optional<Boolean> end_turn) {
 		return ToolSupport.run("perform_encounter_action", () -> engine.encounters().perform(operation_id, campaign,
 				encounter.orElse(null), actor, action, end_turn.orElse(true)));
@@ -742,7 +742,7 @@ public class RpgTools {
 
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
 			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
-			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT / CONVERT_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, a Bonus Action); "
+			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, Bonus Action) / CONVERT_SPELL_SLOT {slot_level} (slot to points, no action); "
 			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
 			+ "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. "
 			+ "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))

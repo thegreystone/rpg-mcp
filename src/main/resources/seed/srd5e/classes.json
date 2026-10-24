@@ -1028,8 +1028,8 @@
             "name": "Font of Magic",
             "level": 2,
             "enforcement": "ENGINE",
-            "summary": "Sorcery points equal to your Sorcerer level, back on a Long Rest; as a Bonus Action, points become a spell slot (level 1-5 at 2/3/5/6/7 points) or a slot becomes points equal to its level.",
-            "text": "You can tap into the wellspring of magic within you. This wellspring takes the form of Sorcery Points, which allow you to create a variety of magical effects. You have a number of Sorcery Points equal to your Sorcerer level, and you regain all expended points when you finish a Long Rest. Converting Spell Slots to Sorcery Points: as a Bonus Action, you can expend one spell slot and gain Sorcery Points equal to the slot's level. Creating Spell Slots: as a Bonus Action, you can transform unexpended Sorcery Points into one spell slot of level 1 (2 points), 2 (3), 3 (5), 4 (6) or 5 (7). A slot created this way vanishes when you finish a Long Rest.",
+            "summary": "Sorcery points equal to your Sorcerer level, back on a Long Rest; creating a spell slot (level 1-5 at 2/3/5/6/7 points) costs a Bonus Action. Converting a slot into points equal to its level requires no action.",
+            "text": "You can tap into the wellspring of magic within you. This wellspring takes the form of Sorcery Points, which allow you to create a variety of magical effects. You have a number of Sorcery Points equal to your Sorcerer level, and you regain all expended points when you finish a Long Rest. Converting Spell Slots to Sorcery Points: expend a spell slot to recover points equal to its level, without spending an action. Creating Spell Slots: as a Bonus Action, you can transform unexpended Sorcery Points into one spell slot of level 1 (2 points), 2 (3), 3 (5), 4 (6) or 5 (7). A slot created this way vanishes when you finish a Long Rest.",
             "text_is_paraphrase": true,
             "mechanic": {
               "kind": "FONT_OF_MAGIC",
