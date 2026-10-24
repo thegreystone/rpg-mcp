@@ -1092,6 +1092,9 @@ even with `end_turn: true`. Take the extra attack or use `END_TURN` to skip it. 
 Spell and Font of Magic slot creation share this allowance. Converting a slot to sorcery points takes no action.
 Nick mastery remains GM-adjudicated.
 
+Opportunity Attacks select a melee stat-block action or a carried melee weapon, falling back to an Unarmed Strike.
+An explicit `weapon` choice must also be melee; a ranged attack cannot be used for this reaction.
+
 `USE_ITEM {item, target}` uses a carried consumable: a Potion of Healing of any potency heals by its dice; an item without an
 encoded effect is consumed and left to the GM.
 

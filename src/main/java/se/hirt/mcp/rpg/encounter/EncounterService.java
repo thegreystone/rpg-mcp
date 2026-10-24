@@ -848,13 +848,15 @@ public final class EncounterService {
 		// happens to name the same weapon: otherwise a promoted companion keeps the monster's flat numbers and
 		// loses its own ability modifier, proficiency and weapon properties (RULES_ENGINE.md §3).
 		boolean statBlock = RuntimeService.usesStatBlock(tx, actor);
-		String named = weaponText != null && !weaponText.isBlank() && !weaponText.equalsIgnoreCase("unarmed")
-				? weaponText : null;
+		boolean unarmed = "unarmed".equalsIgnoreCase(weaponText);
+		String named = weaponText != null && !weaponText.isBlank() && !unarmed ? weaponText : null;
 		Combat.AttackProfile profile;
-		if (statBlock) {
+		if (unarmed) {
+			profile = Combat.unarmed(actor, prof);
+		} else if (statBlock) {
 			// A pure stat block: its own actions first (the named one, else the first attack), then whatever
 			// it happens to carry.
-			Optional<Map<String, Object>> creatureAction = creatureAction(actor, attackName);
+			Optional<Map<String, Object>> creatureAction = creatureAction(actor, named);
 			if (creatureAction.isPresent()) {
 				profile = Combat.creatureAction(creatureAction.get());
 			} else if (named != null) {
@@ -1472,11 +1474,9 @@ public final class EncounterService {
 		action.put("kind", "ATTACK");
 		action.put("target", Ref.of(Ref.CHARACTER, mover.id()));
 		action.put("reaction", true);
-		if (weapon != null && !weapon.isBlank()) {
-			action.put("weapon", weapon);
-		} else {
-			defaultMeleeAttack(tx, reactor).ifPresent(w -> action.put("weapon", w));
-		}
+		String selected = weapon != null && !weapon.isBlank() ? weapon
+				: defaultMeleeAttack(tx, reactor).orElse("unarmed");
+		action.put("weapon", selected);
 		tx.update("encounter_participant", reactorParticipant.id(), Map.of("reaction_used", 1));
 		Map<String, Object> result = attack(tx, campaignId, encounter, reactor, reactorParticipant, action, round,
 				true);
@@ -1486,18 +1486,21 @@ public final class EncounterService {
 	}
 
 	/**
-	 * The reactor's default melee weapon: the first equipped melee weapon, else the first carried
-	 * one; creatures use their stat block.
+	 * The reactor's default melee attack: a stat-block melee action, then the first equipped or
+	 * carried melee weapon. An empty result uses an Unarmed Strike.
 	 */
 	private Optional<String> defaultMeleeAttack(Tx tx, Row reactor) {
 		if (RuntimeService.usesStatBlock(tx, reactor)) {
-			return rules.find(reactor.str("origin_content_ref")).flatMap(d -> {
+			Optional<String> creatureAttack = rules.find(reactor.str("origin_content_ref")).flatMap(d -> {
 				@SuppressWarnings("unchecked")
 				List<Map<String, Object>> actions = (List<Map<String, Object>>) d.payload().getOrDefault("actions",
 						List.of());
 				return actions.stream().filter(a -> "MELEE_ATTACK".equals(String.valueOf(a.get("kind"))))
 						.map(a -> String.valueOf(a.get("name"))).findFirst();
 			});
+			if (creatureAttack.isPresent()) {
+				return creatureAttack;
+			}
 		}
 		for (Row e : tx.query("SELECT * FROM inventory_entry WHERE character_id = ? ORDER BY equipped DESC, id",
 				reactor.id())) {
