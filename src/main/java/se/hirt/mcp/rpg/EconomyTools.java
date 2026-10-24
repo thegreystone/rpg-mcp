@@ -76,7 +76,7 @@ public class EconomyTools {
 	Optional<String> owner_kind,
 		@ToolArg(description = "Owner reference matching owner_kind: 'faction:n', 'location:n' (ESTATE) or 'character:n'")
 		Optional<String> owner,
-		@ToolArg(description = "Opening balance: '25 gp', {\"gp\": 25} or an integer in copper (default none)")
+		@ToolArg(description = "Opening balance: '1.5 gp', {\"gp\": 1.5} or whole copper; non-negative and exact to 1 cp (default none)")
 		Optional<String> money, @ToolArg(description = "Free-text notes: what the treasury is for, who may draw on it")
 		Optional<String> notes) {
 		return ToolSupport.run("create_account", () -> engine.accounts().create(operation_id, campaign, name,
@@ -90,9 +90,10 @@ public class EconomyTools {
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Source: " + MONEY_REF)
 	String from, @ToolArg(description = "Destination: " + MONEY_REF)
-	String to, @ToolArg(description = "Amount: '1 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in copper")
-	Object money, @ToolArg(description = "Why (recorded on the event)")
-	Optional<String> reason) {
+	String to,
+		@ToolArg(description = "Amount: '1.5 gp', '2 sp 5 cp', {\"gp\": 1.5} or whole copper; non-negative and exact to 1 cp")
+		Object money, @ToolArg(description = "Why (recorded on the event)")
+		Optional<String> reason) {
 		return ToolSupport.run("transfer_money",
 				() -> engine.accounts().transfer(operation_id, campaign, from, to, money, reason.orElse(null)));
 	}

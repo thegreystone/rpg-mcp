@@ -957,6 +957,13 @@ grant something at those moments at about the stated rate; see RULES_ENGINE.md Â
 
 ### 14.5 `give_money`
 
+Money inputs accept whole copper, denomination maps (`{"gp": 1.5, "sp": 2}`), or complete text amounts
+(`"1.5 gp 2 sp"` or `"1gp2sp"`). Coin codes are case-insensitive; decimal text uses a period and may start with
+one (`".5 gp"`). Each component must be non-negative and convert exactly to whole copper: `"1.5 gp"` is 150 cp,
+while `".5 cp"` is rejected, even when combined with another fractional-copper component. Signs, stray text,
+non-finite numbers, fractional copper and overflow return `INVALID_ARGUMENT`; input is never rounded or partially
+matched. This format applies to prices, grants, transfers, balances and fixed cash-flow amounts.
+
 Moves coin from one character to another in one transaction. `from` and `to` are character references, `money` any form
 `trade` accepts (`'1 gp 5 sp'`, `{"gp": 15}`, copper integer), `reason` optional. The giver must hold the amount
 (`INSUFFICIENT_RESOURCE`), nobody pays themselves, the amount is positive. Writes one `MONEY_GIVEN` event naming both

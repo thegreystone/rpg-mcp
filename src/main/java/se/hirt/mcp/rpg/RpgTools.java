@@ -569,9 +569,10 @@ public class RpgTools {
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Giving character reference, e.g. 'character:4'")
 	String from, @ToolArg(description = "Receiving character reference")
-	String to, @ToolArg(description = "Amount: '1 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in copper")
-	Object money, @ToolArg(description = "Why (narrative note, recorded on the event)")
-	Optional<String> reason) {
+	String to,
+		@ToolArg(description = "Amount: '1.5 gp', '2 sp 5 cp', {\"gp\": 1.5} or whole copper; non-negative and exact to 1 cp")
+		Object money, @ToolArg(description = "Why (narrative note, recorded on the event)")
+		Optional<String> reason) {
 		return ToolSupport.run("give_money",
 				() -> engine.inventory().giveMoney(operation_id, campaign, from, to, money, reason.orElse(null)));
 	}

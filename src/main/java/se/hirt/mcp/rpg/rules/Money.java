@@ -30,7 +30,9 @@ package se.hirt.mcp.rpg.rules;
 
 import se.hirt.mcp.rpg.protocol.RpgException;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,50 +51,65 @@ public final class Money {
 	public static final long PP = 1000;
 	public static final int COINS_PER_POUND = 50;
 
-	private static final Pattern PART = Pattern.compile("(\\d+)\\s*(pp|gp|ep|sp|cp)", Pattern.CASE_INSENSITIVE);
+	private static final String DECIMAL = "(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+	private static final Pattern BARE_AMOUNT = Pattern.compile(DECIMAL);
+	private static final Pattern PART = Pattern.compile("(" + DECIMAL + ")\\s*(pp|gp|ep|sp|cp)\\s*",
+			Pattern.CASE_INSENSITIVE);
 
 	private Money() {
 	}
 
-	/** Accepts an integer (copper), {@code {"gp": 15, "sp": 2}} or {@code "15 gp 2 sp"}. */
+	/**
+	 * Accepts copper, a denomination map or text such as {@code "1.5 gp 2 sp"}. Each component must
+	 * be non-negative and convert exactly to whole copper; no rounding or partial parsing.
+	 */
 	public static long parseCp(Object value) {
 		if (value == null) {
 			throw RpgException.invalidArgument("An amount of money is required.");
 		}
-		if (value instanceof Number n) {
-			return requireNonNegative(n.longValue());
-		}
-		if (value instanceof Map<?, ?> m) {
-			long total = 0;
-			for (var e : m.entrySet()) {
-				if (!(e.getValue() instanceof Number n)) {
-					throw RpgException.invalidArgument(
-							"Money amounts must be numbers; got '" + e.getValue() + "' for " + e.getKey() + ".");
-				}
-				total += n.longValue() * unit(String.valueOf(e.getKey()));
+		try {
+			if (value instanceof Number n) {
+				return copper(n.toString(), CP);
 			}
-			return requireNonNegative(total);
+			if (value instanceof Map<?, ?> m) {
+				long total = 0;
+				for (var e : m.entrySet()) {
+					if (!(e.getValue() instanceof Number n)) {
+						throw RpgException.invalidArgument(
+								"Money amounts must be numbers; got '" + e.getValue() + "' for " + e.getKey() + ".");
+					}
+					total = Math.addExact(total, copper(n.toString(), unit(String.valueOf(e.getKey()))));
+				}
+				return total;
+			}
+			String text = value.toString().trim();
+			if (BARE_AMOUNT.matcher(text).matches()) {
+				return copper(text, CP);
+			}
+			Matcher matcher = PART.matcher(text);
+			long total = 0;
+			int end = 0;
+			while (end < text.length() && matcher.region(end, text.length()).lookingAt()) {
+				total = Math.addExact(total, copper(matcher.group(1), unit(matcher.group(2))));
+				end = matcher.end();
+			}
+			if (end == 0 || end != text.length()) {
+				throw RpgException.invalidArgument("Cannot parse money '" + value
+						+ "'; use e.g. '1.5 gp', '2 sp 5 cp', {\"gp\": 1.5} or whole copper.");
+			}
+			return total;
+		} catch (ArithmeticException | NumberFormatException e) {
+			throw RpgException.invalidArgument("Money amounts must be finite, convert exactly to whole copper, "
+					+ "and total at most " + Long.MAX_VALUE + " cp.");
 		}
-		String text = value.toString().trim().toLowerCase();
-		if (text.matches("\\d+")) {
-			return Long.parseLong(text);
-		}
-		Matcher matcher = PART.matcher(text);
-		long total = 0;
-		boolean any = false;
-		while (matcher.find()) {
-			total += Long.parseLong(matcher.group(1)) * unit(matcher.group(2));
-			any = true;
-		}
-		if (!any) {
-			throw RpgException.invalidArgument("Cannot parse money '" + value
-					+ "'; use e.g. '15 gp', '2 sp 5 cp', {\"gp\": 15} or an integer in cp.");
-		}
-		return total;
+	}
+
+	private static long copper(String amount, long unit) {
+		return requireNonNegative(new BigDecimal(amount).multiply(BigDecimal.valueOf(unit)).longValueExact());
 	}
 
 	private static long unit(String code) {
-		return switch (code.toLowerCase()) {
+		return switch (code.toLowerCase(Locale.ROOT)) {
 		case "pp" -> PP;
 		case "gp" -> GP;
 		case "ep" -> EP;
