@@ -600,7 +600,7 @@ public final class NarrativeService {
 			long now = GameTime.currentSeq(tx, campaignId);
 			var items = new ArrayList<Map<String, Object>>();
 			for (Row w : tx.query(
-					"SELECT * FROM world_event WHERE campaign_id = ? AND (game_seq IS NULL OR game_seq <= ?) ORDER BY game_seq DESC, id DESC",
+					"SELECT * FROM world_event WHERE campaign_id = ? AND visibility <> 'DIRECTOR_ONLY' AND (game_seq IS NULL OR game_seq <= ?) ORDER BY game_seq DESC, id DESC",
 					campaignId, now)) {
 				List<Object> channels = w.isNull("channels_json") ? List.of() : w.list("channels_json");
 				if (!ch.equals("ANY") && !channels.contains(ch) && !channels.contains("ANY")) {
@@ -692,7 +692,8 @@ public final class NarrativeService {
 				campaignId);
 		ctx.put("player_character", pc.map(r -> characters.sheet(tx, r, "SUMMARY")).orElse(null));
 		ctx.put("party", sessions.partyMembers(tx, campaignId, "SUMMARY"));
-		ctx.put("relationships", pc.map(r -> PartyService.compact(tx, campaignId, r.id(), 20)).orElse(List.of()));
+		ctx.put("relationships",
+				pc.map(r -> PartyService.compact(tx, campaignId, r.id(), 20, true, true)).orElse(List.of()));
 		ctx.put("npc_agendas", tx.query(
 				"SELECT id, name, agenda_json FROM character WHERE campaign_id = ? AND agenda_json IS NOT NULL AND lifecycle = 'ACTIVE' ORDER BY id",
 				campaignId).stream()
@@ -866,7 +867,7 @@ public final class NarrativeService {
 				ctx.put("relationships", PartyService.compact(tx, campaignId, c.id(), 20));
 				ctx.put("membership_history", sessions.membershipHistory(tx, c.id()));
 				ctx.put("recent_events", tx.query(
-						"SELECT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? ORDER BY e.id DESC LIMIT 10",
+						"SELECT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? AND e.visibility <> 'DIRECTOR_ONLY' ORDER BY e.id DESC LIMIT 10",
 						c.id(), campaignId).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
 				ctx.put("location", c.isNull("location_id") ? null
 						: WorldService.summary(tx.get("location", c.lng("location_id"))));
@@ -885,7 +886,7 @@ public final class NarrativeService {
 				ctx.put("relationship", db == null ? null : relationshipPair(tx, campaignId, a, other));
 				ctx.put("shared_events", tx.query(
 						"SELECT DISTINCT e.* FROM event e JOIN event_actor x ON x.event_id = e.id AND x.character_id = ? "
-								+ "JOIN event_actor y ON y.event_id = e.id AND y.character_id = ? WHERE e.campaign_id = ? ORDER BY e.fictional_seq DESC LIMIT 15",
+								+ "JOIN event_actor y ON y.event_id = e.id AND y.character_id = ? WHERE e.campaign_id = ? AND e.visibility <> 'DIRECTOR_ONLY' ORDER BY e.fictional_seq DESC LIMIT 15",
 						a.id(), other.id(), campaignId).stream()
 						.map(e -> LedgerService.eventSummary(tx, e, focus != null)).toList());
 			}
@@ -900,27 +901,30 @@ public final class NarrativeService {
 				for (Long id : WorldService.lineage(tx, l.id())) {
 					here.add(Ref.of(Ref.LOCATION, id));
 				}
-				ctx.put("world_events_here", tx
-						.query("SELECT * FROM world_event WHERE campaign_id = ? ORDER BY id DESC LIMIT 20", campaignId)
-						.stream().map(NarrativeService::worldEventView)
+				ctx.put("world_events_here", tx.query(
+						"SELECT * FROM world_event WHERE campaign_id = ? AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT 20",
+						campaignId).stream().map(NarrativeService::worldEventView)
 						.filter(w -> ((List<?>) w.get("affected")).stream().anyMatch(a -> here.contains(a.toString())))
 						.toList());
 				ctx.put("events_here", tx.query(
-						"SELECT * FROM event WHERE campaign_id = ? AND location_id = ? ORDER BY id DESC LIMIT 10",
+						"SELECT * FROM event WHERE campaign_id = ? AND location_id = ? AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT 10",
 						campaignId, l.id()).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
 			}
 			case "QUEST" -> {
 				ctx = new LinkedHashMap<>();
 				if (ref != null && !ref.isBlank()) {
 					Row q = existing(tx, campaignId, "quest", ref, "quest");
+					if ("DIRECTOR_ONLY".equals(q.str("visibility"))) {
+						throw RpgException.notFound("quest " + ref);
+					}
 					ctx.put("quest", questView(q));
 				} else {
 					ctx.put("quests", tx.query(
-							"SELECT * FROM quest WHERE campaign_id = ? ORDER BY CASE status WHEN 'ACCEPTED' THEN 0 WHEN 'OFFERED' THEN 1 ELSE 2 END, id",
+							"SELECT * FROM quest WHERE campaign_id = ? AND visibility <> 'DIRECTOR_ONLY' ORDER BY CASE status WHEN 'ACCEPTED' THEN 0 WHEN 'OFFERED' THEN 1 ELSE 2 END, id",
 							campaignId).stream().map(NarrativeService::questView).toList());
 				}
 				ctx.put("story_beats", tx.query(
-						"SELECT * FROM story_beat WHERE campaign_id = ? AND state IN ('AVAILABLE','PLANNED','BLOCKED') ORDER BY id",
+						"SELECT * FROM story_beat WHERE campaign_id = ? AND visibility <> 'DIRECTOR_ONLY' AND state IN ('AVAILABLE','PLANNED','BLOCKED') ORDER BY id",
 						campaignId).stream().map(NarrativeService::beatView).toList());
 			}
 			case "ENCOUNTER" -> {
@@ -930,7 +934,12 @@ public final class NarrativeService {
 				ctx = new LinkedHashMap<>();
 				ctx.put("encounter", sessions.encounterState(tx, e, 10));
 			}
-			case "DIRECTOR" -> ctx = directorView(tx, campaign, "CAMPAIGN_REVIEW");
+			case "DIRECTOR" -> {
+				ctx = directorView(tx, campaign, "CAMPAIGN_REVIEW");
+				if (ref != null && !ref.isBlank()) {
+					ctx.put("location", WorldService.directorDetail(tx, WorldService.location(tx, campaignId, ref)));
+				}
+			}
 			default -> throw RpgException.invalidArgument(
 					"scope must be SCENE, CHARACTER, WANT, RELATIONSHIP, INTIMACY, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
 			}
@@ -1033,9 +1042,11 @@ public final class NarrativeService {
 				.collect(java.util.stream.Collectors.joining(","));
 		String sql = second == null
 				? "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? WHERE e.campaign_id = ? AND e.type IN ("
-						+ types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25"
+						+ types
+						+ ") AND e.visibility <> 'DIRECTOR_ONLY' ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25"
 				: "SELECT DISTINCT e.* FROM event e JOIN event_actor a ON a.event_id = e.id AND a.character_id = ? JOIN event_actor b ON b.event_id = e.id AND b.character_id = ? WHERE e.campaign_id = ? AND e.type IN ("
-						+ types + ") ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25";
+						+ types
+						+ ") AND e.visibility <> 'DIRECTOR_ONLY' ORDER BY e.fictional_seq DESC, e.id DESC LIMIT 25";
 		List<Row> rows = second == null ? tx.query(sql, focal.id(), campaignId)
 				: tx.query(sql, focal.id(), second.id(), campaignId);
 		for (Row e : rows) {

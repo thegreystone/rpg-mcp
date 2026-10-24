@@ -311,10 +311,24 @@ public final class WorldService {
 	 * occupants.
 	 */
 	public static Map<String, Object> detail(Tx tx, Row l) {
+		return detail(tx, l, false);
+	}
+
+	/** Full location view including Director-only features and connections. */
+	public static Map<String, Object> directorDetail(Tx tx, Row l) {
+		return detail(tx, l, true);
+	}
+
+	private static Map<String, Object> detail(Tx tx, Row l, boolean includeDirector) {
 		var m = summary(l);
 		m.put("description", l.str("description"));
 		m.put("tags", l.isNull("tags_json") ? List.of() : l.list("tags_json"));
-		m.put("features", l.isNull("features_json") ? List.of() : l.list("features_json"));
+		m.put("features",
+				l.isNull("features_json") ? List.of()
+						: l.list("features_json").stream()
+								.filter(f -> includeDirector || !(f instanceof Map<?, ?> feature)
+										|| !"DIRECTOR_ONLY".equalsIgnoreCase(String.valueOf(feature.get("visibility"))))
+								.toList());
 		var path = new ArrayList<String>();
 		Row cursor = l;
 		while (cursor != null && !cursor.isNull("parent_id")) {
@@ -326,7 +340,10 @@ public final class WorldService {
 		m.put("within", path);
 		m.put("connections", tx.query(
 				"SELECT * FROM location_connection WHERE campaign_id = ? AND (location_a_id = ? OR location_b_id = ?) ORDER BY id",
-				l.lng("campaign_id"), l.id(), l.id()).stream().map(c -> connectionSummary(tx, c, l.id())).toList());
+				l.lng("campaign_id"), l.id(), l.id()).stream()
+				.filter(c -> includeDirector
+						|| !"DIRECTOR_ONLY".equalsIgnoreCase(String.valueOf(c.map("state_json").get("visibility"))))
+				.map(c -> connectionSummary(tx, c, l.id())).toList());
 		m.put("children", tx.query("SELECT * FROM location WHERE parent_id = ? ORDER BY id", l.id()).stream()
 				.map(WorldService::summary).toList());
 		m.put("characters_present", tx.query(

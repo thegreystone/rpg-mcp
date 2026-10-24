@@ -203,6 +203,7 @@ public final class LedgerService {
 				}
 			}
 			where.add("e.campaign_id = ?");
+			where.add("e.visibility <> 'DIRECTOR_ONLY'");
 			params.add(campaignId);
 			if (types != null && !types.isEmpty()) {
 				where.add("e.type IN (" + String.join(",", java.util.Collections.nCopies(types.size(), "?")) + ")");
@@ -262,6 +263,7 @@ public final class LedgerService {
 				}
 			}
 			where.add("e.campaign_id = ?");
+			where.add("e.visibility <> 'DIRECTOR_ONLY'");
 			params.add(campaignId);
 			if (fromTime != null && !fromTime.isBlank()) {
 				where.add("e.fictional_seq >= ?");

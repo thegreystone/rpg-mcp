@@ -286,7 +286,7 @@ public final class PartyService {
 		m.put("revision", rel.lng("revision"));
 		var events = new ArrayList<Map<String, Object>>();
 		for (Row e : tx.query(
-				"SELECT e.* FROM relationship_event re JOIN event e ON e.id = re.event_id WHERE re.relationship_id = ? ORDER BY e.fictional_seq, e.id",
+				"SELECT e.* FROM relationship_event re JOIN event e ON e.id = re.event_id WHERE re.relationship_id = ? AND e.visibility <> 'DIRECTOR_ONLY' ORDER BY e.fictional_seq, e.id",
 				rel.id())) {
 			events.add(LedgerService.eventSummary(tx, e, true));
 		}
@@ -336,6 +336,12 @@ public final class PartyService {
 	 */
 	public static List<Map<String, Object>> compact(
 		Tx tx, long campaignId, long characterId, int limit, boolean includeProfile) {
+		return compact(tx, campaignId, characterId, limit, includeProfile, false);
+	}
+
+	/** With {@code includeDirector} true, significant event counts include Director-only events. */
+	public static List<Map<String, Object>> compact(
+		Tx tx, long campaignId, long characterId, int limit, boolean includeProfile, boolean includeDirector) {
 		var out = new ArrayList<Map<String, Object>>();
 		for (Row r : tx.query(
 				"SELECT r.*, c.name AS to_name FROM relationship r JOIN character c ON c.id = r.to_character_id WHERE r.campaign_id = ? AND r.from_character_id = ? ORDER BY r.revision DESC, r.id LIMIT ?",
@@ -355,8 +361,10 @@ public final class PartyService {
 					m.put("profile_available", keys);
 				}
 			}
-			m.put("significant_events",
-					tx.count("SELECT COUNT(*) FROM relationship_event WHERE relationship_id = ?", r.id()));
+			m.put("significant_events", tx.count(
+					"SELECT COUNT(*) FROM relationship_event re JOIN event e ON e.id = re.event_id WHERE re.relationship_id = ?"
+							+ (includeDirector ? "" : " AND e.visibility <> 'DIRECTOR_ONLY'"),
+					r.id()));
 			out.add(m);
 		}
 		return out;

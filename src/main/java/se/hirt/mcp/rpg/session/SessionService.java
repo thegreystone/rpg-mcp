@@ -442,15 +442,15 @@ public final class SessionService {
 					m.put("visibility", b.str("visibility"));
 					return m;
 				}).toList());
-		ctx.put("active_quests",
-				tx.query("SELECT * FROM quest WHERE campaign_id = ? AND status IN ('OFFERED','ACCEPTED') ORDER BY id",
-						campaignId).stream().map(q -> {
-							var m = new LinkedHashMap<String, Object>();
-							m.put("title", q.str("title"));
-							m.put("status", q.str("status"));
-							m.put("visibility", q.str("visibility"));
-							return m;
-						}).toList());
+		ctx.put("active_quests", tx.query(
+				"SELECT * FROM quest WHERE campaign_id = ? AND status IN ('OFFERED','ACCEPTED') AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
+				campaignId).stream().map(q -> {
+					var m = new LinkedHashMap<String, Object>();
+					m.put("title", q.str("title"));
+					m.put("status", q.str("status"));
+					m.put("visibility", q.str("visibility"));
+					return m;
+				}).toList());
 
 		Map<String, Object> adventure = campaign.map("adventure_json");
 		var adv = new LinkedHashMap<String, Object>();

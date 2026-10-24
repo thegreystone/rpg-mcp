@@ -253,10 +253,14 @@ class WorldTest {
 					.orElseThrow().get("superseded_by"));
 			// An empty review is valid and still recorded.
 			engine.narrative().commitDirectorChanges(op(), campaign, List.of(), "nothing to change");
-			assertEquals(2,
+			assertEquals(0,
 					list(engine.ledger()
 							.queryTimeline(campaign, null, null, null, List.of("DIRECTOR_REVIEW"), null, true, 10)
 							.get("events")).size());
+			assertEquals(2L,
+					(long) engine.db()
+							.read(tx -> tx.count("SELECT COUNT(*) FROM event WHERE type = 'DIRECTOR_REVIEW'")),
+					"GM filtering leaves both Director review audit events intact");
 			// Director-only material never reaches the bootstrap context.
 			Map<String, Object> boot = engine.sessions().bootstrap(op(), campaign, null);
 			assertFalse(boot.toString().contains("steal the survivor's notebook"));
@@ -287,6 +291,15 @@ class WorldTest {
 					"GM");
 			String wood = (String) list(town.get("new_connections")).get(0).get("to");
 			String harbourRef = (String) list(town.get("new_connections")).get(1).get("to");
+			String knownPressure = "GM_PRESSURE_SENTINEL: displaced hunters are poaching in the wood";
+			String secretPressure = "DIRECTOR_PRESSURE_SENTINEL: the duke arranged the disappearances";
+			engine.narrative().upsert(op(), campaign, "STORY_SEED", null, map("seed_kind", "PRESSURE", "title",
+					"Displaced hunters", "summary", knownPressure, "visibility", "GM_ONLY"), "DIRECTOR");
+			for (int i = 0; i < 3; i++) {
+				engine.narrative().upsert(op(), campaign, "STORY_SEED", null, map("seed_kind", "PRESSURE", "title",
+						"The duke's plan " + i, "summary", secretPressure + " " + i, "visibility", "DIRECTOR_ONLY"),
+						"DIRECTOR");
+			}
 
 			// Two four-hour blocks: the first d6 misses, the second hits; then the table pick.
 			dice.queue(4, 1, 1);
@@ -301,6 +314,12 @@ class WorldTest {
 			assertTrue(((String) creature.get("id")).startsWith("srd5e:creature/"));
 			assertTrue(((Number) suggestion.get("count")).intValue() >= 1);
 			assertTrue(((Number) suggestion.get("xp_budget")).intValue() > 0);
+			assertEquals(1, ((List<?>) suggestion.get("hooks")).size());
+			assertTrue(suggestion.get("hooks").toString().contains(knownPressure),
+					"newer Director pressures must not consume the GM's hook limit");
+			assertFalse(suggestion.toString().contains(secretPressure));
+			assertTrue(engine.narrative().directorContext(campaign, null).toString().contains(secretPressure),
+					"the Director retains its unrevealed pressures");
 			assertTrue(
 					((List<?>) m(trip.get("director_trigger")).get("reasons")).contains("TRAVEL_ENCOUNTER_SUGGESTED"));
 			assertTrue(engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM encounter")) == 0,

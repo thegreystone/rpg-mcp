@@ -182,6 +182,12 @@ Returned information is labeled where relevant: `PLAYER_KNOWN`, `PARTY_KNOWN`, `
 `GM_ONLY`, `DIRECTOR_ONLY`. The AI MUST NOT reveal non-player-known information because it appeared in GM or Director
 context.
 
+GM context, bootstrap, location and relationship views, memory/timeline queries, and diegetic information exclude
+`DIRECTOR_ONLY` records. Other visibility labels remain attached for the GM to respect when narrating. An explicit
+Director context (`get_director_context` or `get_context` with scope `DIRECTOR`) retains Director planning material.
+`get_context` with scope `DIRECTOR` and `ref: location:N` also includes that location's Director-only features and
+connections. Requesting a Director-only quest through GM context returns `NOT_FOUND`.
+
 ### 5.6 Revisions
 
 Mutable aggregates expose an integer `revision`. A mutation derived from read state MUST include `expected_revision`;
@@ -630,7 +636,7 @@ Moving into an unmaterialized node MAY require `materialize_location` first; the
 entry (`RULES_ENGINE.md` §9): per four hours of travel one roll through the roller, a 1 on a d6 on wild ground, a 1 on
 a d12 on roads, rivers and coasts, never inside settlements or buildings. A hit names a creature from the terrain table
 for the tags crossed, a count sized from the SRD 5.2.1 Moderate XP budget for the party's levels, the hour it falls in,
-and up to two open Director pressures as hooks. Nothing is written and no encounter starts; the GM plays it with
+and up to two open pressures visible to the GM as hooks. Nothing is written and no encounter starts; the GM plays it with
 `materialize_character` and `start_encounter`, folds it into a pressure, or ignores it. `director_trigger.reasons`
 carries `TRAVEL_ENCOUNTER_SUGGESTED` when present.
 

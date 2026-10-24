@@ -177,7 +177,7 @@ final class TravelEncounters {
 		int count = (int) Math.max(1, Math.min(8, budget / xp));
 		var hooks = new ArrayList<String>();
 		for (Row seed : tx.query(
-				"SELECT * FROM director_seed WHERE campaign_id = ? AND state = 'OPEN' AND kind = 'PRESSURE' ORDER BY id DESC LIMIT 2",
+				"SELECT * FROM director_seed WHERE campaign_id = ? AND state = 'OPEN' AND kind = 'PRESSURE' AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT 2",
 				campaignId)) {
 			Map<String, Object> payload = seed.isNull("payload_json") ? Map.of() : seed.map("payload_json");
 			Object summary = payload.get("summary");

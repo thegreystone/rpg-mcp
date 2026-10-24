@@ -1031,8 +1031,8 @@ public class RpgTools {
 			+ "person believably in a bed: biography, voice, state, open wants, their own intimate profile and intimate wants, every partner with both directions of the pairwise "
 			+ "profile, the household terms, the intimate ledger events with detail, and the PEGI 18 guidance; below PEGI_18 the romance layer only), "
 			+ "WANT {ref: want:N} returns {want: {full want fields, character: character:N, kind: general|intimate}}, including optional resolved_by, "
-			+ "with private closure-order markers omitted; intimate wants require PEGI_18. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR. "
-			+ "Visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "with private closure-order markers omitted; intimate wants require PEGI_18. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR {ref: optional location:N for its full Director detail}. "
+			+ "GM scopes exclude DIRECTOR_ONLY material; explicit DIRECTOR retains it. Other visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Scope")
 	String scope, @ToolArg(description = "Primary reference for the scope")
