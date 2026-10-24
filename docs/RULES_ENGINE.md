@@ -282,8 +282,10 @@ The engine ships with zero deviations from SRD 5.2.1. Campaign-configured varian
     campaign, audited. Everything else in the setup draft is fixed at commit.
 11. **Font of Magic creates slots of a level the character can already cast.** The SRD allows any slot of level 1–5;
     the engine only creates a slot whose pool exists, because the casting core refuses slots whose pool maximum is 0.
-    The created slot grows the pool's maximum until the next Long Rest resizes every pool back to the class table, so
-    the slot vanishes as the rule says.
+    The created slot grows the pool's maximum and survives level-up, alongside newly gained class slots. Spent slots
+    stay spent, and a Short Rest preserves the pool. The next Long Rest resizes every pool back to the current class
+    table, so the created slot vanishes as the rule says. Existing campaigns use the same stored pool counts and
+    need no migration.
 
 Any future divergence gets an entry here before it is coded.
 

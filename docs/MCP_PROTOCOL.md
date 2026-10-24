@@ -801,7 +801,7 @@ kind has a schema; exceptional changes need `apply_gm_override`.
   Weapon, Heroic Inspiration, `sorcery_points`, `innate_sorcery`).
 - `CREATE_SPELL_SLOT {slot_level}` / `CONVERT_SPELL_SLOT {slot_level}`: Font of Magic conversions (points into a slot at
   the table's cost; a slot into points equal to its level), Bonus Actions in the fiction; the result carries the new
-  `sorcery_points` and `slot` counts.
+  `sorcery_points` and `slot` counts. Created slots survive level-up and Short Rests, and vanish at the next Long Rest.
 - `ADJUST_MAX_HP {amount, until | minutes, reason}`: a signed `max_hp` active effect applied to the stored maximum when
   it begins and taken back when it ends, so `hp.max` is always the number in force (`hp.max_base`, `hp.max_adjustments`
   show what is temporary). A reduction clamps current HP; a maximum of 0 kills (SRD 5.2.1 "Hit Point Maximum"). Ends

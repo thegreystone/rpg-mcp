@@ -151,32 +151,48 @@ public final class SpellService {
 	}
 
 	/**
-	 * Creates or resizes spell-slot resources for the character's current level (activation and
-	 * level-up).
+	 * Creates or resizes spell-slot resources to the current class table (activation and Long
+	 * Rest).
 	 */
 	public static void initializeSlots(Tx tx, RulesData rules, Row c) {
+		initializeSlots(tx, rules, c, null);
+	}
+
+	/**
+	 * Resizes slots at level-up while preserving capacity created with Font of Magic. The previous
+	 * casting profile must be captured before changing the class level; null resets maxima to the
+	 * current class table instead.
+	 */
+	public static void initializeSlots(Tx tx, RulesData rules, Row c, Casting previousCasting) {
 		Optional<Casting> casting = castingOf(tx, rules, c);
 		if (casting.isEmpty()) {
 			return;
 		}
 		Casting cast = casting.get();
 		if (cast.pact()) {
-			upsertResource(tx, c.id(), PACT_SLOT, cast.pactSlots(), "SHORT_REST");
+			upsertResource(tx, c.id(), PACT_SLOT, cast.pactSlots(), "SHORT_REST", null);
 			return;
 		}
 		int[] slots = cast.slots();
+		int[] previousSlots = previousCasting == null || previousCasting.pact() ? null : previousCasting.slots();
 		for (int i = 0; i < 9; i++) {
 			int max = i < slots.length ? slots[i] : 0;
 			if (max > 0) {
-				upsertResource(tx, c.id(), SLOT_PREFIX + (i + 1), max, "LONG_REST");
+				Integer previousMax = previousSlots == null ? null : i < previousSlots.length ? previousSlots[i] : 0;
+				upsertResource(tx, c.id(), SLOT_PREFIX + (i + 1), max, "LONG_REST", previousMax);
 			}
 		}
 	}
 
-	private static void upsertResource(Tx tx, long characterId, String ref, int max, String recharge) {
+	private static void upsertResource(
+		Tx tx, long characterId, String ref, int max, String recharge, Integer previousMax) {
 		Optional<Row> existing = tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
 				characterId, ref);
 		if (existing.isPresent()) {
+			if (previousMax != null) {
+				// Existing campaigns already store created capacity in max, even after those slots are spent.
+				max += Math.max(0, existing.get().intOr("max", 0) - previousMax);
+			}
 			int delta = max - existing.get().intOr("max", 0);
 			int current = Math.max(0, Math.min(max, existing.get().intOr("current", 0) + Math.max(0, delta)));
 			tx.update("resource_state", existing.get().id(), Map.of("max", max, "current", current));

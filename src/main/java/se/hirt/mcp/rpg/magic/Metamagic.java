@@ -351,8 +351,8 @@ public final class Metamagic {
 						+ " sorcery points; a level " + level + " slot costs " + cost + ".");
 			}
 			tx.update("resource_state", points.id(), Map.of("current", points.intOr("current", 0) - cost));
-			// The created slot is an extra one: the pool's maximum grows with it until the Long Rest, which resizes
-			// the pool back to the class table (SpellService.initializeSlots) and so makes the created slot vanish.
+			// The created slot grows the pool's maximum through level-ups until the Long Rest resets it to the
+			// class table (SpellService.initializeSlots).
 			tx.update("resource_state", slot.id(),
 					Map.of("current", slot.intOr("current", 0) + 1, "max", slot.intOr("max", 0) + 1));
 			result.put("created_slot_level", level);

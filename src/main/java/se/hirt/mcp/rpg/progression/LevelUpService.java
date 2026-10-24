@@ -35,6 +35,7 @@ import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.harness.HarnessState;
 import se.hirt.mcp.rpg.ledger.LedgerService;
+import se.hirt.mcp.rpg.magic.SpellService;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
@@ -826,6 +827,7 @@ public final class LevelUpService {
 			if (!violations.isEmpty()) {
 				throw RpgException.validation(violations);
 			}
+			Optional<SpellService.Casting> previousCasting = SpellService.castingOf(tx, rules, c);
 			Map<String, Object> chosen = (Map<String, Object>) payload.get("choices");
 			int toLevel = ((Number) payload.get("to_level")).intValue();
 			RulesData.Definition classDef = rules.require((String) payload.get("class_ref"), "CLASS");
@@ -909,7 +911,7 @@ public final class LevelUpService {
 			shiftMaxHp(cols, constitutionHp);
 			cols.put("revision", c.lng("revision") + 1);
 			tx.update("character", c.id(), cols);
-			se.hirt.mcp.rpg.magic.SpellService.initializeSlots(tx, rules, tx.get("character", c.id()));
+			SpellService.initializeSlots(tx, rules, tx.get("character", c.id()), previousCasting.orElse(null));
 			List<String> lineageSpells = se.hirt.mcp.rpg.character.Origins.grantSpeciesSpells(tx, rules,
 					tx.get("character", c.id()));
 			se.hirt.mcp.rpg.character.Origins.initializeResources(tx, rules, tx.get("character", c.id()));
@@ -1032,6 +1034,7 @@ public final class LevelUpService {
 	private static Map<String, Object> levelCompanion(
 		Tx tx, RulesData rules, RollService roller, Row campaign, Row c, Row classRow) {
 		long campaignId = campaign.id();
+		Optional<SpellService.Casting> previousCasting = SpellService.castingOf(tx, rules, c);
 		RulesData.Definition def = rules.require(classRow.str("class_ref"), "CLASS");
 		int to = classRow.intOr("level", 1) + 1;
 		int hitDie = ((Number) def.payload().get("hit_die")).intValue();
@@ -1067,7 +1070,7 @@ public final class LevelUpService {
 		tx.update("character_class", classRow.id(), Map.of("level", to));
 		tx.update("character", c.id(), cols);
 		Row after = tx.get("character", c.id());
-		se.hirt.mcp.rpg.magic.SpellService.initializeSlots(tx, rules, after);
+		SpellService.initializeSlots(tx, rules, after, previousCasting.orElse(null));
 		se.hirt.mcp.rpg.character.Origins.grantSpeciesSpells(tx, rules, after);
 		se.hirt.mcp.rpg.character.Origins.initializeResources(tx, rules, after);
 		tx.touched(Ref.of(Ref.CHARACTER, c.id()), after.lng("revision"));
