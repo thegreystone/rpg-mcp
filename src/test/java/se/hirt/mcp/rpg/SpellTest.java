@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
 import se.hirt.mcp.rpg.protocol.RpgException;
+import se.hirt.mcp.rpg.protocol.Ref;
 
 import java.util.List;
 import java.util.Map;
@@ -78,6 +79,144 @@ class SpellTest {
 		engine.campaigns().commitSetup(op(), campaign, null);
 		engine.sessions().bootstrap(op(), campaign, null);
 		return new String[] {campaign, pc};
+	}
+
+	@Test
+	void singleAttackSpellsRejectExtraTargetsWithoutSpendingResources() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("spell-target-limit"))) {
+			String[] ids = rayCaster(engine, 1);
+			String campaign = ids[0], pc = ids[1];
+			List<String> targets = spellTargets(engine, campaign, 2);
+			engine.spells().cast(op(), campaign, pc, "Detect Magic", null, null, null);
+			assertTargetOverflow(engine, campaign, pc, null, "Fire Bolt", null, targets, 1);
+			assertTargetOverflow(engine, campaign, pc, null, "Fire Bolt", null, List.of(targets.get(0), targets.get(0)),
+					1);
+			assertTargetOverflow(engine, campaign, pc, null, "Chromatic Orb", 1, targets, 1);
+
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(20, 50, 1, 50, 1, 50);
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc), "foes", targets), null, null, null, null, null)
+					.get("encounter");
+			assertTargetOverflow(engine, campaign, pc, encounter, "Chromatic Orb", 1, targets, 1);
+		}
+	}
+
+	@Test
+	void scorchingRayEnforcesItsSlotBasedLimitAndPreservesRayAllocation() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("scorching-ray-limit"))) {
+			String[] ids = rayCaster(engine, 5);
+			String campaign = ids[0], pc = ids[1];
+			List<String> targets = spellTargets(engine, campaign, 5);
+			assertTargetOverflow(engine, campaign, pc, null, "Scorching Ray", 2, targets.subList(0, 4), 3);
+			assertTargetOverflow(engine, campaign, pc, null, "Scorching Ray", 2,
+					List.of(targets.get(0), targets.get(0), targets.get(0), targets.get(0)), 3);
+			assertTargetOverflow(engine, campaign, pc, null, "Scorching Ray", 3, targets, 4);
+
+			assertSpellAttacks(engine, campaign, pc, "Scorching Ray", 2,
+					List.of(targets.get(0), targets.get(0), targets.get(1)),
+					List.of(targets.get(0), targets.get(0), targets.get(1)));
+			assertSpellAttacks(engine, campaign, pc, "Scorching Ray", 2, targets.subList(0, 2),
+					List.of(targets.get(0), targets.get(1), targets.get(1)));
+			assertSpellAttacks(engine, campaign, pc, "Scorching Ray", 2, List.of(targets.get(0)),
+					List.of(targets.get(0), targets.get(0), targets.get(0)));
+			assertSpellAttacks(engine, campaign, pc, "Scorching Ray", 3, targets.subList(0, 4), targets.subList(0, 4));
+		}
+	}
+
+	@Test
+	void eldritchBlastEnforcesItsLevelBasedBeamLimit() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("eldritch-blast-limit"))) {
+			String[] ids = caster(engine, "Warlock",
+					map("CHA", 15, "CON", 14, "DEX", 13, "WIS", 12, "INT", 10, "STR", 8),
+					List.of("Arcana", "Deception"), List.of("Eldritch Blast", "Minor Illusion"),
+					List.of("Hex", "Charm Person"));
+			String campaign = ids[0], pc = ids[1];
+			List<String> targets = spellTargets(engine, campaign, 3);
+			assertTargetOverflow(engine, campaign, pc, null, "Eldritch Blast", null, targets.subList(0, 2), 1);
+			assertSpellAttacks(engine, campaign, pc, "Eldritch Blast", null, List.of(targets.get(0)),
+					List.of(targets.get(0)));
+			levelCaster(engine, campaign, pc, 5);
+			assertTargetOverflow(engine, campaign, pc, null, "Eldritch Blast", null, targets, 2);
+			assertSpellAttacks(engine, campaign, pc, "Eldritch Blast", null, targets.subList(0, 2),
+					targets.subList(0, 2));
+		}
+	}
+
+	private static String[] rayCaster(Engine engine, int level) {
+		String[] ids = caster(engine, "Wizard", map("INT", 15, "DEX", 14, "CON", 13, "WIS", 12, "CHA", 10, "STR", 8),
+				List.of("Arcana", "History"), List.of("Fire Bolt", "Mage Hand", "Light"),
+				List.of("Magic Missile", "Detect Magic", "Chromatic Orb", "Mage Armor"));
+		levelCaster(engine, ids[0], ids[1], level);
+		if (level >= 3) {
+			engine.spells().prepare(op(), ids[0], ids[1], null,
+					List.of("Scorching Ray", "Detect Magic", "Chromatic Orb", "Mage Armor"));
+		}
+		return ids;
+	}
+
+	private static void levelCaster(Engine engine, String campaign, String pc, int level) {
+		if (level <= 1) {
+			return;
+		}
+		engine.runtime().awardXp(op(), campaign, List.of(pc), engine.rules().xpThreshold(level), "MILESTONE", "test");
+		for (int next = 2; next <= level; next++) {
+			String transaction = (String) m(engine.levelUps().begin(op(), campaign, pc).get("transaction")).get("ref");
+			if (next == 4) {
+				engine.levelUps().update(op(), campaign, transaction, null,
+						map("ability_score_improvement", map("INT", 2)));
+			}
+			engine.levelUps().commit(op(), campaign, transaction, null);
+		}
+	}
+
+	private static List<String> spellTargets(Engine engine, String campaign, int count) {
+		return java.util.stream.IntStream.range(0, count)
+				.mapToObj(i -> (String) engine.runtime()
+						.materialize(op(), campaign, "Ogre", "Target " + i, null, null, null, null, false)
+						.get("character"))
+				.toList();
+	}
+
+	private static void assertTargetOverflow(
+		Engine engine, String campaign, String pc, String encounter, String spell, Integer slot, List<String> targets,
+		int limit) {
+		long campaignId = Ref.id(campaign, Ref.CAMPAIGN);
+		Map<String, List<Map<String, Object>>> before = engine.db().snapshot(campaignId);
+		long journalBefore = engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM journal_entry"));
+		ScriptedRollService dice = (ScriptedRollService) engine.roller();
+		assertTrue(dice.exhausted());
+		dice.queue(1);
+		RpgException failure = assertThrows(RpgException.class, () -> {
+			if (encounter == null) {
+				engine.spells().cast(op(), campaign, pc, spell, slot, targets, null);
+			} else {
+				engine.encounters().perform(op(), campaign, encounter, pc,
+						map("kind", "CAST", "spell", spell, "slot_level", slot, "targets", targets), true);
+			}
+		});
+		assertEquals(ErrorCode.INVALID_ARGUMENT, failure.code());
+		assertTrue(failure.getMessage().contains("at most " + limit + " target"), failure.getMessage());
+		assertEquals(before, engine.db().snapshot(campaignId),
+				"failed casting preserves resources, effects, HP and turns");
+		long journalAfter = engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM journal_entry"));
+		assertEquals(journalBefore, journalAfter, "a rejected cast leaves no journal entry");
+		assertFalse(dice.exhausted(), "validation must not consume a die");
+		assertEquals(1, dice.roll("1d20").total());
+		assertTrue(dice.exhausted());
+	}
+
+	private static void assertSpellAttacks(
+		Engine engine, String campaign, String pc, String spell, Integer slot, List<String> targets,
+		List<String> expectedTargets) {
+		ScriptedRollService dice = (ScriptedRollService) engine.roller();
+		for (int i = 0; i < expectedTargets.size(); i++) {
+			dice.queue(1);
+		}
+		Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, spell, slot, targets, null);
+		assertEquals(expectedTargets, list(cast.get("targets")).stream().map(t -> t.get("target")).toList());
+		assertTrue(list(cast.get("targets")).stream().allMatch(t -> Boolean.FALSE.equals(t.get("hit"))));
+		assertTrue(dice.exhausted(), "exactly one attack roll per ray or beam");
 	}
 
 	@Test

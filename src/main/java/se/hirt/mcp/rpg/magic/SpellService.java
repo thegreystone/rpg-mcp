@@ -554,12 +554,13 @@ public final class SpellService {
 			if (mech.get("beams_scaling") instanceof Map<?, ?> bs) {
 				shots = scaledInt((Map<String, Object>) bs, casterLevel, 1);
 			}
+			if (targets.size() > shots) {
+				throw RpgException.invalidArgument(def.name() + " allows at most " + shots
+						+ " target entries (one per attack) at this level; got " + targets.size() + ".");
+			}
 			var queue = new ArrayList<Row>();
 			for (int i = 0; i < shots; i++) {
 				queue.add(targets.get(Math.min(i, targets.size() - 1)));
-			}
-			if (targets.size() > shots) {
-				queue = new ArrayList<>(targets);
 			}
 			for (Row target : queue) {
 				perTarget.add(spellAttack(tx, rules, roller, campaignId, caster, target, def, mech, atk, mod, upcast,
