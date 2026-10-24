@@ -128,8 +128,15 @@ public final class Database implements AutoCloseable {
 				finishJournalEntry(tx, mutation, result);
 				conn.commit();
 				return result;
-			} catch (RuntimeException e) {
-				conn.rollback();
+			} catch (RuntimeException | Error | SQLException e) {
+				// Errors and failed commits must not leave writes for the next mutation to commit.
+				try {
+					conn.rollback();
+				} catch (SQLException | RuntimeException | Error rollbackFailure) {
+					if (rollbackFailure != e) {
+						e.addSuppressed(rollbackFailure);
+					}
+				}
 				throw e;
 			}
 		} catch (SQLException e) {
