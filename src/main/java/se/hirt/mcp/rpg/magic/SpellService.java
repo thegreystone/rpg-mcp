@@ -627,7 +627,7 @@ public final class SpellService {
 				int amount = Math.max(0, roll.total()) + (Boolean.TRUE.equals(mech.get("add_modifier")) ? mod : 0);
 				Map<String, Object> healed = RuntimeService.heal(tx, tx.get("character", target.id()), amount,
 						def.name());
-				if (mech.get("cures") instanceof List<?> cures) {
+				if (!"DEAD".equals(target.str("life_state")) && mech.get("cures") instanceof List<?> cures) {
 					for (Object cond : cures) {
 						removeCondition(tx, target.id(), cond.toString());
 					}

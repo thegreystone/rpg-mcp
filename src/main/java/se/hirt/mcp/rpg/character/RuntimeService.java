@@ -517,11 +517,14 @@ public final class RuntimeService {
 
 	/**
 	 * Healing (SRD 5.2.1 "Healing"): HP can't exceed max; a creature at 0 HP that regains HP is no
-	 * longer dying.
+	 * longer dying. A dead creature cannot regain HP until restored to life.
 	 */
 	public static Map<String, Object> heal(Tx tx, Row c, int amount, String reason) {
-		int max = effectiveMaxHp(tx, c);
 		int before = c.intOr("current_hp", 0);
+		if ("DEAD".equals(c.str("life_state"))) {
+			return Map.of("healed", 0, "hp_before", before, "hp_after", before, "skipped", "already dead");
+		}
+		int max = effectiveMaxHp(tx, c);
 		int after = Math.min(max, before + amount);
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("current_hp", after);
