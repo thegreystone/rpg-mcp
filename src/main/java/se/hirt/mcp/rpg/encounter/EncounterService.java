@@ -49,6 +49,7 @@ import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Combat;
+import se.hirt.mcp.rpg.rules.Exhaustion;
 import se.hirt.mcp.rpg.rules.Rules;
 import se.hirt.mcp.rpg.rules.TurnEconomy;
 import se.hirt.mcp.rpg.session.GameTime;
@@ -252,6 +253,7 @@ public final class EncounterService {
 				// Alert (Origin feat): the proficiency bonus is added to initiative (SRD 5.2.1 "Feats").
 				int initiativeBonus = dexMod + (se.hirt.mcp.rpg.character.Origins.initiativeProficient(tx, rules, c)
 						? RuntimeService.proficiencyBonus(tx, rules, c) : 0);
+				initiativeBonus -= Exhaustion.penalty(tx, c.id());
 				// A surprised side rolls initiative with Disadvantage (SRD 5.2.1 "Surprise").
 				boolean isSurprised = surprised.contains(String.valueOf(p.get("side")));
 				Roll roll = roller.roll((isSurprised ? "2d20kl1" : "1d20")
@@ -559,6 +561,9 @@ public final class EncounterService {
 					throw RpgException.notAllowed(
 							actor.str("name") + " is " + cond + ": Speed 0, no movement (SRD 5.2.1 \"" + cond + "\").");
 				});
+				if (Exhaustion.speed(tx, rules, actor) == 0) {
+					throw RpgException.notAllowed(actor.str("name") + " has Speed 0 and cannot move or Dash.");
+				}
 			}
 			long round = encounter.lng("round");
 			var result = new LinkedHashMap<String, Object>();
@@ -619,7 +624,7 @@ public final class EncounterService {
 						actor.id()) > 0;
 				// One source of truth: the character's own Stealth when they have a sheet, the stat block's when
 				// they are still a stat block (RULES_ENGINE.md §3).
-				int bonus = creatureSkill(tx, actor, "Stealth");
+				int bonus = creatureSkill(tx, actor, "Stealth") - Exhaustion.penalty(tx, actor.id());
 				Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 				CharacterService.recordRoll(tx, campaignId, "stealth (hide)", roll);
 				boolean hidden = roll.total() >= 15;
@@ -1101,7 +1106,7 @@ public final class EncounterService {
 			reasons.add("target is exposed (e.g. Faerie Fire)");
 		}
 		String dice = advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
-		int bonus = profile.attackBonus() + actorMods.attackBonus;
+		int bonus = profile.attackBonus() + actorMods.attackBonus - Exhaustion.penalty(tx, actor.id());
 		Roll attackRoll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 		long rollId = CharacterService.recordRoll(tx, campaignId,
 				(reaction ? "opportunity attack " : "attack ") + profile.name(), attackRoll);
@@ -1903,22 +1908,26 @@ public final class EncounterService {
 				Map<String, Object> d = e.map("duration_json");
 				if ("START_OF_TURN".equals(d.get("until")) && d.get("participant") instanceof Number n
 						&& n.longValue() == p.id()) {
-					tx.delete("active_effect", e.id());
+					se.hirt.mcp.rpg.rules.Effects.end(tx, e);
 				}
 			}
+			c = tx.get("character", c.id());
 			if ("DYING".equals(c.str("life_state"))) {
 				Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
 						: c.map("death_saves_json");
 				if (!Boolean.TRUE.equals(saves.get("stable"))) {
-					Roll roll = roller.roll("1d20");
+					int penalty = Exhaustion.penalty(tx, c.id());
+					Roll roll = roller.roll("1d20" + (penalty == 0 ? "" : "-" + penalty));
 					CharacterService.recordRoll(tx, campaignId, "death saving throw " + Ref.of(Ref.CHARACTER, c.id()),
 							roll);
-					Map<String, Object> after = Combat.deathSave(roll.total(), saves);
+					int natural = roll.dice().get(0);
+					Map<String, Object> after = Combat.deathSave(natural, roll.total(), saves);
 					String outcome = String.valueOf(after.get("outcome"));
 					var ev = new LinkedHashMap<String, Object>();
 					ev.put("character", Ref.of(Ref.CHARACTER, c.id()));
 					ev.put("name", c.str("name"));
 					ev.put("death_save", roll.total());
+					ev.put("natural", natural);
 					ev.put("outcome", outcome);
 					ev.put("successes", after.get("successes"));
 					ev.put("failures", after.get("failures"));
@@ -1929,14 +1938,12 @@ public final class EncounterService {
 								c.str("name") + " rolls a natural 20 on a death save and regains 1 HP!", null);
 						c = tx.get("character", c.id());
 					} else if (outcome.equals("DEAD")) {
+						se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
 						var cols = new LinkedHashMap<String, Object>();
 						cols.put("life_state", "DEAD");
 						cols.put("death_saves_json", null);
-						cols.put("revision", c.lng("revision") + 1);
+						cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 						tx.update("character", c.id(), cols);
-						for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ?", c.id())) {
-							tx.delete("active_effect", e.id());
-						}
 						RuntimeService.endMemberships(tx, campaignId, c.id(), "DEAD");
 						tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
 						LedgerService.append(tx, campaignId,

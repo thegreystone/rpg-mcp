@@ -176,6 +176,7 @@ public final class CheckService {
 				profBonus = proficient ? rules.proficiencyBonus(Math.max(1, level)) : 0;
 				modifier = abilityMod + profBonus;
 			}
+			modifier -= Exhaustion.penalty(tx, actor.id());
 
 			String dice = switch (advantage) {
 			case "ADVANTAGE" -> "2d20kh1";

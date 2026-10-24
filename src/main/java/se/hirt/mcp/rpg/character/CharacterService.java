@@ -904,6 +904,7 @@ public final class CharacterService {
 		m.put("name", c.str("name"));
 		m.put("lifecycle", c.str("lifecycle"));
 		m.put("life_state", c.str("life_state"));
+		m.put("exhaustion", se.hirt.mcp.rpg.rules.Exhaustion.level(tx, c));
 		rules.find(c.str("species_ref") == null ? "" : c.str("species_ref")).ifPresent(s -> m.put("species", s.name()));
 		List<Row> classes = tx.query("SELECT * FROM character_class WHERE character_id = ? ORDER BY id", c.id());
 		int level = classes.stream().mapToInt(r -> r.intOr("level", 1)).sum();
@@ -945,7 +946,7 @@ public final class CharacterService {
 		m.put("skill_proficiencies", traits.stream().filter(t -> "SKILL".equals(t.str("kind")))
 				.map(t -> rules.find(t.str("content_ref")).map(RulesData.Definition::name).orElse(t.str("content_ref")))
 				.toList());
-		m.put("speed", c.integer("speed"));
+		m.put("speed", c.isNull("speed") ? null : se.hirt.mcp.rpg.rules.Exhaustion.speed(tx, rules, c));
 		m.put("xp", c.lng("xp"));
 		m.put("level_up_eligible", level > 0 && rules.levelForXp(c.lng("xp")) > level);
 		m.put("conditions", RuntimeService.conditions(tx, c.id()));

@@ -44,6 +44,7 @@ import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Ability;
 import se.hirt.mcp.rpg.rules.Combat;
 import se.hirt.mcp.rpg.rules.Effects;
+import se.hirt.mcp.rpg.rules.Exhaustion;
 import se.hirt.mcp.rpg.rules.Rules;
 import se.hirt.mcp.rpg.rules.TurnEconomy;
 
@@ -791,6 +792,9 @@ public final class SpellService {
 				}
 				var t = targetView(target);
 				t.put("removed_conditions", removed);
+				if (removed.contains("EXHAUSTION")) {
+					t.put("exhaustion", Exhaustion.level(tx, target.id()));
+				}
 				perTarget.add(t);
 			}
 		}
@@ -806,11 +810,12 @@ public final class SpellService {
 				int effectiveMax = Math.max(1, RuntimeService.effectiveMaxHp(tx, target));
 				int hp = "FULL".equals(String.valueOf(mech.get("hp"))) ? effectiveMax
 						: ((Number) mech.getOrDefault("hp", 1)).intValue();
+				Exhaustion.reduce(tx, target.id(), 1);
 				var cols = new LinkedHashMap<String, Object>();
 				cols.put("life_state", "ALIVE");
 				cols.put("current_hp", Math.min(effectiveMax, hp));
 				cols.put("death_saves_json", null);
-				cols.put("revision", target.lng("revision") + 1);
+				cols.put("revision", tx.get("character", target.id()).lng("revision") + 1);
 				tx.update("character", target.id(), cols);
 				se.hirt.mcp.rpg.ledger.LedgerService.append(tx, campaignId,
 						new se.hirt.mcp.rpg.ledger.LedgerService.EventSpec("CHARACTER_REVIVED",
@@ -821,6 +826,7 @@ public final class SpellService {
 				var t = targetView(target);
 				t.put("revived", true);
 				t.put("hp", Math.min(effectiveMax, hp));
+				t.put("exhaustion", Exhaustion.level(tx, target.id()));
 				t.put("note",
 						"Time-since-death and material components are the GM's to verify; a former party member rejoins via update_party_membership.");
 				perTarget.add(t);
@@ -1048,7 +1054,7 @@ public final class SpellService {
 				"SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = 'srd5e:effect/dodging'",
 				target.id()) > 0;
 		String dice = advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
-		int bonus = atk + casterMods.attackBonus;
+		int bonus = atk + casterMods.attackBonus - Exhaustion.penalty(tx, caster.id());
 		Roll roll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 		long rollId = CharacterService.recordRoll(tx, campaignId, "spell attack " + def.name(), roll);
 		int total = roll.total();
@@ -1218,6 +1224,10 @@ public final class SpellService {
 				repeat = Map.of("repeat_save", spec);
 			}
 			for (String cond : conditions) {
+				if ("EXHAUSTION".equalsIgnoreCase(cond)) {
+					t.putAll(Exhaustion.gain(tx, rules, target, def.name()));
+					continue;
+				}
 				if (Effects.modifiers(tx, rules, target.id()).immuneConditions.contains(cond)) {
 					t.put("immune", cond);
 					continue;
@@ -1229,7 +1239,9 @@ public final class SpellService {
 			}
 			if (!conditions.isEmpty()) {
 				t.put("conditions", conditions);
-				t.put("duration", duration);
+				if (conditions.stream().anyMatch(condition -> !"EXHAUSTION".equalsIgnoreCase(condition))) {
+					t.put("duration", duration);
+				}
 			}
 			if (mech.get("on_fail_effect") instanceof Map<?, ?> fx) {
 				Map<String, Object> effect = (Map<String, Object>) fx;
@@ -1266,7 +1278,7 @@ public final class SpellService {
 			Optional<Map<String, Object>> saves = rules.find(target.str("origin_content_ref"))
 					.map(d -> (Map<String, Object>) d.payload().get("saves"));
 			if (saves.isPresent() && saves.get() != null && saves.get().get(ability.name()) instanceof Number n) {
-				return n.intValue();
+				return n.intValue() - Exhaustion.penalty(tx, target.id());
 			}
 		}
 		int bonus = Rules.modifier(target.intOr(ability.column(), 10));
@@ -1275,7 +1287,7 @@ public final class SpellService {
 				target.id(), ability.name()) > 0) {
 			bonus += RuntimeService.proficiencyBonus(tx, rules, target);
 		}
-		return bonus;
+		return bonus - Exhaustion.penalty(tx, target.id());
 	}
 
 	private static Map<String, Object> duration(
@@ -1340,6 +1352,9 @@ public final class SpellService {
 	}
 
 	private static boolean removeCondition(Tx tx, long characterId, String condition) {
+		if ("EXHAUSTION".equalsIgnoreCase(condition)) {
+			return Exhaustion.reduce(tx, characterId, 1) > 0;
+		}
 		boolean removed = false;
 		for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?", characterId,
 				RuntimeService.conditionRef(condition))) {

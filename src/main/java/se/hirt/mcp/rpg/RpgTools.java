@@ -760,6 +760,7 @@ public class RpgTools {
 
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
 			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
+			+ "EXHAUSTION accumulates one level per ADD_CONDITION and ignores duration; REMOVE_CONDITION clears all levels, while Long Rest or Greater Restoration removes one. "
 			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, Bonus Action) / CONVERT_SPELL_SLOT {slot_level} (slot to points, no action); "
 			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
 			+ "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. "

@@ -345,6 +345,11 @@ public final class Combat {
 
 	/** Death saving throw bookkeeping (SRD 5.2.1 "Death Saving Throws"). */
 	public static Map<String, Object> deathSave(int natural, Map<String, Object> saves) {
+		return deathSave(natural, natural, saves);
+	}
+
+	/** Natural 1 and 20 keep their special effects even when a modifier changes the total. */
+	public static Map<String, Object> deathSave(int natural, int total, Map<String, Object> saves) {
 		int successes = ((Number) saves.getOrDefault("successes", 0)).intValue();
 		int failures = ((Number) saves.getOrDefault("failures", 0)).intValue();
 		String outcome;
@@ -355,7 +360,7 @@ public final class Combat {
 		} else if (natural == 1) {
 			failures += 2;
 			outcome = failures >= 3 ? "DEAD" : "TWO_FAILURES";
-		} else if (natural >= 10) {
+		} else if (total >= 10) {
 			successes += 1;
 			outcome = successes >= 3 ? "STABLE" : "SUCCESS";
 		} else {

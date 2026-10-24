@@ -744,6 +744,13 @@ Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 A named, rules-aware non-encounter change (healing, resources, conditions, HP) when no more specific tool exists. Each
 kind has a schema; exceptional changes need `apply_gm_override`.
 
+- `ADD_CONDITION {condition: "EXHAUSTION"}` adds one level, ignoring `duration`; exhaustion lasts until recovered.
+  `REMOVE_CONDITION` with that condition clears all levels. A Long Rest or resurrection removes one level, as does
+  Greater Restoration when Exhaustion is chosen. The sheet's `exhaustion` field and its single Exhaustion condition
+  show the same level. Every D20 Test takes a penalty of twice that level, Speed falls by five feet per level, and
+  level six causes death. Older saves'
+  unnumbered Exhaustion effects count as one level until a journaled mutation folds them into the stored count.
+
 - `USE_ITEM {item, target}`: a consumable with an encoded effect, used outside combat. A Potion of Healing of any
   potency heals by its dice (rolled and journaled, returned as `roll`) and one unit is consumed; an item without an
   encoded effect is `CAPABILITY_UNAVAILABLE` and the GM narrates it.

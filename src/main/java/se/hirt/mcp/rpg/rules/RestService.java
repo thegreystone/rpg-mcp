@@ -217,21 +217,18 @@ public final class RestService {
 		m.put("name", c.str("name"));
 		// Effects that last until a Long Rest (a reduced hit point maximum among them) end here.
 		List<String> ended = se.hirt.mcp.rpg.rules.Effects.expireOnLongRest(tx, c.id());
-		Row rested = c;
+		Row rested = tx.get("character", c.id());
 		if (!ended.isEmpty()) {
-			rested = tx.get("character", c.id());
 			m.put("effects_ended", ended);
 		}
 		int before = rested.intOr("current_hp", 0);
 		int max = RuntimeService.effectiveMaxHp(tx, rested);
 		Map<String, Object> heal = RuntimeService.heal(tx, rested, Math.max(0, max - before), "long rest");
-		Row after = tx.get("character", c.id());
 		var cols = new LinkedHashMap<String, Object>();
 		// Exhaustion drops by one level (SRD 5.2.1 "Long Rest").
-		if (after.intOr("exhaustion", 0) > 0) {
-			cols.put("exhaustion", after.intOr("exhaustion", 0) - 1);
-		}
-		cols.put("revision", after.lng("revision") + 1);
+		m.put("exhaustion_removed", Exhaustion.reduce(tx, c.id(), 1));
+		m.put("exhaustion", Exhaustion.level(tx, c.id()));
+		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 		tx.update("character", c.id(), cols);
 		Optional<Row> cls = tx.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1",
 				c.id());
@@ -409,6 +406,7 @@ public final class RestService {
 								// Every effect ends, and a temporary change to the maximum with it; the fiat HP
 								// above is then clamped to the maximum that remains.
 								se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+								Exhaustion.reduce(tx, c.id(), 6);
 								Row plain = tx.get("character", c.id());
 								cols.put("current_hp", Math.min(Math.max(1, plain.intOr("max_hp", 1)), hp));
 								// A revived former member rejoins nothing automatically; use update_party_membership.
@@ -485,9 +483,10 @@ public final class RestService {
 							label = c.str("name") + " moved to " + l.str("name") + " by fiat";
 						}
 						}
-						cols.put("revision", c.lng("revision") + 1);
+						long revision = tx.get("character", c.id()).lng("revision") + 1;
+						cols.put("revision", revision);
 						tx.update("character", c.id(), cols);
-						tx.touched(Ref.of(Ref.CHARACTER, c.id()), c.lng("revision") + 1);
+						tx.touched(Ref.of(Ref.CHARACTER, c.id()), revision);
 					}
 					case "SET_METAMAGIC" -> {
 						// A sorcerer who levelled before Metamagic was data-driven chooses the options here, audited;

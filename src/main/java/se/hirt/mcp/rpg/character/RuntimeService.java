@@ -45,6 +45,7 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.rules.Ability;
 import se.hirt.mcp.rpg.rules.CheckService;
 import se.hirt.mcp.rpg.rules.Combat;
+import se.hirt.mcp.rpg.rules.Exhaustion;
 import se.hirt.mcp.rpg.rules.Rules;
 import se.hirt.mcp.rpg.session.GameTime;
 
@@ -287,8 +288,10 @@ public final class RuntimeService {
 			}
 			case "ADD_CONDITION" -> {
 				String condition = condition(change);
-				if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
-						conditionRef(condition)) > 0) {
+				if ("EXHAUSTION".equals(condition)) {
+					result.putAll(Exhaustion.gain(tx, rules, c, reason));
+				} else if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?",
+						c.id(), conditionRef(condition)) > 0) {
 					result.put("already_present", true);
 				} else {
 					long id = addCondition(tx, campaignId, c.id(), condition, se.hirt.mcp.rpg.rules.Effects
@@ -300,10 +303,15 @@ public final class RuntimeService {
 			case "REMOVE_CONDITION" -> {
 				String condition = condition(change);
 				int removed = 0;
-				for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?",
-						c.id(), conditionRef(condition))) {
-					tx.delete("active_effect", e.id());
-					removed++;
+				if ("EXHAUSTION".equals(condition)) {
+					removed = Exhaustion.reduce(tx, c.id(), 6);
+					result.put("exhaustion", Exhaustion.level(tx, c.id()));
+				} else {
+					for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?",
+							c.id(), conditionRef(condition))) {
+						tx.delete("active_effect", e.id());
+						removed++;
+					}
 				}
 				result.put("condition", condition);
 				result.put("removed", removed);
@@ -505,12 +513,19 @@ public final class RuntimeService {
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? ORDER BY id", characterId)) {
 			var m = new LinkedHashMap<String, Object>();
 			String ref = e.str("condition_ref");
+			if (Exhaustion.CONDITION_REF.equals(ref)) {
+				continue;
+			}
 			m.put("condition", ref == null ? null : ref.substring(ref.lastIndexOf('/') + 1).toUpperCase());
 			m.put("source", e.str("source_description"));
 			if (!e.isNull("duration_json")) {
 				m.put("duration", e.map("duration_json"));
 			}
 			out.add(m);
+		}
+		int exhaustion = Exhaustion.level(tx, characterId);
+		if (exhaustion > 0) {
+			out.add(Map.of("condition", "EXHAUSTION", "source", "Exhaustion", "level", exhaustion));
 		}
 		return out;
 	}
@@ -666,6 +681,7 @@ public final class RuntimeService {
 							c.lng("location_id"), null, Map.of("massive_damage", dr.massiveDamage())));
 		}
 		cols.put("life_state", life);
+		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 		tx.update("character", c.id(), cols);
 		if ("DEAD".equals(life)) {
 			markDefeatedInRunningEncounter(tx, c.id());

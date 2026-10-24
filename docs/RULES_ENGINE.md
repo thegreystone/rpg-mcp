@@ -156,6 +156,13 @@ RollService
 
 ## 5. Mechanics by Milestone
 
+Exhaustion uses the character's stored level (0–6). Each application adds one; every D20 Test loses twice that level,
+including initiative and death saves, while natural 1/20 death-save effects retain their meaning. Walking Speed loses
+five feet per level and is clamped at zero; MOVE and DASH require positive Speed. A Long Rest, Greater Restoration or
+resurrection removes one level, and the condition ends at zero. Explicit runtime removal clears all levels. Level six
+applies the normal death consequences. Legacy unnumbered effects are read as one level and folded into the count on a
+later journaled mutation, including when restored from an old checkpoint. Exhaustion survives effect cleanup on death.
+
 Maps `DESIGN.md` §33 to rules work. E = engine code, D = data, G = GM.
 
 | Milestone            | Mechanics                                                                                                            | Kind |

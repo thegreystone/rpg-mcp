@@ -241,6 +241,10 @@ public final class Effects {
 	 * Point Maximum").
 	 */
 	public static void end(Tx tx, Row effect) {
+		if (Exhaustion.CONDITION_REF.equals(effect.str("condition_ref"))) {
+			Exhaustion.normalize(tx, effect.lng("character_id"));
+			return;
+		}
 		if (!effect.isNull("modifier_json") && effect.map("modifier_json").get("max_hp") instanceof Number n
 				&& n.intValue() != 0) {
 			tx.find("character", effect.lng("character_id")).ifPresent(c -> {
@@ -260,6 +264,7 @@ public final class Effects {
 	 * the way.
 	 */
 	public static int removeAll(Tx tx, long characterId) {
+		Exhaustion.normalize(tx, characterId);
 		int removed = 0;
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ?", characterId)) {
 			end(tx, e);
@@ -273,6 +278,7 @@ public final class Effects {
 	 * their descriptions.
 	 */
 	public static List<String> expireOnLongRest(Tx tx, long characterId) {
+		Exhaustion.normalize(tx, characterId);
 		var ended = new ArrayList<String>();
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
 				characterId)) {
