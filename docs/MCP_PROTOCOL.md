@@ -625,6 +625,10 @@ Atomically converts a location seed or semantic node into canonical detail: loca
 secrets with visibility labels, revision. MUST reject contradictions with committed geography unless performed through
 an explicit override.
 
+Connections between the same undirected pair of locations update only supplied non-null `kind`, `state`, `visibility`,
+`travel_minutes` and `distance_miles` fields; omitted or null fields retain their committed values.
+New connections default to `PATH`, `OPEN`, `PARTY_KNOWN` visibility and 60 travel minutes.
+
 ### 12.3 `advance_time`
 
 Advances the clock and commits rules-governed consequences (resource durations, scheduled events, rest effects, trigger

@@ -181,10 +181,9 @@ public final class WorldService {
 				Integer minutes = c.get("travel_minutes") instanceof Number n ? n.intValue() : null;
 				Object miles = c.get("distance_miles");
 				connections.add(connect(tx, campaignId, location.id(), otherId,
-						c.get("kind") == null ? "PATH" : String.valueOf(c.get("kind")),
-						c.get("state") == null ? "OPEN" : String.valueOf(c.get("state")).toUpperCase(), minutes, miles,
-						c.get("visibility") == null ? "PARTY_KNOWN"
-								: String.valueOf(c.get("visibility")).toUpperCase()));
+						c.get("kind") == null ? null : String.valueOf(c.get("kind")),
+						c.get("state") == null ? null : String.valueOf(c.get("state")).toUpperCase(), minutes, miles,
+						c.get("visibility") == null ? null : String.valueOf(c.get("visibility")).toUpperCase()));
 			}
 			Row after = tx.get("location", location.id());
 			tx.touched(Ref.of(Ref.LOCATION, after.id()), after.lng("revision"));
@@ -227,39 +226,51 @@ public final class WorldService {
 		return tx.insert("location", cols);
 	}
 
-	/** One row per undirected edge (a < b); re-connecting an existing pair updates it. */
+	/**
+	 * One row per undirected edge (a < b); null fields preserve existing values, with defaults only
+	 * for new edges.
+	 */
 	public static Map<String, Object> connect(
 		Tx tx, long campaignId, long a, long b, String kind, String state, Integer minutes, Object miles,
 		String visibility) {
 		if (a == b) {
 			throw RpgException.invalidArgument("A location cannot connect to itself.");
 		}
-		String k = kind.toUpperCase();
-		if (!CONNECTION_KINDS.contains(k)) {
-			throw RpgException.invalidArgument("Connection kind must be one of " + CONNECTION_KINDS + ".");
-		}
-		if (!CONNECTION_STATES.contains(state)) {
-			throw RpgException.invalidArgument("Connection state must be one of " + CONNECTION_STATES + ".");
-		}
 		long lo = Math.min(a, b);
 		long hi = Math.max(a, b);
-		var stateJson = new LinkedHashMap<String, Object>();
-		stateJson.put("state", state);
-		stateJson.put("visibility", visibility);
-		var distance = new LinkedHashMap<String, Object>();
-		distance.put("travel_minutes", minutes == null ? DEFAULT_TRAVEL_MINUTES : minutes);
-		if (miles != null) {
-			distance.put("distance_miles", miles);
-		}
 		Optional<Row> existing = tx.queryOne(
 				"SELECT * FROM location_connection WHERE campaign_id = ? AND location_a_id = ? AND location_b_id = ?",
 				campaignId, lo, hi);
+		String k = kind == null ? existing.map(row -> row.str("kind")).orElse("PATH") : kind.toUpperCase();
+		if (!CONNECTION_KINDS.contains(k)) {
+			throw RpgException.invalidArgument("Connection kind must be one of " + CONNECTION_KINDS + ".");
+		}
+		if (state != null && !CONNECTION_STATES.contains(state)) {
+			throw RpgException.invalidArgument("Connection state must be one of " + CONNECTION_STATES + ".");
+		}
+		var stateJson = new LinkedHashMap<>(existing.map(row -> row.map("state_json")).orElse(Map.of()));
+		if (state != null) {
+			stateJson.put("state", state);
+		}
+		if (visibility != null) {
+			stateJson.put("visibility", visibility);
+		}
+		var distance = new LinkedHashMap<>(existing.map(row -> row.map("distance_json")).orElse(Map.of()));
+		if (minutes != null) {
+			distance.put("travel_minutes", minutes);
+		}
+		if (miles != null) {
+			distance.put("distance_miles", miles);
+		}
 		long id;
 		if (existing.isPresent()) {
 			tx.update("location_connection", existing.get().id(),
 					Map.of("kind", k, "state_json", Json.write(stateJson), "distance_json", Json.write(distance)));
 			id = existing.get().id();
 		} else {
+			stateJson.putIfAbsent("state", "OPEN");
+			stateJson.putIfAbsent("visibility", "PARTY_KNOWN");
+			distance.putIfAbsent("travel_minutes", DEFAULT_TRAVEL_MINUTES);
 			var cols = new LinkedHashMap<String, Object>();
 			cols.put("campaign_id", campaignId);
 			cols.put("location_a_id", lo);

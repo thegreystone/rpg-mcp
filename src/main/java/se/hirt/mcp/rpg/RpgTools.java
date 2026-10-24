@@ -942,7 +942,9 @@ public class RpgTools {
 			+ "location reference (a semantic node) and/or a spec {name, kind: REGION|SETTLEMENT|DISTRICT|SITE|BUILDING|AREA, parent, description, tags, "
 			+ "features: [{name, description, visibility}], secrets: [{name, description}] (GM_ONLY), children: [{name, kind, description}], "
 			+ "connections: [{to: 'location:N' or {name, kind}, kind: ROAD|PATH|RIVER|STREET|DOOR|PASSAGE…, travel_minutes, distance_miles, state: OPEN|LOCKED|BLOCKED|SECRET, visibility}]}. "
-			+ "Committed features cannot be redefined (extend=true adds more). Dungeons are AREA children joined by DOOR/PASSAGE connections.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Committed features cannot be redefined (extend=true adds more). Dungeons are AREA children joined by DOOR/PASSAGE connections. "
+			+ "For an existing undirected connection, only supplied non-null kind/state/visibility/travel_minutes/distance_miles fields update; omitted or null fields retain committed values. "
+			+ "New connections default to PATH, OPEN, PARTY_KNOWN visibility and 60 travel minutes.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse materializeLocation(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign,
