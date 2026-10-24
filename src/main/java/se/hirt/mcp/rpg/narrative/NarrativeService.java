@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.narrative;
 
+import se.hirt.mcp.rpg.campaign.SetupDraft;
 import se.hirt.mcp.rpg.character.Biography;
 import se.hirt.mcp.rpg.character.CharacterService;
 import se.hirt.mcp.rpg.character.WantLookup;
@@ -699,7 +700,7 @@ public final class NarrativeService {
 				.map(r -> GameTime.toMap(tx, campaignId, r.lng("seq"))).orElse(null));
 		ctx.put("adventure", campaign.isNull("adventure_json") ? Map.of() : campaign.map("adventure_json"));
 		Map<String, Object> prefs = campaign.map("preferences_json");
-		ctx.put("experience_preferences", prefs.get("experience"));
+		ctx.put("experience_preferences", SetupDraft.effectiveExperience(prefs.get("experience")));
 		ctx.put("party_preferences", prefs.get("party"));
 		ctx.put("seeds",
 				tx.query("SELECT * FROM director_seed WHERE campaign_id = ? AND state = 'OPEN' ORDER BY id", campaignId)

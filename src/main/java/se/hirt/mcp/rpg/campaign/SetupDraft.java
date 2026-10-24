@@ -63,6 +63,14 @@ public final class SetupDraft {
 	public static final Set<String> ADVENTURE_KEYS = Set.of("premise", "background_truth", "opening_location",
 			"immediate_goal", "start_time", "gm_notes", "region", "tone_notes", "seeds", "story_beats", "factions",
 			"world_events", "locations", "quests");
+	private static final Map<String, Object> OPTIONAL_DEFAULTS = Map.of("experience.fantasy_style",
+			Described.recommended(FantasyStyle.class), "experience.relationship_focus", "CENTRAL",
+			"experience.excluded_themes", List.of(), "rules.ability_generation",
+			Described.recommended(AbilityGeneration.class), "rules.progression",
+			Described.recommended(Progression.class), "rules.hp_progression",
+			Described.recommended(HpProgression.class), "rules.xp_policy", Described.recommended(XpPolicy.class),
+			"rules.companion_level_up", Described.recommended(CompanionLevelUp.class), "rules.gm_override_policy",
+			Described.recommended(GmOverridePolicy.class));
 
 	private final Map<String, Object> payload;
 
@@ -72,6 +80,36 @@ public final class SetupDraft {
 
 	public Map<String, Object> payload() {
 		return payload;
+	}
+
+	static Object optionalDefault(String path) {
+		return OPTIONAL_DEFAULTS.get(path);
+	}
+
+	/** Explicit null accepts an optional default; omitted answers remain pending. */
+	Map<String, Object> normalizeAnswers(String section, Map<String, Object> incoming) {
+		var answers = new LinkedHashMap<>(incoming);
+		Map<String, Object> current = section(section);
+		String prefix = section + ".";
+		for (var entry : OPTIONAL_DEFAULTS.entrySet()) {
+			if (!entry.getKey().startsWith(prefix)) {
+				continue;
+			}
+			String field = entry.getKey().substring(prefix.length());
+			boolean skipped = incoming.containsKey(field) && incoming.get(field) == null;
+			boolean acceptSectionDefaults = ("rules".equals(section) || "experience".equals(section))
+					&& incoming.isEmpty() && (current == null || current.get(field) == null);
+			if (!skipped && !acceptSectionDefaults) {
+				continue;
+			}
+			Object tone = incoming.containsKey("tone") ? incoming.get("tone")
+					: current == null ? null : current.get("tone");
+			if ("experience.fantasy_style".equals(entry.getKey()) && tone != null && !SURPRISE_ME.equals(tone)) {
+				continue;
+			}
+			answers.put(field, entry.getValue());
+		}
+		return answers;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -107,19 +145,33 @@ public final class SetupDraft {
 	}
 
 	/**
-	 * The experience section as the campaign will run it: whatever the player recorded, with the
-	 * fantasy style defaulted to {@link FantasyStyle#EPIC} — a Baldur's Gate-style fantasy epic —
-	 * when neither a style nor a tone was given (DESIGN.md §4.2). A player who described the
-	 * flavour in their own words is never overridden.
+	 * The experience section as the campaign will run it, including applicable defaults (DESIGN.md
+	 * §4.2). A player who described the flavour in their own words is never overridden.
 	 */
 	public Map<String, Object> effectiveExperience() {
-		Map<String, Object> s = section("experience");
-		if (s == null) {
+		return effectiveExperience(section("experience"));
+	}
+
+	/** Read-only default resolution for both setup drafts and older saved campaign preferences. */
+	@SuppressWarnings("unchecked")
+	public static Map<String, Object> effectiveExperience(Object experience) {
+		if (!(experience instanceof Map<?, ?>)) {
 			return null;
 		}
-		var out = new LinkedHashMap<>(s);
-		if (out.get("fantasy_style") == null && out.get("tone") == null) {
-			out.put("fantasy_style", FantasyStyle.EPIC.name());
+		var out = new LinkedHashMap<>((Map<String, Object>) experience);
+		Object style = out.get("fantasy_style");
+		Object tone = out.get("tone");
+		if (style == null || SURPRISE_ME.equals(style)) {
+			if (tone == null || SURPRISE_ME.equals(tone)) {
+				out.put("fantasy_style", optionalDefault("experience.fantasy_style"));
+			} else if (SURPRISE_ME.equals(style)) {
+				out.remove("fantasy_style");
+			}
+		}
+		for (String field : List.of("relationship_focus", "excluded_themes")) {
+			if (out.get(field) == null || SURPRISE_ME.equals(out.get(field))) {
+				out.put(field, optionalDefault("experience." + field));
+			}
 		}
 		return out;
 	}

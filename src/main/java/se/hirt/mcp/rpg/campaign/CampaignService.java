@@ -293,7 +293,8 @@ public final class CampaignService {
 		constraints.put("surprise_me", "Any creative field may hold the value SURPRISE_ME to delegate it to the GM.");
 		m.put("constraints", constraints);
 		m.put("interview", "Ask decisions[0] only: put its question to the player with every option and description, "
-				+ "numbered, plus a custom answer where allow_custom is true; record the answer; read the decisions again.");
+				+ "numbered, plus a custom answer where allow_custom is true; record the answer; read the decisions again. "
+				+ "For an optional question recorded by update_campaign_setup, send JSON null at its path to accept the default.");
 		m.put("meta", Harness.meta(campaign, null));
 		return m;
 	}
@@ -350,6 +351,11 @@ public final class CampaignService {
 		switch (key) {
 		case "title" -> campaignCols.put("title", value == null ? null : value.toString().trim());
 		case "player_age" -> {
+			if (value == null) {
+				draft.sectionOrCreate("content_profile").putIfAbsent("player_constraints",
+						new LinkedHashMap<>(Map.of("max_profile", draft.maxProfile())));
+				break;
+			}
 			if (!(value instanceof Number n) || n.intValue() < 0 || n.intValue() > 150) {
 				throw RpgException.invalidArgument("player_age must be a plausible integer age.");
 			}
@@ -381,7 +387,7 @@ public final class CampaignService {
 		}
 		case "experience", "party" -> mergeSection(draft, key, value);
 		case "rules" -> {
-			Map<String, Object> incoming = asMap(key, value);
+			Map<String, Object> incoming = draft.normalizeAnswers(key, asMap(key, value));
 			for (var e : incoming.entrySet()) {
 				if (!SetupDraft.RULE_KEYS.contains(e.getKey())) {
 					throw RpgException.invalidArgument(
@@ -449,7 +455,7 @@ public final class CampaignService {
 	}
 
 	private static void mergeSection(SetupDraft draft, String key, Object value) {
-		Map<String, Object> incoming = asMap(key, value);
+		Map<String, Object> incoming = draft.normalizeAnswers(key, asMap(key, value));
 		draft.sectionOrCreate(key).putAll(incoming);
 	}
 

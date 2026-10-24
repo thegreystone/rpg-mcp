@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.session;
 
+import se.hirt.mcp.rpg.campaign.SetupDraft;
 import se.hirt.mcp.rpg.character.CharacterService;
 import se.hirt.mcp.rpg.character.Biography;
 import se.hirt.mcp.rpg.character.WantLookup;
@@ -396,8 +397,9 @@ public final class SessionService {
 		c.put("gm_override_policy", campaign.isNull("gm_override_policy_json") ? null
 				: campaign.map("gm_override_policy_json").get("policy"));
 		Map<String, Object> prefs = campaign.map("preferences_json");
-		c.put("experience_preferences", prefs.get("experience"));
-		FantasyStyle style = FantasyStyle.of(prefs.get("experience"));
+		Map<String, Object> experience = SetupDraft.effectiveExperience(prefs.get("experience"));
+		c.put("experience_preferences", experience);
+		FantasyStyle style = FantasyStyle.of(experience);
 		c.put("experience_guidance", style == null ? null : style.guidance());
 		c.put("party_preferences", prefs.get("party"));
 		c.put("rules", prefs.get("rules"));

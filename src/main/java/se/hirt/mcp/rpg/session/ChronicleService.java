@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.session;
 
+import se.hirt.mcp.rpg.campaign.SetupDraft;
 import se.hirt.mcp.rpg.choice.FantasyStyle;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
@@ -331,10 +332,11 @@ public final class ChronicleService {
 	private static Map<String, Object> voice(Row campaign) {
 		Map<String, Object> prefs = campaign.isNull("preferences_json") ? Map.of() : campaign.map("preferences_json");
 		var v = new LinkedHashMap<String, Object>();
-		if (prefs.get("experience") instanceof Map<?, ?> exp) {
+		Map<String, Object> exp = SetupDraft.effectiveExperience(prefs.get("experience"));
+		if (exp != null) {
 			v.put("tone", exp.get("tone"));
 			v.put("fantasy_style", exp.get("fantasy_style"));
-			FantasyStyle style = FantasyStyle.of(prefs.get("experience"));
+			FantasyStyle style = FantasyStyle.of(exp);
 			if (style != null) {
 				v.put("style_guidance", style.guidance());
 			}

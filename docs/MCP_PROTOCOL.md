@@ -357,12 +357,21 @@ decisions:
     recommended: PEGI_18
     allow_custom: false               # a free-text answer is acceptable
     allow_surprise_me: false          # SURPRISE_ME is acceptable
-    optional: false                   # may be skipped; then `default` applies
+    optional: false                   # true when the question may be skipped
     note: "..."                       # advisory guidance for the GM
 ```
 
 Options MAY carry extra fields (`speed`, `hit_die`, `level`, `school`, `ability`, `contents`, …). A decision without
 options (a name, an age) has `allow_custom: true`.
+
+To skip an optional decision recorded by `update_campaign_setup`, send JSON null at its advertised path. For example,
+`changes: {experience: {fantasy_style: null}}` accepts the default fantasy style and advances the interview.
+Omitted fields remain unanswered. Defaults retain their JSON types: skipped `excluded_themes` becomes an empty list.
+A custom tone remains authoritative. Effective experience defaults to `EPIC`, relationship focus `CENTRAL` and no
+excluded themes; delegated style or tone also resolves to the epic unless the player supplied their own flavour.
+These defaults reach saved campaigns and runtime context, including older saves, without rewriting their history.
+Skipping `player_age` stores only the existing/default content cap and never
+raises an existing lower cap. Required decisions still need an answer.
 
 - Legal values, labels and descriptions of a closed choice live in exactly one place in the server (an enum or the
   installed content). Tool descriptions MUST NOT enumerate them.
@@ -375,6 +384,9 @@ options (a name, an age) has `allow_custom: true`.
 ### 9.4 `update_campaign_setup`
 
 Updates one or more setup dimensions atomically:
+
+An empty `experience: {}` or `rules: {}` accepts that section's remaining optional defaults while preserving choices
+already recorded. Nonempty partial updates accept defaults only for explicit-null optional fields.
 
 ```yaml
 operation_id: "..."

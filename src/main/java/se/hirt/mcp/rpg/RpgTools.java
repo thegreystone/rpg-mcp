@@ -117,7 +117,8 @@ public class RpgTools {
 			+ "continuation (value or {policy}); party (object or SURPRISE_ME); "
 			+ "adventure ({premise, background_truth (GM-only), opening_location: name or {name, kind, description}, immediate_goal, start_time 'Day 1, 16:40', gm_notes}); "
 			+ "player_character ('character:N'). The legal values of every choice come from the `decisions` in the response — never hard-code them. "
-			+ "Sections merge, so one call per answer is fine; unknown keys are rejected; sections may be revisited freely before commit.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Sections merge, so one call per answer is fine. To skip an optional setup question, send JSON null at its path to accept the default; omitted fields stay unanswered. An empty experience or rules object accepts that section's remaining defaults. "
+			+ "Unknown keys are rejected; sections may be revisited freely before commit.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateCampaignSetup(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Campaign revision you last read (CONFLICT if stale)")

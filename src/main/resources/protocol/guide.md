@@ -46,6 +46,9 @@ prune options, and never batch the questions. For nearly every creative question
 valid answer (store `SURPRISE_ME`). Ask the player's age early and pass it as `player_age` — only the
 derived content cap is stored, never the age.
 
+For optional questions recorded by `update_campaign_setup`, send JSON null at the answer's path to accept its default.
+An empty `experience` or `rules` object accepts that section's remaining defaults without replacing explicit choices.
+
 The default experience is a **Baldur's Gate-style fantasy epic** (`fantasy_style: EPIC`): a world-threatening
 plot, vivid companions with their own agendas, romance that develops naturally, hard choices with lasting
 consequences, and a world where almost anyone can die. Say so when you ask about the flavour of fantasy —

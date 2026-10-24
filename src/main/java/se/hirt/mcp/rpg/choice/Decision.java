@@ -61,7 +61,7 @@ public final class Decision {
 	private boolean allowCustom;
 	private boolean allowSurpriseMe;
 	private boolean optional;
-	private String defaultValue;
+	private Object defaultValue;
 	private String owner = "PLAYER";
 	private String note;
 	private final Map<String, Object> details = new LinkedHashMap<>();
@@ -119,7 +119,7 @@ public final class Decision {
 	}
 
 	/** May be skipped; the default (if any) applies. The GM should still ask. */
-	public Decision optional(String defaultValue) {
+	public Decision optional(Object defaultValue) {
 		this.optional = true;
 		this.defaultValue = defaultValue;
 		return this;

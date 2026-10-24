@@ -87,7 +87,7 @@ final class SetupDecisions {
 								"What flavour of fantasy? The default is a Baldur's Gate-style fantasy epic.")
 						.recordedBy(SETUP, "changes.experience.fantasy_style")
 						.suggestions(Described.options(FantasyStyle.class))
-						.optional(Described.recommended(FantasyStyle.class)).surpriseMe()
+						.optional(SetupDraft.optionalDefault("experience.fantasy_style")).surpriseMe()
 						.note("Tell the player the default is the fantasy epic: skipping the question or 'surprise me' gets "
 								+ "exactly that. Store a listed value or the player's own words; also record tone and themes "
 								+ "from the answer."));
@@ -95,7 +95,8 @@ final class SetupDecisions {
 			if (experience.get("relationship_focus") == null) {
 				out.add(Decision
 						.of("experience.relationship_focus", "How important are relationships between characters?")
-						.recordedBy(SETUP, "changes.experience.relationship_focus").optional("CENTRAL").surpriseMe()
+						.recordedBy(SETUP, "changes.experience.relationship_focus")
+						.optional(SetupDraft.optionalDefault("experience.relationship_focus")).surpriseMe()
 						.suggestions(List.of(Option.of("CENTRAL", "Central",
 								"Friendship, rivalry and romance are a main reason to play — the fantasy epic's default.")
 								.recommended(true), Option.of("PRESENT", "Present", "They matter, but the plot leads."),
@@ -105,7 +106,8 @@ final class SetupDecisions {
 				out.add(Decision
 						.of("experience.excluded_themes",
 								"Anything the player specifically does not want in the story?")
-						.recordedBy(SETUP, "changes.experience.excluded_themes").optional("[]").custom()
+						.recordedBy(SETUP, "changes.experience.excluded_themes")
+						.optional(SetupDraft.optionalDefault("experience.excluded_themes")).custom()
 						.note("Record a list of themes to exclude, or an empty list."));
 			}
 		}
@@ -114,37 +116,37 @@ final class SetupDecisions {
 			out.add(Decision.of("rules.ability_generation", "How should ability scores be generated?")
 					.recordedBy(SETUP, "changes.rules.ability_generation")
 					.legal(Described.options(AbilityGeneration.class))
-					.optional(Described.recommended(AbilityGeneration.class)));
+					.optional(SetupDraft.optionalDefault("rules.ability_generation")));
 		}
 		if (rules == null || rules.get("progression") == null) {
 			out.add(Decision.of("rules.progression", "How do characters advance in level?")
 					.recordedBy(SETUP, "changes.rules.progression").legal(Described.options(Progression.class))
-					.optional(Described.recommended(Progression.class)));
+					.optional(SetupDraft.optionalDefault("rules.progression")));
 		}
 		if (rules == null || rules.get("hp_progression") == null) {
 			out.add(Decision.of("rules.hp_progression", "How are hit points gained at each level?")
 					.recordedBy(SETUP, "changes.rules.hp_progression").legal(Described.options(HpProgression.class))
-					.optional(Described.recommended(HpProgression.class))
+					.optional(SetupDraft.optionalDefault("rules.hp_progression"))
 					.note("The Constitution modifier and species bonuses (e.g. Dwarven Toughness) always apply on top."));
 		}
 		if (rules == null || rules.get("xp_policy") == null) {
 			out.add(Decision.of("rules.xp_policy", "Who earns the experience the party wins?")
 					.recordedBy(SETUP, "changes.rules.xp_policy").legal(Described.options(XpPolicy.class))
-					.optional(Described.recommended(XpPolicy.class))
+					.optional(SetupDraft.optionalDefault("rules.xp_policy"))
 					.note("Companions recruited later always join at the party's current experience, so nobody is a permanent liability."));
 		}
 		if (rules == null || rules.get("companion_level_up") == null) {
 			out.add(Decision.of("rules.companion_level_up", "Who makes a companion's level-up choices?")
 					.recordedBy(SETUP, "changes.rules.companion_level_up")
 					.legal(Described.options(CompanionLevelUp.class))
-					.optional(Described.recommended(CompanionLevelUp.class))
+					.optional(SetupDraft.optionalDefault("rules.companion_level_up"))
 					.note("A companion who has no class yet always needs one chosen for them; the engine never invents a class."));
 		}
 		if (rules == null || rules.get("gm_override_policy") == null) {
 			out.add(Decision.of("rules.gm_override_policy", "May the GM override the rules in exceptional cases?")
 					.recordedBy(SETUP, "changes.rules.gm_override_policy")
 					.legal(Described.options(GmOverridePolicy.class))
-					.optional(Described.recommended(GmOverridePolicy.class))
+					.optional(SetupDraft.optionalDefault("rules.gm_override_policy"))
 					.note("Instructions about how to use overrides belong in adventure.gm_notes."));
 		}
 		if (draft.continuationPolicy() == null) {
