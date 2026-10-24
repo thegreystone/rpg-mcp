@@ -845,6 +845,9 @@ stack with the weapon's own enchantment; the slot raises Magic Weapon to +2 (lev
 refused (`NONMAGICAL`), a wrong kind (`WEAPON_KIND`); each target in the result names the `weapon`. Flame Blade conjures
 a weapon: `ATTACK` with `attack: "Flame Blade"` while it lasts (RULES_ENGINE.md §10).
 
+Named weapons prefer an equipped copy, then the lowest inventory ID, just like named attacks. Use `inventory:N` to
+choose a particular copy, including an unequipped one.
+
 `prepare_spells {character, cantrips?, spells?}` replaces the class-chosen lists; species- and feat-granted spells stay.
 
 ---

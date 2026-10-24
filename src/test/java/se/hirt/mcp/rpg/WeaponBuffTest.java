@@ -31,6 +31,7 @@ package se.hirt.mcp.rpg;
 import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
+import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.util.List;
@@ -140,6 +141,26 @@ class WeaponBuffTest {
 
 	private static String expression(Map<String, Object> part) {
 		return String.valueOf(m(part.get("roll")).get("expression"));
+	}
+
+	private static String[] magicWeaponCaster(Engine engine) {
+		String[] ids = caster(engine, "Wizard", map("INT", 15, "STR", 14, "CON", 13, "DEX", 12, "WIS", 10, "CHA", 8),
+				List.of("Arcana", "History"), List.of("Fire Bolt", "Light", "Mage Hand"),
+				List.of("Mage Armor", "Magic Missile", "Shield", "Sleep"));
+		levelTo(engine, ids[0], ids[1], 3, "INT");
+		engine.spells().prepare(op(), ids[0], ids[1], null, List.of("Magic Weapon", "Mage Armor", "Magic Missile"));
+		return ids;
+	}
+
+	private static String grant(Engine engine, String campaign, String pc, Map<String, Object> item) {
+		return (String) l(
+				engine.inventory().grantLoot(op(), campaign, pc, List.of(item), null, "QUEST", null).get("granted"))
+				.get(0).get("entry");
+	}
+
+	private static String buffedWeapon(Engine engine, String campaign, String pc) {
+		Map<String, Object> effect = l(engine.characters().characterSheet(campaign, pc, "PLAY").get("effects")).get(0);
+		return Ref.of(Ref.INVENTORY, ((Number) m(effect.get("modifiers")).get("weapon_entry_id")).longValue());
 	}
 
 	@Test
@@ -282,6 +303,142 @@ class WeaponBuffTest {
 			assertEquals(1, effects.size(), String.valueOf(effects));
 			assertEquals("Dagger", m(effects.get(0).get("modifiers")).get("weapon_name"));
 			assertEquals(1, m(effects.get(0).get("modifiers")).get("attack_bonus"), "a level-2 slot: +1");
+		}
+	}
+
+	@Test
+	void magicWeaponByNameBindsToTheEquippedCopyOfASplitStack() throws Exception {
+		try (Engine engine = engine(tempDb("buff-equipped-stack"))) {
+			String[] ids = magicWeaponCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			String spareEntry = grant(engine, campaign, pc, map("item", "Dagger", "quantity", 2));
+			String equippedEntry = (String) engine.inventory().equip(op(), campaign, pc, spareEntry, true).get("entry");
+			assertNotEquals(spareEntry, equippedEntry, "equipping one dagger splits it from the older carried stack");
+			List<Map<String, Object>> inventory = l(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"));
+
+			engine.spells().cast(op(), campaign, pc, "Magic Weapon", null, null, map("weapon", "Dagger"));
+			Map<String, Object> effect = l(engine.characters().characterSheet(campaign, pc, "PLAY").get("effects"))
+					.get(0);
+			long boundEntryId = ((Number) m(effect.get("modifiers")).get("weapon_entry_id")).longValue();
+			assertEquals(Ref.id(equippedEntry, Ref.INVENTORY), boundEntryId,
+					"a named weapon buff must choose the equipped copy instead of the older spare stack");
+			assertEquals(inventory, engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"),
+					"binding a buff leaves quantities and equipment unchanged");
+
+			String[] f = fight(engine, campaign, pc);
+			Map<String, Object> dagger = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "attack", "Dagger", "target", f[1]));
+			assertEquals(2 + 2 + 1, attackModifier(dagger), "STR +2, proficiency +2, Magic Weapon +1: " + dagger);
+			assertEquals("1d4+3", expression(part(dagger, "piercing")));
+			Map<String, Object> spare = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "weapon", spareEntry, "target", f[1]));
+			assertEquals(2 + 2, attackModifier(spare), "the spare dagger remains unbuffed");
+			assertEquals("1d4+2", expression(part(spare, "piercing")));
+		}
+	}
+
+	@Test
+	void magicWeaponExplicitReferenceCanBindTheUnequippedCopy() throws Exception {
+		try (Engine engine = engine(tempDb("buff-explicit-spare"))) {
+			String[] ids = magicWeaponCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			String spareEntry = grant(engine, campaign, pc, map("item", "Dagger", "quantity", 2));
+			String equippedEntry = (String) engine.inventory().equip(op(), campaign, pc, spareEntry, true).get("entry");
+			assertNotEquals(spareEntry, equippedEntry);
+			engine.spells().cast(op(), campaign, pc, "Magic Weapon", null, null, map("weapon", spareEntry));
+			assertEquals(spareEntry, buffedWeapon(engine, campaign, pc), "an explicit reference overrides equipment");
+
+			String[] f = fight(engine, campaign, pc);
+			Map<String, Object> named = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "attack", "Dagger", "target", f[1]));
+			assertEquals(2 + 2, attackModifier(named), "the named attack uses the unbuffed equipped dagger");
+			assertEquals("1d4+2", expression(part(named, "piercing")));
+			Map<String, Object> spare = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "weapon", spareEntry, "target", f[1]));
+			assertEquals(2 + 2 + 1, attackModifier(spare), "the explicit spare receives Magic Weapon");
+			assertEquals("1d4+3", expression(part(spare, "piercing")));
+		}
+	}
+
+	@Test
+	void namedAndDefaultWeaponBuffsChooseTheFirstOfTwoEquippedCopies() throws Exception {
+		try (Engine engine = engine(tempDb("buff-two-equipped"))) {
+			String[] ids = magicWeaponCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			String stack = grant(engine, campaign, pc, map("item", "Dagger", "quantity", 3));
+			String first = (String) engine.inventory().equip(op(), campaign, pc, stack, true).get("entry");
+			String second = (String) engine.inventory().equip(op(), campaign, pc, stack, true).get("entry");
+			assertNotEquals(first, second);
+			assertTrue(Ref.id(first, Ref.INVENTORY) < Ref.id(second, Ref.INVENTORY));
+			engine.spells().cast(op(), campaign, pc, "Magic Weapon", null, null, map("weapon", "Dagger"));
+			assertEquals(first, buffedWeapon(engine, campaign, pc), "the lowest equipped entry ID breaks name ties");
+
+			String[] f = fight(engine, campaign, pc);
+			Map<String, Object> named = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "attack", "Dagger", "target", f[1]));
+			assertEquals(2 + 2 + 1, attackModifier(named), "a named attack uses the same equipped copy as the buff");
+			Map<String, Object> other = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "weapon", second, "target", f[1]));
+			assertEquals(2 + 2, attackModifier(other), "the second equipped copy is not buffed");
+
+			engine.encounters().end(op(), campaign, f[0], "ENEMIES_FLED", null);
+			engine.spells().cast(op(), campaign, pc, "Magic Weapon", null, null, null);
+			assertEquals(first, buffedWeapon(engine, campaign, pc),
+					"omitting the option still defaults to a wielded weapon");
+		}
+	}
+
+	@Test
+	void namedWeaponBuffStillWorksWhenTheWeaponIsOnlyCarried() throws Exception {
+		try (Engine engine = engine(tempDb("buff-carried-weapon"))) {
+			String[] ids = magicWeaponCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			String dagger = grant(engine, campaign, pc, map("item", "Dagger"));
+			List<Map<String, Object>> inventory = l(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"));
+			engine.spells().cast(op(), campaign, pc, "Magic Weapon", null, null, map("weapon", "srd5e:item/dagger"));
+			assertEquals(dagger, buffedWeapon(engine, campaign, pc));
+			assertEquals(inventory, engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"),
+					"selecting a carried weapon does not equip it");
+
+			String[] f = fight(engine, campaign, pc);
+			Map<String, Object> attack = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "attack", "Dagger", "target", f[1]));
+			assertEquals(2 + 2 + 1, attackModifier(attack));
+			assertEquals("1d4+3", expression(part(attack, "piercing")));
+		}
+	}
+
+	@Test
+	void shillelaghByNameBindsToTheEquippedCopyOfACustomStaff() throws Exception {
+		try (Engine engine = engine(tempDb("buff-custom-equipped-stack"))) {
+			String[] ids = caster(engine, "Druid", map("WIS", 15, "CON", 14, "DEX", 13, "INT", 12, "CHA", 10, "STR", 8),
+					List.of("Insight", "Perception"), List.of("Shillelagh", "Druidcraft"),
+					List.of("Cure Wounds", "Entangle"));
+			String campaign = ids[0], pc = ids[1];
+			String spare = grant(engine, campaign, pc, map("item", "+1 Quarterstaff", "quantity", 2));
+			String equipped = (String) engine.inventory().equip(op(), campaign, pc, spare, true).get("entry");
+			assertNotEquals(spare, equipped);
+			List<Map<String, Object>> inventory = l(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"));
+			assertTrue(inventory.stream().filter(i -> equipped.equals(i.get("ref"))).findFirst().orElseThrow()
+					.get("item").toString().startsWith("content:"),
+					"the enchanted staff uses custom content resolution");
+			engine.spells().cast(op(), campaign, pc, "Shillelagh", null, null,
+					map("weapon", "+1 Quarterstaff", "damage_type", "force"));
+			assertEquals(equipped, buffedWeapon(engine, campaign, pc));
+			assertEquals(inventory, engine.characters().characterSheet(campaign, pc, "PLAY").get("inventory"));
+
+			String[] f = fight(engine, campaign, pc);
+			Map<String, Object> staff = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "attack", "+1 Quarterstaff", "target", f[1]));
+			assertEquals(2 + 2 + 1, attackModifier(staff), "WIS +2, proficiency +2, and the staff's +1");
+			assertEquals("1d8+3", expression(part(staff, "force")));
+			Map<String, Object> other = hit(engine, campaign, f[0], pc, f[1],
+					map("kind", "ATTACK", "weapon", spare, "target", f[1]));
+			assertEquals(-1 + 2 + 1, attackModifier(other), "the spare staff still uses STR and its intrinsic magic");
+			assertEquals("1d6", expression(part(other, "bludgeoning")));
 		}
 	}
 

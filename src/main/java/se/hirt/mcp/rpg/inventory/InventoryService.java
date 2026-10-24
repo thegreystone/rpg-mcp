@@ -586,7 +586,10 @@ public final class InventoryService {
 		return out;
 	}
 
-	/** The inventory entry a character carries for {@code inventory:N} or an item name. */
+	/**
+	 * The exact carried {@code inventory:N}, or a named item's equipped copy before unequipped
+	 * copies. Ties use the lowest entry ID, matching named weapon attacks.
+	 */
 	public static Row carriedEntry(Tx tx, RulesData rules, long campaignId, Row character, String text) {
 		if (text.startsWith(Ref.INVENTORY + ":")) {
 			Row e = entry(tx, campaignId, text);
@@ -597,10 +600,10 @@ public final class InventoryService {
 		}
 		Item item = ContentService.resolveItem(tx, rules, campaignId, text);
 		Optional<Row> found = item.custom() ? tx.queryOne(
-				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY id LIMIT 1",
+				"SELECT * FROM inventory_entry WHERE character_id = ? AND custom_content_id = ? ORDER BY equipped DESC, id LIMIT 1",
 				character.id(), item.customId())
 				: tx.queryOne(
-						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY id LIMIT 1",
+						"SELECT * FROM inventory_entry WHERE character_id = ? AND content_ref = ? ORDER BY equipped DESC, id LIMIT 1",
 						character.id(), item.contentRef());
 		return found.orElseThrow(() -> RpgException.validation(List.of(new Violation("item", "NOT_CARRIED",
 				character.str("name") + " does not carry a " + item.name() + "."))));

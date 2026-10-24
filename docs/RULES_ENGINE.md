@@ -381,6 +381,8 @@ robes); rings are `RING`; rods, staffs and wands are held (`ONE_HAND`); the rest
   Blade (`conjured_weapon`: a melee spell attack by that name while the effect lasts, dice scaled by the slot) are
   seeded verbatim. Actor-wide buffs (Bless, Divine Favor) apply to every attack as before; a flat `damage_bonus` on an
   actor-wide effect adds to the first damage part. Re-casting a weapon buff replaces the previous one (stacking key).
+  Named weapons resolve equipped copies first, then by entry ID, matching attacks; an explicit `inventory:N` binds
+  that exact carried copy.
 - **Treasure guidance (the engine's own; the SRD has no treasure tables).** Suggestions only, by the party's highest
   level: levels 1–4 draw COMMON 45 / UNCOMMON 45 / RARE 10, a permanent item every second or third completed quest (a
   Ring of Protection is a stroke of luck); 5–10 UNCOMMON 40 / RARE 45 / VERY_RARE 15, about one per completed quest or
