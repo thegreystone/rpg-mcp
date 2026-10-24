@@ -769,6 +769,23 @@ public final class LevelUpService {
 		return v;
 	}
 
+	/** The selected ability columns, shared by the preview and the committed level-up. */
+	private static Map<String, Object> abilityChanges(Row c, Map<String, Object> chosen) {
+		var columns = new LinkedHashMap<String, Object>();
+		if (chosen.get("ability_score_improvement") instanceof Map<?, ?> asi) {
+			for (var entry : asi.entrySet()) {
+				Ability ability = Ability.parse(String.valueOf(entry.getKey()));
+				columns.put(ability.column(), c.intOr(ability.column(), 10) + ((Number) entry.getValue()).intValue());
+			}
+		}
+		if (chosen.get("feat") instanceof Map<?, ?> feat && feat.get("choices") instanceof Map<?, ?> choices
+				&& choices.get("ability_increase") != null) {
+			Ability ability = Ability.parse(String.valueOf(choices.get("ability_increase")));
+			columns.put(ability.column(), Math.min(Rules.MAX_SCORE, c.intOr(ability.column(), 10) + 1));
+		}
+		return columns;
+	}
+
 	@SuppressWarnings("unchecked")
 	private Map<String, Object> preview(Tx tx, Row t, Row c) {
 		Map<String, Object> payload = t.map("payload_json");
@@ -779,14 +796,9 @@ public final class LevelUpService {
 		before.put("level", payload.get("from_level"));
 		after.put("level", toLevel);
 		before.put("max_hp", c.integer("max_hp"));
-		Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
-				? (Map<String, Object>) m : Map.of();
+		Map<String, Object> abilityColumns = abilityChanges(c, chosen);
 		Object gain = chosen.get("hp_gain");
-		int conBefore = c.intOr("con_score", 10);
-		int conAfter = conBefore + (asi.get("CON") instanceof Number n ? n.intValue() : 0)
-				+ (chosen.get("feat") instanceof Map<?, ?> feat && feat.get("choices") instanceof Map<?, ?> fc
-						&& "CON".equalsIgnoreCase(String.valueOf(fc.get("ability_increase"))) ? 1 : 0);
-		int constitutionHp = constitutionHp(conBefore, Math.min(Rules.MAX_SCORE, conAfter), toLevel);
+		int constitutionHp = constitutionHp(c, abilityColumns, toLevel);
 		after.put("max_hp", gain == null ? null : c.intOr("max_hp", 0) + ((Number) gain).intValue() + constitutionHp);
 		if (constitutionHp != 0) {
 			after.put("constitution_hp", constitutionHp);
@@ -798,7 +810,7 @@ public final class LevelUpService {
 		for (Ability a : Ability.values()) {
 			int score = c.intOr(a.column(), 10);
 			scoresBefore.put(a.name(), score);
-			scoresAfter.put(a.name(), score + (asi.get(a.name()) instanceof Number n ? n.intValue() : 0));
+			scoresAfter.put(a.name(), abilityColumns.getOrDefault(a.column(), score));
 		}
 		before.put("abilities", scoresBefore);
 		after.put("abilities", scoresAfter);
@@ -885,10 +897,7 @@ public final class LevelUpService {
 			}
 			Map<String, Object> asi = chosen.get("ability_score_improvement") instanceof Map<?, ?> m
 					? (Map<String, Object>) m : Map.of();
-			for (var e : asi.entrySet()) {
-				Ability a = Ability.parse(e.getKey());
-				cols.put(a.column(), c.intOr(a.column(), 10) + ((Number) e.getValue()).intValue());
-			}
+			cols.putAll(abilityChanges(c, chosen));
 			// A feat taken instead of the ASI (SRD 5.2.1): granted with its choices; a feat ability increase applies now.
 			Map<String, Object> featRecord = chosen.get("feat") instanceof Map<?, ?> fm ? (Map<String, Object>) fm
 					: null;
@@ -898,11 +907,7 @@ public final class LevelUpService {
 				featName = feat.name();
 				Map<String, Object> featChoices = featRecord.get("choices") instanceof Map<?, ?> fc
 						? new LinkedHashMap<>((Map<String, Object>) fc) : new LinkedHashMap<>();
-				Object increase = featChoices.remove("ability_increase");
-				if (increase != null) {
-					Ability a = Ability.parse(String.valueOf(increase));
-					cols.put(a.column(), Math.min(Rules.MAX_SCORE, c.intOr(a.column(), 10) + 1));
-				}
+				featChoices.remove("ability_increase");
 				se.hirt.mcp.rpg.character.Origins.grantFeat(tx, rules, c, feat, "level_up", featChoices);
 			}
 			// A higher Constitution modifier raises the maximum by one for every level attained, this one

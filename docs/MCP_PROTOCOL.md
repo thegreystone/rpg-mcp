@@ -1185,7 +1185,8 @@ level-up, where `feat_choices` completes it; with nothing pending, `feat_choices
 
 ### 16.4 `validate_level_up`
 
-Violations and a complete before/after preview.
+Violations and a complete before/after preview, including chosen feat ability increases and resulting Constitution
+HP changes.
 
 ### 16.5 `commit_level_up`
 
