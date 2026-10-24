@@ -390,6 +390,7 @@ public final class CharacterChoices {
 	@SuppressWarnings("unchecked")
 	public Decision featChoicesDecision(Tx tx, Row c, Row featRow) {
 		RulesData.Definition feat = Origins.featDefinition(rules, featRow).orElseThrow();
+		String featRef = featRow.str("content_ref");
 		Map<String, Object> payload = featRow.map("payload_json");
 		List<Object> pending = payload.get("pending") instanceof List<?> l ? (List<Object>) l : List.of();
 		Map<String, Object> chosen = Origins.castMap(payload.get("choices"));
@@ -397,9 +398,9 @@ public final class CharacterChoices {
 		Decision d = Decision
 				.of("feat_choices",
 						feat.name() + " still needs: " + pending + ". " + feat.payload().getOrDefault("summary", ""))
-				.recordedBy("update_character_draft", "changes.feat_choices").detail("feat", feat.id())
+				.recordedBy("update_character_draft", "changes.feat_choices").detail("feat", featRef)
 				.detail("pending", pending).note("Answer with the feat plus one or more choices, e.g. {\"feat\": \""
-						+ feat.name() + "\", \"" + pending.get(0) + "\": ...}.");
+						+ featRef + "\", \"" + pending.get(0) + "\": ...}.");
 		switch (String.valueOf(pending.get(0))) {
 		case "spell_list" -> {
 			var options = new ArrayList<Option>();
@@ -421,9 +422,9 @@ public final class CharacterChoices {
 			int n = ((Number) spec.get("cantrips")).intValue();
 			d.legal(spells(String.valueOf(chosen.get("spell_list")), 0)).choose(n, n);
 		}
-		case "spells" -> d.legal(spells(String.valueOf(chosen.get("spell_list")), 1)).choose(1, 1)
-				.note("Answer {\"feat\": \"" + feat.name()
-						+ "\", \"spell\": ...}: the spell is always prepared, with one free cast per Long Rest.");
+		case "spells" ->
+			d.legal(spells(String.valueOf(chosen.get("spell_list")), 1)).choose(1, 1).note("Answer {\"feat\": \""
+					+ featRef + "\", \"spell\": ...}: the spell is always prepared, with one free cast per Long Rest.");
 		case "proficiencies" -> {
 			int n = ((Number) spec.get("proficiencies")).intValue();
 			d.legal(skillAndToolOptions(tx, c)).choose(n, n);

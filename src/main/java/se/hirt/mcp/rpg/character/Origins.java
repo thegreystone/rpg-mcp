@@ -505,14 +505,15 @@ public final class Origins {
 						.invalidArgument("Unknown background '" + value + "'; see get_character_choices BACKGROUND."));
 		clearBackgroundGrants(tx, c, creation);
 		cols.put("background_ref", bg.id());
-		// The two background skills are fixed; a class/species pick that duplicates one is released for re-choice
-		// (SRD 5.2.1 "Choose a Background": duplicate proficiencies are re-chosen from the flexible source).
+		// Fixed background skills release conflicting flexible choices for re-selection.
 		for (Object skillRef : (List<Object>) bg.payload().get("skills")) {
 			RulesData.Definition skill = rules.require(skillRef.toString(), "SKILL");
 			for (Row t : tx.query(
 					"SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SKILL' AND content_ref = ?",
 					c.id(), skill.id())) {
-				tx.delete("character_trait", t.id());
+				if (!reopenFeatProficiencies(tx, rules, c, sourceOf(t))) {
+					tx.delete("character_trait", t.id());
+				}
 			}
 			insertTrait(tx, c.id(), "SKILL", skill.id(), Map.of("source", SOURCE_BACKGROUND));
 		}
@@ -525,6 +526,32 @@ public final class Origins {
 		Map<String, Object> preset = bg.payload().get("feat_choices") instanceof Map<?, ?> m ? (Map<String, Object>) m
 				: Map.of();
 		grantFeat(tx, rules, c, feat, SOURCE_BACKGROUND, preset);
+	}
+
+	/** Releases a feat's full proficiency choice group so it can be answered again. */
+	private static boolean reopenFeatProficiencies(Tx tx, RulesData rules, Row c, String source) {
+		if (!source.startsWith("feat:")) {
+			return false;
+		}
+		Optional<Row> feat = featRows(tx, c).stream().filter(f -> source.equals("feat:" + f.str("content_ref")))
+				.findFirst();
+		if (feat.isEmpty() || !castMap(featDefinition(rules, feat.get()).orElseThrow().payload().get("choices"))
+				.containsKey("proficiencies")) {
+			return false;
+		}
+		Map<String, Object> payload = feat.get().map("payload_json");
+		var choices = new LinkedHashMap<>(castMap(payload.get("choices")));
+		choices.remove("proficiencies");
+		var pending = new LinkedHashSet<String>();
+		if (payload.get("pending") instanceof List<?> keys) {
+			keys.forEach(key -> pending.add(String.valueOf(key)));
+		}
+		pending.add("proficiencies");
+		deleteBySource(tx, c.id(), Set.of("SKILL", "PROFICIENCY"), source);
+		payload.put("choices", choices);
+		payload.put("pending", pendingOrder(pending));
+		tx.update("character_trait", feat.get().id(), Map.of("payload_json", Json.write(payload)));
+		return true;
 	}
 
 	/**
@@ -709,11 +736,18 @@ public final class Origins {
 			throw RpgException.invalidArgument(
 					"feat_choices must be an object naming the feat, e.g. {\"feat\": \"Skilled\", \"proficiencies\": [...]}, or a list of such objects (one per feat).");
 		}
-		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(m.get("feat")))
-				.orElseThrow(() -> RpgException.invalidArgument("Unknown feat '" + m.get("feat") + "'."));
-		Row featRow = featRows(tx, c).stream().filter(f -> baseFeatRef(f.str("content_ref")).equals(feat.id()))
-				.findFirst().orElseThrow(() -> RpgException
-						.invalidArgument(c.str("name") + " does not have the feat " + feat.name() + "."));
+		String requested = String.valueOf(m.get("feat"));
+		List<Row> feats = featRows(tx, c);
+		Row featRow = feats.stream().filter(f -> requested.equals(f.str("content_ref"))).findFirst().orElseGet(() -> {
+			RulesData.Definition feat = rules.resolve("FEAT", requested)
+					.orElseThrow(() -> RpgException.invalidArgument("Unknown feat '" + requested + "'."));
+			List<Row> matching = feats.stream().filter(f -> baseFeatRef(f.str("content_ref")).equals(feat.id()))
+					.toList();
+			return matching.stream()
+					.filter(f -> f.map("payload_json").get("pending") instanceof List<?> p && !p.isEmpty()).findFirst()
+					.orElseGet(() -> matching.stream().findFirst().orElseThrow(() -> RpgException
+							.invalidArgument(c.str("name") + " does not have the feat " + feat.name() + ".")));
+		});
 		var values = new LinkedHashMap<String, Object>();
 		m.forEach((k, v) -> {
 			if (!"feat".equals(k)) {
