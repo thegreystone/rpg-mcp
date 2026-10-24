@@ -28,7 +28,11 @@ PRAGMA busy_timeout = 5000;
 `foreign_keys` must be set per connection.
 
 - **Seed data** is imported from JSON classpath resources on startup when `installed_ruleset` lacks the
-  ruleset+version (I-66), one transaction per ruleset version.
+  ruleset+version (I-66), one transaction per ruleset version. Version upgrades update matching definitions in place,
+  preserving their numeric and string IDs, and insert new definitions. Older version metadata and definitions absent
+  from the new seed remain available for existing campaigns; unrelated namespaces are preserved. Content owned by
+  another namespace cannot be replaced by the import. New campaigns without an explicit version select the most
+  recently installed version of their namespace. Existing campaign version fields and checkpoint history are unchanged.
 
 ---
 

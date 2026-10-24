@@ -44,8 +44,9 @@ import java.util.*;
  * run, or whenever a database lacks the ruleset+version (DESIGN.md §25.1, I-66). Idempotent per
  * version: when the version is already installed, entries whose embedded definition changed (a new
  * {@code summary}, a corrected payload) or that are new are refreshed in place — content ids are
- * stable, so nothing that references them moves. Installed content is not rewindable, so the
- * importer uses the raw write path.
+ * stable, so nothing that references them moves. A new version updates matching definitions in
+ * place, preserving their IDs and retaining older version metadata and definitions absent from the
+ * new seed. Installed content is not rewindable, so the importer uses the raw write path.
  */
 public final class SeedImporter {
 
@@ -71,7 +72,7 @@ public final class SeedImporter {
 			@SuppressWarnings("unchecked")
 			List<String> files = (List<String>) ruleset.get("files");
 			for (String file : files) {
-				count += importFile(tx, rulesetId, "seed/" + namespace + "/" + file);
+				count += importFile(tx, rulesetId, namespace, "seed/" + namespace + "/" + file);
 			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("namespace", namespace);
@@ -148,14 +149,26 @@ public final class SeedImporter {
 		return tx.rawInsert("installed_ruleset", cols);
 	}
 
-	private static int importFile(Tx tx, long rulesetId, String path) {
+	private static int importFile(Tx tx, long rulesetId, String namespace, String path) {
 		Map<String, Object> file = Json.readMap(resource(path));
 		String kind = (String) file.get("kind");
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> entries = (List<Map<String, Object>>) file.get("entries");
 		int count = 0;
 		for (Map<String, Object> entry : entries) {
-			tx.rawInsert("installed_content", columnsFor(entry, kind, rulesetId));
+			var existing = tx.queryOne(
+					"SELECT c.id, r.namespace FROM installed_content c JOIN installed_ruleset r ON r.id = c.ruleset_id WHERE c.content_id = ?",
+					entry.get("id"));
+			Map<String, Object> cols = columnsFor(entry, kind, rulesetId);
+			if (existing.isEmpty()) {
+				tx.rawInsert("installed_content", cols);
+			} else {
+				if (!namespace.equals(existing.get().str("namespace"))) {
+					throw RpgException.invalidArgument("Content '" + entry.get("id") + "' belongs to ruleset '"
+							+ existing.get().str("namespace") + "'; cannot replace it from '" + namespace + "'.");
+				}
+				tx.rawUpdate("installed_content", existing.get().id(), cols);
+			}
 			count++;
 		}
 		return count;

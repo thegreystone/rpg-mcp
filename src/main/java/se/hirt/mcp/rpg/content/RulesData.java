@@ -60,7 +60,8 @@ public final class RulesData {
 
 	public RulesData(Database db) {
 		db.read(tx -> {
-			for (Row r : tx.query("SELECT * FROM installed_ruleset ORDER BY id")) {
+			// Put the most recently installed version first for unversioned campaign requests.
+			for (Row r : tx.query("SELECT * FROM installed_ruleset ORDER BY id DESC")) {
 				var m = new LinkedHashMap<String, Object>();
 				m.put("namespace", r.str("namespace"));
 				m.put("version", r.str("version"));
