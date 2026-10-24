@@ -194,6 +194,10 @@ Mutable aggregates expose an integer `revision`. A mutation derived from read st
 commands against a pending transaction MUST include its revision. A schema MAY omit `expected_revision` only for a blind,
 commutative operation or when the target is created in the same call. A stale revision returns `CONFLICT`.
 
+Character revisions include inventory, equipment, conditions and other active effects, including concentration.
+Re-read the character sheet after those changes before submitting another revision-dependent update. Idempotent
+replays do not advance revisions; checkpoint restoration recovers the historical revision.
+
 ---
 
 ## 6. Common Response and Error Model

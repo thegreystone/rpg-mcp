@@ -29,6 +29,7 @@
 package se.hirt.mcp.rpg.persistence;
 
 import se.hirt.mcp.rpg.protocol.Json;
+import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.sql.*;
@@ -49,6 +50,8 @@ public final class Tx {
 	private final long journalId;
 	private final List<Map<String, Object>> undo = new ArrayList<>();
 	private final Map<String, Object> touched = new LinkedHashMap<>();
+	private final Map<Long, Long> initialCharacterRevisions = new HashMap<>();
+	private final Set<Long> invalidatedCharacters = new HashSet<>();
 	private Long campaignId;
 	private boolean checkpointMarker;
 
@@ -76,6 +79,9 @@ public final class Tx {
 	}
 
 	public void touched(String ref, long revision) {
+		if (ref.startsWith(Ref.CHARACTER + ":") && touched.get(ref) instanceof Number previous) {
+			revision = Math.max(revision, previous.longValue());
+		}
 		touched.put(ref, revision);
 	}
 
@@ -145,6 +151,9 @@ public final class Tx {
 		if (Tables.isRewindable(table)) {
 			undo.add(op("delete", table, id, null));
 		}
+		if (affectsCharacterSheet(table)) {
+			invalidateOwners(table, null, get(table, id));
+		}
 		return id;
 	}
 
@@ -154,21 +163,73 @@ public final class Tx {
 		if (columns.isEmpty()) {
 			return;
 		}
-		if (Tables.isRewindable(table)) {
-			Row before = get(table, id);
+		Row before = Tables.isRewindable(table) ? get(table, id) : null;
+		if (before != null) {
 			undo.add(op("restore", table, id, before.asMap()));
 		}
+		if ("character".equals(table)) {
+			initialCharacterRevisions.putIfAbsent(id, before.lng("revision"));
+			// A service may still hold the row loaded before its inventory/effect changes.
+			if (invalidatedCharacters.contains(id) && columns.get("revision") instanceof Number requested
+					&& requested.longValue() < before.lng("revision")) {
+				columns = new LinkedHashMap<>(columns);
+				columns.put("revision", before.lng("revision"));
+			}
+		}
 		rawUpdate(table, id, columns);
+		if (affectsCharacterSheet(table)) {
+			Row after = get(table, id);
+			if (!before.asMap().equals(after.asMap())) {
+				invalidateOwners(table, before, after);
+			}
+		} else if ("character".equals(table) && invalidatedCharacters.contains(id)) {
+			touched(Ref.of(Ref.CHARACTER, id), get(table, id).lng("revision"));
+		}
 	}
 
 	public void delete(String table, long id) {
 		requireMutable();
 		checkTable(table);
-		if (Tables.isRewindable(table)) {
-			Row before = get(table, id);
+		Row before = Tables.isRewindable(table) ? get(table, id) : null;
+		if (before != null) {
 			undo.add(op("insert", table, id, before.asMap()));
 		}
 		rawDelete(table, id);
+		if (affectsCharacterSheet(table)) {
+			invalidateOwners(table, before, null);
+		}
+	}
+
+	private static boolean affectsCharacterSheet(String table) {
+		return "inventory_entry".equals(table) || "active_effect".equals(table);
+	}
+
+	private void invalidateOwners(String table, Row before, Row after) {
+		for (Row row : new Row[] {before, after}) {
+			if (row == null) {
+				continue;
+			}
+			invalidateCharacter(row.lng("character_id"));
+			if ("active_effect".equals(table)) {
+				invalidateCharacter(row.lng("concentration_character_id"));
+			}
+		}
+	}
+
+	/**
+	 * Advance each changed sheet once automatically, reusing a revision already advanced by service
+	 * code.
+	 */
+	private void invalidateCharacter(Long id) {
+		if (id == null || !invalidatedCharacters.add(id)) {
+			return;
+		}
+		Row character = get("character", id);
+		long initial = initialCharacterRevisions.computeIfAbsent(id, ignored -> character.lng("revision"));
+		if (character.lng("revision") <= initial) {
+			update("character", id, Map.of("revision", initial + 1));
+		}
+		touched(Ref.of(Ref.CHARACTER, id), get("character", id).lng("revision"));
 	}
 
 	// ── raw writes (non-rewindable tables, undo application, importer) ──

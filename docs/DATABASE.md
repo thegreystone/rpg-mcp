@@ -44,6 +44,13 @@ PRAGMA busy_timeout = 5000;
   by it. The immutable `want_identity` registry stores ownership IDs without foreign keys into rewindable tables
   (§3.3), so restoration cannot remove identities.
 - Mutable aggregate roots carry `revision INTEGER NOT NULL DEFAULT 0` (domain model §2.5).
+  Character revisions also cover carried inventory and active effects. Journaled `Tx` writes to `inventory_entry`
+  and `active_effect` invalidate affected character owners, including a concentrating caster and both old/new owners
+  when a link changes. An owner advances once automatically per mutation, reusing an existing service increment;
+  subsequent service increments are preserved, and stale row values cannot lower the revision. Unchanged child writes
+  add no automatic increment, and idempotent replays do not advance revisions. Revision changes are journaled and
+  appear in `touched_json`; raw importer and undo writes bypass this tracking so checkpoint restoration recovers
+  the exact historical revisions.
 - Enums are `TEXT` with `CHECK (col IN (...))`.
 - Real timestamps are RFC 3339 UTC `TEXT` (`created_at`, `updated_at` where useful).
 - Game time is the pair `game_time TEXT` (display instant) + `game_seq INTEGER` (ordering). Ordering always uses
