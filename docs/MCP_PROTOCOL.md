@@ -761,6 +761,15 @@ Identity is unaffected: renaming changes only the display name. The operation re
 Identity, rules features, resources, equipment, conditions, progression and carrying state at detail `SUMMARY`, `PLAY`
 or `FULL`.
 
+A character with class levels carries `armor_training` (`LIGHT`, `MEDIUM`, `HEAVY`, `SHIELDS`) and
+`weapon_proficiencies` (`SIMPLE`, `MARTIAL`, `MARTIAL_LIGHT`, `MARTIAL_FINESSE`) from its classes (SRD 5.2.1 "Armor
+Training"; `RULES_ENGINE.md` §3, §7), and `untrained_armor {item, effect}` while wearing body armor it lacks training
+with: Disadvantage on every D20 Test involving Strength or Dexterity and no spellcasting. `armor_class.shield` notes
+"no AC benefit" for a shield worn without Shields training; `speed` shows the 10-foot reduction of heavy armor whose
+Strength requirement the wearer does not meet. Stat-block creatures carry none of this and are unrestricted. The
+hit-dice pool is `recharge: LONG_REST`; `spellcasting.ritual_casting` is an explanatory string (any prepared
+Ritual-tagged spell may be cast as a ritual), and a sorcerer's `spellcasting.metamagic` reports `options_known_limit`.
+
 ### 13.2 `resolve_check`
 
 An ability check, skill check or saving throw from authoritative state:
@@ -781,7 +790,16 @@ GM-set difficulty the rules policy permits.
 `tool` names a tool used for the check (`Thieves' Tools`), validated against installed TOOL items. An ability check
 with a tool the actor is proficient with adds the proficiency bonus; a skill check with a tool the actor is also
 proficient in has advantage, and a GM-imposed disadvantage is cancelled instead (SRD 5.2.1 "Tools and Skills
-Together"). The result reports `tool`, `tool_proficient` and `advantage_source` when the engine granted or cancelled it.
+Together"). The result reports `tool`, `tool_proficient` and, whenever the engine itself supplied an Advantage or
+Disadvantage source (tool proficiency, untrained armor), `advantage_source` naming them and any cancellation.
+
+The actor's conditions shape the roll (`RULES_ENGINE.md` §3): Poisoned and Frightened (while the recorded source of
+fear is an active participant of the same encounter) give ability checks Disadvantage; Restrained gives Dexterity
+saving throws Disadvantage; the Dodge action gives them Advantage while the dodger is not Incapacitated and its Speed
+is above 0; body armor worn without training gives every Strength or Dexterity check and save Disadvantage. The GM's
+declared `advantage`, the engine's sources and the conditions are decided together: any Advantage source with any
+Disadvantage source cancels to a plain d20, however many of either there are. The result carries `advantage_reasons`
+when the list is non-empty.
 
 Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 
@@ -790,17 +808,35 @@ Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 A named, rules-aware change outside the attack loop (healing, resources, conditions, HP) when no more specific tool exists. Each
 kind has a schema; exceptional changes need `apply_gm_override`.
 
-- `ADD_CONDITION {condition, duration}` accepts minutes, duration text such as `"3 rounds"` or `"1 hour"`,
-  milestones such as `"long rest"` or `"start of turn"`, and maps such as `{until: START_OF_TURN}`.
-  Start-of-turn durations require the recipient to be an active encounter participant: they expire when that
-  recipient's next turn begins, or when the encounter ends. The server records the participant and encounter;
-  explicit map anchors must match them. Outside encounters, use a time-based duration or `"until removed"`.
+- `ADD_CONDITION {condition, duration, source?}` accepts minutes, duration text such as `"3 rounds"` or `"1 hour"`,
+  milestones such as `"long rest"`, `"short rest"` or `"start of turn"`, and maps such as `{until: START_OF_TURN}`
+  (`until` is `LONG_REST`, `SHORT_REST`, `RESTORED`, `START_OF_TURN` or `HP_ABOVE_ZERO`). A round duration inside an
+  encounter expires when that round begins and survives the encounter's end as clock minutes (§15.5); outside one,
+  `"N rounds"` is `ceil(N / 10)` minutes. Start-of-turn durations require the recipient to be an active encounter
+  participant: they expire when that recipient's next turn begins, or when the encounter ends. The server records the
+  participant and encounter; explicit map anchors must match them. Outside encounters, use a time-based duration or
+  `"until removed"`. `source` (a character ref) records the creature behind the condition: the grappler of a Grappled
+  creature, the source of a Frightened creature's fear; the attack rules read it (`RULES_ENGINE.md` §3), and without
+  it those two conditions impose nothing. Condition immunities are honoured (Petrified → Poisoned, `immune_conditions`
+  on active effects, stat-block condition immunities): the result reports `immune: <CONDITION>` and `skipped: <why>`
+  instead of adding. Gaining Incapacitated, Stunned, Paralyzed, Unconscious or Petrified breaks the creature's
+  Concentration.
 - `ADD_CONDITION {condition: "EXHAUSTION"}` adds one level, ignoring `duration`; exhaustion lasts until recovered.
-  `REMOVE_CONDITION` with that condition clears all levels. A Long Rest or resurrection removes one level, as does
-  Greater Restoration when Exhaustion is chosen. The sheet's `exhaustion` field and its single Exhaustion condition
-  show the same level. Every D20 Test takes a penalty of twice that level, Speed falls by five feet per level, and
-  level six causes death. Older saves'
-  unnumbered Exhaustion effects count as one level until a journaled mutation folds them into the stored count.
+  `REMOVE_CONDITION` with that condition removes one level, like a Long Rest or Greater Restoration, unless the change
+  carries `levels: N` (a positive integer); the result reports `removed`, the remaining `exhaustion` level,
+  `condition_ended` (true only when the level reached 0) and, while levels remain, a `note` with the penalties still
+  in force. A Long Rest or resurrection
+  removes one level, as does Greater Restoration when Exhaustion is chosen. The sheet's `exhaustion` field and its
+  single Exhaustion condition show the same level. Every D20 Test takes a penalty of twice that level, Speed falls by
+  five feet per level, and level six causes death. Older saves' unnumbered Exhaustion effects count as one level until
+  a journaled mutation folds them into the stored count.
+- `STABILIZE` resets both death-save counts to zero with the Stable flag (SRD 5.2.1 "Death Saving Throws"), so
+  damage taken while Stable counts from zero (one failure, two on a critical hit); the result's `note` says so.
+  Healing that ends Unconscious (`HEAL`, `USE_ITEM`, a revival) leaves the creature Prone: `PRONE` is added and the
+  result carries `prone`; the creature rights itself with `STAND` on its encounter turn (§15.3), or the GM records it
+  with `REMOVE_CONDITION` outside one. A knocked-out creature's Unconscious (`until: SHORT_REST`, §15.3) ends the same
+  way, or by `REMOVE_CONDITION` after first aid (DC 10 Wisdom (Medicine)). Temporary HP never wakes an unconscious
+  creature.
 
 - `USE_ITEM {item, target}`: a consumable with an encoded effect, used outside combat. A Potion of Healing of any
   potency heals by its dice (rolled and journaled, returned as `roll`) and one unit is consumed; an item without an
@@ -824,7 +860,15 @@ effects, restores only what the rules allow and records the result. On interrupt
 automatic effects to that instant, creates a `REST_INTERRUPT` pending transaction and reports whether the attempted rest
 qualifies for any recovery. It MUST NOT grant completion-only recovery or resolve a decision implicitly.
 
-A completed Long Rest clears each resting character's temporary HP. A Short Rest preserves temporary HP.
+Either rest requires at least 1 HP (SRD 5.2.1 "Short Rest" / "Long Rest"): a named 0-HP character is refused with
+`OPERATION_NOT_ALLOWED`; in a party-wide rest that character's entry is `{character, name, skipped: <reason>, hp}` and
+nothing changes for them. A Short Rest heals `max(1, roll + CON)` per Hit Point Die spent (`hit_dice`
+`{character: n}`; `rolls`, `hit_dice_spent`, `hit_dice_left`), recharges `SHORT_REST` resources, preserves temporary
+HP and ends effects with `until: SHORT_REST` (`effects_ended`), a knock-out's Unconscious among them. A completed Long
+Rest regains all lost HP and all spent Hit Point Dice (`hit_dice {current, max}`; the pool is `recharge: LONG_REST`),
+clears temporary HP, removes one Exhaustion level (`exhaustion_removed`, `exhaustion`) and ends both `LONG_REST` and
+`SHORT_REST` effects. A Long Rest within 16 hours of the previous one's end is refused (or skipped in a party-wide
+rest); the end is stored in `character.last_long_rest_seq` (migration V010).
 
 ### 13.5 `award_xp`
 
@@ -902,8 +946,33 @@ checks preparation and slots, spends the slot, rolls attacks, saves and damage, 
 returns rules text for anything unstructured. `options` carries spell-specific choices: `ritual: true`, `damage_type`
 (Chromatic Orb), `against` (a buff aimed at one creature), `condition` (which condition a cure removes).
 
+`ritual: true` casts any prepared (or known / always prepared) spell with the Ritual tag without a slot, ten minutes
+longer; no class feature is needed (SRD 5.2.1 "Rituals"; `RULES_ENGINE.md` §8). A caster wearing body armor without
+training cannot cast at all: `cast_spell` and the encounter `CAST` action refuse with `OPERATION_NOT_ALLOWED` (SRD
+5.2.1 "Armor Training").
+
+Inside an encounter, on the caster's own turn, only one spell that expends a spell slot may be cast (SRD 5.2.1 "One
+Spell with a Spell Slot per Turn"): a second is refused with `OPERATION_NOT_ALLOWED` before anything is spent;
+cantrips, rituals and feat free casts are exempt, reactions on other creatures' turns are unaffected, and Shield cast
+as a reaction on the caster's own turn counts. Quickened Spell is refused after a level 1+ spell that turn and allows
+no further level 1+ spell after it (`RULES_ENGINE.md` §5).
+
 Targets making simultaneous saving throws share one damage roll, including any Empowered rerolls. Each target's
 save and defenses still determine its own damage. Separate spell attacks and Magic Missile darts roll independently.
+Spell attack rolls use the same condition table as weapon attacks (`RULES_ENGINE.md` §3) and report `advantage` and
+`advantage_reasons`; a non-Touch spell attack has Disadvantage with a hostile, seeing, non-Incapacitated enemy in the
+caster's zone. A spell that makes a creature Unconscious, Stunned, Paralyzed, Petrified or Incapacitated breaks its
+Concentration; the Concentration save DC on damage is `max(10, min(30, damage / 2))`.
+
+Magic Missile against a creature in an encounter that can cast Shield opens a `SHIELD_SPELL` pending choice (context
+`magic_missile: true`, `spell`, `attacker`, `target`, `darts[]`) before damage; the darts are rolled at cast time and
+applied only on `DECLINE` (the resolve result lists `darts[]`), while `CAST_SHIELD` yields `shield`, `damage: 0` and
+`negated`. A target whose Shield is already up is negated automatically (`negated`, damage 0) and an NPC under the
+`AUTO` reaction policy casts it outright. Target entries carry `rolled` and `pending: "SHIELD_SPELL"` or `negated`;
+the cast result has `pending` and `next_step`. Sleep repeats its save once at the end of the target's next turn, a
+second failure escalates to Unconscious with no further repeat, and the effect ends when the target takes damage
+(`ended_on_damage` on the damage result). Heal restores 70 HP, +10 per slot level above 6, and ends Blinded, Deafened
+and Poisoned.
 
 A sorcerer adds `options.metamagic`, one name or a list (`["Empowered Spell", "Quickened Spell"]`), with the extras an
 option needs: `heightened_target` (default first target), `careful` (creatures that succeed automatically),
@@ -913,8 +982,13 @@ be known (`spellcasting.metamagic.known`), applicable and paid in sorcery points
 roll is rerolled.
 
 Empowered uses one Charisma-based reroll allowance (minimum one die) across the casting's damage rolls. The engine
-rerolls the lowest dice in each roll as it resolves, carrying any unused allowance to later damage parts, darts or
-attacks. Each die is rerolled at most once, and the option costs one sorcery point for the casting.
+rerolls the lowest dice in each roll as it resolves, only dice below their maximum, carrying any unused allowance to
+later damage parts, darts or attacks. Each die is rerolled at most once; the sorcery point is charged when the first
+die is rerolled, so a casting that rerolls nothing (a missed attack spell, every die at its maximum) spends no point
+and reports `points_spent` only when a die was rerolled. Extended gives the caster Advantage on Concentration saves
+for that spell (`extended_spell` on the concentration effect; the save's `roll.expression` is `2d20kh1+N`).
+Heightened's Disadvantage carries to the spell's repeat saves (`repeat_save.disadvantage`; `repeat_saves` entries
+show `2d20kl1`). The sheet reports `options_known_limit`: two at level 2, four at 10, six at 17.
 
 `options.weapon` (a name or `inventory:N`) names the carried weapon a weapon-enchanting spell binds to (Magic Weapon,
 Shillelagh; default the wielder's equipped weapon): its bonus, die and damage ride only on attacks with that weapon and
@@ -944,6 +1018,11 @@ armor, one shield, two hands, two rings, and one of each worn slot (`CLOAK`, `BO
 `WRISTS`, `EYES`); a magic item without a slot (a Bag of Holding) is carried, not worn (`NOT_EQUIPPABLE`). An equipped
 item that requires attunement is attuned; a fourth is `ATTUNEMENT_LIMIT` (SRD 5.2.1 "Attunement"). A magic item's +N
 and modifiers apply only while equipped.
+
+Armor training is checked, not enforced, at equip time (SRD 5.2.1 "Armor Training"): the result `warnings` say when
+a shield gives no Armor Class benefit (no Shields training), when body armor the character lacks training with gives
+Disadvantage on Strength and Dexterity D20 Tests and blocks spellcasting, and when heavy armor's Strength requirement
+is unmet and Speed falls by 10 feet; the sheet shows the consequences (§13.1).
 
 ### 14.3 `trade`
 
@@ -1065,6 +1144,15 @@ first actionable turn. Positioning is zone-level by default (near/far, cover, ma
 `tactical_grid` capability an encounter MAY carry x,y positions used for movement and range validation; the grid schema
 is deferred.
 
+Initiative is a Dexterity check (SRD 5.2.1 "Initiative"). A group of identical creatures on the same side (the same
+stat block) gets one roll applied to each member; their `initiative_rolls` entries carry `shared_roll`. Each entry
+carries `advantage`, `advantage_reasons`, `surprised` and `shared_roll`: a surprised side, an Incapacitated combatant
+and a character in untrained armor roll with Disadvantage, an Invisible one with Advantage. The engine breaks no ties:
+no Dexterity comparison, no hidden roll. Tied combatants keep a provisional order (the party's side first, then roster
+order) and the result carries `ties: [{initiative, participants: [{participant, character, name, side}], decided_by:
+"GM" | "PLAYERS"}]` with a `ties_note`, because the SRD leaves ties to the GM (monsters, or a monster and a character)
+and to the players (characters). Call `perform_encounter_action` in the agreed order.
+
 ### 15.2 `get_encounter_state`
 
 Round, turn, participants, sides, visible conditions, positions where a spatial model is active, available actions or
@@ -1075,8 +1163,14 @@ encounter reference to revisit an offer; omitting `encounter` still selects a ru
 
 ### 15.3 `perform_encounter_action`
 
-Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `DISENGAGE`, `DODGE`, `HELP`, `HIDE`, `READY`,
-`USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`, `END_TURN`.
+Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `STAND`, `DISENGAGE`, `DODGE`, `HELP`,
+`HIDE`, `READY`, `USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`, `END_TURN`.
+
+`STAND` is a Prone creature righting itself (SRD 5.2.1 "Prone"): movement, not an action, so the turn stays open. It
+costs half the creature's Speed (rounded down), reported as `movement_cost` beside `speed` for the GM to hold against
+the turn's movement, since zones carry no movement budget. It is refused while the creature is not Prone or its Speed
+is 0 (Grappled, Restrained, Paralyzed, Unconscious, Petrified, or Exhaustion). `MOVE` and `DASH` while Prone are
+crawling (each foot costs 1 extra foot) and do not end the condition; the result says so in `crawling`.
 
 Returns the validated interpretation, rolls and modifiers, resource expenditure, damage, healing, conditions, movement
 and other consequences, defeated/dying changes, triggered reactions or pending choices, the next turn or required
@@ -1107,13 +1201,50 @@ even with `end_turn: true`. Take the extra attack or use `END_TURN` to skip it. 
 `light_extra_attack: true` and `action_cost: BONUS_ACTION`; it cannot be repeated that turn. Encounter state reports
 `bonus_action_available` and any eligible Light weapons for the current participant. Bonus-action spells, Quickened
 Spell and Font of Magic slot creation share this allowance. Converting a slot to sorcery points takes no action.
+
+While the turn stays open (`end_turn: false`) and nothing is pending, the result carries `turn_economy`: `action`,
+`bonus_action` and `reaction` as `AVAILABLE` or `SPENT`, `movement` as `AVAILABLE`, `HALF_SPENT` (after `STAND`) or
+`USED` (after `MOVE` or `DASH`; zones carry no distance), and `attacks_remaining` for a Multiattack. The Action is
+recorded by `ATTACK`, `CAST` (unless the spell took the Bonus Action), `DODGE`, `DASH`, `DISENGAGE`, `HELP`, `HIDE`,
+`USE_ITEM` (unless a potion) and `OTHER_RULES_ACTION`; a second Action in a turn is reported, never refused. While the
+Action is unspent, `next_step` says so. These are facts for the GM, not prompts for the player: the GM asks about a
+leftover only when the declaration was incomplete, it matters in the scene and the player may not know the rule;
+otherwise the turn ends quietly. Encounter state reports `action_available` beside `bonus_action_available` for the
+current participant.
 Nick mastery remains GM-adjudicated.
 
 Opportunity Attacks select a melee stat-block action or a carried melee weapon, falling back to an Unarmed Strike.
 An explicit `weapon` choice must also be melee; a ranged attack cannot be used for this reaction.
 
 `USE_ITEM {item, target}` uses a carried consumable: a Potion of Healing of any potency heals by its dice; an item without an
-encoded effect is consumed and left to the GM.
+encoded effect is consumed and left to the GM. An item of type `POTION` spends the turn's Bonus Action (SRD 5.2.1
+"Potions": drinking requires a Bonus Action), the same one the Light extra attack and bonus-action spells use: the
+result reports `action_cost: "BONUS_ACTION"`, and it is refused with `OPERATION_NOT_ALLOWED` once the Bonus Action
+is spent.
+
+Attack results carry `advantage` (`ADVANTAGE`, `DISADVANTAGE` or `NONE`) and `advantage_reasons` from one condition
+table shared by weapon and spell attacks (`RULES_ENGINE.md` §3): the attacker's Blinded, Restrained, Prone, Poisoned,
+Grappled (against anyone but the recorded grappler) and Frightened (source of fear active in the encounter) give
+Disadvantage, Invisible gives Advantage; the target's Blinded, Restrained, Stunned, Petrified, Paralyzed and
+Unconscious grant Advantage (the last two make a hit from within 5 feet critical), Prone grants Advantage within 5 feet
+and imposes Disadvantage beyond, Invisible imposes Disadvantage, Dodge imposes Disadvantage while the dodger is not
+Incapacitated and has Speed above 0. A ranged weapon attack has Disadvantage with a hostile, living, seeing (not
+Blinded), non-Incapacitated participant in the attacker's zone unless the attacker is Invisible. Attack rolls add the
+proficiency bonus only with a weapon the character is proficient with (`warnings` otherwise; unarmed strikes always);
+body armor worn without training gives the roll Disadvantage.
+
+`ATTACK {nonlethal: true}` with a melee attack that would drop the target to 0 HP knocks it out instead (SRD 5.2.1
+"Knocking Out a Creature"): the target is at 1 HP, `ALIVE`, has no death-save record and gains `UNCONSCIOUS` with
+duration `{kind: UNTIL, until: SHORT_REST, expires_seq: now + 60 minutes, label}`, ending when it completes a Short
+Rest (one hour on the clock), regains any HP, or receives first aid (DC 10 Wisdom (Medicine); GM `REMOVE_CONDITION`).
+The result reports `knocked_out: true`; the participant is `DEFEATED` for the rest of the encounter and cannot be
+attacked (`RULES_ENGINE.md` §6).
+
+A hit on a creature that can cast Shield opens a `SHIELD_SPELL` pending choice on every hit by an attack roll,
+Opportunity Attacks included (inside the `pending_choices` of a `MOVE` result), natural 20s and hits beyond AC + 5
+too, since the +5 lasts until the start of the caster's next turn; the prompt says whether casting turns this hit
+into a miss. Under the `AUTO` NPC reaction policy an NPC casts it only when it does. Magic Missile's Shield offer is
+described in §13.9.
 
 ### 15.4 `resolve_pending_choice`
 
@@ -1125,6 +1256,12 @@ Validates the outcome, commits completion, distributes mechanically defined rewa
 configured, returns level-up eligibility and Director-trigger recommendations. Cannot end while mandatory pending
 reactions or choices remain. A major encounter (an XP pool of 200 or more, or a player character's death) also returns
 `treasure` (§14.4).
+
+The clock advances six seconds per round, rounded up to whole minutes. Effects with a duration in rounds do not end
+with the fight: the rounds each has left after the final round become game minutes, `ceil(remaining × 6 s / 60)` from
+the post-fight clock, stored as `{kind: MINUTES, expires_seq, converted_from_rounds: n, label}`; effects already due
+end at once, and the result reports `round_effects_converted_to_minutes`. Start-of-turn durations (`until:
+START_OF_TURN`) end with the encounter because that turn never comes (`RULES_ENGINE.md` §6).
 
 When a shooter can search the battlefield, `ammunition_recovery` offers a one-minute search (§15.6). The offer does
 not restore anything, spend time, create a pending transaction, or block exploration. The GM offers the search to
@@ -1405,6 +1542,9 @@ The only general exceptional mutation. Kinds beyond character-level edits:
 - `SET_CAMPAIGN_RULE {rule, value}`: retunes `hp_progression`, `xp_policy`, `companion_level_up`, `progression` or
   `gm_override_policy` on a committed campaign; takes no target. Everything else in the setup is fixed at commit.
 - `SET_METAMAGIC {options: [names]}`: replaces a sorcerer's known options, at most the number the class level allows.
+- `SET_ABILITY_SCORE {ability, score}`: a Constitution change moves the hit point maximum by the modifier's difference
+  per class level; a maximum that reaches 0 kills by this route too (SRD 5.2.1 "Hit Point Maximum"), reported as
+  `after.life_state: DEAD`. There is no floor of 1.
 
 Requires: policy permitting the override, a typed kind, exact target and effect, a human-readable reason, expected
 revisions, `operation_id`. The response labels the result as an override and writes an immutable audit record

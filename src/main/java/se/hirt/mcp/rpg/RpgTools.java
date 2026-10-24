@@ -668,7 +668,8 @@ public class RpgTools {
 	@Tool(name = "start_encounter", description = "MUTATING. Creates and starts an encounter: sides map names to character references "
 			+ "({\"party\": [\"character:1\"], \"raiders\": [\"character:5\", \"character:6\"]}), optional stances between sides "
 			+ "({\"party|raiders\": \"HOSTILE\"}; default HOSTILE), optional zones per character ({\"character:5\": \"far\"}). "
-			+ "Rolls initiative (d20 + DEX), creates the retry checkpoint under ENCOUNTER_RETRY, and returns the first turn. All participants must be materialized characters. "
+			+ "Rolls initiative (d20 + DEX; one roll per group of identical creatures on a side; Incapacitated rolls with Disadvantage, Invisible with Advantage), creates the retry checkpoint under ENCOUNTER_RETRY, and returns the first turn. "
+			+ "Ties are not broken by the engine: `ties` lists them with who decides (GM for monsters and mixed ties, players among characters); the provisional order puts the party's side first. All participants must be materialized characters. "
 			+ "options.npc_reactions: AUTO (default; the engine resolves NPC opportunity attacks and Shield) or ASK (every reaction becomes a pending choice); options.surprised: [side names] roll initiative with Disadvantage (SRD Surprise). Allies never take opportunity attacks on each other.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse startEncounter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
@@ -712,12 +713,17 @@ public class RpgTools {
 
 	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: "
 			+ "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), "
-			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; knocks out at 0 HP instead of killing)}; CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
-			+ "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged); DISENGAGE; HELP; HIDE; "
-			+ "USE_ITEM {item, target} (a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
+			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; a creature that would drop to 0 HP is left at 1 HP, Unconscious until the end of a Short Rest or until it regains HP, no death saves)}; "
+			+ "weapon proficiency and armor training follow the class tables (no Proficiency Bonus with an unproficient weapon; untrained armor: Disadvantage on STR/DEX rolls, no spellcasting; untrained shield: no AC). CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
+			+ "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged; a Prone mover crawls); "
+			+ "STAND (a Prone creature rights itself for half its Speed: movement, not an action, so the turn stays open; refused at Speed 0); DISENGAGE; HELP; HIDE; "
+			+ "USE_ITEM {item, target} (drinking or administering a potion spends the Bonus Action, action_cost BONUS_ACTION; a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
 			+ "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters "
 			+ "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. "
-			+ "end_turn (default true) advances to the next participant unless Multiattack attacks or an extra Light attack remain; END_TURN skips them. Rolls death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "end_turn (default true) advances to the next participant unless Multiattack attacks or an extra Light attack remain; END_TURN skips them. "
+			+ "While the turn stays open the result's turn_economy lists what remains (action, bonus_action, reaction, movement) and next_step notes an unspent Action; "
+			+ "ask the player about a leftover only when their declaration was incomplete, it matters in the scene (an enemy in reach, somewhere to go) and they may not know the rule (standing up costs no action) - otherwise END_TURN quietly. "
+			+ "Rolls death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performEncounterAction(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Acting character reference (must be the current turn)")
@@ -766,7 +772,9 @@ public class RpgTools {
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
 			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
 			+ "'Start of turn' requires an active encounter and expires at the recipient's next turn or encounter end. "
-			+ "EXHAUSTION accumulates one level per ADD_CONDITION and ignores duration; REMOVE_CONDITION clears all levels, while Long Rest or Greater Restoration removes one. "
+			+ "ADD_CONDITION also takes source (a character ref): the grappler of a GRAPPLED creature or the source of a FRIGHTENED creature's fear, which the attack rules read; a creature immune to the condition (Petrified to Poisoned, a stat block's immunities) reports immune instead. "
+			+ "EXHAUSTION accumulates one level per ADD_CONDITION and ignores duration; REMOVE_CONDITION removes one level (like a Long Rest or Greater Restoration) unless {levels: N} says how many. "
+			+ "Round durations outlive the encounter: at its end the remaining rounds become game minutes (6 s per round, rounded up). A revived Unconscious creature remains Prone. "
 			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, Bonus Action) / CONVERT_SPELL_SLOT {slot_level} (slot to points, no action); "
 			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
 			+ "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. "
@@ -1065,7 +1073,8 @@ public class RpgTools {
 	// ── Rest and overrides ─────────────────────────────────────────────
 
 	@Tool(name = "perform_rest", description = "MUTATING. SHORT rest (1 hour; characters may spend Hit Point Dice: hit_dice {\"character:1\": 2} — rolled by the server) or LONG rest "
-			+ "(8 hours; HP to maximum, temporary HP cleared, half the Hit Point Dice regained, exhaustion −1, other resources recharged). Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "(8 hours; HP to maximum, temporary HP cleared, all spent Hit Point Dice regained, exhaustion −1, other resources recharged). A character needs at least 1 HP to start either rest, "
+			+ "and a LONG rest within 16 hours of finishing the previous one is refused (named characters) or reported skipped (party-wide rest). Each spent Hit Point Die on a SHORT rest regains at least 1 HP. Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performRest(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "SHORT or LONG")
@@ -1117,7 +1126,7 @@ public class RpgTools {
 			+ "saving throws vs your DC (half/no damage, conditions with durations), healing, Magic Missile, temporary HP, buffs (Mage Armor, Bless, Shield of Faith…), cures, "
 			+ "resurrection. Concentration is enforced (a new concentration spell ends the previous one; damage forces a CON save). Utility spells return their rules text for you to adjudicate. "
 			+ "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb (and Force for Shillelagh), {condition} for cures, "
-			+ "{ritual: true} to cast a spell with the Ritual tag as a ritual (a class with Ritual Casting; ten minutes longer, no slot spent), "
+			+ "{ritual: true} to cast a prepared spell with the Ritual tag as a ritual (any caster; ten minutes longer, no slot spent), "
 			+ "{weapon: 'Longsword' | 'inventory:N'} for a spell that enchants one carried weapon (Magic Weapon, Shillelagh; default the wielder's equipped weapon): "
 			+ "its bonus, die and damage ride only on attacks with that weapon, stack with the weapon's own enchantment, and the slot raises Magic Weapon to +2 (level 3-5) or +3 (6+). "
 			+ "Flame Blade conjures a weapon: attack with it by name.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))

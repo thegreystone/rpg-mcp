@@ -53,6 +53,22 @@ public final class TurnEconomy {
 		return turn != null && !turnKey(turn.encounter()).equals(flags(turn.participant()).get("bonus_action_turn"));
 	}
 
+	/**
+	 * The Action was taken on this turn (SRD 5.2.1 "Your Turn"). Recorded, never refused: a second
+	 * Action in a turn is the GM's call (Action Surge, Haste).
+	 */
+	public static final String ACTION = "action_turn";
+	/** A MOVE or DASH was made on this turn; zones carry no distance, so only the fact is known. */
+	public static final String MOVED = "moved_turn";
+	/** The actor stood up from Prone on this turn, for half its Speed (SRD 5.2.1 "Prone"). */
+	public static final String STOOD_UP = "stood_up_turn";
+
+	/** Whether this actor can still take the Action on the current turn. */
+	public static boolean actionAvailable(Tx tx, Row encounter, long actorId) {
+		Turn turn = currentTurn(tx, encounter, actorId);
+		return turn != null && !turnKey(turn.encounter()).equals(flags(turn.participant()).get(ACTION));
+	}
+
 	/** Spends the current turn's Bonus Action in the same journaled mutation as its effect. */
 	public static void spendBonusAction(Tx tx, Row encounter, long actorId, String source) {
 		Turn turn = currentTurn(tx, encounter, actorId);
@@ -71,6 +87,39 @@ public final class TurnEconomy {
 		tx.update("encounter_participant", turn.participant().id(), Map.of("once_per_turn_json", Json.write(flags)));
 	}
 
+	/**
+	 * A spell slot was expended on this turn (SRD 5.2.1 "One Spell with a Spell Slot per Turn").
+	 */
+	public static final String SLOT_SPENT = "slot_spent_turn";
+	/** A level 1+ spell was cast on this turn (Quickened Spell's first clause). */
+	public static final String LEVELED_SPELL = "leveled_spell_turn";
+	/** A spell was Quickened on this turn (Quickened Spell's second clause). */
+	public static final String QUICKENED = "quickened_turn";
+
+	/**
+	 * Whether the given once-per-turn marker is already set for the actor's current turn. False
+	 * outside the actor's own turn (a reaction on another creature's turn belongs to that turn).
+	 * Pending choices (WAITING_CHOICE) still count as the same turn.
+	 */
+	public static boolean markedThisTurn(Tx tx, Row encounter, long actorId, String marker) {
+		Turn turn = turnOf(tx, encounter, actorId, true);
+		return turn != null && turnKey(turn.encounter()).equals(flags(turn.participant()).get(marker));
+	}
+
+	/**
+	 * Sets a once-per-turn marker for the actor's current turn; a no-op outside the actor's own
+	 * turn.
+	 */
+	public static void markThisTurn(Tx tx, Row encounter, long actorId, String marker) {
+		Turn turn = turnOf(tx, encounter, actorId, true);
+		if (turn == null) {
+			return;
+		}
+		Map<String, Object> flags = flags(turn.participant());
+		flags.put(marker, turnKey(turn.encounter()));
+		tx.update("encounter_participant", turn.participant().id(), Map.of("once_per_turn_json", Json.write(flags)));
+	}
+
 	private static Map<String, Object> flags(Row participant) {
 		return participant.isNull("once_per_turn_json") ? new LinkedHashMap<>()
 				: new LinkedHashMap<>(participant.map("once_per_turn_json"));
@@ -80,8 +129,13 @@ public final class TurnEconomy {
 	}
 
 	private static Turn currentTurn(Tx tx, Row encounter, long actorId) {
+		return turnOf(tx, encounter, actorId, false);
+	}
+
+	private static Turn turnOf(Tx tx, Row encounter, long actorId, boolean allowWaitingChoice) {
 		Row live = tx.find("encounter", encounter.id()).orElse(null);
-		if (live == null || !"RUNNING".equals(live.str("status")) || live.lng("turn_participant_id") == null) {
+		if (live == null || live.lng("turn_participant_id") == null || !("RUNNING".equals(live.str("status"))
+				|| allowWaitingChoice && "WAITING_CHOICE".equals(live.str("status")))) {
 			return null;
 		}
 		Row participant = tx.queryOne(

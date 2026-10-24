@@ -196,9 +196,13 @@ class EngineFixesTest {
 		}
 	}
 
+	/**
+	 * SRD 5.2.1 "Combat": "A round represents about 6 seconds in the game world." A 10-round
+	 * condition is a 1-minute condition; the encounter ending does not cure it, the clock does.
+	 */
 	@Test
-	void roundScopedConditionsEndWithTheEncounter() throws Exception {
-		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("rounds-end-with-encounter"))) {
+	void roundScopedConditionsOutliveTheEncounterAsMinutes() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("rounds-outlive-encounter"))) {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = "character:1";
@@ -213,12 +217,22 @@ class EngineFixesTest {
 							.findFirst().orElseThrow().get("duration")).get("kind"),
 					"inside an encounter the duration is counted in rounds");
 
-			// The fight ends in round 1, long before round 11: the condition must not outlive it.
-			engine.encounters().end(op(), campaign, encounter, "PARTY_VICTORY", "the wolf flees");
+			// The fight ends in round 1: the ten rounds left become one minute on the clock.
+			Map<String, Object> ended = engine.encounters().end(op(), campaign, encounter, "PARTY_VICTORY",
+					"the wolf flees");
+			assertEquals(1, ended.get("round_effects_converted_to_minutes"));
 			List<Map<String, Object>> left = list(
 					engine.characters().characterSheet(campaign, pc, "PLAY").get("conditions"));
-			assertTrue(left.stream().noneMatch(c -> "BLINDED".equals(c.get("condition"))),
-					"round-scoped conditions die with the encounter: " + left);
+			Map<String, Object> duration = m(left.stream().filter(c -> "BLINDED".equals(c.get("condition"))).findFirst()
+					.orElseThrow(() -> new AssertionError("the condition outlives the fight: " + left))
+					.get("duration"));
+			assertEquals("MINUTES", duration.get("kind"), "rounds become game time at the encounter's end");
+			assertEquals(10, duration.get("converted_from_rounds"));
+			engine.sessions().advanceTime(op(), campaign, 1, "a minute later");
+			List<Map<String, Object>> later = list(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("conditions"));
+			assertTrue(later.stream().noneMatch(c -> "BLINDED".equals(c.get("condition"))),
+					"ten rounds are a minute: " + later);
 		}
 	}
 
@@ -233,7 +247,7 @@ class EngineFixesTest {
 					.materialize(op(), campaign, "Bandit", "Hob", null, null, null, null, false).get("character");
 			String enemy = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
-			dice.queue(20, 50, 15, 50, 10, 50);
+			dice.queue(20, 15, 10);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc, ally), "raiders", List.of(enemy)), null, map(enemy, "far"), null, null,
 					null, null);
@@ -261,7 +275,7 @@ class EngineFixesTest {
 					.materialize(op(), campaign, "Bandit", "First", null, null, null, null, false).get("character");
 			String second = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Second", null, null, null, null, false).get("character");
-			dice.queue(5, 50, 20, 50, 12, 50);
+			dice.queue(5, 20);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "raiders", List.of(first, second)), null, null, null, null, null, null);
 			String enc = (String) started.get("encounter");
@@ -315,7 +329,7 @@ class EngineFixesTest {
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
 			engine.runtime().applyRuntimeChange(op(), campaign, enemy,
 					map("kind", "DAMAGE", "amount", 10, "damage_type", "slashing", "reason", "worn down"));
-			dice.queue(20, 50, 15, 50, 10, 50);
+			dice.queue(20, 15, 10);
 			String enc = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc, ally), "raiders", List.of(enemy)), null, null, null, null, null, null)
 					.get("encounter");
@@ -354,8 +368,8 @@ class EngineFixesTest {
 							map("party", List.of(pc), "raiders", List.of(bandit)), null, null, null, null, null,
 							map("surprised", List.of("goblins"))));
 			assertEquals(ErrorCode.INVALID_ARGUMENT, unknown.code());
-			// PC: d20 then the d100 tiebreak; the surprised bandit: two d20 (keep the lower) then its tiebreak.
-			dice.queue(10, 50, 18, 3, 50);
+			// PC: one d20; the surprised bandit: two d20 (keep the lower). No hidden tie-break die follows.
+			dice.queue(10, 18, 3);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "raiders", List.of(bandit)), null, null, null, null, null,
 					map("surprised", List.of("raiders")));

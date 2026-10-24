@@ -66,24 +66,18 @@ public final class EncounterService {
 	public static final Set<String> STANCES = Set.of("ALLIED", "HOSTILE", "NEUTRAL", "TEMPORARILY_COOPERATIVE",
 			"UNKNOWN");
 	public static final Set<String> ACTIONS = Set.of("ATTACK", "CAST", "DODGE", "DASH", "DISENGAGE", "HELP", "HIDE",
-			"MOVE", "USE_ITEM", "INTERACT", "OTHER_RULES_ACTION", "END_TURN");
+			"MOVE", "STAND", "USE_ITEM", "INTERACT", "OTHER_RULES_ACTION", "END_TURN");
 	public static final Set<String> OUTCOMES = Set.of("PARTY_VICTORY", "PARTY_DEFEAT", "PARTY_FLED", "ENEMIES_FLED",
 			"NEGOTIATED", "OTHER");
 	private static final String DODGING_REF = "srd5e:effect/dodging";
 	private static final String DISENGAGING_REF = "srd5e:effect/disengaging";
 	private static final String SHIELD_SPELL_REF = "srd5e:effect/shield-spell";
-	private static final String SHIELD_SPELL = "srd5e:spell/shield";
-	/**
-	 * Conditions that deny actions and reactions (SRD 5.2.1 Incapacitated and the conditions that
-	 * include it). The turn itself remains: an end-of-turn save may shake the condition off.
-	 */
-	private static final List<String> INCAPACITATING_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
-			"UNCONSCIOUS", "PETRIFIED");
-	/** Conditions that set Speed to 0 (SRD 5.2.1), so neither moving nor dashing goes anywhere. */
-	private static final List<String> SPEED_ZERO_CONDITIONS = List.of("PARALYZED", "UNCONSCIOUS", "PETRIFIED",
-			"GRAPPLED", "RESTRAINED");
 	public static final Set<String> NPC_REACTION_POLICIES = Set.of("AUTO", "ASK");
-	private static final int SECONDS_PER_ROUND = 6;
+	/**
+	 * The kinds that take the turn's Action unless the result says the Bonus Action paid instead.
+	 */
+	private static final Set<String> ACTION_KINDS = Set.of("ATTACK", "CAST", "DODGE", "DASH", "DISENGAGE", "HELP",
+			"HIDE", "USE_ITEM", "OTHER_RULES_ACTION");
 
 	private final Database db;
 	private final RulesData rules;
@@ -224,7 +218,7 @@ public final class EncounterService {
 			long xpPool = 0;
 			for (Map<String, Object> p : participants) {
 				Row hostileC = (Row) p.get("character");
-				if (hostile(stanceMap, partySide, String.valueOf(p.get("side")))
+				if (Combat.hostile(stanceMap, partySide, String.valueOf(p.get("side")))
 						&& !hostileC.isNull("origin_content_ref")) {
 					xpPool += rules.find(hostileC.str("origin_content_ref")).map(d -> d.payload().get("xp_value"))
 							.map(v -> ((Number) v).longValue()).orElse(0L);
@@ -245,27 +239,71 @@ public final class EncounterService {
 			cols.put("revision", 0);
 			long encounterId = tx.insert("encounter", cols);
 
-			// Initiative: d20 + DEX modifier; ties broken by DEX score, then by a die (SRD 5.2.1 "Initiative").
+			// Initiative: a Dexterity check, d20 + DEX modifier (SRD 5.2.1 "Initiative"). "For a group of identical
+			// creatures, the GM makes a single roll, so each member of the group has the same Initiative." Ties are
+			// not broken by the engine: "the GM decides the order among tied monsters, and the players decide the
+			// order among tied characters"; the provisional order puts the party's side first, then roster order,
+			// and the result lists the ties for the table to settle.
 			var order = new ArrayList<Map<String, Object>>();
+			var groupRolls = new LinkedHashMap<String, Roll>();
 			for (Map<String, Object> p : participants) {
 				Row c = (Row) p.get("character");
+				String side = String.valueOf(p.get("side"));
 				int dexMod = Rules.modifier(c.intOr("dex_score", 10));
 				// Alert (Origin feat): the proficiency bonus is added to initiative (SRD 5.2.1 "Feats").
 				int initiativeBonus = dexMod + (se.hirt.mcp.rpg.character.Origins.initiativeProficient(tx, rules, c)
 						? RuntimeService.proficiencyBonus(tx, rules, c) : 0);
 				initiativeBonus -= Exhaustion.penalty(tx, c.id());
+				var reasons = new ArrayList<String>();
+				boolean advantage = false;
+				boolean disadvantage = false;
 				// A surprised side rolls initiative with Disadvantage (SRD 5.2.1 "Surprise").
-				boolean isSurprised = surprised.contains(String.valueOf(p.get("side")));
-				Roll roll = roller.roll((isSurprised ? "2d20kl1" : "1d20")
-						+ (initiativeBonus >= 0 ? "+" + initiativeBonus : Integer.toString(initiativeBonus)));
-				CharacterService.recordRoll(tx, campaignId, "initiative " + Ref.of(Ref.CHARACTER, c.id()), roll);
-				int tiebreak = c.intOr("dex_score", 10) * 100 + roller.roll("1d100").total();
+				boolean isSurprised = surprised.contains(side);
+				if (isSurprised) {
+					disadvantage = true;
+					reasons.add("surprised");
+				}
+				// "If you're Incapacitated when you roll Initiative, you have Disadvantage on the roll" and "If you're
+				// Invisible when you roll Initiative, you have Advantage on the roll" (SRD 5.2.1 Conditions).
+				Optional<String> incapacitated = conditionAmong(tx, c, Combat.INCAPACITATING_CONDITIONS);
+				if (incapacitated.isPresent()) {
+					disadvantage = true;
+					reasons.add(incapacitated.get().toLowerCase() + " (Incapacitated)");
+				}
+				if (conditionAmong(tx, c, List.of("INVISIBLE")).isPresent()) {
+					advantage = true;
+					reasons.add("invisible");
+				}
+				// Untrained armor: Disadvantage on any D20 Test involving Dexterity (SRD 5.2.1 "Armor Training").
+				Optional<String> untrainedArmor = se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, c);
+				if (untrainedArmor.isPresent()) {
+					disadvantage = true;
+					reasons.add("wearing " + untrainedArmor.get() + " without armor training");
+				}
+				String dice = advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
+				String expression = dice
+						+ (initiativeBonus >= 0 ? "+" + initiativeBonus : Integer.toString(initiativeBonus));
+				// Identical creatures (the same stat block on the same side, rolling the same way) share one roll.
+				String group = RuntimeService.usesStatBlock(tx, c)
+						? side + "|" + c.str("origin_content_ref") + "|" + expression : null;
+				boolean sharedRoll = group != null && groupRolls.containsKey(group);
+				Roll roll;
+				if (sharedRoll) {
+					roll = groupRolls.get(group);
+				} else {
+					roll = roller.roll(expression);
+					CharacterService.recordRoll(tx, campaignId, "initiative " + Ref.of(Ref.CHARACTER, c.id()), roll);
+					if (group != null) {
+						groupRolls.put(group, roll);
+					}
+				}
 				var pc = new LinkedHashMap<String, Object>();
 				pc.put("encounter_id", encounterId);
 				pc.put("character_id", c.id());
-				pc.put("side", p.get("side"));
+				pc.put("side", side);
 				pc.put("initiative", roll.total());
-				pc.put("initiative_tiebreak", tiebreak);
+				// No hidden tie-break: a stable provisional order only (the party's side first, then roster order).
+				pc.put("initiative_tiebreak", side.equals(partySide) ? 1 : 0);
 				pc.put("position_zone", zones == null || zones.get(Ref.of(Ref.CHARACTER, c.id())) == null ? "near"
 						: zones.get(Ref.of(Ref.CHARACTER, c.id())).toString());
 				pc.put("status", "ACTIVE");
@@ -274,15 +312,23 @@ public final class EncounterService {
 				var o = new LinkedHashMap<String, Object>();
 				o.put("participant", participantId);
 				o.put("initiative", roll.total());
-				o.put("tiebreak", tiebreak);
 				o.put("name", c.str("name"));
 				o.put("roll", roll.toMap());
+				o.put("advantage", advantage && !disadvantage ? "ADVANTAGE"
+						: disadvantage && !advantage ? "DISADVANTAGE" : "NONE");
+				if (!reasons.isEmpty()) {
+					o.put("advantage_reasons", reasons);
+				}
 				if (isSurprised) {
 					o.put("surprised", true);
+				}
+				if (sharedRoll) {
+					o.put("shared_roll", "one roll for a group of identical creatures (SRD 5.2.1 \"Initiative\")");
 				}
 				order.add(o);
 			}
 			List<Row> ordered = turnOrder(tx, encounterId);
+			List<Map<String, Object>> ties = initiativeTies(tx, ordered, partySide);
 			long first = ordered.get(0).id();
 			tx.update("encounter", encounterId, Map.of("turn_participant_id", first, "revision", 1));
 			log(tx, campaignId, encounterId, 1, null, "ENCOUNTER_STARTED",
@@ -301,9 +347,48 @@ public final class EncounterService {
 			Map<String, Object> state = state(tx, tx.get("encounter", encounterId), 10);
 			state.put("retry_checkpoint", retryCheckpoint);
 			state.put("initiative_rolls", order);
+			if (!ties.isEmpty()) {
+				state.put("ties", ties);
+				state.put("ties_note",
+						"Tied Initiative is not broken by the engine (SRD 5.2.1 \"Initiative\"): the GM decides the order among tied monsters and between a monster and a player character, the players among tied characters. The provisional order lists the party's side first; call perform_encounter_action in the agreed order.");
+			}
 			state.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return state;
 		});
+	}
+
+	/**
+	 * Groups of participants sharing an Initiative count, with who decides their order (SRD 5.2.1).
+	 */
+	private static List<Map<String, Object>> initiativeTies(Tx tx, List<Row> ordered, String partySide) {
+		var ties = new ArrayList<Map<String, Object>>();
+		var byInitiative = new LinkedHashMap<Long, List<Row>>();
+		for (Row p : ordered) {
+			byInitiative.computeIfAbsent(p.lng("initiative"), k -> new ArrayList<>()).add(p);
+		}
+		for (var e : byInitiative.entrySet()) {
+			if (e.getValue().size() < 2) {
+				continue;
+			}
+			var members = new ArrayList<Map<String, Object>>();
+			boolean allParty = true;
+			for (Row p : e.getValue()) {
+				Row c = tx.get("character", p.lng("character_id"));
+				var m = new LinkedHashMap<String, Object>();
+				m.put("participant", p.id());
+				m.put("character", Ref.of(Ref.CHARACTER, c.id()));
+				m.put("name", c.str("name"));
+				m.put("side", p.str("side"));
+				members.add(m);
+				allParty &= partySide.equals(p.str("side"));
+			}
+			var tie = new LinkedHashMap<String, Object>();
+			tie.put("initiative", e.getKey());
+			tie.put("participants", members);
+			tie.put("decided_by", allParty ? "PLAYERS" : "GM");
+			ties.add(tie);
+		}
+		return ties;
 	}
 
 	// ── get_encounter_state ────────────────────────────────────────────
@@ -378,6 +463,7 @@ public final class EncounterService {
 			}
 			pm.put("current_turn", turnId != null && turnId == p.id());
 			pm.put("reaction_available", reactionAvailable(tx, p, c));
+			pm.put("action_available", TurnEconomy.actionAvailable(tx, encounter, c.id()));
 			pm.put("bonus_action_available", TurnEconomy.bonusActionAvailable(tx, encounter, c.id()));
 			List<String> lightWeapons = lightExtraWeapons(tx, encounter, c);
 			if (!lightWeapons.isEmpty()) {
@@ -548,21 +634,22 @@ public final class EncounterService {
 			if (!"ACTIVE".equals(participant.str("status")) || !"ALIVE".equals(actor.str("life_state"))) {
 				throw RpgException.notAllowed(actor.str("name") + " cannot act (" + actor.str("life_state") + ").");
 			}
-			// Incapacitated denies every action but not movement; the speed-0 conditions deny that too. The turn
-			// stays open either way, so END_TURN always stands (and rolls any end-of-turn save).
-			if (!"END_TURN".equals(kind) && !"MOVE".equals(kind)) {
-				conditionAmong(tx, actor, INCAPACITATING_CONDITIONS).ifPresent(cond -> {
+			// Incapacitated denies every action but not movement (standing up included); the speed-0 conditions deny
+			// that too. The turn stays open either way, so END_TURN always stands (and rolls any end-of-turn save).
+			if (!"END_TURN".equals(kind) && !"MOVE".equals(kind) && !"STAND".equals(kind)) {
+				conditionAmong(tx, actor, Combat.INCAPACITATING_CONDITIONS).ifPresent(cond -> {
 					throw RpgException.notAllowed(actor.str("name") + " is " + cond
 							+ " and cannot take actions (SRD 5.2.1 \"Incapacitated\"); END_TURN passes the turn.");
 				});
 			}
-			if ("MOVE".equals(kind) || "DASH".equals(kind)) {
-				conditionAmong(tx, actor, SPEED_ZERO_CONDITIONS).ifPresent(cond -> {
+			if ("MOVE".equals(kind) || "DASH".equals(kind) || "STAND".equals(kind)) {
+				conditionAmong(tx, actor, Combat.SPEED_ZERO_CONDITIONS).ifPresent(cond -> {
 					throw RpgException.notAllowed(
 							actor.str("name") + " is " + cond + ": Speed 0, no movement (SRD 5.2.1 \"" + cond + "\").");
 				});
 				if (Exhaustion.speed(tx, rules, actor) == 0) {
-					throw RpgException.notAllowed(actor.str("name") + " has Speed 0 and cannot move or Dash.");
+					throw RpgException
+							.notAllowed(actor.str("name") + " has Speed 0 and cannot move, Dash or stand up.");
 				}
 			}
 			long round = encounter.lng("round");
@@ -613,9 +700,40 @@ public final class EncounterService {
 				log(tx, campaignId, encounter.id(), round, actor.id(), kind,
 						actor.str("name") + (kind.equals("DASH") ? " dashes" : " moves") + " to " + zone + ".", null);
 				result.put("zone", zone);
+				if (conditionAmong(tx, actor, List.of("PRONE")).isPresent()) {
+					// "Your only movement options are to crawl or to spend an amount of movement equal to half your
+					// Speed (round down) to right yourself" (SRD 5.2.1 "Prone"); crawling costs 1 extra foot per foot.
+					result.put("crawling", actor.str("name")
+							+ " is Prone and crawls: each foot of movement costs 1 extra foot; STAND ends the condition for half their Speed.");
+				}
 				if (from != null && !from.equals(zone)) {
 					result.putAll(opportunityAttacks(tx, campaignId, encounter, actor, participant, from, round));
 				}
+			}
+			case "STAND" -> {
+				// "Spend an amount of movement equal to half your Speed (round down) to right yourself and thereby end
+				// the condition. If your Speed is 0, you can't right yourself" (SRD 5.2.1 "Prone"). Zones carry no
+				// movement budget, so the cost is reported for the GM to hold against this turn's movement.
+				List<Row> prone = tx.query("SELECT * FROM active_effect WHERE character_id = ? AND condition_ref = ?",
+						actor.id(), RuntimeService.conditionRef("PRONE"));
+				if (prone.isEmpty()) {
+					throw RpgException.notAllowed(actor.str("name") + " is not Prone.");
+				}
+				for (Row e : prone) {
+					se.hirt.mcp.rpg.rules.Effects.end(tx, e);
+				}
+				int speed = Exhaustion.speed(tx, rules, actor);
+				int cost = speed / 2;
+				log(tx, campaignId, encounter.id(), round, actor.id(), "STAND",
+						actor.str("name") + " stands up, spending " + cost + " of " + speed + " feet of movement.",
+						null);
+				result.put("stood_up", true);
+				result.put("speed", speed);
+				result.put("movement_cost", cost);
+				result.put("note",
+						"Prone has ended. Standing up is movement, not an action: it spends half of "
+								+ actor.str("name") + "'s Speed (" + cost + " of " + speed
+								+ " ft), leaving the rest of this turn's movement (SRD 5.2.1 \"Prone\").");
 			}
 			case "HIDE" -> {
 				int dexMod = Rules.modifier(actor.intOr("dex_score", 10));
@@ -652,6 +770,16 @@ public final class EncounterService {
 			}
 			default -> throw RpgException.invalidArgument("Unhandled action " + kind);
 			}
+			// The turn's economy (SRD 5.2.1 "Your Turn"): the Action is recorded, never refused, so the GM can tell
+			// an incomplete declaration from a finished turn; movement is a fact without a distance.
+			if (ACTION_KINDS.contains(kind) && !lightExtra && !"BONUS_ACTION".equals(result.get("action_cost"))) {
+				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.ACTION);
+			}
+			if ("MOVE".equals(kind) || "DASH".equals(kind)) {
+				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.MOVED);
+			} else if ("STAND".equals(kind)) {
+				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.STOOD_UP);
+			}
 			// A stat block that says "makes two attacks" gets two attacks: the turn does not end under the
 			// actor while attacks remain (SRD 5.2.1 "Multiattack"). END_TURN always ends it.
 			int remaining = kind.equals("ATTACK") ? attacksRemaining(tx, encounter, actor, round, !lightExtra) : 0;
@@ -668,6 +796,16 @@ public final class EncounterService {
 			}
 			boolean advance = kind.equals("END_TURN") || (endTurn && remaining == 0 && lightWeapons.isEmpty());
 			List<Map<String, Object>> pending = pendingChoices(tx, encounter.id());
+			if (!advance && pending.isEmpty()) {
+				// Facts for the GM, not a prompt for the player: whether to ask about a leftover is a judgment of the
+				// declaration and the scene, which the tool description leaves to the GM.
+				Map<String, Object> economy = turnEconomy(tx, encounter, actor, participant, remaining);
+				result.put("turn_economy", economy);
+				if (!result.containsKey("next_step") && "AVAILABLE".equals(economy.get("action"))) {
+					result.put("next_step", actor.str("name")
+							+ "'s Action is still available this turn (ATTACK, CAST, DODGE, DASH, DISENGAGE, HELP, HIDE, USE_ITEM); END_TURN when the turn is done.");
+				}
+			}
 			if (!pending.isEmpty()) {
 				// I-33: the action is on hold until every choice is resolved; the turn advances afterwards if requested.
 				tx.update("encounter", encounter.id(), Map.of("status", "WAITING_CHOICE"));
@@ -692,6 +830,28 @@ public final class EncounterService {
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return result;
 		});
+	}
+
+	/**
+	 * What remains of the actor's turn while it stays open (SRD 5.2.1 "Your Turn"): the Action, the
+	 * Bonus Action, the Reaction and movement, which zones carry without a distance.
+	 */
+	private static Map<String, Object> turnEconomy(
+		Tx tx, Row encounter, Row actor, Row participant, int attacksRemaining) {
+		var economy = new LinkedHashMap<String, Object>();
+		economy.put("action",
+				TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.ACTION) ? "SPENT" : "AVAILABLE");
+		economy.put("bonus_action",
+				TurnEconomy.bonusActionAvailable(tx, encounter, actor.id()) ? "AVAILABLE" : "SPENT");
+		economy.put("reaction", tx.get("encounter_participant", participant.id()).intOr("reaction_used", 0) != 0
+				? "SPENT" : "AVAILABLE");
+		boolean moved = TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.MOVED);
+		boolean stood = TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.STOOD_UP);
+		economy.put("movement", moved ? "USED" : stood ? "HALF_SPENT" : "AVAILABLE");
+		if (attacksRemaining > 0) {
+			economy.put("attacks_remaining", attacksRemaining);
+		}
+		return economy;
 	}
 
 	/**
@@ -787,7 +947,7 @@ public final class EncounterService {
 					}
 					Row ally = tx.get("character", p.lng("character_id"));
 					if (!"ALIVE".equals(ally.str("life_state")) || RuntimeService.conditions(tx, ally.id()).stream()
-							.anyMatch(cond -> INCAPACITATING_CONDITIONS
+							.anyMatch(cond -> Combat.INCAPACITATING_CONDITIONS
 									.contains(String.valueOf(cond.get("condition")).toUpperCase()))) {
 						continue;
 					}
@@ -894,6 +1054,13 @@ public final class EncounterService {
 		if (!weaponEntry.bool("equipped")) {
 			warnings.add(item.name() + " was not equipped; treating the draw as part of the attack.");
 		}
+		// "If you have proficiency with a weapon, you add your Proficiency Bonus to attack rolls you make with it"
+		// (SRD 5.2.1 "Weapons"); without it, the ability modifier alone.
+		if (!se.hirt.mcp.rpg.rules.Training.proficientWithWeapon(tx, rules, actor, item.payload())) {
+			warnings.add(actor.str("name") + " is not proficient with the " + item.name()
+					+ ": no Proficiency Bonus on the attack roll (SRD 5.2.1 \"Weapons\").");
+			prof = 0;
+		}
 		// Spells bound to this weapon (Magic Weapon's +N, Shillelagh's ability and die) ride only on attacks with it.
 		se.hirt.mcp.rpg.rules.Effects.Modifiers bound = se.hirt.mcp.rpg.rules.Effects.weaponModifiers(tx, actor.id(),
 				weaponEntry.id());
@@ -956,7 +1123,7 @@ public final class EncounterService {
 
 	private List<String> lightExtraWeapons(Tx tx, Row encounter, Row actor) {
 		if (!TurnEconomy.bonusActionAvailable(tx, encounter, actor.id())
-				|| conditionAmong(tx, actor, INCAPACITATING_CONDITIONS).isPresent()) {
+				|| conditionAmong(tx, actor, Combat.INCAPACITATING_CONDITIONS).isPresent()) {
 			return List.of();
 		}
 		Row p = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
@@ -1078,36 +1245,27 @@ public final class EncounterService {
 			}
 			ammoUsed = used;
 		}
-		// Advantage / disadvantage sources: explicit, Dodge, target conditions, effects.
+		// Advantage / disadvantage sources (SRD 5.2.1): the GM's declaration, the attacker's and the target's
+		// conditions, Dodge, effects on the target (Blur, Faerie Fire) and a ranged attack within 5 feet of an enemy;
+		// the table lives in Combat.attackRollFactors so spell attacks read the same one.
 		String adv = action.get("advantage") == null ? "NONE" : action.get("advantage").toString().toUpperCase();
-		boolean advantage = adv.equals("ADVANTAGE");
-		boolean disadvantage = adv.equals("DISADVANTAGE");
-		var reasons = new ArrayList<String>();
-		boolean targetDodging = tx.count(
-				"SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", target.id(),
-				DODGING_REF) > 0;
-		if (targetDodging) {
-			disadvantage = true;
-			reasons.add("target is dodging");
-		}
-		Combat.TargetConditions targetConditions = Combat.targetConditions(tx, target);
-		if (targetConditions.advantage()) {
-			advantage = true;
-			reasons.addAll(targetConditions.reasons());
-		}
+		// Opportunity attacks happen before the mover leaves reach, although its zone is already updated.
+		boolean close = opportunity || Combat.withinFiveFeet(tx, encounter.id(), actor.id(), target.id(), false);
+		Combat.AttackRollFactors factors = Combat.attackRollFactors(tx, rules, encounter.id(), actor, target, close,
+				profile.ranged(), adv.equals("ADVANTAGE"), adv.equals("DISADVANTAGE"));
+		var reasons = new ArrayList<String>(factors.reasons());
 		se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
 				actor.id());
-		se.hirt.mcp.rpg.rules.Effects.Modifiers targetMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
-				target.id());
-		if (targetMods.disadvantageOnAttacksAgainst) {
-			disadvantage = true;
-			reasons.add("target is protected (e.g. Blur)");
+		// Untrained armor: "Disadvantage on any D20 Test that involves Strength or Dexterity" (SRD 5.2.1 "Armor
+		// Training"), which every weapon and unarmed attack roll does.
+		Optional<String> untrainedArmor = se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, actor);
+		if (untrainedArmor.isPresent()) {
+			reasons.add("attacker wears " + untrainedArmor.get() + " without armor training");
 		}
-		if (targetMods.advantageOnAttacksAgainst) {
-			advantage = true;
-			reasons.add("target is exposed (e.g. Faerie Fire)");
-		}
-		String dice = advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
+		final Combat.AttackRollFactors rollFactors = untrainedArmor.isPresent()
+				? new Combat.AttackRollFactors(factors.advantage(), true, factors.criticalWithinFiveFeet(), reasons)
+				: factors;
+		String dice = rollFactors.form();
 		int bonus = profile.attackBonus() + actorMods.attackBonus - Exhaustion.penalty(tx, actor.id());
 		Roll attackRoll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 		long rollId = CharacterService.recordRoll(tx, campaignId,
@@ -1123,9 +1281,7 @@ public final class EncounterService {
 		int natural = attackRoll.dice().get(0);
 		int targetAc = RuntimeService.armorClass(tx, rules, target);
 		boolean hit = natural != 1 && (natural == 20 || attackTotal >= targetAc);
-		// Opportunity attacks happen before the mover leaves reach, although its zone is already updated.
-		boolean close = opportunity || Combat.withinFiveFeet(tx, encounter.id(), actor.id(), target.id(), false);
-		boolean critical = hit && (natural == 20 || (targetConditions.criticalWithinFiveFeet() && close));
+		boolean critical = hit && (natural == 20 || (rollFactors.criticalWithinFiveFeet() && close));
 
 		var ctx = new LinkedHashMap<String, Object>();
 		ctx.put("attacker", actor.id());
@@ -1138,8 +1294,7 @@ public final class EncounterService {
 		ctx.put("bonus_dice", bonusDice);
 		ctx.put("attack_total", attackTotal);
 		ctx.put("natural", natural);
-		ctx.put("advantage",
-				advantage && !disadvantage ? "ADVANTAGE" : disadvantage && !advantage ? "DISADVANTAGE" : "NONE");
+		ctx.put("advantage", rollFactors.label());
 		ctx.put("advantage_reasons", reasons);
 		ctx.put("target_armor_class", targetAc);
 		ctx.put("critical", critical);
@@ -1150,17 +1305,23 @@ public final class EncounterService {
 		}
 		ctx.put("warnings", setup.warnings());
 
-		// Shield (SRD 5.2.1): a reaction when hit; +5 AC until the start of the caster's next turn, including against the trigger.
-		if (hit && natural != 20 && !reaction && attackTotal < targetAc + 5
-				&& canCastShield(tx, target, targetParticipant)) {
+		// Shield (SRD 5.2.1): "a reaction, which you take when you are hit by an attack roll" — any hit, an Opportunity
+		// Attack, a natural 20 or a hit beyond AC + 5 included: the +5 lasts until the start of the caster's next turn,
+		// so it can be worth casting even when it cannot turn this hit. A chooser is asked; under the AUTO policy an NPC
+		// casts it only when it turns the hit into a miss.
+		if (hit && canCastShield(tx, target, targetParticipant)) {
+			boolean turnsIntoMiss = natural != 20 && attackTotal < targetAc + 5;
 			if (asksBeforeReacting(tx, campaignId, encounter, target.id())) {
 				var options = List.of(Map.of("option", "CAST_SHIELD", "description",
 						"Cast Shield as a reaction (spends the lowest available spell slot): AC +5 until the start of "
-								+ target.str("name") + "'s next turn, turning this hit into a miss."),
+								+ target.str("name") + "'s next turn, "
+								+ (turnsIntoMiss ? "turning this hit into a miss."
+										: "although this " + (natural == 20 ? "natural 20" : "hit")
+												+ " lands regardless.")),
 						Map.of("option", "DECLINE", "description", "Take the hit."));
 				Map<String, Object> view = openChoice(tx, campaignId, encounter, target.id(), "SHIELD_SPELL",
 						actor.str("name") + "'s " + profile.name() + " hits " + target.str("name") + " (" + attackTotal
-								+ " vs AC " + targetAc + "). Cast Shield?",
+								+ " vs AC " + targetAc + (natural == 20 ? ", natural 20" : "") + "). Cast Shield?",
 						options, ctx);
 				var out = attackView(ctx, profile);
 				out.put("resolved", false);
@@ -1169,10 +1330,12 @@ public final class EncounterService {
 						+ " — waiting for a Shield decision.");
 				return out;
 			}
-			Map<String, Object> shield = castShield(tx, campaignId, encounter, target, targetParticipant, round);
-			ctx.put("shield", shield);
-			ctx.put("target_armor_class", targetAc + 5);
-			ctx.put("hit", false);
+			if (turnsIntoMiss) {
+				Map<String, Object> shield = castShield(tx, campaignId, encounter, target, targetParticipant, round);
+				ctx.put("shield", shield);
+				ctx.put("target_armor_class", targetAc + 5);
+				ctx.put("hit", false);
+			}
 		}
 		return finishAttack(tx, campaignId, encounter, actor, target, targetParticipant, profile, ctx, round);
 	}
@@ -1294,27 +1457,34 @@ public final class EncounterService {
 			boolean knockOut = Boolean.TRUE.equals(action.get("nonlethal")) && dr.droppedToZero();
 			Map<String, Object> applied;
 			if (knockOut) {
-				// SRD 5.2.1 "Knocking Out a Creature": 0 HP, Unconscious and Stable instead of dying.
-				Map<String, Object> saves = Combat.freshDeathSaves();
-				saves.put("stable", true);
+				// SRD 5.2.1 "Knocking Out a Creature": "reduce the creature to 1 Hit Point and give it the Unconscious
+				// condition. It then starts a Short Rest, at the end of which that condition ends on it. The condition
+				// ends early if the creature regains any Hit Points or if someone takes an action to administer first
+				// aid to it, making a successful DC 10 Wisdom (Medicine) check." Alive at 1 HP: no death saves.
 				var cols = new LinkedHashMap<String, Object>();
-				cols.put("current_hp", 0);
+				cols.put("current_hp", 1);
 				cols.put("temp_hp", 0);
-				cols.put("life_state", "DYING");
-				cols.put("death_saves_json", Json.write(saves));
+				cols.put("life_state", "ALIVE");
+				cols.put("death_saves_json", null);
 				cols.put("revision", target.lng("revision") + 1);
 				tx.update("character", target.id(), cols);
 				se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, target.id());
-				RuntimeService.addCondition(tx, campaignId, target.id(), "UNCONSCIOUS",
-						Map.of("label", "knocked out; wakes after 1d4 hours or when healed"),
+				var duration = new LinkedHashMap<String, Object>();
+				duration.put("kind", "UNTIL");
+				duration.put("until", "SHORT_REST");
+				duration.put("expires_seq", GameTime.currentSeq(tx, campaignId) + 60);
+				duration.put("label",
+						"knocked out: until the end of the Short Rest it starts (one hour), or until it regains any Hit Points or receives first aid (DC 10 Wisdom (Medicine), GM: REMOVE_CONDITION)");
+				RuntimeService.addCondition(tx, campaignId, target.id(), "UNCONSCIOUS", duration,
 						"knocked out by " + actor.str("name"), "MECHANICAL_CONSEQUENCE");
 				applied = new LinkedHashMap<>();
 				applied.put("damage", dr.totalDealt());
 				applied.put("breakdown", dr.breakdown());
 				applied.put("hp_before", dr.hpBefore());
-				applied.put("hp_after", 0);
-				applied.put("life_state", "DYING");
+				applied.put("hp_after", 1);
+				applied.put("life_state", "ALIVE");
 				applied.put("knocked_out", true);
+				// Out of this fight (a house rule: the engine refuses attacks on DEFEATED participants).
 				tx.update("encounter_participant", targetParticipant.id(), Map.of("status", "DEFEATED"));
 			} else {
 				applied = RuntimeService.applyDamageResult(tx, rules, roller, target, dr, critical, actor.id(),
@@ -1326,8 +1496,8 @@ public final class EncounterService {
 			out.putAll(applied);
 			summary = actor.str("name") + " hits " + target.str("name") + " with " + label
 					+ (critical ? " (critical)" : "") + " for " + dr.totalDealt() + " damage (" + dr.hpBefore() + " → "
-					+ dr.hpAfter() + " HP)"
-					+ (knockOut ? " — " + target.str("name") + " is knocked out."
+					+ (knockOut ? 1 : dr.hpAfter()) + " HP)"
+					+ (knockOut ? " — " + target.str("name") + " is knocked out (Unconscious at 1 HP)."
 							: Boolean.TRUE.equals(applied.get("died")) ? " — " + target.str("name") + " dies."
 									: "DYING".equals(applied.get("life_state"))
 											? " — " + target.str("name") + " drops to 0 HP." : ".");
@@ -1369,14 +1539,14 @@ public final class EncounterService {
 
 	/**
 	 * A reaction is available once per round, to conscious, non-incapacitated, active participants
-	 * (SRD 5.2.1 "Reactions").
+	 * (SRD 5.2.1 "Reactions"). Opportunity attacks and the Shield spell's offer share this reading.
 	 */
-	private boolean reactionAvailable(Tx tx, Row participant, Row c) {
+	static boolean reactionAvailable(Tx tx, Row participant, Row c) {
 		if (participant.intOr("reaction_used", 0) != 0 || !"ACTIVE".equals(participant.str("status"))
 				|| !"ALIVE".equals(c.str("life_state"))) {
 			return false;
 		}
-		return conditionAmong(tx, c, INCAPACITATING_CONDITIONS).isEmpty();
+		return conditionAmong(tx, c, Combat.INCAPACITATING_CONDITIONS).isEmpty();
 	}
 
 	/** The first of the given conditions the character currently has, if any. */
@@ -1390,28 +1560,18 @@ public final class EncounterService {
 		return Optional.empty();
 	}
 
+	/**
+	 * See {@link ShieldSpell#canCast}: reaction, Shield prepared, a slot, no slot spent on the
+	 * target's own turn, and no untrained armor.
+	 */
 	private boolean canCastShield(Tx tx, Row target, Row targetParticipant) {
-		return reactionAvailable(tx, targetParticipant, target) && tx.count(
-				"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED' AND content_ref = ?",
-				target.id(), SHIELD_SPELL) > 0 && se.hirt.mcp.rpg.magic.SpellService.hasSlot(tx, target.id(), 1);
+		return ShieldSpell.canCast(tx, rules, tx.get("encounter", targetParticipant.lng("encounter_id")), target,
+				targetParticipant);
 	}
 
 	private Map<String, Object> castShield(
 		Tx tx, long campaignId, Row encounter, Row target, Row targetParticipant, long round) {
-		Map<String, Object> slot = se.hirt.mcp.rpg.magic.SpellService.spendLowestSlot(tx, target.id(), 1).orElseThrow(
-				() -> RpgException.insufficientResource(target.str("name") + " has no spell slot for Shield."));
-		se.hirt.mcp.rpg.rules.Effects.add(tx, campaignId, target.id(), target.id(), SHIELD_SPELL,
-				"Shield (" + target.str("name") + ")", SHIELD_SPELL_REF, Map.of("ac_bonus", 5),
-				Map.of("until", "START_OF_TURN", "participant", targetParticipant.id(), "label", "Shield"), null,
-				"SHIELD", "PLAYER");
-		tx.update("encounter_participant", targetParticipant.id(), Map.of("reaction_used", 1));
-		log(tx, campaignId, encounter.id(), round, target.id(), "REACTION",
-				target.str("name") + " casts Shield as a reaction (AC +5 until their next turn).", null);
-		var m = new LinkedHashMap<String, Object>();
-		m.put("cast", "Shield");
-		m.put("slot", slot);
-		m.put("armor_class_bonus", 5);
-		return m;
+		return ShieldSpell.cast(tx, campaignId, encounter, target, targetParticipant, round);
 	}
 
 	/**
@@ -1434,7 +1594,7 @@ public final class EncounterService {
 		var reactions = new ArrayList<Map<String, Object>>();
 		for (Row p : turnOrder(tx, encounter.id())) {
 			if (p.id() == moverParticipant.id() || !fromZone.equals(p.str("position_zone"))
-					|| !hostile(stances, p.str("side"), moverParticipant.str("side"))) {
+					|| !Combat.hostile(stances, p.str("side"), moverParticipant.str("side"))) {
 				continue;
 			}
 			Row reactor = tx.get("character", p.lng("character_id"));
@@ -1611,6 +1771,23 @@ public final class EncounterService {
 				Row attacker = tx.get("character", ((Number) ctx.get("attacker")).longValue());
 				Row target = tx.get("character", ((Number) ctx.get("target")).longValue());
 				Row targetParticipant = chooserParticipant;
+				if (Boolean.TRUE.equals(ctx.get("magic_missile"))) {
+					// Targeted by Magic Missile (SRD 5.2.1 "Shield"): CAST_SHIELD negates every dart aimed at the
+					// chooser and raises AC until their next turn; DECLINE lands the darts rolled at casting.
+					if (option.equals("CAST_SHIELD")) {
+						if (!canCastShield(tx, target, targetParticipant)) {
+							throw RpgException.notAllowed(
+									target.str("name") + " can no longer cast Shield (no reaction or slot).");
+						}
+						result.put("shield", castShield(tx, campaignId, encounter, target, targetParticipant, round));
+						result.put("damage", 0);
+						result.put("negated", "Shield: no damage from Magic Missile (SRD 5.2.1)");
+					} else {
+						result.put("darts", ShieldSpell.applyDeferredDarts(tx, rules, roller, campaignId, encounter,
+								attacker, target, targetParticipant, ctx, round));
+					}
+					break;
+				}
 				Combat.AttackProfile profile = resolveProfile(tx, attacker, (Map<String, Object>) ctx.get("action"))
 						.profile();
 				// The ammunition is already spent; restore the effective modifiers recorded with the attack.
@@ -1719,6 +1896,12 @@ public final class EncounterService {
 		String targetRef = action.get("target") == null ? Ref.of(Ref.CHARACTER, actor.id())
 				: action.get("target").toString();
 		Row target = CharacterService.character(tx, campaignId, targetRef);
+		if ("POTION".equals(item.payload().get("type"))) {
+			// "Drinking a potion or administering it to another creature requires a Bonus Action" (SRD 5.2.1
+			// "Potions"): the same Bonus Action the Light extra attack and bonus-action spells spend.
+			TurnEconomy.spendBonusAction(tx, encounter, actor.id(), "drinking " + item.name());
+			out.put("action_cost", "BONUS_ACTION");
+		}
 		Map<String, Object> used = InventoryService.useConsumable(tx, rules, campaignId, roller, entry, item, target);
 		if (used != null) {
 			out.putAll(used);
@@ -1781,7 +1964,9 @@ public final class EncounterService {
 					.parse(String.valueOf(spec.get("ability")));
 			int dc = spec.get("dc") instanceof Number n ? n.intValue() : 10;
 			int bonus = se.hirt.mcp.rpg.magic.SpellService.saveBonus(tx, rules, c, ability);
-			Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
+			// Heightened Spell: Disadvantage on every save against the spell, this repeat included (SRD 5.2.1).
+			String d20 = Boolean.TRUE.equals(spec.get("disadvantage")) ? "2d20kl1" : "1d20";
+			Roll roll = roller.roll(d20 + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 			CharacterService.recordRoll(tx, campaignId,
 					"repeat save " + spec.get("spell") + " " + ability.name() + " " + Ref.of(Ref.CHARACTER, c.id()),
 					roll);
@@ -1802,14 +1987,21 @@ public final class EncounterService {
 			} else {
 				int failures = (spec.get("failures") instanceof Number n ? n.intValue() : 1) + 1;
 				spec.put("failures", failures);
-				tx.update("active_effect", e.id(), Map.of("modifier_json", Json.write(Map.of("repeat_save", spec))));
 				entry.put("failures", failures);
 				String escalation = spec.get("on_second_failure") == null ? null
 						: String.valueOf(spec.get("on_second_failure"));
+				// The other keys on the effect (ends_on_damage, Shield's modifiers) survive the bookkeeping.
+				var kept = new LinkedHashMap<String, Object>(mods);
+				kept.put("repeat_save", spec);
 				if (failures >= 2 && escalation != null) {
+					// Sleep: "repeat the save. If the target fails the second save, the target has the Unconscious
+					// condition for the duration" — one repeat, not one per turn: the instruction leaves the effect.
+					kept.remove("repeat_save");
+					Map<String, Object> escalatedMods = Boolean.TRUE.equals(mods.get("ends_on_damage"))
+							? Map.of("ends_on_damage", true) : null;
 					se.hirt.mcp.rpg.rules.Effects.add(tx, campaignId, c.id(), e.lng("source_character_id"),
 							e.str("source_content_ref"), e.str("source_description"),
-							RuntimeService.conditionRef(escalation), null,
+							RuntimeService.conditionRef(escalation), escalatedMods,
 							e.isNull("duration_json") ? null : e.map("duration_json"),
 							e.lng("concentration_character_id"), e.str("source_content_ref") + ":" + escalation,
 							"MECHANICAL_CONSEQUENCE");
@@ -1819,6 +2011,9 @@ public final class EncounterService {
 									+ escalation.toLowerCase() + ".",
 							null);
 				}
+				var cols = new LinkedHashMap<String, Object>();
+				cols.put("modifier_json", kept.isEmpty() ? null : Json.write(kept));
+				tx.update("active_effect", e.id(), cols);
 			}
 			saves.add(entry);
 		}
@@ -2030,7 +2225,8 @@ public final class EncounterService {
 			long defeatedXp = 0;
 			var defeated = new ArrayList<String>();
 			var recipients = new ArrayList<Row>();
-			// Round and turn effects die with their encounter, including those on removed participants.
+			// Start-of-turn effects die with their encounter, including those on removed participants; round
+			// durations are converted to game time once the clock has moved (below).
 			se.hirt.mcp.rpg.rules.Effects.expireOnEncounterEnd(tx, encounter.id());
 			for (Row p : participants) {
 				Row c = tx.get("character", p.lng("character_id"));
@@ -2041,7 +2237,7 @@ public final class EncounterService {
 						recipients.add(c);
 					}
 				} else if (("DEFEATED".equals(p.str("status")) || "DEAD".equals(c.str("life_state")))
-						&& !"REMOVED".equals(p.str("status")) && hostile(stances, partySide, p.str("side"))) {
+						&& !"REMOVED".equals(p.str("status")) && Combat.hostile(stances, partySide, p.str("side"))) {
 					long xp = c.isNull("origin_content_ref") ? 0 : rules.find(c.str("origin_content_ref"))
 							.map(d -> d.payload().get("xp_value")).map(v -> ((Number) v).longValue()).orElse(0L);
 					defeatedXp += xp;
@@ -2067,12 +2263,16 @@ public final class EncounterService {
 				}
 				awards.addAll(se.hirt.mcp.rpg.progression.PartyXp.lockstep(tx, rules, campaign));
 			}
-			// Time: six seconds per round.
+			// Time: six seconds per round, rounded up to the clock's minutes.
 			long rounds = encounter.lng("round");
-			long minutes = Math.max(1, (rounds * SECONDS_PER_ROUND + 59) / 60);
+			long minutes = se.hirt.mcp.rpg.rules.Effects.minutesForRounds(rounds);
 			Row clock = GameTime.clock(tx, campaignId);
 			long newSeq = clock.lng("seq") + minutes;
 			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
+			// A 10-round condition is a 1-minute condition (SRD 5.2.1 "Combat"): the rounds it has left after the
+			// final round continue on the clock instead of ending with the fight.
+			int converted = se.hirt.mcp.rpg.rules.Effects.convertRoundsAtEncounterEnd(tx, encounter.id(), rounds,
+					newSeq);
 			se.hirt.mcp.rpg.rules.Effects.expireByTime(tx, campaignId, newSeq);
 
 			var cols = new LinkedHashMap<String, Object>();
@@ -2141,6 +2341,9 @@ public final class EncounterService {
 			result.put("outcome", o);
 			result.put("rounds", rounds);
 			result.put("elapsed_minutes", minutes);
+			if (converted > 0) {
+				result.put("round_effects_converted_to_minutes", converted);
+			}
 			result.put("defeated", defeated);
 			result.put("xp_pool", xpPool);
 			result.put("xp_policy", se.hirt.mcp.rpg.progression.PartyXp.policy(campaign));
@@ -2193,19 +2396,6 @@ public final class EncounterService {
 			Row character = CharacterService.character(tx, campaignId, characterRef);
 			return AmmunitionRecovery.recover(tx, rules, roller, campaign, encounter, character, selection);
 		});
-	}
-
-	private static boolean hostile(Map<String, Object> stances, String a, String b) {
-		if (a == null || b == null || a.equals(b)) {
-			// A side is never hostile to itself: allies neither provoke nor take opportunity attacks on
-			// each other, and their stat blocks never count toward the XP pool.
-			return false;
-		}
-		Object s = stances.get(a + "|" + b);
-		if (s == null) {
-			s = stances.get(b + "|" + a);
-		}
-		return s == null || "HOSTILE".equals(s.toString());
 	}
 
 	// ── log ────────────────────────────────────────────────────────────

@@ -232,7 +232,7 @@ class ShieldAmmunitionTest {
 						return Map.of();
 					});
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			dice.queue(20, 100, 1, 1);
+			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(actor), "foes", List.of(target)), null, null, null, null, null);
 			String encounter = (String) started.get("encounter");

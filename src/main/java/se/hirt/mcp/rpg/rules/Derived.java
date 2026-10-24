@@ -81,9 +81,21 @@ public final class Derived {
 	 * @param floor
 	 *            an effect-granted minimum AC (Barkskin)
 	 */
-	@SuppressWarnings("unchecked")
 	public static Map<String, Object> armorClass(
 		Integer dexScore, List<Map<String, Object>> equipped, Integer unarmoredBase, int bonus, Integer floor) {
+		return armorClass(dexScore, equipped, unarmoredBase, bonus, floor, true);
+	}
+
+	/**
+	 * @param shieldTrained
+	 *            whether the wearer has armor training with Shields: "You gain the Armor Class
+	 *            benefit of a Shield only if you have training with it" (SRD 5.2.1 "Armor
+	 *            Training"); an untrained shield is reported but adds nothing
+	 */
+	@SuppressWarnings("unchecked")
+	public static Map<String, Object> armorClass(
+		Integer dexScore, List<Map<String, Object>> equipped, Integer unarmoredBase, int bonus, Integer floor,
+		boolean shieldTrained) {
 		int dexMod = Rules.modifier(dexScore == null ? 10 : dexScore);
 		int ac = 10 + dexMod;
 		String basis = "Unarmored (10 + DEX)";
@@ -136,6 +148,9 @@ public final class Derived {
 				}
 			}
 		}
+		if (shield != null && !shieldTrained) {
+			shieldBonus = 0;
+		}
 		int value = ac + shieldBonus + bonus + unarmoredBonus;
 		if (floor != null && value < floor) {
 			value = floor;
@@ -145,7 +160,8 @@ public final class Derived {
 		m.put("value", value);
 		m.put("basis", basis);
 		if (shield != null) {
-			m.put("shield", shield + " (+" + shieldBonus + ")");
+			m.put("shield", shieldTrained ? shield + " (+" + shieldBonus + ")"
+					: shield + " (no AC benefit without Shield training, SRD 5.2.1 \"Armor Training\")");
 		}
 		if (bonus != 0) {
 			m.put("effect_bonus", bonus);

@@ -29,6 +29,7 @@
 package se.hirt.mcp.rpg;
 
 import org.junit.jupiter.api.Test;
+import se.hirt.mcp.rpg.dice.ScriptedRollService;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
@@ -146,72 +147,99 @@ class EncounterRulesTest {
 					.materialize(op(), campaign, "Scout", "Pell", null, null, null, null, false).get("character");
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(scout), "b", List.of(bandit)), null, null, null, null, null)
-					.get("encounter");
+			// Scripted initiative: the Scout rolls 20 and the Bandit 1 (no tie-break die is rolled, SRD 5.2.1
+			// "Initiative"), so the Scout always acts first and the Multiattack branch is the one exercised.
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(20, 1);
+			Map<String, Object> started = engine.encounters().start(op(), campaign,
+					map("a", List.of(scout), "b", List.of(bandit)), null, null, null, null, null);
+			String encounter = (String) started.get("encounter");
+			assertEquals(scout, m(started.get("turn")).get("character"), "the Scout won initiative");
+			assertTrue(dice.exhausted());
 
-			Map<String, Object> state = engine.encounters().encounterState(campaign, encounter, 3);
-			String first = (String) m(m(state).get("turn")).get("character");
-			String other = first.equals(scout) ? bandit : scout;
+			// Two melee attacks on the bandit (AC 12): a natural 1 misses and rolls no damage.
+			dice.queue(1);
+			Map<String, Object> one = engine.encounters().perform(op(), campaign, encounter, scout,
+					map("kind", "ATTACK", "attack", "Shortsword", "target", bandit), true);
+			assertEquals(1, one.get("attacks_remaining"), "a Scout makes two attacks: " + one.get("summary"));
+			assertEquals(Boolean.FALSE, one.getOrDefault("turn_advanced", Boolean.FALSE),
+					"the turn does not end under the actor while an attack remains");
+			dice.queue(1);
+			Map<String, Object> two = engine.encounters().perform(op(), campaign, encounter, scout,
+					map("kind", "ATTACK", "attack", "Shortsword", "target", bandit), true);
+			assertNull(two.get("attacks_remaining"), "both attacks used");
+			assertEquals(Boolean.TRUE, two.get("turn_advanced"));
+			assertEquals(bandit, m(two.get("next_turn")).get("character"));
+			assertTrue(dice.exhausted());
 
-			if (first.equals(scout)) {
-				Map<String, Object> one = engine.encounters().perform(op(), campaign, encounter, scout,
-						map("kind", "ATTACK", "attack", "Shortsword", "target", other), true);
-				assertEquals(1, one.get("attacks_remaining"), "a Scout makes two attacks: " + one.get("summary"));
-				assertEquals(Boolean.FALSE, one.getOrDefault("turn_advanced", Boolean.FALSE),
-						"the turn does not end under the actor while an attack remains");
-				Map<String, Object> two = engine.encounters().perform(op(), campaign, encounter, scout,
-						map("kind", "ATTACK", "attack", "Shortsword", "target", other), true);
-				assertNull(two.get("attacks_remaining"), "both attacks used");
-				assertEquals(Boolean.TRUE, two.get("turn_advanced"));
-			} else {
-				// The bandit has no Multiattack, so one attack ends its turn exactly as before.
-				Map<String, Object> one = engine.encounters().perform(op(), campaign, encounter, bandit,
-						map("kind", "ATTACK", "attack", "Scimitar", "target", other), true);
-				assertNull(one.get("attacks_remaining"));
-				assertEquals(Boolean.TRUE, one.get("turn_advanced"));
-			}
+			// The bandit has no Multiattack, so one attack ends its turn.
+			dice.queue(1);
+			Map<String, Object> single = engine.encounters().perform(op(), campaign, encounter, bandit,
+					map("kind", "ATTACK", "attack", "Scimitar", "target", scout), true);
+			assertNull(single.get("attacks_remaining"));
+			assertEquals(Boolean.TRUE, single.get("turn_advanced"));
+			assertTrue(dice.exhausted());
 		}
 	}
 
 	@Test
 	void aSpellThatGrantsAnotherSaveRollsItAtTheEndOfTheTargetsTurn() throws Exception {
-		Path db = tempDb("enc-repeat-save");
+		// A failed first save, then a failed repeat save: Sleep escalates to Unconscious (SRD 5.2.1 "Sleep").
+		Map<String, Object> failed = sleepRepeatSave(tempDb("enc-repeat-save-fail"), 1);
+		assertEquals(Boolean.FALSE, failed.get("saved"));
+		assertEquals("UNCONSCIOUS", failed.get("escalated_to"), "second failure: " + failed);
+		assertNull(failed.get("effect_ended"));
+
+		// A failed first save, then a passing repeat save: the effect ends.
+		Map<String, Object> passed = sleepRepeatSave(tempDb("enc-repeat-save-pass"), 20);
+		assertEquals(Boolean.TRUE, passed.get("saved"));
+		assertEquals(Boolean.TRUE, passed.get("effect_ended"));
+		assertNull(passed.get("escalated_to"));
+	}
+
+	/**
+	 * Casts Sleep on a bandit that fails its first save (a scripted 1) and returns the repeat save
+	 * the engine rolls at the end of the bandit's next turn with the given d20.
+	 */
+	private static Map<String, Object> sleepRepeatSave(Path db, int repeatD20) throws Exception {
 		try (Engine engine = engine(db)) {
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
 			String campaign = committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = (String) engine.sessions().party(campaign, "SUMMARY").get("player_character");
 			engine.spells().prepare(op(), campaign, pc, null, List.of("Sleep", "Magic Missile"));
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "foes", List.of(bandit)), null, null, null, null, null).get("encounter");
+			// Initiative: the sorcerer first, then the bandit.
+			dice.queue(20, 10);
+			Map<String, Object> started = engine.encounters().start(op(), campaign,
+					map("party", List.of(pc), "foes", List.of(bandit)), null, null, null, null, null);
+			String encounter = (String) started.get("encounter");
+			assertEquals(pc, m(started.get("turn")).get("character"));
 
-			// Put the bandit under Sleep however the initiative fell, then let its turn end.
-			Map<String, Object> state = engine.encounters().encounterState(campaign, encounter, 3);
-			if (!pc.equals(m(m(state).get("turn")).get("character"))) {
-				engine.encounters().perform(op(), campaign, encounter, bandit, map("kind", "DODGE"), true);
-			}
+			dice.queue(1);
 			Map<String, Object> cast = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "CAST", "spell", "Sleep", "targets", List.of(bandit)), true);
-			assertNotNull(cast, "sleep cast");
+			assertEquals(Boolean.FALSE, list(cast.get("targets")).get(0).get("saved"), "the first save fails");
 
+			dice.queue(repeatD20);
 			Map<String, Object> ended = engine.encounters().perform(op(), campaign, encounter, bandit,
 					map("kind", "END_TURN"), true);
-			List<Map<String, Object>> saves = (List<Map<String, Object>>) ended.get("repeat_saves");
+			List<Map<String, Object>> saves = list(ended.get("repeat_saves"));
 			assertNotNull(saves, "the engine rolls the repeat save itself: " + ended.keySet());
 			Map<String, Object> save = saves.get(0);
 			assertEquals("Sleep", save.get("spell"));
 			assertEquals("WIS", save.get("ability"));
-			assertNotNull(save.get("roll"));
+			assertEquals(List.of(repeatD20), m(save.get("roll")).get("dice"));
 			assertNotNull(save.get("dc"));
-			// Either it shook the spell off, or it failed again and Sleep escalates to Unconscious.
-			if (Boolean.TRUE.equals(save.get("saved"))) {
-				assertEquals(Boolean.TRUE, save.get("effect_ended"));
-			} else {
-				assertEquals("UNCONSCIOUS", save.get("escalated_to"), "second failure: " + save);
-			}
+			assertTrue(dice.exhausted());
+			return save;
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static List<Map<String, Object>> list(Object o) {
+		return (List<Map<String, Object>>) o;
 	}
 
 	/**

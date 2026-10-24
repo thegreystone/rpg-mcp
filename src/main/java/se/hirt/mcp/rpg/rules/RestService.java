@@ -47,11 +47,18 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Rests (MCP_PROTOCOL.md §13.4; SRD 5.2.1 Rules Glossary "Short Rest" / "Long Rest" — [verify]) and
+ * Rests (MCP_PROTOCOL.md §13.4; SRD 5.2.1 Rules Glossary "Short Rest" / "Long Rest": at least 1 Hit
+ * Point to start either, each spent Hit Point Die regains at least 1 Hit Point, a Long Rest regains
+ * all lost Hit Points and all spent Hit Point Dice, and 16 hours must pass between Long Rests) and
  * the explicit, audited GM override (§20, DESIGN.md §15.1): the only general exceptional mutation,
  * always labeled.
  */
 public final class RestService {
+
+	/**
+	 * "After you finish a Long Rest, you must wait at least 16 hours before starting another one."
+	 */
+	public static final long LONG_REST_GAP_MINUTES = 16 * 60;
 
 	public static final String HIT_DICE = "hit_dice";
 	public static final Set<String> OVERRIDE_KINDS = Set.of("ADJUST_HP", "SET_MAX_HP", "SET_ARMOR_CLASS",
@@ -99,16 +106,33 @@ public final class RestService {
 					resters.add(CharacterService.character(tx, campaignId, ref));
 				}
 			}
+			long minutes = k.equals("SHORT") ? 60 : 8 * 60;
+			Row clock = GameTime.clock(tx, campaignId);
+			long now = clock.lng("seq");
+			long newSeq = now + minutes;
+			boolean named = characterRefs != null && !characterRefs.isEmpty();
 			var results = new ArrayList<Map<String, Object>>();
 			for (Row c : resters) {
 				if (!"ACTIVE".equals(c.str("lifecycle")) || "DEAD".equals(c.str("life_state"))) {
 					continue;
 				}
-				results.add(k.equals("SHORT") ? shortRest(tx, campaignId, c, hitDice) : longRest(tx, campaignId, c));
+				// A named character who may not rest is a refused call; a party-wide rest reports them skipped.
+				String refusal = refusal(c, k, now);
+				if (refusal != null) {
+					if (named) {
+						throw RpgException.notAllowed(refusal);
+					}
+					var skipped = new LinkedHashMap<String, Object>();
+					skipped.put("character", Ref.of(Ref.CHARACTER, c.id()));
+					skipped.put("name", c.str("name"));
+					skipped.put("skipped", refusal);
+					skipped.put("hp", RuntimeService.hpView(tx, c));
+					results.add(skipped);
+					continue;
+				}
+				results.add(k.equals("SHORT") ? shortRest(tx, campaignId, c, hitDice)
+						: longRest(tx, campaignId, c, newSeq));
 			}
-			long minutes = k.equals("SHORT") ? 60 : 8 * 60;
-			Row clock = GameTime.clock(tx, campaignId);
-			long newSeq = clock.lng("seq") + minutes;
 			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
 			int expired = Effects.expireByTime(tx, campaignId, newSeq);
 			LedgerService.append(tx, campaignId,
@@ -138,6 +162,26 @@ public final class RestService {
 		});
 	}
 
+	/**
+	 * Why a character cannot start this rest, or null: "To start a Short Rest, you must have at
+	 * least 1 Hit Point", "To start a Long Rest, you must have at least 1 Hit Point" and "After you
+	 * finish a Long Rest, you must wait at least 16 hours before starting another one" (SRD 5.2.1).
+	 */
+	static String refusal(Row c, String kind, long nowSeq) {
+		String rest = kind.equals("SHORT") ? "Short Rest" : "Long Rest";
+		if (c.intOr("current_hp", 0) < 1) {
+			return c.str("name") + " has 0 Hit Points and cannot start a " + rest + " (SRD 5.2.1: \"To start a " + rest
+					+ ", you must have at least 1 Hit Point.\").";
+		}
+		Long last = kind.equals("LONG") ? c.lng("last_long_rest_seq") : null;
+		if (last != null && nowSeq - last < LONG_REST_GAP_MINUTES) {
+			long since = Math.max(0, nowSeq - last);
+			return c.str("name") + " finished a Long Rest " + since / 60 + " h " + since % 60
+					+ " min ago; at least 16 hours must pass before starting another one (SRD 5.2.1 \"Long Rest\").";
+		}
+		return null;
+	}
+
 	/** Hit Point Dice pool: max = character level, initialized lazily. */
 	static Row hitDicePool(Tx tx, Row c, int level) {
 		Optional<Row> pool = tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?",
@@ -155,7 +199,7 @@ public final class RestService {
 		cols.put("resource_ref", HIT_DICE);
 		cols.put("current", level);
 		cols.put("max", level);
-		cols.put("recharge", "LONG_REST_HALF");
+		cols.put("recharge", "LONG_REST");
 		return tx.get("resource_state", tx.insert("resource_state", cols));
 	}
 
@@ -186,7 +230,8 @@ public final class RestService {
 			for (int i = 0; i < spend; i++) {
 				Roll roll = roller.roll("1d" + hitDie + (conMod >= 0 ? "+" + conMod : Integer.toString(conMod)));
 				CharacterService.recordRoll(tx, campaignId, "hit point die " + Ref.of(Ref.CHARACTER, c.id()), roll);
-				healed += Math.max(0, roll.total());
+				// "You regain Hit Points equal to the total (minimum of 1 Hit Point)" (SRD 5.2.1 "Short Rest").
+				healed += Math.max(1, roll.total());
 				rolls.add(roll.toMap());
 			}
 			tx.update("resource_state", pool.id(), Map.of("current", pool.intOr("current", 0) - spend));
@@ -206,12 +251,17 @@ public final class RestService {
 		// Sorcerous Restoration: some sorcery points back on a Short Rest, once per Long Rest (SRD 5.2.1 "Sorcerer").
 		se.hirt.mcp.rpg.magic.Metamagic.sorcerousRestoration(tx, rules, c)
 				.ifPresent(r -> m.put("sorcerous_restoration", r));
+		// A knocked-out creature's Unconscious condition ends at the end of its Short Rest (SRD 5.2.1).
+		List<String> ended = Effects.expireOnShortRest(tx, c.id());
+		if (!ended.isEmpty()) {
+			m.put("effects_ended", ended);
+		}
 		Row after = tx.get("character", c.id());
 		m.put("hp", RuntimeService.hpView(tx, after));
 		return m;
 	}
 
-	private Map<String, Object> longRest(Tx tx, long campaignId, Row c) {
+	private Map<String, Object> longRest(Tx tx, long campaignId, Row c, long finishSeq) {
 		var m = new LinkedHashMap<String, Object>();
 		m.put("character", Ref.of(Ref.CHARACTER, c.id()));
 		m.put("name", c.str("name"));
@@ -230,6 +280,8 @@ public final class RestService {
 		// Exhaustion drops by one level (SRD 5.2.1 "Long Rest").
 		m.put("exhaustion_removed", Exhaustion.reduce(tx, c.id(), 1));
 		m.put("exhaustion", Exhaustion.level(tx, c.id()));
+		// The rest finishes when the clock has moved: the 16-hour wait counts from here.
+		cols.put("last_long_rest_seq", finishSeq);
 		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 		tx.update("character", c.id(), cols);
 		Optional<Row> cls = tx.queryOne("SELECT * FROM character_class WHERE character_id = ? ORDER BY id LIMIT 1",
@@ -237,11 +289,9 @@ public final class RestService {
 		cls.ifPresent(r -> {
 			int level = r.intOr("level", 1);
 			Row pool = hitDicePool(tx, c, level);
-			// Regain spent Hit Point Dice equal to half the maximum, minimum 1 (SRD 5.2.1 "Long Rest").
-			int regain = Math.max(1, level / 2);
-			int current = Math.min(level, pool.intOr("current", 0) + regain);
-			tx.update("resource_state", pool.id(), Map.of("current", current, "max", level));
-			m.put("hit_dice", Map.of("current", current, "max", level));
+			// "You regain all lost Hit Points and all spent Hit Point Dice" (SRD 5.2.1 "Long Rest").
+			tx.update("resource_state", pool.id(), Map.of("current", level, "max", level));
+			m.put("hit_dice", Map.of("current", level, "max", level));
 		});
 		// Other resources with a recharge rule recharge fully.
 		for (Row res : tx.query("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref <> ?", c.id(),
@@ -334,6 +384,7 @@ public final class RestService {
 						Row c = CharacterService.character(tx, campaignId, targetRef);
 						Harness.requireRevision(c, targetRef, expectedRevision);
 						var cols = new LinkedHashMap<String, Object>();
+						boolean diesOfZeroMaximum = false;
 						switch (k) {
 						case "ADJUST_HP" -> {
 							int max = RuntimeService.effectiveMaxHp(tx, c);
@@ -347,11 +398,8 @@ public final class RestService {
 							if (hp > 0 && !"ALIVE".equals(c.str("life_state")) && !"DEAD".equals(c.str("life_state"))) {
 								cols.put("life_state", "ALIVE");
 								cols.put("death_saves_json", null);
-								for (Row fx : tx.query(
-										"SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?",
-										c.id(), RuntimeService.UNCONSCIOUS_REF)) {
-									tx.delete("active_effect", fx.id());
-								}
+								// Regaining Hit Points ends Unconscious; the character remains Prone (SRD 5.2.1).
+								RuntimeService.endUnconscious(tx, c, true);
 							}
 							label = c.str("name") + " HP " + current + " → " + hp;
 						}
@@ -464,10 +512,15 @@ public final class RestService {
 								if (delta != 0) {
 									cols.put("max_hp", c.intOr("max_hp", 0));
 									cols.put("current_hp", c.intOr("current_hp", 0));
-									se.hirt.mcp.rpg.progression.LevelUpService.shiftMaxHp(cols, delta);
+									diesOfZeroMaximum = se.hirt.mcp.rpg.progression.LevelUpService.shiftMaxHp(cols,
+											delta) && !"DEAD".equals(c.str("life_state"));
 									before.put("max_hp", c.intOr("max_hp", 0));
 									after.put("max_hp", cols.get("max_hp"));
 									label += " (max HP " + c.intOr("max_hp", 0) + " → " + cols.get("max_hp") + ")";
+									if (diesOfZeroMaximum) {
+										after.put("life_state", "DEAD");
+										label += " — the hit point maximum reached 0: " + c.str("name") + " dies";
+									}
 								}
 							}
 						}
@@ -488,6 +541,11 @@ public final class RestService {
 						long revision = tx.get("character", c.id()).lng("revision") + 1;
 						cols.put("revision", revision);
 						tx.update("character", c.id(), cols);
+						if (diesOfZeroMaximum) {
+							// "A creature dies if its Hit Point maximum reaches 0" (SRD 5.2.1), also by a Constitution loss.
+							RuntimeService.dieOfZeroMaximum(tx, campaignId, c, reason, Map.of("kind", k));
+							revision = tx.get("character", c.id()).lng("revision");
+						}
 						tx.touched(Ref.of(Ref.CHARACTER, c.id()), revision);
 					}
 					case "SET_METAMAGIC" -> {

@@ -274,15 +274,28 @@ public final class Effects {
 	}
 
 	/**
-	 * Ends the effects that last until a Long Rest ({@code duration.until = LONG_REST}); returns
-	 * their descriptions.
+	 * Ends the effects that last until a Long Rest ({@code duration.until = LONG_REST}), and those
+	 * waiting for a Short Rest, which a Long Rest also completes; returns their descriptions.
 	 */
 	public static List<String> expireOnLongRest(Tx tx, long characterId) {
 		Exhaustion.normalize(tx, characterId);
+		return expireUntil(tx, characterId, java.util.Set.of("LONG_REST", "SHORT_REST"));
+	}
+
+	/**
+	 * Ends the effects that last until the end of a Short Rest ({@code duration.until =
+	 * SHORT_REST}: a knocked-out creature's Unconscious condition, SRD 5.2.1 "Knocking Out a
+	 * Creature"); returns their descriptions.
+	 */
+	public static List<String> expireOnShortRest(Tx tx, long characterId) {
+		return expireUntil(tx, characterId, java.util.Set.of("SHORT_REST"));
+	}
+
+	private static List<String> expireUntil(Tx tx, long characterId, java.util.Set<String> milestones) {
 		var ended = new ArrayList<String>();
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
 				characterId)) {
-			if ("LONG_REST".equals(e.map("duration_json").get("until"))) {
+			if (milestones.contains(String.valueOf(e.map("duration_json").get("until")))) {
 				ended.add(e.str("source_description"));
 				end(tx, e);
 			}
@@ -316,7 +329,23 @@ public final class Effects {
 		cols.put("duration_json", duration == null ? null : Json.write(duration));
 		cols.put("concentration_character_id", concentrationCharacterId);
 		cols.put("stacking_key", stackingKey);
-		return tx.insert("active_effect", cols);
+		long id = tx.insert("active_effect", cols);
+		conditionGained(tx, characterId, conditionRef);
+		return id;
+	}
+
+	/**
+	 * Bookkeeping when a creature gains a condition, called by both insertion paths (this class and
+	 * RuntimeService.addCondition): Incapacitated, and every condition that includes it, breaks the
+	 * creature's Concentration (SRD 5.2.1 "Incapacitated": "No Concentration. Your Concentration is
+	 * broken."). Returns the descriptions of the concentration effects that ended.
+	 */
+	public static List<String> conditionGained(Tx tx, long characterId, String conditionRef) {
+		if (conditionRef == null || !conditionRef.startsWith("srd5e:condition/")) {
+			return List.of();
+		}
+		String condition = conditionRef.substring("srd5e:condition/".length()).toUpperCase();
+		return Combat.INCAPACITATING_CONDITIONS.contains(condition) ? breakConcentration(tx, characterId) : List.of();
 	}
 
 	private static final java.util.regex.Pattern DURATION_TEXT = java.util.regex.Pattern
@@ -356,9 +385,10 @@ public final class Effects {
 			}
 			if (m.get("until") != null) {
 				String until = String.valueOf(m.get("until")).toUpperCase();
-				if (!java.util.Set.of("LONG_REST", "RESTORED", "START_OF_TURN", "HP_ABOVE_ZERO").contains(until)) {
+				if (!java.util.Set.of("LONG_REST", "SHORT_REST", "RESTORED", "START_OF_TURN", "HP_ABOVE_ZERO")
+						.contains(until)) {
 					throw se.hirt.mcp.rpg.protocol.RpgException.invalidArgument(
-							"duration.until must be LONG_REST, RESTORED, START_OF_TURN or HP_ABOVE_ZERO.");
+							"duration.until must be LONG_REST, SHORT_REST, RESTORED, START_OF_TURN or HP_ABOVE_ZERO.");
 				}
 				m.put("until", until);
 				m.putIfAbsent("label", label);
@@ -445,9 +475,17 @@ public final class Effects {
 		return d;
 	}
 
+	/** Minutes on the campaign clock for a number of rounds: 6 seconds each, rounded up. */
+	public static long minutesForRounds(long rounds) {
+		return Math.max(1, (rounds * SECONDS_PER_ROUND + 59) / 60);
+	}
+
+	/** "A round represents about 6 seconds in the game world" (SRD 5.2.1 "Combat"). */
+	public static final int SECONDS_PER_ROUND = 6;
+
 	/**
-	 * Duration in encounter rounds (expires when that round begins); outside encounters, one
-	 * minute.
+	 * Duration in encounter rounds (expires when that round begins); outside encounters, the same
+	 * time on the clock (6 seconds per round, at least a minute).
 	 */
 	public static Map<String, Object> rounds(
 		Tx tx, long campaignId, Long encounterId, long currentRound, long rounds, String label) {
@@ -459,7 +497,7 @@ public final class Effects {
 			d.put("expires_round", currentRound + rounds);
 		} else {
 			d.put("kind", "MINUTES");
-			d.put("expires_seq", GameTime.currentSeq(tx, campaignId) + Math.max(1, rounds / 10));
+			d.put("expires_seq", GameTime.currentSeq(tx, campaignId) + minutesForRounds(rounds));
 		}
 		return d;
 	}
@@ -485,7 +523,19 @@ public final class Effects {
 	 */
 	public static int expireByRound(Tx tx, long encounterId, long round) {
 		int removed = 0;
+		for (Row e : roundEffects(tx, encounterId)) {
+			if (e.map("duration_json").get("expires_round") instanceof Number n && n.longValue() <= round) {
+				end(tx, e);
+				removed++;
+			}
+		}
+		return removed;
+	}
+
+	/** The round-scoped effects owned by an encounter (see {@link #expireByRound}). */
+	private static List<Row> roundEffects(Tx tx, long encounterId) {
 		long campaignId = tx.get("encounter", encounterId).lng("campaign_id");
+		var out = new ArrayList<Row>();
 		for (Row e : tx.query(
 				"SELECT a.*, p.id AS round_participant_id FROM active_effect a LEFT JOIN encounter_participant p ON p.character_id = a.character_id AND p.encounter_id = ? WHERE a.campaign_id = ? AND a.duration_json IS NOT NULL",
 				encounterId, campaignId)) {
@@ -493,12 +543,39 @@ public final class Effects {
 			Object scope = d.get("encounter");
 			boolean belongs = scope == null ? !e.isNull("round_participant_id")
 					: scope instanceof Number n && n.longValue() == encounterId;
-			if (belongs && d.get("expires_round") instanceof Number n && n.longValue() <= round) {
-				end(tx, e);
-				removed++;
+			if (belongs && d.get("expires_round") instanceof Number) {
+				out.add(e);
 			}
 		}
-		return removed;
+		return out;
+	}
+
+	/**
+	 * At the end of an encounter the rounds an effect has left become game time: "A round
+	 * represents about 6 seconds in the game world" (SRD 5.2.1 "Combat"), and nothing in the SRD
+	 * ends a 10-round condition because the fight ended. The remaining rounds, counted from the
+	 * encounter's final round, are rounded up to whole minutes on the clock ({@code nowSeq}: the
+	 * clock after the encounter's own time has elapsed). Effects already due are ended. Returns the
+	 * number converted.
+	 */
+	public static int convertRoundsAtEncounterEnd(Tx tx, long encounterId, long finalRound, long nowSeq) {
+		int converted = 0;
+		for (Row e : roundEffects(tx, encounterId)) {
+			Map<String, Object> d = new LinkedHashMap<>(e.map("duration_json"));
+			long remaining = ((Number) d.get("expires_round")).longValue() - finalRound;
+			if (remaining <= 0) {
+				end(tx, e);
+				continue;
+			}
+			d.put("kind", "MINUTES");
+			d.put("expires_seq", nowSeq + minutesForRounds(remaining));
+			d.put("converted_from_rounds", remaining);
+			d.remove("expires_round");
+			d.remove("encounter");
+			tx.update("active_effect", e.id(), Map.of("duration_json", Json.write(d)));
+			converted++;
+		}
+		return converted;
 	}
 
 	/** Older unbound start-of-turn durations follow their recipient's next reached turn. */
@@ -517,9 +594,14 @@ public final class Effects {
 		return removed;
 	}
 
-	/** Clears round and turn durations owned by the encounter, including removed participants. */
+	/**
+	 * Clears the start-of-turn durations owned by the encounter, including those on removed
+	 * participants: the turn they wait for never comes, and the round it would have fallen in lies
+	 * inside the minute the encounter's end already advances the clock by. Round durations are not
+	 * touched here; see {@link #convertRoundsAtEncounterEnd}.
+	 */
 	public static int expireOnEncounterEnd(Tx tx, long encounterId) {
-		int removed = expireByRound(tx, encounterId, Long.MAX_VALUE);
+		int removed = 0;
 		long campaignId = tx.get("encounter", encounterId).lng("campaign_id");
 		for (Row e : tx.query(
 				"SELECT a.*, p.id AS turn_participant_id FROM active_effect a LEFT JOIN encounter_participant p ON p.character_id = a.character_id AND p.encounter_id = ? WHERE a.campaign_id = ? AND a.duration_json IS NOT NULL",

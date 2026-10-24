@@ -9,6 +9,15 @@
       "payload": {
         "summary": "A primal warrior who rages for strength and toughness; d12 hit die, the most hit points of any class.",
         "hit_die": 12,
+        "armor_training": [
+          "LIGHT",
+          "MEDIUM",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL"
+        ],
         "primary_abilities": [
           "STR"
         ],
@@ -64,6 +73,12 @@
       "payload": {
         "summary": "A charismatic performer whose music inspires allies and weaves magic; jack of all trades, any skills.",
         "hit_die": 8,
+        "armor_training": [
+          "LIGHT"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "CHA"
         ],
@@ -156,8 +171,7 @@
             20,
             21,
             22
-          ],
-          "ritual": true
+          ]
         }
       }
     },
@@ -167,6 +181,14 @@
       "payload": {
         "summary": "A servant of a deity channelling divine magic: healing, protection and holy power, in armour.",
         "hit_die": 8,
+        "armor_training": [
+          "LIGHT",
+          "MEDIUM",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "WIS"
         ],
@@ -269,8 +291,7 @@
             20,
             21,
             22
-          ],
-          "ritual": true
+          ]
         }
       }
     },
@@ -280,6 +301,13 @@
       "payload": {
         "summary": "A keeper of nature's balance who shapes wild magic and, in time, takes animal form.",
         "hit_die": 8,
+        "armor_training": [
+          "LIGHT",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "WIS"
         ],
@@ -388,8 +416,7 @@
             20,
             21,
             22
-          ],
-          "ritual": true
+          ]
         }
       }
     },
@@ -399,6 +426,16 @@
       "payload": {
         "summary": "A master of weapons and armour: the most attacks, the widest gear, straightforward and durable.",
         "hit_die": 10,
+        "armor_training": [
+          "LIGHT",
+          "MEDIUM",
+          "HEAVY",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL"
+        ],
         "primary_abilities": [
           "STR",
           "DEX"
@@ -501,6 +538,11 @@
       "payload": {
         "summary": "A disciplined martial artist: unarmed strikes, extraordinary speed and mobility, no armour needed.",
         "hit_die": 8,
+        "armor_training": [],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL_LIGHT"
+        ],
         "primary_abilities": [
           "DEX",
           "WIS"
@@ -562,6 +604,16 @@
       "payload": {
         "summary": "A holy warrior bound by an oath: smites, a healing touch, auras and heavy armour.",
         "hit_die": 10,
+        "armor_training": [
+          "LIGHT",
+          "MEDIUM",
+          "HEAVY",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL"
+        ],
         "primary_abilities": [
           "STR",
           "CHA"
@@ -670,8 +722,7 @@
             14,
             15,
             15
-          ],
-          "ritual": false
+          ]
         }
       }
     },
@@ -681,6 +732,15 @@
       "payload": {
         "summary": "A wilderness hunter and tracker: bow or blades, nature magic, at home in hostile terrain.",
         "hit_die": 10,
+        "armor_training": [
+          "LIGHT",
+          "MEDIUM",
+          "SHIELDS"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL"
+        ],
         "primary_abilities": [
           "DEX",
           "WIS"
@@ -798,8 +858,7 @@
             14,
             15,
             15
-          ],
-          "ritual": false
+          ]
         }
       }
     },
@@ -809,6 +868,14 @@
       "payload": {
         "summary": "A cunning skill specialist: stealth, traps, locks and devastating sneak attacks.",
         "hit_die": 8,
+        "armor_training": [
+          "LIGHT"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE",
+          "MARTIAL_FINESSE",
+          "MARTIAL_LIGHT"
+        ],
         "primary_abilities": [
           "DEX"
         ],
@@ -909,6 +976,10 @@
       "payload": {
         "summary": "Innate magic from your bloodline, powered by Charisma; flexible casting and raw power, fragile up close.",
         "hit_die": 6,
+        "armor_training": [],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "CHA"
         ],
@@ -1007,8 +1078,7 @@
             20,
             21,
             22
-          ],
-          "ritual": false
+          ]
         },
         "features": [
           {
@@ -1051,15 +1121,15 @@
             "name": "Metamagic",
             "level": 2,
             "enforcement": "ENGINE",
-            "summary": "Shape a spell as you cast it by spending sorcery points: two options at level 2, three at 10, four at 17. One option per spell, plus Empowered and Seeking.",
-            "text": "Because your magic flows from within, you can alter your spells to suit your needs; you gain two Metamagic options of your choice from the list below, and one more at Sorcerer levels 10 and 17. Each time you gain a Sorcerer level, you can replace one of your Metamagic options with another. You can use only one Metamagic option on a spell when you cast it, unless the option says otherwise.",
+            "summary": "Shape a spell as you cast it by spending sorcery points: two options at level 2, two more at 10 and two more at 17. One option per spell, plus Empowered and Seeking.",
+            "text": "Because your magic flows from within, you can alter your spells to suit your needs; you gain two Metamagic options of your choice from the list below; you gain two more options at Sorcerer level 10 and two more at Sorcerer level 17. Each time you gain a Sorcerer level, you can replace one of your Metamagic options with another. You can use only one Metamagic option on a spell when you cast it, unless the option says otherwise.",
             "text_is_paraphrase": true,
             "mechanic": {
               "kind": "METAMAGIC",
               "options_known": {
                 "2": 2,
-                "10": 3,
-                "17": 4
+                "10": 4,
+                "17": 6
               },
               "options": [
                 {
@@ -1169,6 +1239,12 @@
       "payload": {
         "summary": "Magic granted by a pact with an otherworldly patron: eldritch blasts, invocations, few but recharging slots.",
         "hit_die": 8,
+        "armor_training": [
+          "LIGHT"
+        ],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "CHA"
         ],
@@ -1276,8 +1352,7 @@
             14,
             15,
             15
-          ],
-          "ritual": false
+          ]
         }
       }
     },
@@ -1287,6 +1362,10 @@
       "payload": {
         "summary": "A scholar of arcane magic with the largest spell list in the game; fragile but endlessly versatile.",
         "hit_die": 6,
+        "armor_training": [],
+        "weapon_proficiencies": [
+          "SIMPLE"
+        ],
         "primary_abilities": [
           "INT"
         ],
@@ -1390,8 +1469,7 @@
             23,
             24,
             25
-          ],
-          "ritual": true
+          ]
         }
       }
     }

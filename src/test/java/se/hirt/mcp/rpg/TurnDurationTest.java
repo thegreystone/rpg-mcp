@@ -56,7 +56,7 @@ class TurnDurationTest {
 			String pc = "character:1";
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
-			((ScriptedRollService) engine.roller()).queue(20, 50, 1, 50);
+			((ScriptedRollService) engine.roller()).queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "ogres", List.of(ogre)), null, null, null, null, null);
 			String encounter = (String) started.get("encounter");
@@ -232,7 +232,7 @@ class TurnDurationTest {
 	private static Fight start(Engine engine, String campaign) {
 		String ogre = (String) engine.runtime().materialize(op(), campaign, "Ogre", null, null, null, null, null, false)
 				.get("character");
-		((ScriptedRollService) engine.roller()).queue(20, 50, 1, 50);
+		((ScriptedRollService) engine.roller()).queue(20, 1);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
 				map("party", List.of("character:1"), "ogres", List.of(ogre)), null, null, null, null, null);
 		assertEquals("character:1", m(started.get("turn")).get("character"));

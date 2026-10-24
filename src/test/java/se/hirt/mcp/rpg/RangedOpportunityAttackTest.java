@@ -286,9 +286,11 @@ class RangedOpportunityAttackTest {
 
 	private static String start(Engine engine, String campaign, List<String> enemies, String policy) {
 		ScriptedRollService dice = (ScriptedRollService) engine.roller();
-		dice.queue(20, 100);
+		// One d20 per combatant; the test creatures differ, so none share a roll, and no tie-break die
+		// follows a d20 (SRD 5.2.1 "Initiative").
+		dice.queue(20);
 		for (int i = 0; i < enemies.size(); i++) {
-			dice.queue(1, 1);
+			dice.queue(1);
 		}
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
 				map("party", List.of("character:1"), "foes", enemies), null, null, null, null, null,
