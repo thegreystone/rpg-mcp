@@ -740,6 +740,10 @@ sits under, and `{replace: true}` starts over. Internal closure-order markers ar
 public want views. The GM SHOULD record facts as they are established in play. The older `goals` list remains for
 compatibility; `wants` is the dated, closable form the views show.
 
+Null list entries, including in nested lists, return `INVALID_ARGUMENT` with `details.path` identifying the entry
+(for example, `biography.timeline[1]` or `intimacy.wants[0].with[1]`). Null map values still remove fields; the whole
+update is atomic when validation fails.
+
 On upgrade, references are overlaid on legacy profile JSON using the identity registry, including notes preserved in
 historical checkpoint before-images. Existing JSON is not rewritten; an entry gains its stored ref when it is next
 updated or closed. Old campaigns and checkpoints remain usable.

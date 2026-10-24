@@ -339,7 +339,7 @@ public class RpgTools {
 			+ "wants: [the same referenced want entries] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. "
 			+ "Optional resolved_by must name an existing event in the same campaign. Want refs must belong to this character and the matching general/intimate list. "
 			+ "Other lists append without duplicates and maps merge key by key at every depth; an entry with the same note replaces the old one (end a state); "
-			+ "a null removes the key it sits under; {replace: true} starts over. Record facts as they "
+			+ "a null map value removes its key; {replace: true} starts over. Biography/intimacy lists reject null entries, including nested ones, with INVALID_ARGUMENT and details.path. Record facts as they "
 			+ "are established in play: an age, a line worth keeping, a pregnancy, a scar, what someone wants. Mechanical state is never changed here. Drafts use update_character_draft.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse updateCharacter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)

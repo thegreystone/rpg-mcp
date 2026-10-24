@@ -138,9 +138,9 @@ public final class Biography {
 	 * duplicates at every depth; an entry that is a map with a {@code note} replaces an existing
 	 * entry with the same note. Wants instead merge partial updates by ref, falling back to a note
 	 * match for older clients. Entries of dated lists are stamped with the current game time when
-	 * the caller gave none; maps merge key by key; a null value removes the key it sits under;
-	 * {@code replace: true} starts from an empty aggregate. Nothing stored is dropped by a value of
-	 * another shape ({@link DeepMerge}).
+	 * the caller gave none; maps merge key by key; a null value removes the key it sits under; null
+	 * list entries are rejected with their indexed path; {@code replace: true} starts from an empty
+	 * aggregate. Nothing stored is dropped by a value of another shape ({@link DeepMerge}).
 	 */
 	public static Map<String, Object> merge(
 		Tx tx, long campaignId, long characterId, Map<String, Object> current, Map<String, Object> given,
@@ -148,6 +148,7 @@ public final class Biography {
 		if (given == null) {
 			return current;
 		}
+		requireNonNullListEntries(given, what);
 		boolean replace = Boolean.TRUE.equals(given.get("replace"));
 		var out = replace ? new LinkedHashMap<String, Object>() : new LinkedHashMap<>(current);
 		for (var e : given.entrySet()) {
@@ -178,6 +179,25 @@ public final class Biography {
 			out.put(key, merged instanceof String s ? s.trim() : merged);
 		}
 		return out;
+	}
+
+	/** Null removes a map field; a list entry must contain a value, including in nested lists. */
+	private static void requireNonNullListEntries(Object value, String path) {
+		if (value instanceof List<?> list) {
+			for (int i = 0; i < list.size(); i++) {
+				String entryPath = path + "[" + i + "]";
+				Object entry = list.get(i);
+				if (entry == null) {
+					throw RpgException
+							.invalidArgument(
+									"'" + entryPath + "' must not be null; use null as a map value to remove a field.")
+							.withDetail("path", entryPath);
+				}
+				requireNonNullListEntries(entry, entryPath);
+			}
+		} else if (value instanceof Map<?, ?> map) {
+			map.forEach((key, entry) -> requireNonNullListEntries(entry, path + "." + key));
+		}
 	}
 
 	/** Wants merge by stable ref, with the original case-insensitive note match as a fallback. */
