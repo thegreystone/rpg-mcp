@@ -819,7 +819,7 @@ public class RpgTools {
 
 	@Tool(name = "begin_level_up", description = "MUTATING. Opens a level-up transaction for a character whose XP reaches the next level (one level at a time). "
 			+ "Nothing changes on the live character until commit_level_up. Hit points are fixed at begin by campaign rules.hp_progression "
-			+ "(rolled openly when the policy calls for it); the remaining choice arrives at ASI levels: "
+			+ "(rolled openly when the policy calls for it; abandoning and restarting retains the original hit die); the remaining choice arrives at ASI levels: "
 			+ "the Ability Score Improvement. A companion recruited as a stat block has no class: their first level-up is the class choice itself (choices.class), "
 			+ "which replaces the stat block's hit points with the class's own and grants its saving throws. "
 			+ "The harness enters LEVEL_UP until commit or abandon_transaction.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))

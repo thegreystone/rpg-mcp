@@ -171,9 +171,7 @@ public final class LevelUpService {
 				chosen.put("hp_method", "AVERAGE");
 				chosen.put("hp_gain", Math.max(1, hitDie / 2 + 1 + conMod) + speciesHp);
 			} else {
-				Roll roll = roller.roll("1d" + hitDie);
-				CharacterService.recordRoll(tx, campaignId,
-						"hit points level " + next + " " + Ref.of(Ref.CHARACTER, c.id()), roll);
+				Roll roll = hitPointRoll(tx, roller, campaignId, c.id(), next, hitDie);
 				chosen.put("hp_method", "ROLL");
 				chosen.put("hp_roll", roll.toMap());
 				chosen.put("hp_gain", Math.max(1, roll.total() + conMod) + speciesHp);
@@ -182,6 +180,30 @@ public final class LevelUpService {
 			payload.put("choices", chosen);
 			return openTransaction(tx, campaign, campaignId, c, payload);
 		});
+	}
+
+	/**
+	 * The first recorded hit die belongs to the character and level, so abandoning a transaction
+	 * cannot reroll it. Reusing the authoritative roll also supports older campaigns and follows
+	 * checkpoint restore semantics without changing the live character before commit.
+	 */
+	private static Roll hitPointRoll(
+		Tx tx, RollService roller, long campaignId, long characterId, int level, int hitDie) {
+		String purpose = "hit points level " + level + " " + Ref.of(Ref.CHARACTER, characterId);
+		String expression = "1d" + hitDie;
+		Optional<Row> existing = tx.queryOne(
+				"SELECT * FROM roll WHERE campaign_id = ? AND purpose = ? AND expression = ? ORDER BY id LIMIT 1",
+				campaignId, purpose, expression);
+		if (existing.isPresent()) {
+			Row row = existing.get();
+			return new Roll(row.str("expression"),
+					row.list("dice_json").stream().map(value -> ((Number) value).intValue()).toList(),
+					row.list("dropped_json").stream().map(value -> ((Number) value).intValue()).toList(),
+					row.integer("modifier"), row.integer("total"));
+		}
+		Roll roll = roller.roll(expression);
+		CharacterService.recordRoll(tx, campaignId, purpose, roll);
+		return roll;
 	}
 
 	/** Opens the LEVEL_UP transaction and returns its choices. */
@@ -285,7 +307,7 @@ public final class LevelUpService {
 		}
 		hp.put("note", Boolean.TRUE.equals(payload.get("class_required"))
 				? "Computed at commit from the chosen class's hit die, the CON modifier and species bonuses; it replaces the stat block's hit points."
-				: "Fixed by campaign rules.hp_progression; the CON modifier and species bonuses are included.");
+				: "Fixed by campaign rules.hp_progression; the CON modifier and species bonuses are included. A rolled hit die is retained if this level-up is abandoned and restarted.");
 		result.put("hit_points", hp);
 		if (Boolean.TRUE.equals(payload.get("class_required"))) {
 			var pick = new LinkedHashMap<String, Object>();
@@ -1055,9 +1077,7 @@ public final class LevelUpService {
 			method = "AVERAGE";
 			gain = Math.max(1, hitDie / 2 + 1 + conMod) + speciesHp;
 		} else {
-			Roll roll = roller.roll("1d" + hitDie);
-			CharacterService.recordRoll(tx, campaignId, "hit points level " + to + " " + Ref.of(Ref.CHARACTER, c.id()),
-					roll);
+			Roll roll = hitPointRoll(tx, roller, campaignId, c.id(), to, hitDie);
 			method = "ROLL";
 			gain = Math.max(1, roll.total() + conMod) + speciesHp;
 		}

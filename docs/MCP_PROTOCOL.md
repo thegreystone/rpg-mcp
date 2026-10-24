@@ -1424,6 +1424,8 @@ Kinds: `CHARACTER_CREATION`, `CAMPAIGN_COMMIT`, `LEVEL_UP`, `ENCOUNTER_CHOICE`, 
 `TRAVEL_INTERRUPT`, `REST_INTERRUPT`. Only one transaction exclusively controlling an aggregate may be open at once.
 `abandon_transaction` discards draft state and leaves canonical state unchanged unless the transaction represents an
 already-committed interruptible workflow.
+For a level-up, an already-recorded hit die is retained for that character and target level. Restarting the level-up
+reuses that die, including after reopening the campaign; choices can be revised without rerolling hit points.
 
 ---
 

@@ -211,7 +211,9 @@ The engine ships with zero deviations from SRD 5.2.1. Campaign-configured varian
 3. **HP progression** (`rules.hp_progression`, default `FIRST_3_MAX`). Replaces the per-level average-or-roll choice
    with a campaign policy: `FIRST_3_MAX` (full hit die through level 3, open server roll from 4), `AVERAGE`, or `ROLL`
    (open server roll every level). CON and species bonuses always apply. Fixed at `begin_level_up`; journaled like any
-   roll.
+   roll. The first recorded hit die for a character and target level is reused after abandoning and restarting the
+   level-up, including after reopening the campaign. The current CON and species bonuses determine the new attempt's
+   HP gain; abandoning does not apply it to the character.
 4. **Encounter XP on any overcome outcome.** The XP pool is fixed at `start_encounter` (sum of hostile participants'
    XP, stored on the encounter) and pays out in full on `PARTY_VICTORY`, `NEGOTIATED` or `ENEMIES_FLED`; `PARTY_DEFEAT`
    and `PARTY_FLED` pay nothing. Encounters started before this ruling fall back to defeated-only XP.
