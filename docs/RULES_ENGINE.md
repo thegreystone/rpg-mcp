@@ -249,12 +249,19 @@ The engine ships with zero deviations from SRD 5.2.1. Campaign-configured varian
    the spell (Heightened and Careful need a save, Seeking an attack roll, Empowered and Transmuted damage, Quickened a
    1-action casting time, Extended a duration of a minute or more, Distant a range other than Self, Twinned a spell
    that gains a target from a higher slot) and paid before any die is rolled; one option shapes a spell, Empowered and
-   Seeking may join it. Empowered rerolls the lowest damage dice of the casting's first damage roll; Seeking rerolls a
+   Seeking may join it. Empowered rerolls the lowest dice in each damage roll, sharing one Charisma-based allowance
+   (minimum one die) across damage parts, darts and attacks; each die is rerolled at most once. Seeking rerolls a
    missed attack roll and spends its point only then; Heightened gives the target's save Disadvantage; Careful marks
    the named creatures as automatic successes taking no damage; Transmuted swaps an elemental type; Extended doubles a
    minute-or-longer duration to at most 24 hours. Quickened spends the shared Bonus Action during encounters.
    Distant, Subtle and Twinned are paid and reported; the engine does not otherwise track general Action economy,
    range or components.
+
+   Simultaneous saving-throw targets share one raw spell damage roll, including Empowered rerolls; each target
+   independently applies its save, Careful protection and defenses ([2024 damage rules](https://www.dndbeyond.com/sources/dnd/br-2024/playing-the-game#DamageagainstMultipleTargets)).
+   Spell attacks and Magic Missile darts keep their independent rolls. Empowered carries unused rerolls forward
+   within its one allowance ([Sage Advice](https://www.dndbeyond.com/sources/dnd/sae/sage-advice-compendium#Sorcerer));
+   it selects the lowest dice in each arriving roll rather than comparing future rolls.
 
    **Sneak Attack**: on a hit with a Finesse or Ranged weapon, when the roll had Advantage, or when an ally is beside
    the target and the roll did not have Disadvantage. Once per turn, tracked on the participant. With zones instead

@@ -67,13 +67,13 @@ import java.util.Set;
  * before the feature existed.
  * <p>
  * At casting, {@code options.metamagic} names the options; the plan validates them against the
- * spell, spends the points and is consulted by the casting core: Empowered rerolls the lowest
- * damage dice once per casting, Seeking rerolls a missed spell attack (one point per reroll, spent
- * when used), Heightened gives one target Disadvantage on its save, Careful lets named creatures
- * succeed automatically and take no damage, Transmuted swaps the element, Extended doubles a
- * duration of a minute or more (to at most 24 hours); Quickened spends the encounter's Bonus
- * Action. Distant, Subtle and Twinned are bookkeeping the fiction honours (range, components, an
- * extra target), reported in the result.
+ * spell, spends the points and is consulted by the casting core: Empowered rerolls the lowest dice
+ * in each damage roll within one casting-wide budget, Seeking rerolls a missed spell attack (one
+ * point per reroll, spent when used), Heightened gives one target Disadvantage on its save, Careful
+ * lets named creatures succeed automatically and take no damage, Transmuted swaps the element,
+ * Extended doubles a duration of a minute or more (to at most 24 hours); Quickened spends the
+ * encounter's Bonus Action. Distant, Subtle and Twinned are bookkeeping the fiction honours (range,
+ * components, an extra target), reported in the result.
  */
 public final class Metamagic {
 
@@ -441,7 +441,6 @@ public final class Metamagic {
 		final Set<Long> careful = new LinkedHashSet<>();
 		String transmuteTo;
 		int rerollBudget;
-		boolean empoweredSpent;
 		int seekingRerolls;
 
 		public boolean has(String id) {
@@ -598,7 +597,8 @@ public final class Metamagic {
 				throw violation(opt, "NO_DAMAGE", "needs a spell that rolls damage.");
 			}
 			plan.rerollBudget = Math.max(1, chaMod);
-			plan.notes.add("Empowered: up to " + plan.rerollBudget + " lowest damage dice rerolled once this casting.");
+			plan.notes.add("Empowered: up to " + plan.rerollBudget
+					+ " damage dice rerolled across this casting, taking the lowest dice in each roll.");
 		}
 		case "extended" -> {
 			if (!(duration.contains("minute") || duration.contains("hour") || duration.contains("day"))) {
@@ -677,13 +677,13 @@ public final class Metamagic {
 	// ── hooks used by the casting core ─────────────────────────────────
 
 	/**
-	 * Empowered Spell: rerolls the lowest damage dice of the casting's first damage roll (up to the
-	 * Charisma modifier, minimum one) and uses the new results. Returns the roll unchanged when the
-	 * plan does not empower or has already.
+	 * Empowered Spell: rerolls the lowest dice in this damage roll and uses the new results. The
+	 * casting's budget (Charisma modifier, minimum one) is shared across damage parts, darts and
+	 * attacks. Returns the roll unchanged when the plan does not empower or its budget is spent.
 	 */
 	public static Roll empower(
 		Tx tx, RollService roller, long campaignId, Plan plan, String expression, Roll roll, String label) {
-		if (plan == null || !plan.has("empowered") || plan.empoweredSpent || roll.dice().isEmpty()) {
+		if (plan == null || !plan.has("empowered") || plan.rerollBudget <= 0 || roll.dice().isEmpty()) {
 			return roll;
 		}
 		var sides = new ArrayList<Integer>();
@@ -710,7 +710,8 @@ public final class Metamagic {
 		order.sort((a, b) -> Integer.compare(dice.get(a), dice.get(b)));
 		var rerolled = new ArrayList<Map<String, Object>>();
 		int total = roll.total();
-		for (int k = 0; k < Math.min(plan.rerollBudget, order.size()); k++) {
+		int rerolls = Math.min(plan.rerollBudget, order.size());
+		for (int k = 0; k < rerolls; k++) {
 			int index = order.get(k);
 			int was = dice.get(index);
 			Roll fresh = roller.roll("1d" + sides.get(index));
@@ -719,7 +720,7 @@ public final class Metamagic {
 			total += now - was;
 			rerolled.add(Map.of("die", "d" + sides.get(index), "was", was, "now", now));
 		}
-		plan.empoweredSpent = true;
+		plan.rerollBudget -= rerolls;
 		plan.notes.add("Empowered on " + label + ": rerolled " + rerolled);
 		Roll out = new Roll(expression + " (Empowered)", dice, roll.dropped(), roll.modifier(), total);
 		CharacterService.recordRoll(tx, campaignId, "Empowered reroll " + label, out);

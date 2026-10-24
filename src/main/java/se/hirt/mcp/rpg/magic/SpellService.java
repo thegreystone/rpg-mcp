@@ -595,9 +595,12 @@ public final class SpellService {
 				throw RpgException
 						.invalidArgument(def.name() + " needs at least one target (the creatures in the area).");
 			}
+			// Simultaneous saves share one damage roll; each target applies its own save and defenses.
+			// Populate it lazily so empty areas and dead recipients never roll damage.
+			var sharedDamage = new ArrayList<Combat.RolledDamage>();
 			for (Row target : targets) {
 				perTarget.add(savingThrow(tx, rules, roller, campaignId, caster, target, def, mech, dc, upcast,
-						casterLevel, encounterId, round, concentrator, source, effectsCreated, opts, mm));
+						casterLevel, encounterId, round, concentrator, source, effectsCreated, opts, mm, sharedDamage));
 			}
 			if (targets.isEmpty()) {
 				// An emanation or area centred on the caster (Spirit Guardians, Thunderwave) with nobody in it yet:
@@ -1131,7 +1134,7 @@ public final class SpellService {
 		Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, Row targetRow,
 		RulesData.Definition def, Map<String, Object> mech, int dc, int upcast, int casterLevel, Long encounterId,
 		long round, Long concentrator, String source, List<String> effectsCreated, Map<String, Object> opts,
-		Metamagic.Plan mm) {
+		Metamagic.Plan mm, List<Combat.RolledDamage> sharedDamage) {
 		Row target = tx.get("character", targetRow.id());
 		var t = targetView(target);
 		if ("DEAD".equals(target.str("life_state"))) {
@@ -1181,8 +1184,11 @@ public final class SpellService {
 			t.put("saved", saved);
 		}
 		String onSuccess = careful ? "NONE" : String.valueOf(mech.getOrDefault("on_success", "HALF"));
-		List<Combat.RolledDamage> damages = rollSpellDamage(tx, roller, campaignId, def, mech, upcast, casterLevel,
-				false, 0, opts, mm);
+		if (sharedDamage.isEmpty()) {
+			sharedDamage.addAll(
+					rollSpellDamage(tx, roller, campaignId, def, mech, upcast, casterLevel, false, 0, opts, mm));
+		}
+		List<Combat.RolledDamage> damages = sharedDamage;
 		if (!damages.isEmpty() && !(saved && onSuccess.equals("NONE"))) {
 			if (saved && onSuccess.equals("HALF")) {
 				damages = damages.stream().map(d -> new Combat.RolledDamage(d.type(), d.roll(), d.amount() / 2))

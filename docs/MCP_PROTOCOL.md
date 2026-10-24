@@ -851,12 +851,19 @@ checks preparation and slots, spends the slot, rolls attacks, saves and damage, 
 returns rules text for anything unstructured. `options` carries spell-specific choices: `ritual: true`, `damage_type`
 (Chromatic Orb), `against` (a buff aimed at one creature), `condition` (which condition a cure removes).
 
+Targets making simultaneous saving throws share one damage roll, including any Empowered rerolls. Each target's
+save and defenses still determine its own damage. Separate spell attacks and Magic Missile darts roll independently.
+
 A sorcerer adds `options.metamagic`, one name or a list (`["Empowered Spell", "Quickened Spell"]`), with the extras an
 option needs: `heightened_target` (default first target), `careful` (creatures that succeed automatically),
 `damage_type` for Transmuted, `sorcery_incarnate: true` while Innate Sorcery is active at level 7 or above. Options must
 be known (`spellcasting.metamagic.known`), applicable and paid in sorcery points before anything is rolled; the result's
 `metamagic` block reports what was used, its cost and the points left. Seeking spends its point only when a missed attack
 roll is rerolled.
+
+Empowered uses one Charisma-based reroll allowance (minimum one die) across the casting's damage rolls. The engine
+rerolls the lowest dice in each roll as it resolves, carrying any unused allowance to later damage parts, darts or
+attacks. Each die is rerolled at most once, and the option costs one sorcery point for the casting.
 
 `options.weapon` (a name or `inventory:N`) names the carried weapon a weapon-enchanting spell binds to (Magic Weapon,
 Shillelagh; default the wielder's equipped weapon): its bonus, die and damage ride only on attacks with that weapon and
