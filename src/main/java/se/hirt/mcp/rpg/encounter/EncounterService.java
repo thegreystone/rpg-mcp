@@ -1584,6 +1584,13 @@ public final class EncounterService {
 				Row targetParticipant = chooserParticipant;
 				Combat.AttackProfile profile = resolveProfile(tx, attacker, (Map<String, Object>) ctx.get("action"))
 						.profile();
+				// The ammunition is already spent; restore the effective modifiers recorded with the attack.
+				if (ctx.get("ammunition") instanceof Map<?, ?> ammunition) {
+					int bonus = ammunition.get("bonus") instanceof Number n ? n.intValue() : 0;
+					Map<String, String> extra = ammunition.get("extra_damage") instanceof Map<?, ?> damage
+							? (Map<String, String>) damage : null;
+					profile = Combat.withAmmunition(profile, bonus, extra);
+				}
 				var live = new LinkedHashMap<String, Object>(ctx);
 				if (option.equals("CAST_SHIELD")) {
 					if (!canCastShield(tx, target, targetParticipant)) {
