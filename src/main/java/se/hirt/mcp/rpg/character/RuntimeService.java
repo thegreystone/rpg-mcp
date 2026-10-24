@@ -431,16 +431,19 @@ public final class RuntimeService {
 		String source = reason == null || reason.isBlank()
 				? (amount < 0 ? "hit point maximum reduced" : "hit point maximum raised") : reason;
 		String stackingKey = change.get("stacking_key") == null ? null : change.get("stacking_key").toString();
+		int currentHp = c.intOr("current_hp", 0);
 		long effectId = se.hirt.mcp.rpg.rules.Effects.add(tx, campaignId, c.id(), null, null, source, null,
 				Map.of("max_hp", amount), duration, null, stackingKey, "GM");
+		// Replacing an effect restores its maximum and may temporarily clamp current HP.
+		Row refreshed = tx.get("character", c.id());
 		var out = new LinkedHashMap<String, Object>();
 		out.put("effect", effectId);
 		out.put("adjustment", Map.of("amount", amount, "duration", duration));
-		int effective = Math.max(0, c.intOr("max_hp", 0) + amount);
+		int effective = Math.max(0, refreshed.intOr("max_hp", 0) + amount);
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("max_hp", effective);
-		cols.put("current_hp", Math.min(c.intOr("current_hp", 0), effective));
-		if (effective == 0 && !"DEAD".equals(c.str("life_state"))) {
+		cols.put("current_hp", Math.min(currentHp, effective));
+		if (effective == 0 && !"DEAD".equals(refreshed.str("life_state"))) {
 			// Dead: the effects go, and with them the maximum they changed; write the death on the row we have.
 			tx.update("character", c.id(), Map.of("max_hp", effective, "current_hp", 0));
 			se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id());
@@ -457,7 +460,7 @@ public final class RuntimeService {
 					"MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null, Map.of("max_hp_adjustment", amount)));
 			out.put("died", true);
 		}
-		cols.put("revision", c.lng("revision") + 1);
+		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 		tx.update("character", c.id(), cols);
 		return out;
 	}

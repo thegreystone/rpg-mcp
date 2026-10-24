@@ -260,6 +260,144 @@ class BiographyTest {
 	}
 
 	@Test
+	void renewingAMaxHpBonusDoesNotAccumulateOrDiscardCurrentHp() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("renew-maxhp"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			int base = ((Number) maxHpState(engine, campaign, pc).get("max")).intValue();
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 10, "stacking_key", "blessing", "minutes", 1));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc, map("kind", "HEAL", "amount", 10));
+
+			Map<String, Object> renewal = map("kind", "ADJUST_MAX_HP", "amount", 10, "stacking_key", "blessing",
+					"minutes", 3);
+			String operation = op();
+			engine.runtime().applyRuntimeChange(operation, campaign, pc, renewal);
+			Map<String, Object> hp = maxHpState(engine, campaign, pc);
+			assertEquals(base + 10, hp.get("max"));
+			assertEquals(base + 10, hp.get("current"), "renewal does not lose HP to the interim removal");
+			assertEquals(base, hp.get("max_base"));
+			assertEquals(1, list(hp.get("max_adjustments")).size());
+			assertEquals(Boolean.TRUE,
+					engine.runtime().applyRuntimeChange(operation, campaign, pc, renewal).get("replayed"));
+			assertEquals(hp, maxHpState(engine, campaign, pc));
+
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 15, "stacking_key", "blessing", "minutes", 3));
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base + 15, hp.get("max"));
+			assertEquals(base + 10, hp.get("current"), "a larger maximum does not heal");
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 5, "stacking_key", "blessing", "minutes", 3));
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base + 5, hp.get("max"));
+			assertEquals(base + 5, hp.get("current"), "only the final smaller maximum clamps HP");
+			assertEquals(base, hp.get("max_base"));
+			assertEquals(1, list(hp.get("max_adjustments")).size());
+			engine.sessions().advanceTime(op(), campaign, 1, "the old duration passes");
+			assertEquals(base + 5, maxHpState(engine, campaign, pc).get("max"));
+			engine.sessions().advanceTime(op(), campaign, 2, "the replacement expires");
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base, hp.get("max"));
+			assertEquals(base, hp.get("current"));
+			assertNull(hp.get("max_adjustments"), "expiry leaves no permanent bonus");
+		}
+	}
+
+	@Test
+	void replacingAMaxHpReductionUsesTheRestoredMaximumWithoutHealing() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("replace-maxhp-drain"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			int base = ((Number) maxHpState(engine, campaign, pc).get("max")).intValue();
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", -2, "stacking_key", "drain", "until", "RESTORED"));
+			Map<String, Object> stronger = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 1 - base, "stacking_key", "drain", "until", "RESTORED"));
+			assertEquals("ALIVE", stronger.get("life_state"),
+					"replacement must not kill by counting the old drain again");
+			assertEquals(1, m(stronger.get("hp")).get("max"));
+			assertEquals(1, m(stronger.get("hp")).get("current"));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", -1, "stacking_key", "drain", "until", "RESTORED"));
+			Map<String, Object> hp = maxHpState(engine, campaign, pc);
+			assertEquals(base - 1, hp.get("max"));
+			assertEquals(1, hp.get("current"), "weakening a drain does not heal");
+			assertEquals(base, hp.get("max_base"));
+			assertEquals(1, list(hp.get("max_adjustments")).size());
+			engine.runtime().applyRuntimeChange(op(), campaign, pc, map("kind", "RESTORE_MAX_HP"));
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base, hp.get("max"));
+			assertEquals(1, hp.get("current"));
+			assertNull(hp.get("max_adjustments"));
+		}
+	}
+
+	@Test
+	void maxHpReplacementsPreserveOtherKeysAndRestoreThroughCheckpoints() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("maxhp-stacking-keys"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String pc = "character:1";
+			int base = ((Number) maxHpState(engine, campaign, pc).get("max")).intValue();
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 10, "stacking_key", "blessing", "minutes", 1));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 3, "stacking_key", "boon"));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc, map("kind", "HEAL", "amount", 13));
+			Map<String, Object> before = maxHpState(engine, campaign, pc);
+			String checkpoint = (String) engine.checkpoints().create(op(), campaign, "before replacing the bonus")
+					.get("checkpoint");
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 5, "stacking_key", "blessing", "minutes", 1));
+			Map<String, Object> hp = maxHpState(engine, campaign, pc);
+			assertEquals(base + 8, hp.get("max"));
+			assertEquals(base + 8, hp.get("current"));
+			assertEquals(base, hp.get("max_base"));
+			assertEquals(2, list(hp.get("max_adjustments")).size());
+			engine.checkpoints().restore(op(), campaign, checkpoint, "undo the replacement");
+			assertEquals(before, maxHpState(engine, campaign, pc));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "ADJUST_MAX_HP", "amount", 5, "stacking_key", "blessing", "minutes", 1));
+			engine.sessions().advanceTime(op(), campaign, 1, "the blessing ends");
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base + 3, hp.get("max"));
+			assertEquals(1, list(hp.get("max_adjustments")).size());
+			engine.rest().rest(op(), campaign, "LONG", null, null);
+			hp = maxHpState(engine, campaign, pc);
+			assertEquals(base, hp.get("max"));
+			assertEquals(base, hp.get("current"));
+			assertNull(hp.get("max_adjustments"));
+		}
+	}
+
+	@Test
+	void aReplacementThatReallyReducesTheMaximumToZeroStillKills() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("maxhp-replacement-death"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String guard = (String) engine.runtime()
+					.materialize(op(), campaign, "Guard", "Wat", null, null, null, null, false).get("character");
+			int base = ((Number) maxHpState(engine, campaign, guard).get("max")).intValue();
+			engine.runtime().applyRuntimeChange(op(), campaign, guard,
+					map("kind", "ADJUST_MAX_HP", "amount", 4, "stacking_key", "maximum"));
+			Map<String, Object> dead = engine.runtime().applyRuntimeChange(op(), campaign, guard,
+					map("kind", "ADJUST_MAX_HP", "amount", -base, "stacking_key", "maximum"));
+			assertEquals(Boolean.TRUE, dead.get("died"));
+			assertEquals("DEAD", dead.get("life_state"));
+			assertEquals(0, m(dead.get("hp")).get("current"));
+			assertEquals(base, m(dead.get("hp")).get("max"));
+			assertNull(m(dead.get("hp")).get("max_adjustments"));
+		}
+	}
+
+	private static Map<String, Object> maxHpState(Engine engine, String campaign, String character) {
+		return m(engine.characters().characterSheet(campaign, character, "PLAY").get("hp"));
+	}
+
+	@Test
 	void theHitPointMaximumCanBeLoweredAndRaisedForAWhile() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("maxhp"))) {
 			String campaign = TestCampaigns.committedCampaign(engine);
