@@ -123,13 +123,23 @@ repeat saves: a spell granting another save at the end of the target's
            it when the turn ends. A second failure escalates where the
            spell says (Sleep to Unconscious). Reported as repeat_saves.
 
-damage pipeline: roll → resistance (halve) / vulnerability (double) /
-           immunity (zero) → temp HP first → current HP.
-           Order per SRD "Damage and Healing". [verify]
+damage pipeline: roll → combine each damage type within this one hit /
+           effect → successful-save reduction, if any → resistance
+           (halve, round down) → vulnerability (double) → temp HP first
+           → current HP. Immunity zeros its type.
+           Separate attacks, rays and darts remain separate damage
+           applications. Order per SRD "Damage and Healing".
 ```
 
 Derived values (AC from armor formula and Dex cap, saves, skill bonuses, carry capacity) are computed on read from base
 values, equipment and effects (`DOMAIN_MODEL.md` §5.5). No cache table in the MVP.
+
+Damage breakdowns contain one row per type, in first-seen order. `rolled` is the combined damage entering defenses;
+`applied` is what remains after defenses. A successful save that halves damage also reports `before_save` for the
+unreduced combined amount. Single-component rows retain `roll`; multi-component rows retain every original type,
+amount (`rolled`, before save reduction) and optional `roll` in `parts`. Combining components never rerolls dice.
+This follows [Resistance and Vulnerability](https://www.dndbeyond.com/sources/dnd/br-2024/playing-the-game#ResistanceandVulnerability):
+resistance applies to damage of its type, then vulnerability applies to the result.
 
 ---
 

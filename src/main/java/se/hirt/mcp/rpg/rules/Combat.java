@@ -33,6 +33,7 @@ import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
+import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.util.*;
 
@@ -298,49 +299,99 @@ public final class Combat {
 	}
 
 	/**
-	 * Damage pipeline (SRD 5.2.1 "Damage and Healing"): per type apply immunity (0), resistance
-	 * (halve, round down) or vulnerability (double); temporary HP absorbs first; then current HP,
-	 * never below 0. Massive damage: if the remaining damage after reaching 0 equals or exceeds the
-	 * creature's HP maximum, it dies outright.
+	 * Damage pipeline (SRD 5.2.1 "Damage and Healing"): combine each type within one damage
+	 * application, then apply immunity (0), resistance (halve, round down) and vulnerability
+	 * (double); temporary HP absorbs first; then current HP, never below 0. Massive damage: if the
+	 * remaining damage after reaching 0 equals or exceeds the creature's HP maximum, it dies
+	 * outright.
 	 */
 	public static DamageResult applyDamage(
 		int currentHp, int tempHp, int maxHp, List<RolledDamage> damages, Defenses defenses) {
+		return applyDamage(currentHp, tempHp, maxHp, damages, defenses, false);
+	}
+
+	/** A successful save halves each combined damage type before resistance and vulnerability. */
+	public static DamageResult applyDamage(
+		int currentHp, int tempHp, int maxHp, List<RolledDamage> damages, Defenses defenses,
+		boolean halfBeforeDefenses) {
+		var byType = new LinkedHashMap<String, List<RolledDamage>>();
+		for (RolledDamage damage : damages) {
+			byType.computeIfAbsent(damage.type().toLowerCase(Locale.ROOT), ignored -> new ArrayList<>()).add(damage);
+		}
 		var breakdown = new ArrayList<Map<String, Object>>();
-		int total = 0;
-		for (RolledDamage d : damages) {
-			int amount = d.amount();
+		long total = 0;
+		for (var group : byType.entrySet()) {
+			List<RolledDamage> parts = group.getValue();
+			long raw = parts.stream().mapToLong(RolledDamage::amount).sum();
+			long rolled = halfBeforeDefenses ? raw / 2 : raw;
+			long amount = rolled;
 			String note = null;
-			String type = d.type().toLowerCase();
+			String type = group.getKey();
 			if (defenses.immunities().contains(type)) {
 				amount = 0;
 				note = "immune";
-			} else if (defenses.resistances().contains(type)) {
-				amount = amount / 2;
-				note = "resistant (halved)";
-			} else if (defenses.vulnerabilities().contains(type)) {
-				amount = amount * 2;
-				note = "vulnerable (doubled)";
+			} else {
+				if (defenses.resistances().contains(type)) {
+					amount = amount / 2;
+					note = "resistant (halved)";
+				}
+				if (defenses.vulnerabilities().contains(type)) {
+					amount = amount * 2;
+					note = note == null ? "vulnerable (doubled)" : note + ", vulnerable (doubled)";
+				}
 			}
 			var m = new LinkedHashMap<String, Object>();
-			m.put("type", d.type());
-			m.put("rolled", d.amount());
-			m.put("applied", amount);
+			m.put("type", parts.getFirst().type());
+			m.put("rolled", damageNumber(rolled));
+			m.put("applied", checkedDamage(amount));
+			if (halfBeforeDefenses) {
+				m.put("before_save", damageNumber(raw));
+			}
 			if (note != null) {
 				m.put("note", note);
 			}
-			if (d.roll() != null) {
-				m.put("roll", d.roll().toMap());
+			if (parts.size() == 1) {
+				if (parts.getFirst().roll() != null) {
+					m.put("roll", parts.getFirst().roll().toMap());
+				}
+			} else {
+				m.put("parts", parts.stream().map(d -> {
+					var part = new LinkedHashMap<String, Object>();
+					part.put("type", d.type());
+					part.put("rolled", d.amount());
+					if (d.roll() != null) {
+						part.put("roll", d.roll().toMap());
+					}
+					return part;
+				}).toList());
 			}
 			breakdown.add(m);
 			total += amount;
 		}
-		int absorbed = Math.min(tempHp, total);
-		int remaining = total - absorbed;
+		int totalDealt = checkedDamage(total);
+		int absorbed = Math.min(tempHp, totalDealt);
+		int remaining = totalDealt - absorbed;
 		int hpAfter = Math.max(0, currentHp - remaining);
 		int overflow = remaining - currentHp;
 		boolean dropped = currentHp > 0 && hpAfter == 0;
 		boolean massive = hpAfter == 0 && overflow >= maxHp && maxHp > 0;
-		return new DamageResult(total, breakdown, tempHp, tempHp - absorbed, currentHp, hpAfter, dropped, massive);
+		return new DamageResult(totalDealt, breakdown, tempHp, tempHp - absorbed, currentHp, hpAfter, dropped, massive);
+	}
+
+	private static int checkedDamage(long amount) {
+		if (amount < 0 || amount > Integer.MAX_VALUE) {
+			throw RpgException
+					.invalidArgument("Damage after defenses must be between 0 and " + Integer.MAX_VALUE + ".");
+		}
+		return (int) amount;
+	}
+
+	/** Preserve ordinary breakdown values while allowing larger amounts before reductions. */
+	private static Number damageNumber(long amount) {
+		if (amount >= Integer.MIN_VALUE && amount <= Integer.MAX_VALUE) {
+			return (int) amount;
+		}
+		return amount;
 	}
 
 	/** Death saving throw bookkeeping (SRD 5.2.1 "Death Saving Throws"). */

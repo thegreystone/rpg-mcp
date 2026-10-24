@@ -1190,14 +1190,13 @@ public final class SpellService {
 		}
 		List<Combat.RolledDamage> damages = sharedDamage;
 		if (!damages.isEmpty() && !(saved && onSuccess.equals("NONE"))) {
-			if (saved && onSuccess.equals("HALF")) {
-				damages = damages.stream().map(d -> new Combat.RolledDamage(d.type(), d.roll(), d.amount() / 2))
-						.toList();
+			boolean halfBeforeDefenses = saved && onSuccess.equals("HALF");
+			if (halfBeforeDefenses) {
 				t.put("halved", true);
 			}
 			Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
 					Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), damages,
-					RuntimeService.defensesOf(tx, rules, target));
+					RuntimeService.defensesOf(tx, rules, target), halfBeforeDefenses);
 			t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, false, caster.id(),
 					"slain by " + def.name()));
 			markDefeated(tx, encounterId, target.id());

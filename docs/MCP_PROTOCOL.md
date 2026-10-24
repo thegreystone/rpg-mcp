@@ -1062,6 +1062,12 @@ and other consequences, defeated/dying changes, triggered reactions or pending c
 follow-up, and the new revision. An action needing a player or GM choice creates a typed pending transaction rather
 than guessing.
 
+Within one damage application, components of the same type are combined before save reductions, resistance and
+vulnerability; separate hits, rays and darts remain separate applications. `breakdown` has one row per type with
+`rolled` (entering defenses), `applied` and any defense `note`. A single component retains `roll`; multiple components
+retain their original types, amounts and rolls in `parts`. When a save halves damage, `before_save` reports the
+combined amount before that reduction. See `RULES_ENGINE.md` §3 for the full damage pipeline.
+
 `CAST` takes the `cast_spell` fields flattened into the action (`spell`, `targets` or `target`, `slot_level`,
 `metamagic`, `heightened_target`, `careful`, `damage_type`, …; §13.9).
 
