@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rpg-mcp",
+  "version": "0.2.0",
+  "description": "A persistent, rules-aware RPG engine (SRD 5.2.1) that turns your AI into a game master for campaigns that last for years.",
+  "author": { "name": "Marcus Hirt", "url": "https://www.hirt.se" },
+  "homepage": "https://github.com/thegreystone/rpg-mcp",
+  "repository": "https://github.com/thegreystone/rpg-mcp",
+  "license": "BSD-3-Clause",
+  "keywords": ["rpg", "dungeon-master", "srd", "5e", "campaign", "game", "dice"],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "onboardingSkill": "./skills/setup/SKILL.md",
+      "interface": {
+        "displayName": "RPG MCP",
+        "shortDescription": "Your AI as a game master",
+        "longDescription": "Play long-running tabletop RPG campaigns with your AI as the Game Master. The engine owns the rules and the truth: characters, HP, money, XP, inventory, time, party, relationships, events and checkpoints live in one local SQLite file, so a campaign runs across many conversations without any chat transcript. SRD 5.2.1 rules content is embedded; no account, no network access. Requires Node.js 18 or newer and a supported native platform; setup downloads the pinned executable from GitHub Releases.",
+        "developerName": "Marcus Hirt",
+        "category": "Entertainment",
+        "capabilities": ["Run a campaign setup interview", "Track characters, dice, combat and loot", "Resume a campaign weeks later"],
+        "websiteURL": "https://github.com/thegreystone/rpg-mcp",
+        "supportURL": "https://github.com/thegreystone/rpg-mcp/issues",
+        "defaultPrompt": ["Is RPG MCP ready to play?", "Start a new campaign using RPG MCP.", "Please continue my campaign using RPG MCP."],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      }
+    }
+  }
+}

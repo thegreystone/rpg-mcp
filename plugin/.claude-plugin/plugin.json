@@ -1,0 +1,25 @@
+{
+  "name": "rpg-mcp",
+  "displayName": "RPG MCP",
+  "description": "A persistent, rules-aware RPG engine (SRD 5.2.1) that turns Claude into a game master for campaigns that last for years. Runs locally; no account, no network access.",
+  "author": {
+    "name": "Marcus Hirt",
+    "url": "https://www.hirt.se"
+  },
+  "homepage": "https://github.com/thegreystone/rpg-mcp",
+  "repository": "https://github.com/thegreystone/rpg-mcp",
+  "documentationUrl": "https://github.com/thegreystone/rpg-mcp/blob/master/README.md",
+  "supportUrl": "https://github.com/thegreystone/rpg-mcp/issues",
+  "license": "BSD-3-Clause",
+  "keywords": [
+    "rpg",
+    "dungeon-master",
+    "srd",
+    "5e",
+    "campaign",
+    "game",
+    "dice"
+  ],
+  "mcpServers": "https://github.com/thegreystone/rpg-mcp/releases/download/v0.2.0/rpg-mcp-server-0.2.0-universal.mcpb",
+  "icon": "./assets/icon.png"
+}

@@ -185,16 +185,27 @@ and Codex, following Mnemic's separate packages. Keep plugin source, skills and 
 code; publish native executables and `.mcpb` archives as GitHub Release assets. Do not commit executables or
 bundle archives to either repository.
 
-When adding RPG MCP to the marketplace, use Mnemic's layout:
+The packages follow Mnemic's layout and both `ai-plugins` catalogs point at them with `git-subdir` sources on
+`master`:
 
-- `plugin/`: a Claude Code manifest referencing a versioned universal bundle URL, the RPG skill and the icon.
-- `plugin-codex/`: a Codex manifest, the icon, and a setup workflow and launcher that download a pinned native
-  executable for the user's platform and configure `RPG_DATA_DIR`.
-- Marketplace entries in `ai-plugins` pointing at those source directories in this repository.
+- [`plugin/`](../plugin/): the Claude Code plugin. Its manifest's `mcpServers` is the URL of the release's
+  universal bundle (so Linux x86_64 is covered, unlike Mnemic), plus the `rpg` skill and the icon. No
+  `version` field: Claude Code versions a `git-subdir` plugin by commit. Claude Desktop rejects URL-backed
+  bundles, so Desktop keeps the per-platform `.mcpb`.
+- [`plugin-codex/`](../plugin-codex/): the Codex plugin. A portable manifest, `mcp.json`, the `rpg` and
+  `setup` skills, and [`scripts/rpg-mcp.mjs`](../plugin-codex/scripts/rpg-mcp.mjs), a dependency-free Node.js
+  18+ launcher that downloads the pinned standalone binary for the host platform into a cache outside the
+  plugin, verifies GitHub's size and SHA-256 digest, and starts it with `RPG_DATA_DIR` set. Optional
+  `--configure --data-dir` and `--binary` settings live outside the plugin too.
 
-RPG MCP does not yet provide those packages or marketplace entries; the README documents direct bundle and
-manual binary installation. Once the packages exist, update their release pins after publishing and signing
-a release, keeping the RPG skill in step with the protocol guide.
+**Updating the pins** after a release has been published *and* `Sign-Release.ps1` has re-packed the universal
+bundle: change the version in the bundle URL in `plugin/.claude-plugin/plugin.json`, and `RELEASE_VERSION`
+in `plugin-codex/scripts/rpg-mcp.mjs` together with `version` in `plugin-codex/plugin.json`. Run
+`claude plugin validate ./plugin` and `node --test plugin-codex/tests/launcher.test.mjs`, push, and users pick
+the change up with `claude plugin update rpg-mcp@hirt-ai-plugins` or a Codex marketplace refresh. Both skills
+only point the model at `get_instructions`; the guide itself stays in the server, so a protocol change rarely
+touches them. Keep `plugin/assets/icon.png` and `plugin-codex/assets/icon.png` in step with
+[`docs/assets/rpg-mcp-icon.png`](assets/rpg-mcp-icon.png).
 
 **Claude Desktop installation.** The README sends Desktop users to the per-platform `.mcpb` on the release,
 installed directly in Claude Desktop, where the bundle's `user_config` form lets them choose a campaign data

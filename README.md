@@ -36,7 +36,25 @@ go to *Settings → Extensions* in Claude Desktop, and drag the file into *"Drag
 install"*. Pick your campaign data directory when asked, then skip to
 [Get a campaign started](#2-get-a-campaign-started).
 
-Claude Code, Codex and Linux users take the manual route that follows.
+### The easy way: the plugin marketplace (Claude Code and Codex)
+
+In Claude Code:
+
+```
+/plugin marketplace add thegreystone/ai-plugins
+/plugin install rpg-mcp@hirt-ai-plugins
+```
+
+Start a new session; Claude Code downloads the server bundle on that first start. Then `/rpg-mcp:rpg new`
+begins the setup interview and `/rpg-mcp:rpg continue` picks a campaign up. Campaigns go to `~/.rpg-mcp`;
+change that under `/plugin` → **Installed** → **rpg-mcp** → **Configure**. The bundle covers macOS Apple
+silicon, Windows x64 and Linux x64. See [`plugin/README.md`](plugin/README.md).
+
+In Codex, add the marketplace with `codex plugin marketplace add thegreystone/ai-plugins`, install **RPG
+MCP** from the Plugins Directory, run its **setup** skill once (it prefetches the native executable; Node.js
+18 or newer is required), and start a new chat. See [`plugin-codex/README.md`](plugin-codex/README.md).
+
+Linux aarch64 users, and anyone who prefers a hand-registered binary, take the manual route that follows.
 
 ### Download a binary
 
