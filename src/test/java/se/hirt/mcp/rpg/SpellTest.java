@@ -220,6 +220,118 @@ class SpellTest {
 	}
 
 	@Test
+	void spiritualWeaponConcentrationSurvivesAMissAndEndsOnExpiryOrReplacement() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("spiritual-weapon-concentration"))) {
+			String[] ids = caster(engine, "Cleric",
+					map("WIS", 15, "CON", 14, "STR", 13, "DEX", 12, "CHA", 10, "INT", 8),
+					List.of("Insight", "Religion"), List.of("Sacred Flame", "Guidance", "Spare the Dying"),
+					List.of("Bless", "Detect Magic", "Cure Wounds", "Guiding Bolt"));
+			String campaign = ids[0], pc = ids[1];
+			levelCaster(engine, campaign, pc, 3);
+			engine.spells().prepare(op(), campaign, pc, null, List.of("Spiritual Weapon", "Bless", "Guiding Bolt"));
+			String target = spellTargets(engine, campaign, 1).get(0);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(1);
+			Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, "Spiritual Weapon", 2, List.of(target),
+					null);
+			assertEquals(Boolean.FALSE, list(cast.get("targets")).get(0).get("hit"));
+			assertEquals(1, ((List<?>) cast.get("effects_created")).size());
+			assertEquals(List.of("Spiritual Weapon (Caster)"), concentratingOn(engine, campaign, pc));
+			assertEquals(1, list(engine.characters().characterSheet(campaign, pc, "PLAY").get("effects")).size());
+			assertTrue(dice.exhausted());
+
+			engine.sessions().advanceTime(op(), campaign, 1, "the spell runs its course");
+			assertTrue(concentratingOn(engine, campaign, pc).isEmpty());
+			dice.queue(1);
+			engine.spells().cast(op(), campaign, pc, "Spiritual Weapon", 2, List.of(target), null);
+			dice.queue(1);
+			engine.spells().cast(op(), campaign, pc, "Guiding Bolt", 1, List.of(target), null);
+			assertEquals(List.of("Spiritual Weapon (Caster)"), concentratingOn(engine, campaign, pc),
+					"a non-concentration spell does not replace it");
+			Map<String, Object> bless = engine.spells().cast(op(), campaign, pc, "Bless", 1, List.of(pc), null);
+			assertEquals(List.of("Spiritual Weapon (Caster)"), bless.get("concentration_ended"));
+			assertEquals(List.of("Bless (Caster)"), concentratingOn(engine, campaign, pc));
+			assertEquals(1, list(engine.characters().characterSheet(campaign, pc, "PLAY").get("effects")).size(),
+					"the old marker is gone and Bless does not gain a redundant marker");
+		}
+	}
+
+	@Test
+	void vampiricTouchConcentrationIsCheckedWhenTheCasterTakesDamage() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("vampiric-touch-concentration"))) {
+			String[] ids = vampiricCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			String target = spellTargets(engine, campaign, 1).get(0);
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(19, 1, 1, 1);
+			Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, "Vampiric Touch", 3, List.of(target),
+					null);
+			assertEquals(Boolean.TRUE, list(cast.get("targets")).get(0).get("hit"));
+			assertEquals(1, ((List<?>) cast.get("effects_created")).size());
+			assertEquals(List.of("Vampiric Touch (Caster)"), concentratingOn(engine, campaign, pc));
+			dice.queue(20);
+			Map<String, Object> kept = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "DAMAGE", "amount", 1, "reason", "a glancing blow"));
+			assertEquals(Boolean.TRUE, m(kept.get("concentration")).get("kept"));
+			assertEquals(List.of("Vampiric Touch (Caster)"), concentratingOn(engine, campaign, pc));
+			dice.queue(1);
+			Map<String, Object> broken = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "DAMAGE", "amount", 1, "reason", "another blow"));
+			assertEquals(Boolean.FALSE, m(broken.get("concentration")).get("kept"));
+			assertEquals(List.of("Vampiric Touch (Caster)"), m(broken.get("concentration")).get("ended"));
+			assertTrue(concentratingOn(engine, campaign, pc).isEmpty());
+			assertTrue(dice.exhausted());
+		}
+	}
+
+	@Test
+	void selfDamageCanBreakNewAttackSpellConcentration() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("self-attack-concentration"))) {
+			String[] ids = vampiricCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(19, 1, 1, 1, 1);
+			Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, "Vampiric Touch", 3, List.of(pc), null);
+			assertEquals(Boolean.FALSE, m(list(cast.get("targets")).get(0).get("concentration")).get("kept"));
+			assertTrue(concentratingOn(engine, campaign, pc).isEmpty(),
+					"a marker removed by the spell's own damage must not be recreated after the attack");
+			assertTrue(dice.exhausted());
+		}
+	}
+
+	@Test
+	void droppingToZeroDoesNotRecreateAttackSpellConcentration() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("unconscious-attack-concentration"))) {
+			String[] ids = vampiricCaster(engine);
+			String campaign = ids[0], pc = ids[1];
+			int hp = ((Number) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("hp")).get("current"))
+					.intValue();
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "DAMAGE", "amount", hp - 3, "reason", "wounded before casting"));
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(19, 1, 1, 1, 20);
+			Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, "Vampiric Touch", 3, List.of(pc), null);
+			Map<String, Object> hit = list(cast.get("targets")).get(0);
+			assertEquals(Boolean.TRUE, m(hit.get("concentration")).get("kept"));
+			assertEquals("DYING", hit.get("life_state"));
+			assertTrue(concentratingOn(engine, campaign, pc).isEmpty(),
+					"falling unconscious ends concentration even if the spell's healing then revives the caster");
+			assertTrue(dice.exhausted());
+		}
+	}
+
+	private static String[] vampiricCaster(Engine engine) {
+		String[] ids = rayCaster(engine, 5);
+		engine.spells().prepare(op(), ids[0], ids[1], null, List.of("Vampiric Touch", "Detect Magic", "Mage Armor"));
+		return ids;
+	}
+
+	private static List<?> concentratingOn(Engine engine, String campaign, String pc) {
+		return (List<?>) m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"))
+				.get("concentrating_on");
+	}
+
+	@Test
 	void wizardSelectionSlotsAndCasting() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("wizard"))) {
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();

@@ -558,6 +558,14 @@ public final class SpellService {
 				throw RpgException.invalidArgument(def.name() + " allows at most " + shots
 						+ " target entries (one per attack) at this level; got " + targets.size() + ".");
 			}
+			if (concentration) {
+				// Track the spell even on a miss, before damage can force a save or end concentration.
+				long id = Effects.add(tx, campaignId, caster.id(), caster.id(), def.id(), source,
+						"srd5e:effect/concentrating", null,
+						spellDuration(tx, campaignId, p, mech, upcast, encounterId, round, def.name(), mm), caster.id(),
+						def.id(), "PLAYER");
+				effectsCreated.add(Ref.of("effect", id));
+			}
 			var queue = new ArrayList<Row>();
 			for (int i = 0; i < shots; i++) {
 				queue.add(targets.get(Math.min(i, targets.size() - 1)));

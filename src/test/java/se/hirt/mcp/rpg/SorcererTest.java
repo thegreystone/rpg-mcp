@@ -265,6 +265,47 @@ class SorcererTest {
 	}
 
 	@Test
+	void extendedAttackSpellConcentrationSurvivesAMissAndExpiresAtItsDoubledDuration() throws Exception {
+		try (Engine engine = engine(tempDb("sorc-extended-attack"))) {
+			String[] ids = sorcerer(engine);
+			String campaign = ids[0], pc = ids[1];
+			levelTo(engine, campaign, pc, 5, List.of("Empowered Spell", "Extended Spell"));
+			engine.spells().prepare(op(), campaign, pc, null, List.of("Vampiric Touch"));
+			String ogre = (String) engine.runtime()
+					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
+			ScriptedRollService dice = (ScriptedRollService) engine.roller();
+			dice.queue(1);
+			Map<String, Object> cast = engine.spells().cast(op(), campaign, pc, "Vampiric Touch", null, List.of(ogre),
+					map("metamagic", "Extended Spell"));
+			assertEquals(Boolean.FALSE, list(cast.get("targets")).get(0).get("hit"));
+			assertTrue(dice.exhausted(), "the missed attack rolls no damage dice");
+			assertEquals(1, ((List<?>) cast.get("effects_created")).size(),
+					"the missed spell still creates exactly one concentration marker");
+			assertEquals(1, m(cast.get("metamagic")).get("points_spent"));
+			assertEquals(4, m(m(cast.get("metamagic")).get("sorcery_points")).get("current"));
+			Map<String, Object> sheet = engine.characters().characterSheet(campaign, pc, "PLAY");
+			List<Map<String, Object>> markers = list(sheet.get("effects")).stream()
+					.filter(e -> pc.equals(e.get("concentration_by"))).toList();
+			assertEquals(1, markers.size(), "concentration belongs to the caster even when the target has no effect");
+			assertEquals("CONCENTRATING", markers.get(0).get("condition"));
+			assertEquals(List.of("Vampiric Touch (Lucien)"), m(sheet.get("spellcasting")).get("concentrating_on"));
+
+			engine.sessions().advanceTime(op(), campaign, 1, "the printed one-minute duration passes");
+			sheet = engine.characters().characterSheet(campaign, pc, "PLAY");
+			assertEquals(markers,
+					list(sheet.get("effects")).stream().filter(e -> pc.equals(e.get("concentration_by"))).toList(),
+					"Extended Spell preserves the same marker beyond the printed duration");
+			engine.sessions().advanceTime(op(), campaign, 1, "the doubled two-minute duration passes");
+			sheet = engine.characters().characterSheet(campaign, pc, "PLAY");
+			assertTrue(list(sheet.get("effects")).stream().noneMatch(e -> pc.equals(e.get("concentration_by"))),
+					"concentration expires when the doubled duration ends");
+			assertEquals(List.of(), m(sheet.get("spellcasting")).get("concentrating_on"));
+			assertEquals(4, m(m(sheet.get("spellcasting")).get("sorcery_points")).get("current"),
+					"maintaining and expiring the marker charge no additional sorcery points");
+		}
+	}
+
+	@Test
 	void fontOfMagicConvertsPointsAndSlotsBothWays() throws Exception {
 		try (Engine engine = engine(tempDb("sorc-font"))) {
 			String[] ids = sorcerer(engine);
