@@ -327,7 +327,9 @@ public final class Effects {
 	 * number is minutes; "3 rounds", "1 minute", "2 hours", "1 day" parse; "long rest" / LONG_REST,
 	 * "restored" / RESTORED and "start of turn" / START_OF_TURN are milestones; a map with
 	 * expires_seq, expires_round or until passes through; {minutes: n} / {rounds: n} / {hours: n}
-	 * are converted. Null (or "until removed") means no expiry.
+	 * are converted. Start-of-turn durations bind to the recipient's active encounter participant
+	 * and expire on their next turn or when that encounter ends. Null (or "until removed") means no
+	 * expiry.
 	 */
 	public static Map<String, Object> parseDuration(Tx tx, long campaignId, Row c, Object duration, String label) {
 		if (duration == null) {
@@ -360,7 +362,7 @@ public final class Effects {
 				}
 				m.put("until", until);
 				m.putIfAbsent("label", label);
-				return m;
+				return "START_OF_TURN".equals(until) ? startOfTurn(tx, campaignId, c, m) : m;
 			}
 			if (m.get("expires_seq") instanceof Number || m.get("expires_round") instanceof Number) {
 				if (m.get("expires_round") instanceof Number && encounterId != null) {
@@ -382,7 +384,7 @@ public final class Effects {
 			return until("RESTORED", label);
 		}
 		case "START_OF_TURN", "UNTIL_START_OF_TURN", "UNTIL_START_OF_NEXT_TURN" -> {
-			return until("START_OF_TURN", label);
+			return startOfTurn(tx, campaignId, c, until("START_OF_TURN", label));
 		}
 		case "UNTIL_REMOVED", "INDEFINITE", "PERMANENT", "NONE" -> {
 			return null;
@@ -410,6 +412,28 @@ public final class Effects {
 		d.put("label", label);
 		d.put("until", milestone);
 		return d;
+	}
+
+	private static Map<String, Object> startOfTurn(Tx tx, long campaignId, Row c, Map<String, Object> duration) {
+		Row participant = tx.queryOne(
+				"SELECT p.* FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND p.encounter_id = ? AND p.status = 'ACTIVE' AND e.campaign_id = ? AND e.status IN ('RUNNING', 'WAITING_CHOICE')",
+				c.id(), c.lng("encounter_id"), campaignId)
+				.orElseThrow(() -> se.hirt.mcp.rpg.protocol.RpgException.invalidArgument(
+						"A start-of-turn duration requires an active encounter participant; use minutes or 'until removed' outside encounters."));
+		long encounterId = participant.lng("encounter_id");
+		if (!matchesScope(duration.get("participant"), participant.id())
+				|| !matchesScope(duration.get("encounter"), encounterId)) {
+			throw se.hirt.mcp.rpg.protocol.RpgException.invalidArgument(
+					"A start-of-turn duration must refer to the recipient's current participant and encounter.");
+		}
+		duration.put("kind", "UNTIL");
+		duration.put("participant", participant.id());
+		duration.put("encounter", encounterId);
+		return duration;
+	}
+
+	private static boolean matchesScope(Object scope, long id) {
+		return scope == null || scope instanceof Number n && n.longValue() == id && n.doubleValue() == id;
 	}
 
 	/** Duration in game minutes from now. */
@@ -470,6 +494,50 @@ public final class Effects {
 			boolean belongs = scope == null ? !e.isNull("round_participant_id")
 					: scope instanceof Number n && n.longValue() == encounterId;
 			if (belongs && d.get("expires_round") instanceof Number n && n.longValue() <= round) {
+				end(tx, e);
+				removed++;
+			}
+		}
+		return removed;
+	}
+
+	/** Older unbound start-of-turn durations follow their recipient's next reached turn. */
+	public static int expireAtTurnStart(Tx tx, long encounterId, long participantId) {
+		int removed = 0;
+		for (Row e : tx.query(
+				"SELECT * FROM active_effect WHERE character_id = (SELECT character_id FROM encounter_participant WHERE id = ? AND encounter_id = ?) AND duration_json IS NOT NULL",
+				participantId, encounterId)) {
+			Map<String, Object> d = e.map("duration_json");
+			if ("START_OF_TURN".equals(d.get("until")) && matchesScope(d.get("encounter"), encounterId)
+					&& matchesScope(d.get("participant"), participantId)) {
+				end(tx, e);
+				removed++;
+			}
+		}
+		return removed;
+	}
+
+	/** Clears round and turn durations owned by the encounter, including removed participants. */
+	public static int expireOnEncounterEnd(Tx tx, long encounterId) {
+		int removed = expireByRound(tx, encounterId, Long.MAX_VALUE);
+		long campaignId = tx.get("encounter", encounterId).lng("campaign_id");
+		for (Row e : tx.query(
+				"SELECT a.*, p.id AS turn_participant_id FROM active_effect a LEFT JOIN encounter_participant p ON p.character_id = a.character_id AND p.encounter_id = ? WHERE a.campaign_id = ? AND a.duration_json IS NOT NULL",
+				encounterId, campaignId)) {
+			Map<String, Object> d = e.map("duration_json");
+			if (!"START_OF_TURN".equals(d.get("until"))) {
+				continue;
+			}
+			boolean belongs;
+			if (d.get("encounter") != null) {
+				belongs = matchesScope(d.get("encounter"), encounterId);
+			} else if (d.get("participant") instanceof Number n) {
+				belongs = tx.find("encounter_participant", n.longValue())
+						.filter(p -> p.lng("encounter_id") == encounterId && matchesScope(n, p.id())).isPresent();
+			} else {
+				belongs = d.get("participant") == null && !e.isNull("turn_participant_id");
+			}
+			if (belongs) {
 				end(tx, e);
 				removed++;
 			}

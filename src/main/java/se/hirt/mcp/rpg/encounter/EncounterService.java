@@ -1903,14 +1903,7 @@ public final class EncounterService {
 				continue;
 			}
 			// Effects that last until the start of this participant's turn expire now.
-			for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND duration_json IS NOT NULL",
-					c.id())) {
-				Map<String, Object> d = e.map("duration_json");
-				if ("START_OF_TURN".equals(d.get("until")) && d.get("participant") instanceof Number n
-						&& n.longValue() == p.id()) {
-					se.hirt.mcp.rpg.rules.Effects.end(tx, e);
-				}
-			}
+			se.hirt.mcp.rpg.rules.Effects.expireAtTurnStart(tx, encounter.id(), p.id());
 			c = tx.get("character", c.id());
 			if ("DYING".equals(c.str("life_state"))) {
 				Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
@@ -2034,8 +2027,8 @@ public final class EncounterService {
 			long defeatedXp = 0;
 			var defeated = new ArrayList<String>();
 			var recipients = new ArrayList<Row>();
-			// Round-scoped effects die with their encounter, including those on removed participants.
-			se.hirt.mcp.rpg.rules.Effects.expireByRound(tx, encounter.id(), Long.MAX_VALUE);
+			// Round and turn effects die with their encounter, including those on removed participants.
+			se.hirt.mcp.rpg.rules.Effects.expireOnEncounterEnd(tx, encounter.id());
 			for (Row p : participants) {
 				Row c = tx.get("character", p.lng("character_id"));
 				if (p.str("side").equals(partySide)) {

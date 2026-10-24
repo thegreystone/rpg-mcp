@@ -741,9 +741,14 @@ Legal in `EXPLORATION` and `ENCOUNTER`; it never advances the initiative order.
 
 ### 13.3 `apply_runtime_change`
 
-A named, rules-aware non-encounter change (healing, resources, conditions, HP) when no more specific tool exists. Each
+A named, rules-aware change outside the attack loop (healing, resources, conditions, HP) when no more specific tool exists. Each
 kind has a schema; exceptional changes need `apply_gm_override`.
 
+- `ADD_CONDITION {condition, duration}` accepts minutes, duration text such as `"3 rounds"` or `"1 hour"`,
+  milestones such as `"long rest"` or `"start of turn"`, and maps such as `{until: START_OF_TURN}`.
+  Start-of-turn durations require the recipient to be an active encounter participant: they expire when that
+  recipient's next turn begins, or when the encounter ends. The server records the participant and encounter;
+  explicit map anchors must match them. Outside encounters, use a time-based duration or `"until removed"`.
 - `ADD_CONDITION {condition: "EXHAUSTION"}` adds one level, ignoring `duration`; exhaustion lasts until recovered.
   `REMOVE_CONDITION` with that condition clears all levels. A Long Rest or resurrection removes one level, as does
   Greater Restoration when Exhaustion is chosen. The sheet's `exhaustion` field and its single Exhaustion condition
