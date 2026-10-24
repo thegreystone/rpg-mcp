@@ -1055,7 +1055,7 @@ public class RpgTools {
 	// ── Rest and overrides ─────────────────────────────────────────────
 
 	@Tool(name = "perform_rest", description = "MUTATING. SHORT rest (1 hour; characters may spend Hit Point Dice: hit_dice {\"character:1\": 2} — rolled by the server) or LONG rest "
-			+ "(8 hours; HP to maximum, half the Hit Point Dice regained, exhaustion −1, other resources recharged). Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "(8 hours; HP to maximum, temporary HP cleared, half the Hit Point Dice regained, exhaustion −1, other resources recharged). Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performRest(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "SHORT or LONG")

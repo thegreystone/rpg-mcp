@@ -773,6 +773,8 @@ effects, restores only what the rules allow and records the result. On interrupt
 automatic effects to that instant, creates a `REST_INTERRUPT` pending transaction and reports whether the attempted rest
 qualifies for any recovery. It MUST NOT grant completion-only recovery or resolve a decision implicitly.
 
+A completed Long Rest clears each resting character's temporary HP. A Short Rest preserves temporary HP.
+
 ### 13.5 `award_xp`
 
 Awards XP from an explicit source; encounter XP SHOULD come from `end_encounter` instead. `characters` is OPTIONAL:

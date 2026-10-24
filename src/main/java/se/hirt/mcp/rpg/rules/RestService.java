@@ -225,6 +225,8 @@ public final class RestService {
 		int max = RuntimeService.effectiveMaxHp(tx, rested);
 		Map<String, Object> heal = RuntimeService.heal(tx, rested, Math.max(0, max - before), "long rest");
 		var cols = new LinkedHashMap<String, Object>();
+		// Temporary Hit Points last until depleted or a Long Rest finishes (SRD 5.2.1).
+		cols.put("temp_hp", 0);
 		// Exhaustion drops by one level (SRD 5.2.1 "Long Rest").
 		m.put("exhaustion_removed", Exhaustion.reduce(tx, c.id(), 1));
 		m.put("exhaustion", Exhaustion.level(tx, c.id()));
