@@ -251,7 +251,7 @@ public class RpgTools {
 
 	@Tool(name = "bootstrap_session", description = "MUTATING (opens/resumes a session). Returns the bounded context package to continue play: "
 			+ "campaign config and house rules, game time, location, the player character's sheet (inventory as names), the party with each member's whereabouts and compact open wants {ref, note}, "
-			+ "compact relationships (profiles are fetched with get_context RELATIONSHIP/INTIMACY), story beats, quests, adventure premise (+ GM_ONLY truth), "
+			+ "compact relationships (profiles are fetched with get_context RELATIONSHIP/INTIMACY), story beats with bounded gm_brief guidance and stable refs (get_context STORY_BEAT for full details), quests, adventure premise (+ GM_ONLY truth), "
 			+ "recent events, and `chronicle`: the synopsis (the story so far), the chapters since it, a digest of the ledger since the last chapter, and `due` "
 			+ "(when a chapter or synopsis is owed, delegate it: a summarizing agent calls get_chronicle_material and write_chronicle while play continues). "
 			+ "Honours context_budget (default 16000 tokens; `budget` reports the size). Call after commit and at the start of every new conversation. Trust this over anything you remember.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
@@ -974,7 +974,8 @@ public class RpgTools {
 	// ── Narrative state and the Director ───────────────────────────────
 
 	@Tool(name = "upsert_narrative_state", description = "MUTATING. Creates or updates one bounded narrative aggregate. Completing a QUEST returns `treasure`: level-appropriate magic item suggestions to grant with grant_loot (a completed quest usually yields one). kind: QUEST {title, objective, status: OFFERED|ACCEPTED|COMPLETED|FAILED|ABANDONED, "
-			+ "issuer, rewards, deadline, hidden_objectives, visibility}; STORY_BEAT {title, description, state: PLANNED|AVAILABLE|BLOCKED|SUPERSEDED|COMPLETED|ABANDONED, superseded_by}; "
+			+ "issuer, rewards, deadline, hidden_objectives, visibility}; STORY_BEAT {title, description, gm_brief: optional string (null clears), state: PLANNED|AVAILABLE|BLOCKED|SUPERSEDED|COMPLETED|ABANDONED, superseded_by, visibility, "
+			+ "location, actors/intentions, conditions, clues, approaches, consequences, if_ignored}; publish actionable GM_ONLY opportunities, mark AVAILABLE only when usable, interpret conditions manually and leave player approaches open; "
 			+ "STORY_SEED {seed_kind: STORY_SEED|COMPANION_INTRO|PRESSURE|PACING_INTENT, intention, hooks, conditions, state, superseded_by, materialized_character}; "
 			+ "FACTION_STATE {name, goals, standing, agenda, members, secrets}; WORLD_EVENT {title, description, channels: [NEWSPAPER, RUMOR, TAVERN, TOWN_CRIER, REFUGEES, MERCHANT, PRICES, SOLDIERS, LETTER, WITNESS, ENVIRONMENT…], "
 			+ "locations: [location:N], affected, game_time, visibility}; LOCATION_DETAIL {description, tags, features} (existing location ref); NPC_AGENDA {goals, fears, secrets, current_plan} (character ref). "
@@ -1006,7 +1007,7 @@ public class RpgTools {
 	@Tool(name = "get_director_context", description = "DIRECTOR-ONLY view for the slow narrative loop (invoke at meaningful boundaries, not every turn): premise and background truth, "
 			+ "open seeds and companion intentions, story beats (incl. blocked/invalidated plans), quests, factions, world events, party, relationships, NPC agendas, recent major events, "
 			+ "companion_wants (each present member's personality, INT/WIS/CHA, open wants with stable refs, open intimate wants under PEGI_18, and the wants closed since the last review: a settled want should get a next one proposed in character), "
-			+ "pacing composition and when the last review happened. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "pacing composition and when the last review happened. Publish needed GM_ONLY STORY_BEAT guidance with gm_brief and full opportunity details; keep long-term seeds DIRECTOR_ONLY. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getDirectorContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "INITIAL_CAMPAIGN, SESSION_START or CAMPAIGN_REVIEW (default)")
 	Optional<String> scope) {
@@ -1016,7 +1017,9 @@ public class RpgTools {
 
 	@Tool(name = "commit_director_changes", description = "MUTATING, atomic. Commits a list of typed Director proposals: [{kind: STORY_SEED|PRESSURE|PACING_INTENT|COMPANION_INTRO|STORY_BEAT|QUEST|FACTION_STATE|WORLD_EVENT|LOCATION_DETAIL|NPC_AGENDA, ref?, …fields}]. "
 			+ "Seeds and pressures create possibilities, world events create facts with diegetic channels; nothing may prescribe a player choice or a relationship outcome. "
-			+ "An empty list is valid and still records that a review occurred.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "When the GM needs direction, publish GM_ONLY STORY_BEAT proposals with a concise string gm_brief (hook and plausible approaches), location, actors/intentions, conditions, clues, consequences and if_ignored developments. "
+			+ "Mark AVAILABLE only when usable; conditions are interpreted manually. Update or supersede changed opportunities; keep private seeds DIRECTOR_ONLY. "
+			+ "An empty list preserves valid guidance and still records a review. Afterwards refresh get_context SCENE, then relevant STORY_BEAT refs before narrating.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse commitDirectorChanges(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Proposals; may be empty", required = false)
@@ -1031,8 +1034,9 @@ public class RpgTools {
 			+ "person believably in a bed: biography, voice, state, open wants, their own intimate profile and intimate wants, every partner with both directions of the pairwise "
 			+ "profile, the household terms, the intimate ledger events with detail, and the PEGI 18 guidance; below PEGI_18 the romance layer only), "
 			+ "WANT {ref: want:N} returns {want: {full want fields, character: character:N, kind: general|intimate}}, including optional resolved_by, "
-			+ "with private closure-order markers omitted; intimate wants require PEGI_18. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR {ref: optional location:N for its full Director detail}. "
-			+ "GM scopes exclude DIRECTOR_ONLY material; explicit DIRECTOR retains it. Other visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "with private closure-order markers omitted; intimate wants require PEGI_18. STORY_BEAT {ref: story_beat:N} returns {story_beat: full beat fields}, including original gm_brief and opportunity details; "
+			+ "bootstrap/SCENE provide compact gm_brief guidance, with gm_brief_truncated for shortened or omitted text. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR {ref: optional location:N for its full Director detail}. "
+			+ "GM scopes exclude DIRECTOR_ONLY material; explicit DIRECTOR retains it. A missing or DIRECTOR_ONLY STORY_BEAT ref returns NOT_FOUND. Other visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getContext(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Scope")
 	String scope, @ToolArg(description = "Primary reference for the scope")

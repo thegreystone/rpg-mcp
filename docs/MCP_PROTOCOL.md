@@ -186,7 +186,7 @@ GM context, bootstrap, location and relationship views, memory/timeline queries,
 `DIRECTOR_ONLY` records. Other visibility labels remain attached for the GM to respect when narrating. An explicit
 Director context (`get_director_context` or `get_context` with scope `DIRECTOR`) retains Director planning material.
 `get_context` with scope `DIRECTOR` and `ref: location:N` also includes that location's Director-only features and
-connections. Requesting a Director-only quest through GM context returns `NOT_FOUND`.
+connections. Requesting a Director-only quest or story beat through GM context returns `NOT_FOUND`.
 
 ### 5.6 Revisions
 
@@ -487,7 +487,8 @@ The package holds:
 - `chronicle`: `synopsis`, `chapters_since_synopsis`, `since_last_chapter`, `due` (§11.4)
 - recent significant events
 - `campaign.house_rules` (§11.5)
-- applicable story seeds with visibility labels
+- `story_beats`: open GM-visible beats with stable references, titles, states, visibility labels and compact `gm_brief`
+  guidance; private Director planning is excluded
 - pending encounter, transaction or continuation decision; legal next operations
 - `budget`: tokens asked for, the character target (three characters a token) and characters used
 
@@ -495,12 +496,23 @@ Default budget 16,000 tokens, at most `maximum_context_budget`. The story sectio
 full inventories stay out; the digest drops its least important lines first. The server MUST prioritize current
 canonical state over historical color.
 
+Each story-beat brief contains at most 600 characters. Together the brief texts share at most the smaller of 4,000
+characters and one eighth of `budget.chars_target`. A clipped brief, or one omitted when that allowance is exhausted,
+sets `gm_brief_truncated: true`; references and the other compact beat fields are retained. The brief uses the optional
+nonblank string `gm_brief` payload field, falling back to a legacy string `summary` or `description`. No migration is
+required. These limits apply to brief text, not to the entire response or beat metadata. When beats are present,
+`story_beats_hint` explains scoped retrieval and the truncation flag. The full beat remains available through
+`get_context` scope `STORY_BEAT`, including the original unshortened text.
+
 ### 11.2 `get_context`
 
 Purpose-built context for one scope, with references, optional natural-language focus and a budget. Visibility and
 scope rules always apply.
 
-- `SCENE`
+- `SCENE`: the same bounded current-play package as bootstrap, including compact story-beat guidance, read-only
+- `STORY_BEAT`: requires `ref: story_beat:N`; returns `{story_beat: {...full beat fields}}`, including visibility,
+  lifecycle, revision and all payload details. The brief is not shortened in this scoped response. A missing or
+  `DIRECTOR_ONLY` beat returns `NOT_FOUND`; a reference belonging to another campaign returns `INVALID_ARGUMENT`.
 - `CHARACTER`: FULL sheet with biography and (PEGI_18) intimate profile, relationships with profiles, membership
   history, recent events, location
 - `WANT`: `ref: want:N` returns `{want: {...want fields, character: character:N, kind: general|intimate}}`, including
@@ -596,6 +608,12 @@ Creates or updates one narrative aggregate by discriminated type: `QUEST`, `STOR
 `FACTION_STATE`, `WORLD_EVENT`, `LOCATION_DETAIL`, `NPC_AGENDA`. Each kind has its own schema, validation, visibility,
 lifecycle and transitions. Provenance MUST be recorded: `GM`, `DIRECTOR`, `MECHANICAL_CONSEQUENCE` or
 `ADMINISTRATIVE_OVERRIDE`.
+
+A `STORY_BEAT` MAY carry an optional string `gm_brief`: a concise, actionable hook and plausible approaches for the
+GM. A supplied non-null value MUST be a string; null clears it and a blank value allows the legacy fallback in compact
+context. Further payload fields MAY hold location, actors and their intentions, availability conditions, discoverable
+clues, approaches, consequences and `if_ignored` developments. These are guidance for the GM to interpret, not
+automatically evaluated conditions or prescribed player choices. Existing beats without these fields remain valid.
 
 A `QUEST` whose status becomes `COMPLETED` returns `treasure`: the party's level band, the rarities it draws from, how
 often a magic item should turn up, and up to three candidates drawn through the roller (§14.4). It is a suggestion; the
@@ -1188,7 +1206,9 @@ intentions, significant relationships, invalidated plans, and `companion_wants`:
 their personality line, INT/WIS/CHA, open wants, open intimate wants (PEGI_18 only) and the wants closed since the
 last review (by recorded operation order, even when game time is unchanged). The `guidance` list asks the Director
 to leave no companion with a settled want and no next one, proposing the next in character (`origin: director`), and under
-PEGI_18 to let intimate wants evolve with temperament in the same review.
+PEGI_18 to let intimate wants evolve with temperament in the same review. It also asks the Director to publish
+actionable `GM_ONLY` story beats when the GM needs new direction, keeping private seeds and future possibilities
+`DIRECTOR_ONLY`.
 
 ### 18.3 `commit_director_changes`
 
@@ -1196,6 +1216,38 @@ Validates and atomically commits typed proposals: create/update/supersede story 
 plan, record world event, schedule pressure, update pacing intention, create/supersede companion introduction intention.
 Director output MUST NOT prescribe player choices, relationship outcomes or unavoidable scenes. It MAY commit no changes
 and record that a review occurred.
+
+The Director SHOULD publish usable opportunities as `STORY_BEAT` proposals with `visibility: GM_ONLY`, an actionable
+`gm_brief`, and enough full details to run the opportunity after a context reset. A secret the GM needs to portray
+the world belongs in that guidance; it becomes `PARTY_KNOWN` only when the party actually learns it. Keep long-term
+seeds and unresolved private possibilities `DIRECTOR_ONLY`. Mark a beat `AVAILABLE` only when usable in the current
+fiction; the GM evaluates conditions manually. Update or supersede guidance when circumstances change, preserving
+open outcomes and allowing unexpected approaches or an ignored hook. An empty review SHOULD preserve valid
+published guidance rather than withdrawing it.
+
+```yaml
+operation_id: publish-mill-opportunity
+campaign: campaign:1
+changes:
+  - kind: STORY_BEAT
+    title: The millkeeper's missing apprentice
+    state: AVAILABLE
+    visibility: GM_ONLY
+    gm_brief: "At the old mill, Mara seeks her missing apprentice. Question her, inspect the sluice, or follow the river."
+    location: location:7
+    actors:
+      - {ref: character:8, intention: "Find the apprentice before the guild learns she sent him below the mill."}
+    conditions: "The party can reach the mill; the apprentice has not yet been found."
+    clues: ["Fresh rope on the sluice gate", "A muddy bootprint leading downstream"]
+    approaches: ["Ask Mara what she concealed", "Search below the mill", "Follow the river"]
+    consequences: "Finding him exposes the guild's unsafe excavation; how the party responds remains open."
+    if_ignored: "Mara asks the river wardens for help; revisit the opportunity at the next Director review."
+review_note: "Publish the mill opportunity; keep the guild's long-term plans private."
+```
+
+After committing a review, the GM SHOULD refresh with `get_context {scope: SCENE}` and fetch relevant full beats
+with `get_context {scope: STORY_BEAT, ref: story_beat:N}` before narrating. Approaches are examples, not a closed menu.
+Bootstrap supplies the same compact guidance to a fresh conversation; no previous planning transcript is required.
 
 ---
 

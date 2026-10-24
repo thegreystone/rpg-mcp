@@ -280,6 +280,9 @@ public final class NarrativeService {
 
 	private static Map<String, Object> beat(
 		Tx tx, long campaignId, String ref, Map<String, Object> changes, String provenance) {
+		if (changes.get("gm_brief") != null && !(changes.get("gm_brief") instanceof String)) {
+			throw RpgException.invalidArgument("gm_brief must be a string or null.");
+		}
 		Row existing = existing(tx, campaignId, "story_beat", ref, Ref.STORY_BEAT);
 		var cols = common(tx, campaignId, provenance, changes, "GM_ONLY", existing);
 		String state = changes.get("state") == null ? (existing == null ? "PLANNED" : existing.str("state"))
@@ -732,6 +735,12 @@ public final class NarrativeService {
 		var guidance = new ArrayList<String>(List.of(
 				"Create seeds, pressures and world facts — never scenes the player must play or outcomes the player must feel.",
 				"A review may legitimately change nothing.",
+				"Publish usable GM guidance as GM_ONLY STORY_BEAT records with a concise gm_brief: the hook, situation and plausible approaches. "
+						+ "Keep long-term intentions DIRECTOR_ONLY; GM_ONLY secrets do not become party knowledge. "
+						+ "Put location, NPC motivations, conditions, clues and possible consequences in the full beat payload. "
+						+ "Mark a beat AVAILABLE when usable; interpret conditions in context and keep player choices open. "
+						+ "Refresh or supersede existing beats as circumstances change; an empty review preserves valid guidance.",
+				"After committing a review, refresh get_context SCENE and fetch relevant get_context STORY_BEAT details before returning to narration.",
 				"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally.",
 				"People are the plot: read companion_wants. A companion whose want closed since the last review should leave "
 						+ "this review with a next want proposed in character, drawn from their personality, abilities, biography "
@@ -910,6 +919,14 @@ public final class NarrativeService {
 						"SELECT * FROM event WHERE campaign_id = ? AND location_id = ? AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT 10",
 						campaignId, l.id()).stream().map(e -> LedgerService.eventSummary(tx, e, false)).toList());
 			}
+			case "STORY_BEAT" -> {
+				Row beat = existing(tx, campaignId, "story_beat", required(ref, "ref (story_beat)"), Ref.STORY_BEAT);
+				if ("DIRECTOR_ONLY".equals(beat.str("visibility"))) {
+					throw RpgException.notFound("Story beat " + ref);
+				}
+				ctx = new LinkedHashMap<>();
+				ctx.put("story_beat", beatView(beat));
+			}
 			case "QUEST" -> {
 				ctx = new LinkedHashMap<>();
 				if (ref != null && !ref.isBlank()) {
@@ -941,7 +958,7 @@ public final class NarrativeService {
 				}
 			}
 			default -> throw RpgException.invalidArgument(
-					"scope must be SCENE, CHARACTER, WANT, RELATIONSHIP, INTIMACY, LOCATION, QUEST, ENCOUNTER or DIRECTOR.");
+					"scope must be SCENE, CHARACTER, WANT, RELATIONSHIP, INTIMACY, LOCATION, STORY_BEAT, QUEST, ENCOUNTER or DIRECTOR.");
 			}
 			ctx.put("scope", s);
 			ctx.put("meta", Harness.meta(campaign, null));

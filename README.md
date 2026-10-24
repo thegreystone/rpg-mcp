@@ -247,6 +247,7 @@ If several campaigns are available, it asks which one you want. Chat transcripts
 
 ## Documentation
 
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — planned improvements and their acceptance criteria.
 - [`docs/DEVGUIDE.md`](docs/DEVGUIDE.md) — the implemented tool surface, the persistence architecture,
   building from source and cutting a release.
 - [`docs/`](docs/) — the design documents: [`PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md),

@@ -32,8 +32,11 @@ import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.protocol.ErrorCode;
 import se.hirt.mcp.rpg.protocol.RpgException;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,6 +47,222 @@ import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /** Director planning remains available to the Director without leaking into the GM's context. */
 class NarrativeVisibilityTest {
+
+	@Test
+	void freshContextReceivesActionableDirectorHandoffWithoutPrivatePlanning() throws Exception {
+		Path database = TestCampaigns.tempDb("director-handoff-restart");
+		String campaign;
+		String beatRef;
+		String privatePlan = "PRIVATE_HANDOFF_SENTINEL: the ferryman secretly serves the missing professor";
+		String fullDetail = "FULL_HANDOFF_DETAIL_SENTINEL: use the old quay map if they investigate";
+		String brief = "GM_HANDOFF_SENTINEL: a ferryman asks about the professor at the quay; "
+				+ "offer a conversation or let the party follow his riverboat.";
+		try (Engine engine = TestCampaigns.engine(database)) {
+			campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			Map<String, Object> review = engine.narrative().commitDirectorChanges(op(), campaign,
+					List.of(map("kind", "STORY_SEED", "intention", privatePlan, "visibility", "DIRECTOR_ONLY"),
+							map("kind", "STORY_BEAT", "title", "The ferryman's question", "visibility", "GM_ONLY",
+									"state", "AVAILABLE", "gm_brief", brief, "investigation_detail", fullDetail)),
+					"Offer an optional lead at the quay.");
+			beatRef = (String) list(review.get("applied")).get(1).get("ref");
+		}
+
+		try (Engine fresh = TestCampaigns.engine(database)) {
+			Map<String, Object> boot = fresh.sessions().bootstrap(op(), campaign, null);
+			Map<String, Object> handoff = list(boot.get("story_beats")).stream()
+					.filter(beat -> beatRef.equals(beat.get("ref"))).findFirst().orElseThrow();
+			assertEquals(brief, handoff.get("gm_brief"), "a fresh GM receives a playable hook and possible approaches");
+			assertFalse(boot.toString().contains(privatePlan), "private Director planning remains hidden");
+			assertFalse(boot.toString().contains(fullDetail), "bootstrap keeps the handoff compact");
+			assertTrue(boot.get("story_beats_hint").toString().contains("STORY_BEAT"),
+					"the compact handoff explains how to retrieve its full details");
+			assertTrue(fresh.narrative().directorContext(campaign, null).toString().contains(privatePlan));
+		}
+	}
+
+	@Test
+	void compactHandoffSupportsLegacyTextWithoutExpandingOpaquePayloads() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("director-handoff-legacy"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String explicit = storyBeat(engine, campaign,
+					map("title", "Explicit brief", "gm_brief", "Offer a ferry ride.", "summary", "Old summary.",
+							"description", "Old description.", "options", List.of("Talk", "Investigate")));
+			String summary = storyBeat(engine, campaign, map("title", "Legacy summary", "summary",
+					"Ask the watch about the missing boat.", "description", "A longer legacy description."));
+			String description = storyBeat(engine, campaign,
+					map("title", "Legacy description", "description", "A merchant offers news at the quay."));
+			String opaque = storyBeat(engine, campaign, map("title", "Opaque legacy details", "summary",
+					map("nested", "OPAQUE_SUMMARY_SENTINEL"), "description", List.of("OPAQUE_DESCRIPTION_SENTINEL")));
+			String noText = storyBeat(engine, campaign, map("title", "Legacy metadata only"));
+
+			for (Map<String, Object> context : List.of(engine.sessions().bootstrap(op(), campaign, null),
+					engine.narrative().context(campaign, "SCENE", null, null, null, null))) {
+				assertEquals("Offer a ferry ride.", beat(context, explicit).get("gm_brief"));
+				assertEquals("Ask the watch about the missing boat.", beat(context, summary).get("gm_brief"));
+				assertEquals("A merchant offers news at the quay.", beat(context, description).get("gm_brief"));
+				for (String ref : List.of(opaque, noText)) {
+					assertEquals(Set.of("ref", "title", "state", "visibility"), beat(context, ref).keySet(),
+							"legacy beats without text keep their compact shape");
+				}
+				assertFalse(context.toString().contains("OPAQUE_SUMMARY_SENTINEL"));
+				assertFalse(context.toString().contains("OPAQUE_DESCRIPTION_SENTINEL"));
+				assertFalse(beat(context, explicit).containsKey("options"));
+				assertFalse(beat(context, explicit).containsKey("gm_brief_truncated"));
+			}
+		}
+	}
+
+	@Test
+	void compactHandoffBoundsBriefsAndKeepsFullTextAvailableOnDemand() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("director-handoff-budget"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String fullBrief = "x" + "\uD83C\uDF0A".repeat(600);
+			engine.narrative().upsert(
+					op(), campaign, "STORY_BEAT", null, map("title", "PRIVATE_BUDGET_SENTINEL", "state", "AVAILABLE",
+							"visibility", "DIRECTOR_ONLY", "gm_brief", "PRIVATE_BUDGET_SENTINEL".repeat(500)),
+					"DIRECTOR");
+			var refs = new ArrayList<String>();
+			for (int i = 0; i < 9; i++) {
+				refs.add(storyBeat(engine, campaign, map("title", "Optional river lead " + i, "gm_brief", fullBrief)));
+			}
+
+			for (Map<String, Object> context : List.of(engine.sessions().bootstrap(op(), campaign, null),
+					engine.narrative().context(campaign, "SCENE", null, null, null, 1000))) {
+				int charsTarget = ((Number) m(context.get("budget")).get("chars_target")).intValue();
+				int sharedLimit = Math.min(4000, charsTarget / 8);
+				int total = 0;
+				for (Map<String, Object> handoff : list(context.get("story_beats"))) {
+					if (handoff.get("gm_brief") instanceof String text) {
+						total += text.length();
+						assertTrue(text.length() <= 600, "each brief has a bounded character allowance");
+						assertTrue(text.isEmpty() || !Character.isHighSurrogate(text.charAt(text.length() - 1)),
+								"clipping preserves whole Unicode characters");
+					}
+				}
+				assertTrue(total > 0 && total <= sharedLimit, "all briefs share the context's text allowance");
+				assertFalse(context.toString().contains("PRIVATE_BUDGET_SENTINEL"));
+				for (String ref : refs) {
+					assertEquals(true, beat(context, ref).get("gm_brief_truncated"),
+							"clipped and omitted guidance both direct the GM to the full read");
+				}
+				assertTrue(refs.stream().map(ref -> beat(context, ref)).anyMatch(b -> !b.containsKey("gm_brief")),
+						"references survive even when their text allowance is exhausted");
+			}
+			assertEquals(fullBrief,
+					m(engine.narrative().context(campaign, "STORY_BEAT", refs.getLast(), null, null, 1)
+							.get("story_beat")).get("gm_brief"),
+					"requesting full beat context recovers text omitted from the compact handoff");
+		}
+	}
+
+	@Test
+	void directStoryBeatContextReturnsFullVisiblePayloadAndHidesPrivateReferences() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("director-handoff-full"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			Map<String, Object> detail = map("when", "If the party asks about the ferry", "approaches",
+					List.of("Talk to the ferryman", "Inspect the boat"));
+			for (String visibility : gmVisibilities()) {
+				Map<String, Object> created = engine.narrative().upsert(op(), campaign, "STORY_BEAT", null,
+						map("title", "Visible river lead " + visibility, "state", "AVAILABLE", "visibility", visibility,
+								"gm_brief", "A ferryman offers an optional lead.", "detail", detail),
+						"DIRECTOR");
+				Map<String, Object> full = m(engine.narrative()
+						.context(campaign, "STORY_BEAT", (String) created.get("ref"), null, null, null)
+						.get("story_beat"));
+				created.remove("meta");
+				assertEquals(created, full, "a direct GM read keeps the full visible beat and its revision");
+				assertEquals(detail, full.get("detail"));
+			}
+			String privateText = "PRIVATE_DIRECT_BEAT_SENTINEL: the duke intercepts the riverboat";
+			String hidden = (String) engine.narrative()
+					.upsert(op(), campaign, "STORY_BEAT", null, map("title", privateText, "state", "AVAILABLE",
+							"visibility", "DIRECTOR_ONLY", "gm_brief", privateText, "detail", detail), "DIRECTOR")
+					.get("ref");
+			RpgException rejected = assertThrows(RpgException.class,
+					() -> engine.narrative().context(campaign, "STORY_BEAT", hidden, null, null, null));
+			assertEquals(ErrorCode.NOT_FOUND, rejected.code());
+			assertFalse(engine.sessions().bootstrap(op(), campaign, null).toString().contains(privateText));
+			assertFalse(engine.narrative().context(campaign, "SCENE", null, null, null, null).toString()
+					.contains(privateText));
+			Map<String, Object> privateBeat = beat(engine.narrative().directorContext(campaign, null), hidden);
+			assertEquals(privateText, privateBeat.get("gm_brief"));
+			assertEquals(detail, privateBeat.get("detail"), "Director context retains the complete private payload");
+		}
+	}
+
+	@Test
+	void currentHandoffReflectsRevisionsAndOmitsClosedOrSupersededBeats() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("director-handoff-lifecycle"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String original = storyBeat(engine, campaign,
+					map("title", "An optional ferry lead", "gm_brief", "Old hook."));
+			engine.narrative().commitDirectorChanges(op(), campaign,
+					List.of(map("kind", "STORY_BEAT", "ref", original, "gm_brief", "Ask at the new landing.")),
+					"The ferry has moved.");
+			for (Map<String, Object> context : List.of(engine.sessions().bootstrap(op(), campaign, null),
+					engine.narrative().context(campaign, "SCENE", null, null, null, null))) {
+				assertEquals("Ask at the new landing.", beat(context, original).get("gm_brief"));
+			}
+			String successor = storyBeat(engine, campaign,
+					map("title", "A riverbank lead", "gm_brief", "The ferryman waits beside the stranded boat."));
+			engine.narrative().commitDirectorChanges(op(), campaign, List
+					.of(map("kind", "STORY_BEAT", "ref", original, "state", "SUPERSEDED", "superseded_by", successor)),
+					"Offer the revised possibility.");
+			String completed = storyBeat(engine, campaign,
+					map("title", "Completed hook", "state", "COMPLETED", "gm_brief", "CLOSED_HOOK_SENTINEL"));
+			String abandoned = storyBeat(engine, campaign,
+					map("title", "Abandoned hook", "state", "ABANDONED", "gm_brief", "CLOSED_HOOK_SENTINEL"));
+			String planned = storyBeat(engine, campaign,
+					map("title", "A later possibility", "state", "PLANNED", "gm_brief", "Offer news if they return."));
+			String blocked = storyBeat(engine, campaign,
+					map("title", "An unavailable ferry", "state", "BLOCKED", "gm_brief", "The ferry is under repair."));
+			for (Map<String, Object> context : List.of(engine.sessions().bootstrap(op(), campaign, null),
+					engine.narrative().context(campaign, "SCENE", null, null, null, null))) {
+				for (String closed : List.of(original, completed, abandoned)) {
+					assertTrue(list(context.get("story_beats")).stream().noneMatch(b -> closed.equals(b.get("ref"))));
+				}
+				assertEquals("The ferryman waits beside the stranded boat.", beat(context, successor).get("gm_brief"));
+				assertEquals("PLANNED", beat(context, planned).get("state"));
+				assertEquals("BLOCKED", beat(context, blocked).get("state"));
+				assertFalse(context.toString().contains("CLOSED_HOOK_SENTINEL"));
+			}
+			Map<String, Object> historical = m(
+					engine.narrative().context(campaign, "STORY_BEAT", original, null, null, null).get("story_beat"));
+			assertEquals("SUPERSEDED", historical.get("state"));
+			assertEquals(successor, historical.get("superseded_by"));
+			assertEquals("Ask at the new landing.", historical.get("gm_brief"));
+		}
+	}
+
+	@Test
+	void suppliedGmBriefMustBeTextAndCanBeClearedWithoutBreakingLegacyBeats() throws Exception {
+		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("director-handoff-validation"))) {
+			String campaign = TestCampaigns.committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			String ref = storyBeat(engine, campaign,
+					map("title", "A ferry lead", "gm_brief", "Ask the ferryman.", "summary", "Ask the watch instead."));
+			for (Object invalid : List.of(42, List.of("A hook"), map("hook", "A hook"))) {
+				RpgException rejected = assertThrows(RpgException.class,
+						() -> engine.narrative().commitDirectorChanges(op(), campaign,
+								List.of(map("kind", "STORY_BEAT", "ref", ref, "gm_brief", invalid)), null));
+				assertEquals(ErrorCode.INVALID_ARGUMENT, rejected.code());
+				assertEquals("Ask the ferryman.",
+						m(engine.narrative().context(campaign, "STORY_BEAT", ref, null, null, null).get("story_beat"))
+								.get("gm_brief"),
+						"invalid edits leave the published handoff intact");
+			}
+			engine.narrative().commitDirectorChanges(op(), campaign,
+					List.of(map("kind", "STORY_BEAT", "ref", ref, "gm_brief", null)), "Clear the bespoke brief.");
+			assertEquals("Ask the watch instead.",
+					beat(engine.sessions().bootstrap(op(), campaign, null), ref).get("gm_brief"),
+					"clearing explicit text allows the existing legacy summary to supply the compact brief");
+		}
+	}
 
 	@Test
 	void gmLocationContextKeepsPartyKnownEventsAndExcludesDirectorEvents() throws Exception {
@@ -332,6 +551,17 @@ class NarrativeVisibilityTest {
 				assertFalse(result.toString().contains(secret));
 			}
 		}
+	}
+
+	private static String storyBeat(Engine engine, String campaign, Map<String, Object> changes) {
+		Map<String, Object> fields = map("state", "AVAILABLE", "visibility", "GM_ONLY");
+		fields.putAll(changes);
+		return (String) engine.narrative().upsert(op(), campaign, "STORY_BEAT", null, fields, "DIRECTOR").get("ref");
+	}
+
+	private static Map<String, Object> beat(Map<String, Object> context, String ref) {
+		return list(context.get("story_beats")).stream().filter(b -> ref.equals(b.get("ref"))).findFirst()
+				.orElseThrow();
 	}
 
 	private static List<String> gmVisibilities() {

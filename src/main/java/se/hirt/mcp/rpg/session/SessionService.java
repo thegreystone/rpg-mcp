@@ -431,17 +431,38 @@ public final class SessionService {
 		ctx.put("party", party);
 		ctx.put("former_members", formerMembers(tx, campaignId));
 
-		ctx.put("story_beats", tx
+		var beats = new ArrayList<Map<String, Object>>();
+		int briefBudget = Math.min(4000, chars / 8);
+		for (Row beat : tx
 				.query("SELECT * FROM story_beat WHERE campaign_id = ? AND state IN ('AVAILABLE','PLANNED','BLOCKED') "
-						+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id", campaignId)
-				.stream().map(b -> {
-					var m = new LinkedHashMap<String, Object>();
-					m.put("ref", Ref.of(Ref.STORY_BEAT, b.id()));
-					m.put("title", b.str("title"));
-					m.put("state", b.str("state"));
-					m.put("visibility", b.str("visibility"));
-					return m;
-				}).toList());
+						+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id", campaignId)) {
+			var m = new LinkedHashMap<String, Object>();
+			m.put("ref", Ref.of(Ref.STORY_BEAT, beat.id()));
+			m.put("title", beat.str("title"));
+			m.put("state", beat.str("state"));
+			m.put("visibility", beat.str("visibility"));
+			String brief = gmBrief(beat);
+			if (brief != null) {
+				int end = Math.min(brief.length(), Math.min(600, briefBudget));
+				// Keep a clipped UTF-16 prefix valid even when the last character is an emoji.
+				if (end > 0 && end < brief.length() && Character.isHighSurrogate(brief.charAt(end - 1))) {
+					end--;
+				}
+				if (end > 0) {
+					m.put("gm_brief", brief.substring(0, end));
+					briefBudget -= end;
+				}
+				if (end < brief.length()) {
+					m.put("gm_brief_truncated", true);
+				}
+			}
+			beats.add(m);
+		}
+		ctx.put("story_beats", beats);
+		if (!beats.isEmpty()) {
+			ctx.put("story_beats_hint",
+					"Use get_context with scope STORY_BEAT and a story_beats ref for full guidance; gm_brief_truncated marks shortened or omitted text.");
+		}
 		ctx.put("active_quests", tx.query(
 				"SELECT * FROM quest WHERE campaign_id = ? AND status IN ('OFFERED','ACCEPTED') AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
 				campaignId).stream().map(q -> {
@@ -481,6 +502,17 @@ public final class SessionService {
 		b.put("chars_used", se.hirt.mcp.rpg.protocol.Json.write(ctx).length());
 		ctx.put("budget", b);
 		return ctx;
+	}
+
+	/** Older campaigns may already carry usable guidance under summary or description. */
+	private static String gmBrief(Row beat) {
+		Map<String, Object> payload = beat.map("payload_json");
+		for (String key : List.of("gm_brief", "summary", "description")) {
+			if (payload.get(key) instanceof String text && !text.isBlank()) {
+				return text.strip();
+			}
+		}
+		return null;
 	}
 
 	/** True when the character stands where the party stands (or has no location yet). */
