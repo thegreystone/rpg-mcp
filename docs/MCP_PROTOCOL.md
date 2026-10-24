@@ -642,6 +642,22 @@ Atomically converts a location seed or semantic node into canonical detail: loca
 secrets with visibility labels, revision. MUST reject contradictions with committed geography unless performed through
 an explicit override.
 
+Nested `children` and object-valued connection destinations reuse a location with the same name within the same
+campaign and parent. Names match without case or surrounding whitespace; omitted kinds preserve the existing kind.
+Repeated declarations, including duplicates in one request, retain the existing location reference and detail;
+`new_children` lists only newly inserted children. Supplied kind, description or tags must agree with existing detail.
+To add detail to a child, materialize its location reference directly. Top-level calls without a location reference
+still explicitly create a new place.
+
+If older data contains multiple siblings with the same name, name lookup fails with candidate references instead of
+choosing or merging them. Use `children: [{ref: "location:N"}]` to select an existing direct child; connection destinations
+also accept a location reference as a string or `{ref: "location:N"}`. References must belong to the campaign, and an
+explicit parent must agree with the referenced location. Existing campaigns need no data rewrite.
+
+Children receive a parent connection unless `connection: false`. A new child connection defaults to `PASSAGE`, `OPEN`,
+`PARTY_KNOWN` visibility and 5 travel minutes. Re-declaring a child preserves its known connection details; an explicit
+`connection_kind` changes only the kind. `connection: false` never removes an existing connection.
+
 Connections between the same undirected pair of locations update only supplied non-null `kind`, `state`, `visibility`,
 `travel_minutes` and `distance_miles` fields; omitted or null fields retain their committed values.
 New connections default to `PATH`, `OPEN`, `PARTY_KNOWN` visibility and 60 travel minutes.

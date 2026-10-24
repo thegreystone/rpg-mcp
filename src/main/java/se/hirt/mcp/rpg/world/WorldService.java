@@ -155,14 +155,19 @@ public final class WorldService {
 			tx.update("location", location.id(), cols);
 			var children = new ArrayList<Map<String, Object>>();
 			for (Map<String, Object> child : (List<Map<String, Object>>) s.getOrDefault("children", List.of())) {
-				long id = insertLocation(tx, campaignId, String.valueOf(child.get("name")),
-						kind(child.get("kind"), "AREA"),
-						child.get("description") == null ? null : child.get("description").toString(), location.id(),
-						"SEMANTIC", child.get("tags"));
-				children.add(summary(tx.get("location", id)));
+				NestedLocation resolved = nestedLocation(tx, campaignId, location.id(), child, "AREA", "children");
+				long id = resolved.row().id();
+				if (resolved.created()) {
+					children.add(summary(resolved.row()));
+				}
 				if (child.get("connection") == null || Boolean.TRUE.equals(child.get("connection"))) {
-					connect(tx, campaignId, location.id(), id, child.get("connection_kind") == null ? "PASSAGE"
-							: String.valueOf(child.get("connection_kind")), "OPEN", 5, null, "PARTY_KNOWN");
+					boolean newEdge = connection(tx, campaignId, location.id(), id).isEmpty();
+					if (newEdge || child.get("connection_kind") != null) {
+						connect(tx, campaignId, location.id(), id,
+								child.get("connection_kind") == null ? "PASSAGE"
+										: String.valueOf(child.get("connection_kind")),
+								null, newEdge ? 5 : null, null, null);
+					}
 				}
 			}
 			var connections = new ArrayList<Map<String, Object>>();
@@ -170,11 +175,11 @@ public final class WorldService {
 				long otherId;
 				if (c.get("to") instanceof Map<?, ?> other) {
 					Map<String, Object> o = (Map<String, Object>) other;
-					Long parent = o.get("parent") == null ? location.lng("parent_id")
-							: Long.valueOf(location(tx, campaignId, String.valueOf(o.get("parent"))).id());
-					otherId = insertLocation(tx, campaignId, String.valueOf(o.get("name")), kind(o.get("kind"), "SITE"),
-							o.get("description") == null ? null : o.get("description").toString(), parent, "SEMANTIC",
-							o.get("tags"));
+					Long parent = o.get("parent") != null
+							? Long.valueOf(location(tx, campaignId, String.valueOf(o.get("parent"))).id())
+							: o.get("ref") != null ? location(tx, campaignId, o.get("ref").toString()).lng("parent_id")
+									: location.lng("parent_id");
+					otherId = nestedLocation(tx, campaignId, parent, o, "SITE", "connections.to").row().id();
 				} else {
 					otherId = location(tx, campaignId, String.valueOf(c.get("to"))).id();
 				}
@@ -195,6 +200,75 @@ public final class WorldService {
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	private record NestedLocation(Row row, boolean created) {
+	}
+
+	/**
+	 * Nested declarations name existing places; only an explicit top-level create always inserts.
+	 */
+	private static NestedLocation nestedLocation(
+		Tx tx, long campaignId, Long parentId, Map<String, Object> spec, String defaultKind, String path) {
+		if (spec.get("parent") != null
+				&& !Objects.equals(parentId, location(tx, campaignId, spec.get("parent").toString()).id())) {
+			throw RpgException
+					.invalidArgument("The explicit parent in " + path + " must match its containing location.");
+		}
+		if (spec.get("name") != null && !(spec.get("name") instanceof String)) {
+			throw RpgException.invalidArgument("Location name in " + path + " must be text.");
+		}
+		String name = spec.get("name") == null ? null : spec.get("name").toString().strip();
+		Row existing;
+		if (spec.get("ref") != null) {
+			existing = location(tx, campaignId, spec.get("ref").toString());
+			if (!Objects.equals(parentId, existing.lng("parent_id"))) {
+				throw RpgException.invalidArgument("The location reference in " + path + " must belong to its parent.");
+			}
+			if (name != null && !name.equalsIgnoreCase(existing.str("name").strip())) {
+				throw nestedContradiction(path, "name", existing);
+			}
+		} else {
+			if (name == null || name.isBlank()) {
+				throw RpgException.invalidArgument("Provide a nonblank name or location ref in " + path + ".");
+			}
+			List<Row> matches = tx.query("SELECT * FROM location WHERE campaign_id = ? AND parent_id IS ? ORDER BY id",
+					campaignId, parentId).stream().filter(row -> name.equalsIgnoreCase(row.str("name").strip()))
+					.toList();
+			if (matches.size() > 1) {
+				throw RpgException
+						.invalidArgument("More than one location named '" + name + "' exists under this parent; "
+								+ "supply its location ref in " + path + " to choose one.")
+						.withDetail("candidates", matches.stream().map(WorldService::summary).toList());
+			}
+			existing = matches.isEmpty() ? null : matches.getFirst();
+		}
+		if (existing == null) {
+			long id = insertLocation(tx, campaignId, name, kind(spec.get("kind"), defaultKind),
+					spec.get("description") == null ? null : spec.get("description").toString(), parentId, "SEMANTIC",
+					spec.get("tags"));
+			return new NestedLocation(tx.get("location", id), true);
+		}
+		if (spec.get("kind") != null && !kind(spec.get("kind"), defaultKind).equals(existing.str("kind"))) {
+			throw nestedContradiction(path, "kind", existing);
+		}
+		if (spec.get("description") != null
+				&& !spec.get("description").toString().equals(existing.str("description"))) {
+			throw nestedContradiction(path, "description", existing);
+		}
+		if (spec.get("tags") != null
+				&& !spec.get("tags").equals(existing.isNull("tags_json") ? List.of() : existing.list("tags_json"))) {
+			throw nestedContradiction(path, "tags", existing);
+		}
+		return new NestedLocation(existing, false);
+	}
+
+	private static RpgException nestedContradiction(String path, String field, Row existing) {
+		String ref = Ref.of(Ref.LOCATION, existing.id());
+		return RpgException.validation(List.of(new Violation(path + "." + field, "CONTRADICTION",
+				"The supplied " + field + " contradicts " + ref
+						+ ". Materialize that location by reference to add detail, "
+						+ "or use apply_gm_override to correct committed geography (I-41).")));
 	}
 
 	public static String kind(Object value, String fallback) {
@@ -238,9 +312,7 @@ public final class WorldService {
 		}
 		long lo = Math.min(a, b);
 		long hi = Math.max(a, b);
-		Optional<Row> existing = tx.queryOne(
-				"SELECT * FROM location_connection WHERE campaign_id = ? AND location_a_id = ? AND location_b_id = ?",
-				campaignId, lo, hi);
+		Optional<Row> existing = connection(tx, campaignId, a, b);
 		String k = kind == null ? existing.map(row -> row.str("kind")).orElse("PATH") : kind.toUpperCase();
 		if (!CONNECTION_KINDS.contains(k)) {
 			throw RpgException.invalidArgument("Connection kind must be one of " + CONNECTION_KINDS + ".");
@@ -281,6 +353,12 @@ public final class WorldService {
 			id = tx.insert("location_connection", cols);
 		}
 		return connectionSummary(tx, tx.get("location_connection", id), a);
+	}
+
+	private static Optional<Row> connection(Tx tx, long campaignId, long a, long b) {
+		return tx.queryOne(
+				"SELECT * FROM location_connection WHERE campaign_id = ? AND location_a_id = ? AND location_b_id = ?",
+				campaignId, Math.min(a, b), Math.max(a, b));
 	}
 
 	static Map<String, Object> connectionSummary(Tx tx, Row c, long from) {
