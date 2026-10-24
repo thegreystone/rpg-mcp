@@ -80,7 +80,7 @@ public final class Harness {
 				"record_memory", "query_memories", "query_timeline", "advance_time", "create_checkpoint",
 				"get_continuation_options", "restore_checkpoint", "transfer_item", "give_money", "equip_item", "trade",
 				"grant_loot", "set_calendar", "create_account", "transfer_money", "define_cash_flow",
-				"update_cash_flow", "define_content", "materialize_character", "start_encounter",
+				"update_cash_flow", "define_content", "materialize_character", "start_encounter", "recover_ammunition",
 				"apply_runtime_change", "award_xp", "transfer_player_control", "begin_level_up", "update_character",
 				"update_party_membership", "update_relationship", "update_house_rules", "materialize_location",
 				"move_party", "upsert_narrative_state", "commit_director_changes", "perform_rest", "apply_gm_override",

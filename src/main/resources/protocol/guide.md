@@ -96,6 +96,18 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
 - Combat: materialize every opponent (`materialize_character`), `start_encounter` with sides, then one
   `perform_encounter_action` per action for whoever's turn it is — you choose NPC tactics, the engine rolls.
   `end_encounter` awards XP and tells you if the player character died and what the options are.
+  It and `get_encounter_state` may offer `ammunition_recovery`: ask whether the player wants to spend one minute
+  searching, and call `recover_ammunition` only if requested or agreed. Confirm the battlefield is accessible; the
+  shooter must be alive and able at its known location, outside combat. It is optional and never blocks play.
+  Pass the offered encounter and character refs. Omit `selection` for a random half of all fired pieces, weighted
+  by piece counts without replacement. Explicit `selection` overrides the draw with exactly `recoverable` pieces
+  across the groups using `{group, quantity}`. The quota is half the shooter's total fired ammunition rounded down,
+  once per encounter. Standard +N hits return mundane pieces and misses retain their magic. Any candidate marked
+  `recover_as: GM` makes `selection_required` true: supply explicit selection and use its text to choose
+  `recover_as: ORIGINAL|MUNDANE|LOST` for selected GM groups; `LOST` counts toward the quota. The engine refuses the
+  random default before draws or writes if any unknown GM policy exists. Results report `method: RANDOM|EXPLICIT`;
+  retries keep the original result and never reroll. Never guess custom magic's fate, recover automatically, or grant
+  replacements by hand.
 - Reactions: when an action result or `get_encounter_state` lists `pending_choices`, the encounter is on hold. Put the
   question to the player (an opportunity attack, casting Shield) and call `resolve_pending_choice`; NPC reactions are
   resolved for you. Nothing else can happen in the fight until every choice is resolved.

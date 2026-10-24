@@ -76,6 +76,7 @@ public class RpgResources {
 		caps.put("checkpoints", true);
 		caps.put("game_clock", true);
 		caps.put("encounters", true);
+		caps.put("ammunition_recovery", true);
 		caps.put("creatures", true);
 		caps.put("death_and_continuation", true);
 		caps.put("inventory_economy", true);
@@ -111,7 +112,7 @@ public class RpgResources {
 				"create_checkpoint", "get_continuation_options", "restore_checkpoint", "get_content_definitions",
 				"define_content", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
 				"materialize_character", "start_encounter", "get_encounter_state", "perform_encounter_action",
-				"resolve_pending_choice", "end_encounter", "apply_runtime_change", "award_xp",
+				"resolve_pending_choice", "end_encounter", "recover_ammunition", "apply_runtime_change", "award_xp",
 				"transfer_player_control", "get_party", "begin_level_up", "get_level_up_choices", "update_level_up",
 				"validate_level_up", "commit_level_up", "abandon_transaction", "update_party_membership",
 				"get_relationship", "update_relationship", "update_house_rules", "materialize_location", "move_party",

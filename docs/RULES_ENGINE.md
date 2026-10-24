@@ -31,6 +31,13 @@ never assumed from prior-edition knowledge. Read directly during design: Equipme
   **[verify: SRD "Damage and Healing", pp. 16–18]**
 - Initiative, round and turn order.
 - Resource accounting: spell slots, class resources, item charges, ammunition.
+  Ammunition recovery is an optional one-minute search after combat, requested or accepted by the player
+  (`recover_ammunition`, `MCP_PROTOCOL.md` §15.6; SRD 5.2.1 Equipment, "Ammunition"). The engine returns half the
+  shooter's recorded fired pieces rounded down across all types, once per shooter per encounter, and journals
+  inventory, elapsed time and the search marker together. The GM confirms access to the battlefield. By default the
+  engine chooses a random half, weighted by piece counts without replacement; explicit selection overrides the draw
+  and must meet the same global quota. Unknown `GM` recovery policies require explicit selection and adjudication
+  before any draw or write. The result reports `method: RANDOM|EXPLICIT`; retrying does not reroll.
 - Rests and what they restore. **[verify: SRD Rules Glossary "Short Rest"/"Long Rest"]**
 - Conditions: applying, removing, stacking, and their mechanical modifiers (the rules text is data; the arithmetic
   is code). **[verify: SRD Rules Glossary condition entries]**
@@ -349,6 +356,13 @@ robes); rings are `RING`; rods, staffs and wands are held (`ONE_HAND`); the rest
   `save_bonus`, `attack_bonus`, `speed_bonus`, `resistance`, `attunement`, `slot`, `consumable: {heal}`). Extra damage
   dice on a weapon or ammunition ride only on attacks with that item (`Combat.weapon`, `Combat.withAmmunition`), never on
   the wearer's other attacks; the worn modifiers apply while equipped (`MagicItems.enchant`).
+- **Ammunition recovery.** Standard +1/+2/+3 ammunition loses its magic on a hit and is recovered on its mundane base;
+  a missed piece retains its magic. Other magical or custom ammunition is resolved from its own text by the GM,
+  choosing `ORIGINAL`, `MUNDANE` or `LOST` for its selected recovery group. `LOST` counts against the recovery quota
+  and returns no item. The engine never assumes every magical shot loses its magic. Recovery offers in
+  `end_encounter` and `get_encounter_state` set `selection_required` only for `GM` policies; otherwise omitted
+  selection draws randomly from all fired pieces. Offers are optional and do not block play or change ammunition
+  automatically.
 - **Engine-enforced.** The +N of a weapon (attack and damage rolls), of armor and shields (AC) and of ammunition (the
   shot it is fired with: `ATTACK` names it as `ammunition`, with any extra damage dice of its own); Ring and Cloak of Protection (`modifiers: {ac_bonus,
   save_bonus}`, folded into `Effects.modifiers` while equipped); Bracers of Defense (`ac_bonus_unarmored`, only without

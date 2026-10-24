@@ -185,6 +185,18 @@ CHECK `0 <= current AND current <= max` (I-30), `recharge TEXT`.
 
 Turn order is `ORDER BY initiative DESC, initiative_tiebreak`, total by construction (I-31).
 
+**encounter_log** (V002) — `id`, `campaign_id`, `encounter_id`, `round`, `actor_character_id NULL`, `kind`,
+`summary`, `payload_json`, `journal_id`. Attack payloads retain `ammunition.recovery`: the fired physical item's
+identity and recovery policy, with the final hit recorded after an interrupted attack resumes. Only shots with this
+metadata participate in recovery; older payloads are not guessed from display names. A separate
+`AMMUNITION_RECOVERED` log entry seals one search for that encounter and shooter, including selected groups and their
+resolution and `method: RANDOM|EXPLICIT`. The random default samples pieces weighted by group quantities without
+replacement; explicit selection supplies the same global quota instead. Unknown `GM` policies require explicit
+adjudication before any draw or write. Operation replay returns the stored result; a fresh operation cannot repeat a
+sealed search or reroll it. The log, returned inventory and game-clock changes use the same journaled mutation, so checkpoint
+restore rewinds search eligibility with inventory and time. These are extensions to existing JSON/log kinds;
+ammunition recovery adds no DDL or migration.
+
 ### 3.7 Narrative state
 
 Five sibling tables with common columns `id`, `campaign_id`, `visibility` (+ `visibility_targets_json`), `provenance`,

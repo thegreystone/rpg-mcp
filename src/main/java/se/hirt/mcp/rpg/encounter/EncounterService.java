@@ -38,6 +38,7 @@ import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.harness.HarnessState;
 import se.hirt.mcp.rpg.inventory.InventoryService;
+import se.hirt.mcp.rpg.inventory.AmmunitionRecovery;
 import se.hirt.mcp.rpg.inventory.MagicItems;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.persistence.Database;
@@ -394,6 +395,10 @@ public final class EncounterService {
 		m.put("legal_actions",
 				pending.isEmpty() ? ACTIONS.stream().sorted().toList() : List.of("resolve_pending_choice"));
 		m.put("revision", encounter.lng("revision"));
+		List<Map<String, Object>> recovery = AmmunitionRecovery.offers(tx, rules, encounter);
+		if (!recovery.isEmpty()) {
+			m.put("ammunition_recovery", recovery);
+		}
 		return m;
 	}
 
@@ -1020,6 +1025,7 @@ public final class EncounterService {
 		}
 		// Ammunition (SRD 5.2.1 "Ammunition" property): one piece per attack.
 		Map<String, Object> ammoUsed = null;
+		Map<String, Object> ammoRecovery = null;
 		if (profile.usesAmmunition()) {
 			String weaponName = profile.name();
 			String ammoRef = profile.ammunitionRef();
@@ -1043,6 +1049,7 @@ public final class EncounterService {
 								"NO_AMMUNITION", actor.str("name") + " has no ammunition for " + weaponName + "."))));
 			}
 			ContentService.Item ammoItem = ContentService.itemForEntry(tx, rules, ammo);
+			ammoRecovery = AmmunitionRecovery.snapshot(ammoItem);
 			Map<String, Object> ammoPayload = attackPayload(ammo, ammoItem, setup.warnings());
 			int ammoBonus = MagicItems.bonus(ammoPayload);
 			InventoryService.removeQuantity(tx, ammo, 1);
@@ -1131,6 +1138,9 @@ public final class EncounterService {
 		ctx.put("critical", critical);
 		ctx.put("hit", hit);
 		ctx.put("ammunition", ammoUsed);
+		if (ammoRecovery != null) {
+			ctx.put("ammunition_recovery", ammoRecovery);
+		}
 		ctx.put("warnings", setup.warnings());
 
 		// Shield (SRD 5.2.1): a reaction when hit; +5 AC until the start of the caster's next turn, including against the trigger.
@@ -1322,8 +1332,19 @@ public final class EncounterService {
 		if (ctx.get("warnings") instanceof List<?> w && !w.isEmpty()) {
 			out.put("warnings", w);
 		}
+		var payload = new LinkedHashMap<String, Object>();
+		payload.put("target", target.id());
+		payload.put("hit", hit);
+		payload.put("total", attackTotal);
+		if (ctx.get("ammunition") instanceof Map<?, ?> ammunition
+				&& ctx.get("ammunition_recovery") instanceof Map<?, ?> recovery) {
+			var spent = new LinkedHashMap<String, Object>();
+			ammunition.forEach((key, value) -> spent.put(key.toString(), value));
+			spent.put("recovery", recovery);
+			payload.put("ammunition", spent);
+		}
 		log(tx, campaignId, encounter.id(), round, actor.id(), reaction ? "OPPORTUNITY_ATTACK" : "ATTACK", summary,
-				Map.of("target", target.id(), "hit", hit, "total", attackTotal));
+				payload);
 		return out;
 	}
 
@@ -2057,7 +2078,7 @@ public final class EncounterService {
 			cols.put("revision", encounter.lng("revision") + 1);
 			tx.update("encounter", encounter.id(), cols);
 			log(tx, campaignId, encounter.id(), rounds, null, "ENCOUNTER_ENDED",
-					"Encounter ends: " + o + (summary == null ? "" : " — " + summary), null);
+					"Encounter ends: " + o + (summary == null ? "" : " — " + summary), Map.of("outcome", o));
 
 			// Player character fate decides the harness state.
 			Optional<Row> pc = tx.queryOne(
@@ -2126,6 +2147,11 @@ public final class EncounterService {
 			result.put("level_up_eligible", awards.stream().filter(a -> Boolean.TRUE.equals(a.get("level_up_eligible")))
 					.map(a -> a.get("character")).toList());
 			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
+			List<Map<String, Object>> recovery = AmmunitionRecovery.offers(tx, rules,
+					tx.get("encounter", encounter.id()));
+			if (!recovery.isEmpty()) {
+				result.put("ammunition_recovery", recovery);
+			}
 			if (!continuation.isEmpty()) {
 				result.put("continuation", continuation);
 			}
@@ -2146,6 +2172,23 @@ public final class EncounterService {
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), due == null ? null : List.of(due)));
 			return result;
+		});
+	}
+
+	public Map<String, Object> recoverAmmunition(
+		String operationId, String campaignRef, String encounterRef, String characterRef,
+		List<Map<String, Object>> selection) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		var args = new LinkedHashMap<String, Object>();
+		args.put("campaign", campaignRef);
+		args.put("encounter", encounterRef);
+		args.put("character", characterRef);
+		args.put("selection", selection);
+		return db.mutate(Database.Mutation.of("recover_ammunition", campaignId, operationId, "PLAYER", args), tx -> {
+			Row campaign = Harness.requireMutation(tx, campaignRef, "recover_ammunition");
+			Row encounter = encounter(tx, campaignId, encounterRef);
+			Row character = CharacterService.character(tx, campaignId, characterRef);
+			return AmmunitionRecovery.recover(tx, rules, roller, campaign, encounter, character, selection);
 		});
 	}
 

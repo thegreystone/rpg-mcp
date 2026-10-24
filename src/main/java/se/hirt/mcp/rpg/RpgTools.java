@@ -696,7 +696,7 @@ public class RpgTools {
 	}
 
 	@Tool(name = "get_encounter_state", description = "Authoritative encounter view: round, whose turn, participants with HP (enemy HP labeled GM_ONLY), AC, "
-			+ "conditions, death saves, zones, available attacks, and the recent log ('what happened last turn'). Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "conditions, death saves, zones, available attacks, and the recent log ('what happened last turn'). An ended encounter may offer optional ammunition_recovery. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getEncounterState(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Encounter reference (default: the running encounter)")
 	Optional<String> encounter, @ToolArg(description = "Number of recent log entries (default 10)")
@@ -729,7 +729,8 @@ public class RpgTools {
 			+ "a major encounter's result carries `treasure` (level-appropriate magic item suggestions for grant_loot); "
 			+ "awards the encounter's XP pool (fixed at start from every hostile participant) split among surviving party members whenever the encounter "
 			+ "was overcome — killed, captured, routed or talked down all pay the same; a defeat or flight pays nothing. Also reports level-up eligibility, advances the clock, writes the ledger event, "
-			+ "and — if the player character died — moves the harness to the continuation decision (CHECKPOINT_DECISION, or PLAYER_CHARACTER_TRANSFER under IRONMAN).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "and — if the player character died — moves the harness to the continuation decision (CHECKPOINT_DECISION, or PLAYER_CHARACTER_TRANSFER under IRONMAN). "
+			+ "ammunition_recovery offers an optional one-minute search: use recover_ammunition only if the player asks or agrees; it never blocks play.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse endEncounter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Outcome")
@@ -738,6 +739,23 @@ public class RpgTools {
 	Optional<String> summary) {
 		return ToolSupport.run("end_encounter", () -> engine.encounters().end(operation_id, campaign,
 				encounter.orElse(null), outcome, summary.orElse(null)));
+	}
+
+	@Tool(name = "recover_ammunition", description = "MUTATING, atomic. Only after the player asks or agrees, spend one minute searching an ended encounter for half the character's recorded fired ammunition, rounded down across all types. "
+			+ "Use an ammunition_recovery offer from end_encounter or get_encounter_state. Requires EXPLORATION, the original party shooter alive and able at the known battle location, and no active encounter. The GM confirms the battlefield is accessible. "
+			+ "Each character may search an encounter once. Omit selection to draw a random half of all fired pieces, weighted by group quantities without replacement. Explicit selection overrides the draw with exactly the recoverable quota of {group, quantity}, using offered group numbers once each. "
+			+ "For candidates marked recover_as: GM, the GM must also choose recover_as: ORIGINAL|MUNDANE|LOST from the item's rules text; LOST counts toward the quota and returns nothing. Standard +N hits return mundane ammunition and misses retain their magic. "
+			+ "Any GM candidate sets selection_required and requires explicit selection; omitted selection is refused before any draw or write. The result reports method RANDOM|EXPLICIT. Retrying the operation replays its result, never rerolls. "
+			+ "Offers are optional and create no pending choice. Never recover automatically or grant replacement ammunition by hand.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse recoverAmmunition(@ToolArg(description = OP)
+	String operation_id, @ToolArg(description = REF)
+	String campaign, @ToolArg(description = "Ended encounter reference (encounter:N), required")
+	String encounter, @ToolArg(description = "Original party shooter's character reference (character:N), required")
+	String character,
+		@ToolArg(description = "Optional exact-quota override: [{group: offered number, quantity: n, recover_as: ORIGINAL|MUNDANE|LOST only for GM candidates}]. Omit for a random half weighted by piece counts without replacement; explicit selection is required if any candidate has GM policy")
+		Optional<List<Map<String, Object>>> selection) {
+		return ToolSupport.run("recover_ammunition", () -> engine.encounters().recoverAmmunition(operation_id, campaign,
+				encounter, character, selection.orElse(null)));
 	}
 
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "

@@ -103,6 +103,7 @@ capabilities:
   rulesets: true
   setup: true
   encounters: true
+  ammunition_recovery: true
   checkpoints: true
   director: true
   relationship_memory: true
@@ -950,6 +951,9 @@ is deferred.
 Round, turn, participants, sides, visible conditions, positions where a spatial model is active, available actions or
 constraints, and revision. Secret opponent information is omitted or marked by visibility.
 
+For an ended encounter, `ammunition_recovery` appears when an optional search is available (§15.6). Read the explicit
+encounter reference to revisit an offer; omitting `encounter` still selects a running encounter.
+
 ### 15.3 `perform_encounter_action`
 
 Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `DISENGAGE`, `DODGE`, `HELP`, `HIDE`, `READY`,
@@ -965,6 +969,8 @@ than guessing.
 
 `ATTACK` may name `ammunition` ("+1 Arrow") to fire magic ammunition made on the weapon's own kind; its +N applies to
 that attack and damage roll and the result's `ammunition` reports the piece, its `bonus` and what remains.
+Fired pieces are recorded for optional post-combat recovery (§15.6), including whether the resolved attack hit and
+the ammunition's recovery policy. An interrupted attack records the final result when it resumes.
 
 After an Attack action with a Light weapon, `ATTACK {target, weapon: "inventory:N", light_extra_attack: true}`
 makes the Light property's extra attack with a different carried Light weapon. It spends the turn's Bonus Action;
@@ -991,6 +997,57 @@ Validates the outcome, commits completion, distributes mechanically defined rewa
 configured, returns level-up eligibility and Director-trigger recommendations. Cannot end while mandatory pending
 reactions or choices remain. A major encounter (an XP pool of 200 or more, or a player character's death) also returns
 `treasure` (§14.4).
+
+When a shooter can search the battlefield, `ammunition_recovery` offers a one-minute search (§15.6). The offer does
+not restore anything, spend time, create a pending transaction, or block exploration. The GM offers the search to
+the player and calls `recover_ammunition` only when the player requests or agrees to it.
+
+### 15.6 `recover_ammunition`
+
+An optional, atomic post-combat search. Required fields are `operation_id`, `campaign`, `encounter` and `character`;
+the last two are explicit references to the ended encounter and its original party shooter. Recovery requires
+`EXPLORATION`, no active encounter, a living character able to search, and the character at the encounter's known,
+non-null location. The GM confirms that the battlefield is accessible, including after returning from flight or
+defeat. Each character can search an encounter once; a new operation ID does not permit a second search.
+
+`end_encounter` and `get_encounter_state` return an `ammunition_recovery` list only when offers exist. Each offer is:
+
+```text
+{character, name, used, recoverable, elapsed_minutes: 1, optional: true,
+ default_method: RANDOM, selection_required,
+ candidates: [{group, item, name, quantity, hit, recover_as: ORIGINAL|MUNDANE|GM, base_item?, text?}]}
+```
+
+`used` counts recorded fired pieces across all ammunition types for that shooter; `recoverable` is `floor(used / 2)`
+across that total, not a separate rounding per type. Fewer than two recorded pieces produce no offer and cannot be
+searched. Candidate group numbers identify the choices in that offer; `quantity` is the number of pieces in a group,
+and `hit` is the final attack result. Ordinary ammunition returns as `ORIGINAL`. Standard +1/+2/+3 ammunition that
+hit returns as `MUNDANE` on its base item; a miss retains the original magic. Other magic or custom ammunition is
+`GM`: its rules text determines whether the selected pieces retain their original form, become mundane, or are lost.
+
+Omitting `selection` draws a random half of all recorded fired pieces. Each piece has equal chance: groups are
+weighted by their remaining quantities and pieces are drawn without replacement until the global `recoverable`
+quota is met. Random selection is the engine's default adjudication for which half survives. The result reports
+`method: RANDOM`. An explicit `selection` overrides that draw and reports
+`method: EXPLICIT`; it must choose exactly the offered quota, using each group at most once:
+
+```json
+[{"group": 1, "quantity": 2}, {"group": 3, "quantity": 1, "recover_as": "MUNDANE"}]
+```
+
+`recover_as: ORIGINAL|MUNDANE|LOST` is required only for a `GM` candidate. `LOST` accounts for selected pieces that
+were destroyed or cannot be recovered: they count toward the quota and add nothing to inventory. The engine refuses
+duplicate groups, quantities beyond a group, a wrong total, or a caller-supplied policy for a deterministic group.
+An offer has `selection_required: true` only when a candidate has `GM` policy. If any such pool exists, omitted
+`selection` is refused before drawing or writing anything: the GM supplies the selection and adjudicates any selected
+`GM` groups from their rules text. The random default never guesses unknown magic recovery rules.
+
+A successful search spends one minute, applies time consequences, restores the selected inventory, and records the
+search together. Reusing `operation_id` returns the original result and random selection; a fresh ID is refused after
+that shooter's search is recorded, so retries cannot reroll the recovery. Checkpoint restore rewinds inventory, time,
+and search eligibility together. Older shots without recovery metadata are ignored rather than reconstructed from
+item names. The GM MUST NOT grant recovered ammunition
+by hand or perform the search automatically.
 
 ---
 
@@ -1281,6 +1338,7 @@ Encounter
   perform_encounter_action
   resolve_pending_choice
   end_encounter
+  recover_ammunition
 
 Progression
   begin_level_up
