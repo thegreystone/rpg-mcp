@@ -32,6 +32,7 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -63,7 +64,8 @@ public record DiceExpression(List<Term> terms) {
 			throw RpgException.invalidArgument("A dice expression is required.");
 		}
 		// Typeset text (the SRD PDF, a model's prose) writes "1d4–1" with an en dash or a minus sign; read them as '-'.
-		String s = text.replace(" ", "").replace('–', '-').replace('—', '-').replace('−', '-').toLowerCase();
+		String s = text.replaceAll("\\s+", "").replace('–', '-').replace('—', '-').replace('−', '-')
+				.toLowerCase(Locale.ROOT);
 		var terms = new ArrayList<Term>();
 		int i = 0;
 		int sign = 1;
@@ -78,6 +80,10 @@ public record DiceExpression(List<Term> terms) {
 			}
 			terms.add(parseTerm(s.substring(i, j), sign, text));
 			if (j < s.length()) {
+				if (j == s.length() - 1) {
+					throw RpgException
+							.invalidArgument("A dice term is required after the final operator in '" + text + "'.");
+				}
 				sign = s.charAt(j) == '-' ? -1 : 1;
 			}
 			i = j + 1;
@@ -85,6 +91,7 @@ public record DiceExpression(List<Term> terms) {
 		if (terms.isEmpty()) {
 			throw RpgException.invalidArgument("Empty dice expression '" + text + "'.");
 		}
+		validateRange(terms, text);
 		return new DiceExpression(List.copyOf(terms));
 	}
 
@@ -94,29 +101,68 @@ public record DiceExpression(List<Term> terms) {
 			throw RpgException.invalidArgument("Malformed dice expression '" + whole + "' near '" + term + "'.");
 		}
 		if (m.group(5) != null) {
-			return new Term(sign, 0, 0, Keep.ALL, 0, Integer.parseInt(m.group(5)));
+			return new Term(sign, 0, 0, Keep.ALL, 0, number(m.group(5), term));
 		}
-		int count = m.group(1).isEmpty() ? 1 : Integer.parseInt(m.group(1));
-		int sides = Integer.parseInt(m.group(2));
+		int count = m.group(1).isEmpty() ? 1 : number(m.group(1), term);
+		int sides = number(m.group(2), term);
 		if (count < 1 || count > MAX_DICE || sides < 1 || sides > MAX_SIDES) {
 			throw RpgException.invalidArgument("Dice term '" + term + "' is out of range.");
 		}
 		Keep keep = Keep.ALL;
 		int keepCount = count;
 		if (m.group(3) != null) {
-			int n = Integer.parseInt(m.group(4));
+			int n = number(m.group(4), term);
 			keep = switch (m.group(3)) {
 			case "kh" -> Keep.HIGHEST;
 			case "kl" -> Keep.LOWEST;
 			case "dl" -> Keep.DROP_LOWEST;
 			default -> Keep.DROP_HIGHEST;
 			};
-			if (n < 0 || n > count) {
-				throw RpgException.invalidArgument("Keep/drop count in '" + term + "' exceeds the number of dice.");
+			boolean keeping = keep == Keep.HIGHEST || keep == Keep.LOWEST;
+			if (keeping ? n < 1 || n > count : n < 0 || n >= count) {
+				throw RpgException.invalidArgument("Keep/drop count in '" + term + "' must retain at least one die "
+						+ "and cannot exceed the number of dice.");
 			}
 			keepCount = n;
 		}
 		return new Term(sign, count, sides, keep, keepCount, 0);
+	}
+
+	private static int number(String digits, String term) {
+		try {
+			return Integer.parseInt(digits);
+		} catch (NumberFormatException e) {
+			throw RpgException.invalidArgument("Numeric value in dice term '" + term + "' is out of range.");
+		}
+	}
+
+	/** Validate the int-valued result fields before a roller consumes any random numbers. */
+	private static void validateRange(List<Term> terms, String text) {
+		long modifier = 0;
+		long minimum = 0;
+		long maximum = 0;
+		for (Term term : terms) {
+			if (!term.isDice()) {
+				long value = (long) term.sign() * term.constant();
+				modifier += value;
+				minimum += value;
+				maximum += value;
+			} else {
+				long retained = switch (term.keep()) {
+				case ALL -> term.count();
+				case HIGHEST, LOWEST -> term.keepCount();
+				case DROP_LOWEST, DROP_HIGHEST -> term.count() - term.keepCount();
+				};
+				long highest = retained * term.sides();
+				minimum += term.sign() > 0 ? retained : -highest;
+				maximum += term.sign() > 0 ? highest : -retained;
+			}
+		}
+		if (modifier < Integer.MIN_VALUE || modifier > Integer.MAX_VALUE || minimum < Integer.MIN_VALUE
+				|| maximum > Integer.MAX_VALUE) {
+			throw RpgException.invalidArgument("Dice expression '" + text
+					+ "' has a modifier or possible total outside " + "the supported integer range.");
+		}
 	}
 
 	public int constantModifier() {

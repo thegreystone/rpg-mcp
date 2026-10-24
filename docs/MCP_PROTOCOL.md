@@ -872,6 +872,12 @@ reason: fall from the sea-cliff
 Returns `roll` (expression, dice, dropped, modifier, total), `total` and `roll_ref`. Legal in `EXPLORATION` and
 `ENCOUNTER`.
 
+Expressions accept leading signs, whitespace, case-insensitive dice notation and typeset minus signs. Every `+` or `-`
+must be followed by a term. Each dice group rolls 1–1,000 dice with 1–10,000 sides; a constant's magnitude is at most
+2,147,483,647. `kh`/`kl` keep 1 through all dice; `dl`/`dh` drop zero through all but one, so every group retains a die.
+The final constant modifier and every possible total must fit -2,147,483,648 through 2,147,483,647. Incomplete or
+out-of-range expressions return `INVALID_ARGUMENT` before consuming dice or writing a roll record.
+
 ### 13.9 `cast_spell`, `prepare_spells` and Metamagic
 
 `cast_spell {caster, spell, slot_level?, targets?, options?}` shares its casting core with the encounter `CAST` action:

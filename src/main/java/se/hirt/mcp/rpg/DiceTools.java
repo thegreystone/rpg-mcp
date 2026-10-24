@@ -49,7 +49,8 @@ public class DiceTools {
 	@Tool(name = "roll_dice", description = "MUTATING (journaled roll). Rolls a dice expression with the server's dice and returns the breakdown and a roll_ref. "
 			+ "For everything no semantic tool rolls for you: falling damage (then apply_runtime_change DAMAGE {dice} applies it directly), a random "
 			+ "table, a wandering-monster check, a percentile chance, the dice of an NPC behind the screen. Never invent a die result. "
-			+ "Expressions: NdS with +/- constants (\"2d6+3\"), keep/drop (\"4d6dl1\", \"2d20kh1\"), several terms (\"1d8+1d6-1\"). Nothing is applied.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Expressions: NdS with +/- constants (\"2d6+3\"), keep/drop (\"4d6dl1\", \"2d20kh1\"), several terms (\"1d8+1d6-1\"). "
+			+ "Keep/drop must retain at least one die. Incomplete expressions and out-of-range numbers return INVALID_ARGUMENT before rolling. Nothing is applied.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse rollDice(
 		@ToolArg(description = "Client-generated idempotency key, unique within the campaign (e.g. a ULID).")
 		String operation_id, @ToolArg(description = "Campaign reference, e.g. 'campaign:1'")
