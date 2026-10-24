@@ -525,6 +525,7 @@ public class RpgTools {
 
 	@Tool(name = "define_content", description = "MUTATING. Creates campaign-scoped custom content with a stable content:N reference and an optional 'custom:<kind>/slug' symbolic id. "
 			+ "kind ITEM (default): a local newspaper, a regional delicacy, a quest letter — buyable, carried, transferable; defining it grants it to nobody. "
+			+ "Custom item names are unique within the campaign, ignoring case and surrounding whitespace; a duplicate returns CONFLICT with the existing reference. "
 			+ "kind BACKGROUND: a campaign background (a Noble, a Fen Keeper) built like an SRD one — properties {ability_scores: [3 abilities], feat: an Origin feat, "
 			+ "skills: [2 skills], tool: {item} or {choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}, feat_choices?, starting_equipment?} — "
 			+ "usable by name wherever a background is chosen (drafts and companion promotions). Mechanical WEAPON/ARMOR definitions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
@@ -622,6 +623,7 @@ public class RpgTools {
 			+ "Writes a LOOT_ACQUIRED ledger event. Magic items (get_content_definitions magic: true) are granted by name; a magic weapon, armor, shield or "
 			+ "ammunition entry is a template made on a base: {item: '+1 Longsword'}, {item: 'Weapon, +1, +2, or +3', base: 'Longsword', bonus: 2} or "
 			+ "{item: 'Flame Tongue', base: 'Longsword', name: 'Ember'}; an enchantment of your own (an Arrow of Fire, a frost blade) is {item: 'Arrow', magic: {name, rarity, damage_bonus_dice, damage_type, text}}. "
+			+ "A +N name and explicit bonus must agree. Same-name recipes reuse only matching definitions; a different recipe returns CONFLICT. Use content:N to grant an existing definition. "
 			+ "Completed quests, major encounters and bootstrap report level-appropriate "
 			+ "`treasure` suggestions: a party that finishes a quest or a major fight usually finds something.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse grantLoot(@ToolArg(description = OP)

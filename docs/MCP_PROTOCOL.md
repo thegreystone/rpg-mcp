@@ -854,7 +854,9 @@ of the verbatim `text`, which `FULL` detail returns; the result lists `rarities`
 
 `define_content` creates a campaign-scoped definition with a `content:` reference and optional `custom:` symbolic id:
 
-- `ITEM`: name, type, cost, weight, description, mechanical properties, tags.
+- `ITEM`: name, type, cost, weight, description, mechanical properties, tags. Names must be unique among the
+  campaign's custom items, ignoring case and surrounding whitespace; a duplicate returns `CONFLICT` with the
+  existing reference. Items in other campaigns and backgrounds have separate names.
 - `BACKGROUND`: SRD 5.2.1 shape: `properties.ability_scores` (three abilities), `properties.feat` (an Origin feat),
   `properties.skills` (two), `properties.tool` (`{item}` or `{choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}`),
   optional `feat_choices` presets and `starting_equipment` options (default fifty gold). References are validated
@@ -865,6 +867,8 @@ of the verbatim `text`, which `FULL` detail returns; the result lists `rarities`
 
 Definitions are validated against their kind's schema and recorded with provenance and licensing. Defining is not
 granting: putting a custom item into play goes through `trade`, `grant_loot` or `transfer_item`.
+Older campaigns may contain duplicate item names. Resolving such a name returns `CONFLICT` with `candidates`;
+use a specific `content:N` or `custom:` symbolic id. Existing definitions and inventories are preserved.
 
 ### 13.8 `roll_dice`
 
@@ -955,14 +959,18 @@ Magic items are granted by name (`{item: "Ring of Protection"}`). A magic weapon
 template made on a base item and is instantiated at grant time as campaign content: `{item: "+1 Longsword"}`,
 `{item: "Weapon, +1, +2, or +3", base: "Longsword", bonus: 2}`, or `{item: "Flame Tongue", base: "Longsword", name:
 "Ember"}`. The result names the definition (`content:N`) and its rarity; a template without a base, a base of the wrong
-kind, or a base that is itself magical is refused. One definition serves every grant of the same name.
+kind, or a base that is itself magical is refused. A definition is reused only when the name, template, base and
+bonus match. A same-name recipe with different mechanics returns `CONFLICT` with the existing reference. A `+N`
+name and an explicit `bonus` must agree (`INVALID_ARGUMENT` otherwise); bonuses must be integers from 1 through 3.
 
 An enchantment the SRD does not list (an Arrow of Fire, a frost blade, a lucky charm) is made on a mundane base with
 `magic`: `{item: "Arrow", quantity: 10, magic: {name, rarity, text, bonus?, damage_bonus_dice? + damage_type?, ac_bonus?,
 save_bonus?, attack_bonus?, speed_bonus?, resistance?, attunement?, slot?, consumable?: {heal}}}`. `name` and `text` are
 required; the engine applies the +N, the extra damage dice on hits with that weapon or piece of ammunition, and the worn
-modifiers while equipped; the text is the GM's (`text_is_paraphrase: true`). Priced base + rarity value; one definition
-per name.
+modifiers while equipped; the text is the GM's (`text_is_paraphrase: true`). In this form, `item` names the mundane base;
+put `name` and `bonus` inside `magic` and omit the outer `base`, `name` and `bonus`. Priced base + rarity value. Repeating a
+matching enchantment reuses its definition; changing its base, rarity, mechanics or text under the same name returns
+`CONFLICT`. Grant an existing definition by `content:N`, or choose a different name for a different enchantment.
 
 **Treasure.** A completed quest (§12.1), a major encounter (§15.5) and a bootstrap that finds a party of level 3, or
 with two completed quests, without a single magic item return `treasure` (or a `meta.warnings` line): `party_level`,

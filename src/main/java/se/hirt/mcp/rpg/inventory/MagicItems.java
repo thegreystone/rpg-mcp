@@ -32,13 +32,13 @@ import se.hirt.mcp.rpg.content.ContentService;
 import se.hirt.mcp.rpg.content.ContentService.Item;
 import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.protocol.Json;
-import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
 import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Derived;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -196,7 +196,7 @@ public final class MagicItems {
 	public static Item resolve(Tx tx, RulesData rules, long campaignId, Map<String, Object> spec) {
 		String text = spec.get("item") == null ? null : spec.get("item").toString().trim();
 		String base = spec.get("base") == null ? null : spec.get("base").toString().trim();
-		Integer bonus = spec.get("bonus") instanceof Number n ? n.intValue() : null;
+		Integer bonus = requestedBonus(spec, "bonus");
 		String name = spec.get("name") == null ? null : spec.get("name").toString().trim();
 		if (text == null || text.isBlank()) {
 			throw RpgException
@@ -204,6 +204,10 @@ public final class MagicItems {
 		}
 		if (spec.get("magic") instanceof Map<?, ?> enchantment) {
 			// A GM-made enchantment on a mundane base: {"item": "Arrow", "magic": {"name": "Arrow of Fire", ...}}.
+			if (base != null || bonus != null || name != null) {
+				throw RpgException.invalidArgument(
+						"With magic, item names the mundane base; put name and bonus inside magic and omit base.");
+			}
 			@SuppressWarnings("unchecked")
 			Map<String, Object> e = (Map<String, Object>) enchantment;
 			return enchant(tx, campaignId, ContentService.resolveItem(tx, rules, campaignId, text), e);
@@ -211,20 +215,20 @@ public final class MagicItems {
 		Matcher plus = PLUS_FORM.matcher(text);
 		if (plus.matches()) {
 			// "+1 Longsword": the base names the template kind, and a base given beside it must agree.
-			if (base != null && !base.equalsIgnoreCase(plus.group(2).trim())) {
+			int namedBonus = Integer.parseInt(plus.group(1));
+			if (bonus != null && bonus != namedBonus) {
+				throw RpgException.invalidArgument(
+						"'" + text + "' already specifies +" + namedBonus + "; bonus +" + bonus + " contradicts it.");
+			}
+			String namedBase = plus.group(2).trim();
+			Item baseItem = ContentService.resolveItem(tx, rules, campaignId, namedBase);
+			if (base != null
+					&& !ContentService.resolveItem(tx, rules, campaignId, base).display().equals(baseItem.display())) {
 				throw RpgException
 						.invalidArgument("'" + text + "' already names its base; base '" + base + "' contradicts it.");
 			}
-			bonus = bonus == null ? Integer.parseInt(plus.group(1)) : bonus;
-			base = plus.group(2).trim();
-			// A definition of that exact name may already exist in the campaign.
-			Optional<Row> existing = tx.queryOne(
-					"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' AND LOWER(name) = LOWER(?)",
-					campaignId, text);
-			if (existing.isPresent()) {
-				return ContentService.fromCustomRow(existing.get());
-			}
-			Item baseItem = ContentService.resolveItem(tx, rules, campaignId, base);
+			bonus = namedBonus;
+			base = namedBase;
 			text = switch (baseItem.type()) {
 			case "WEAPON" -> "Weapon, +1, +2, or +3";
 			case "ARMOR" -> "Armor, +1, +2, or +3";
@@ -238,6 +242,13 @@ public final class MagicItems {
 		if (!isTemplate(item.payload())) {
 			if (base != null) {
 				throw RpgException.invalidArgument(item.name() + " is a complete item; it takes no base.");
+			}
+			if (bonus != null && bonus != bonus(item.payload())) {
+				throw RpgException.invalidArgument(item.name() + " is a complete item; bonus +" + bonus
+						+ " contradicts its definition. Use a magic template or enchant a mundane base.");
+			}
+			if (name != null && !name.isBlank() && !name.equalsIgnoreCase(item.name().trim())) {
+				throw RpgException.invalidArgument(item.name() + " is a complete item; it takes no name override.");
 			}
 			return item;
 		}
@@ -254,7 +265,8 @@ public final class MagicItems {
 	/**
 	 * Makes a campaign-owned definition of {@code template} on {@code base}: the base's mechanics
 	 * (damage, armor, slot, weight) plus the template's magic, rarity and text. A definition of the
-	 * same name in the campaign is reused, so ten "+1 Arrow"s are one definition.
+	 * same name in the campaign is reused only when its template, base and bonus agree, so ten "+1
+	 * Arrow"s are one definition.
 	 */
 	public static Item instantiate(Tx tx, long campaignId, Item template, Item base, Integer bonus, String name) {
 		Map<String, Object> tm = magic(template.payload());
@@ -286,13 +298,18 @@ public final class MagicItems {
 		} else if (bonus != null) {
 			throw RpgException.invalidArgument(template.name() + " has no +N; leave bonus out.");
 		}
-		String itemName = name != null && !name.isBlank() ? name
+		String itemName = name != null && !name.isBlank() ? name.trim()
 				: bonus != null ? "+" + bonus + " " + base.name() : template.name() + " (" + base.name() + ")";
-		Optional<Row> existing = tx.queryOne(
-				"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' AND LOWER(name) = LOWER(?)",
-				campaignId, itemName);
+		Optional<Item> existing = ContentService.customItemByName(tx, campaignId, itemName);
 		if (existing.isPresent()) {
-			return ContentService.fromCustomRow(existing.get());
+			Item item = existing.get();
+			Map<String, Object> actual = magic(item.payload());
+			if (actual != null && template.display().equals(actual.get("template_ref"))
+					&& base.display().equals(actual.get("base_ref")) && item.type().equals(base.type())
+					&& bonus(item.payload()) == (bonus == null ? 0 : bonus)) {
+				return item;
+			}
+			throw identityConflict(itemName, item);
 		}
 
 		var payload = new LinkedHashMap<String, Object>(base.payload());
@@ -382,7 +399,8 @@ public final class MagicItems {
 	 * hit with the weapon or the piece of ammunition), {@code ac_bonus}, {@code save_bonus},
 	 * {@code attack_bonus}, {@code speed_bonus}, {@code resistance} (worn items, while equipped),
 	 * {@code attunement}, and {@code consumable: {heal}} for a draught. Anything else stays in the
-	 * text for the GM. One definition per name.
+	 * text for the GM. A matching enchantment reuses its definition; a different same-name
+	 * enchantment is a conflict.
 	 */
 	public static Item enchant(Tx tx, long campaignId, Item base, Map<String, Object> spec) {
 		String name = spec.get("name") == null ? null : spec.get("name").toString().trim();
@@ -393,25 +411,16 @@ public final class MagicItems {
 		if (isMagic(base.payload())) {
 			throw RpgException.invalidArgument(base.name() + " is already magical; enchant a mundane base.");
 		}
-		Optional<Row> existing = tx.queryOne(
-				"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' AND LOWER(name) = LOWER(?)",
-				campaignId, name);
-		if (existing.isPresent()) {
-			return ContentService.fromCustomRow(existing.get());
-		}
 		String rarity = spec.get("rarity") == null ? "UNCOMMON"
 				: spec.get("rarity").toString().trim().toUpperCase().replace(' ', '_');
 		if (!RARITIES.contains(rarity)) {
 			throw RpgException.invalidArgument("magic.rarity must be one of " + RARITIES + ".");
 		}
-		Integer bonus = spec.get("bonus") instanceof Number n ? n.intValue() : null;
+		Integer bonus = requestedBonus(spec, "magic.bonus");
 		boolean plusKind = List.of("WEAPON", "ARMOR", "SHIELD", "AMMUNITION").contains(base.type());
 		if (bonus != null && !plusKind) {
 			throw RpgException.invalidArgument("A +N belongs to a weapon, armor, shield or ammunition, not a "
 					+ base.type().toLowerCase() + "; use ac_bonus, save_bonus or attack_bonus for a worn item.");
-		}
-		if (bonus != null && (bonus < 1 || bonus > 3)) {
-			throw RpgException.invalidArgument("magic.bonus must be +1, +2 or +3.");
 		}
 		var modifiers = new LinkedHashMap<String, Object>();
 		for (String k : ENCHANT_MODIFIERS) {
@@ -475,6 +484,15 @@ public final class MagicItems {
 		payload.put("cost_cp", costCp);
 		double lb = base.payload().get("weight_lb") instanceof Number w ? w.doubleValue() : 0;
 
+		Optional<Item> existing = ContentService.customItemByName(tx, campaignId, name);
+		if (existing.isPresent()) {
+			Item item = existing.get();
+			if (enchantmentIdentity(payload).equals(enchantmentIdentity(item.payload()))) {
+				return item;
+			}
+			throw identityConflict(name, item);
+		}
+
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("kind", "ITEM");
@@ -491,6 +509,58 @@ public final class MagicItems {
 		long id = tx.insert("custom_content", cols);
 		tx.touched(Ref.of(Ref.CONTENT, id), 0);
 		return ContentService.fromCustomRow(tx.get("custom_content", id));
+	}
+
+	private static RpgException identityConflict(String name, Item existing) {
+		return RpgException
+				.conflict("An item named '" + name + "' already exists with a different definition. Use "
+						+ existing.display() + " to grant that item, or choose a different name.")
+				.withDetail("existing", existing.display());
+	}
+
+	private static Integer requestedBonus(Map<String, Object> spec, String path) {
+		if (spec.get("bonus") == null) {
+			return null;
+		}
+		try {
+			if (spec.get("bonus") instanceof Number n) {
+				int bonus = new BigDecimal(n.toString()).intValueExact();
+				if (bonus >= 1 && bonus <= 3) {
+					return bonus;
+				}
+			}
+		} catch (ArithmeticException | NumberFormatException invalid) {
+			// Fractional, non-finite and oversized bonuses are invalid, rather than silently truncated.
+		}
+		throw RpgException.invalidArgument(path + " must be an integer +1, +2 or +3.");
+	}
+
+	/** Authored enchantment identity excludes derived prices and the base's inherited prose. */
+	private static Map<String, Object> enchantmentIdentity(Map<String, Object> payload) {
+		var identity = new LinkedHashMap<String, Object>();
+		for (String key : List.of("type", "magic", "modifiers", "consumable", "slot", "text")) {
+			identity.put(key, normalizedIdentity(payload.get(key)));
+		}
+		return identity;
+	}
+
+	private static Object normalizedIdentity(Object value) {
+		if (value instanceof Number n) {
+			try {
+				return new BigDecimal(n.toString()).stripTrailingZeros();
+			} catch (NumberFormatException invalid) {
+				throw RpgException.invalidArgument("Magic item numeric properties must be finite.");
+			}
+		}
+		if (value instanceof Map<?, ?> map) {
+			var normalized = new LinkedHashMap<Object, Object>();
+			map.forEach((key, element) -> normalized.put(key, normalizedIdentity(element)));
+			return normalized;
+		}
+		if (value instanceof List<?> list) {
+			return list.stream().map(MagicItems::normalizedIdentity).toList();
+		}
+		return value;
 	}
 
 	/** Adds the mundane bundle cost to the magic value of the pieces in that bundle. */

@@ -156,11 +156,11 @@ public final class ContentService {
 			if (row.lng("campaign_id") != campaignId) {
 				throw RpgException.invalidArgument(t + " belongs to another campaign.");
 			}
-			return fromCustomRow(row);
+			return requireCustomItem(row, t);
 		}
 		if (t.startsWith("custom:")) {
 			return tx.queryOne("SELECT * FROM custom_content WHERE campaign_id = ? AND symbolic_id = ?", campaignId, t)
-					.map(ContentService::fromCustomRow)
+					.map(row -> requireCustomItem(row, t))
 					.orElseThrow(() -> RpgException.notFound("Custom content '" + t + "'"));
 		}
 		Optional<RulesData.Definition> installed = rules.resolve("ITEM", t);
@@ -168,11 +168,45 @@ public final class ContentService {
 			return fromDefinition(installed.get());
 		}
 		// Fall back to a custom definition by name.
-		return tx.queryOne(
-				"SELECT * FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' AND LOWER(name) = LOWER(?)",
-				campaignId, t).map(ContentService::fromCustomRow)
-				.orElseThrow(() -> RpgException.notFound(
-						"Item '" + t + "' (use get_content_definitions to search, or define_content to create it)"));
+		return customItemByName(tx, campaignId, t).orElseThrow(() -> RpgException
+				.notFound("Item '" + t + "' (use get_content_definitions to search, or define_content to create it)"));
+	}
+
+	private static Item requireCustomItem(Row row, String reference) {
+		if (!"ITEM".equals(row.str("kind"))) {
+			throw RpgException.invalidArgument(reference + " is " + row.str("kind") + " content, not an item.");
+		}
+		return fromCustomRow(row);
+	}
+
+	/** Resolves a unique campaign item name without merging legacy duplicate definitions. */
+	public static Optional<Item> customItemByName(Tx tx, long campaignId, String name) {
+		if (name == null || name.isBlank()) {
+			return Optional.empty();
+		}
+		String normalized = name.trim();
+		List<Row> matches = tx
+				.query("SELECT id, name FROM custom_content WHERE campaign_id = ? AND kind = 'ITEM' ORDER BY id",
+						campaignId)
+				.stream().filter(row -> row.str("name").trim().equalsIgnoreCase(normalized)).toList();
+		if (matches.size() > 1) {
+			throw RpgException
+					.conflict("Several items named '" + normalized
+							+ "' exist in this campaign; use a content reference or symbolic id.")
+					.withDetail("candidates", matches.stream().map(row -> Ref.of(Ref.CONTENT, row.id())).toList());
+		}
+		return matches.isEmpty() ? Optional.empty()
+				: Optional.of(fromCustomRow(tx.get("custom_content", matches.get(0).id())));
+	}
+
+	/** Custom item names are unique within their campaign; existing legacy rows remain intact. */
+	public static void requireItemNameAvailable(Tx tx, long campaignId, String name) {
+		customItemByName(tx, campaignId, name).ifPresent(existing -> {
+			throw RpgException
+					.conflict("An item named '" + name.trim() + "' already exists as " + existing.display()
+							+ "; use that reference or choose another name.")
+					.withDetail("existing", existing.display());
+		});
 	}
 
 	public static Item fromDefinition(RulesData.Definition d) {
@@ -530,6 +564,7 @@ public final class ContentService {
 				throw RpgException.capabilityUnavailable("Custom " + type
 						+ " definitions need mechanical schemas that arrive with the encounter milestone; use GEAR/VALUABLE/CONSUMABLE/DOCUMENT/OTHER for now.");
 			}
+			requireItemNameAvailable(tx, campaignId, name);
 			String symbolic = null;
 			if (symbolicId != null && !symbolicId.isBlank()) {
 				symbolic = symbolicId.trim();
