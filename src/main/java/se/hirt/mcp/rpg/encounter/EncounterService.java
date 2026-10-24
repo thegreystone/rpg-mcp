@@ -551,7 +551,7 @@ public final class EncounterService {
 				result.put("turns_skipped", turnsSkipped);
 			}
 			switch (kind) {
-			case "ATTACK" -> result.putAll(attack(tx, campaignId, encounter, actor, participant, action, round));
+			case "ATTACK" -> result.putAll(attack(tx, campaignId, encounter, actor, participant, action, round, false));
 			case "CAST" -> {
 				if (action.get("spell") == null) {
 					throw RpgException.invalidArgument("action.spell is required for CAST.");
@@ -894,7 +894,8 @@ public final class EncounterService {
 	 * attacks never offer Shield.
 	 */
 	private Map<String, Object> attack(
-		Tx tx, long campaignId, Row encounter, Row actor, Row participant, Map<String, Object> action, long round) {
+		Tx tx, long campaignId, Row encounter, Row actor, Row participant, Map<String, Object> action, long round,
+		boolean opportunity) {
 		String targetRef = action.get("target") == null ? null : action.get("target").toString();
 		if (targetRef == null) {
 			throw RpgException.invalidArgument("action.target (character reference) is required for ATTACK.");
@@ -964,7 +965,7 @@ public final class EncounterService {
 			}
 			ammoUsed = used;
 		}
-		// Advantage / disadvantage sources: explicit, Dodge on the target, unconscious target, effects.
+		// Advantage / disadvantage sources: explicit, Dodge, target conditions, effects.
 		String adv = action.get("advantage") == null ? "NONE" : action.get("advantage").toString().toUpperCase();
 		boolean advantage = adv.equals("ADVANTAGE");
 		boolean disadvantage = adv.equals("DISADVANTAGE");
@@ -976,12 +977,10 @@ public final class EncounterService {
 			disadvantage = true;
 			reasons.add("target is dodging");
 		}
-		boolean targetUnconscious = "DYING".equals(target.str("life_state"))
-				|| tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?",
-						target.id(), RuntimeService.UNCONSCIOUS_REF) > 0;
-		if (targetUnconscious) {
+		Combat.TargetConditions targetConditions = Combat.targetConditions(tx, target);
+		if (targetConditions.advantage()) {
 			advantage = true;
-			reasons.add("target is unconscious");
+			reasons.addAll(targetConditions.reasons());
 		}
 		se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
 				actor.id());
@@ -1010,8 +1009,10 @@ public final class EncounterService {
 		}
 		int natural = attackRoll.dice().get(0);
 		int targetAc = RuntimeService.armorClass(tx, rules, target);
-		boolean critical = natural == 20 || (targetUnconscious && !profile.ranged());
 		boolean hit = natural != 1 && (natural == 20 || attackTotal >= targetAc);
+		// Opportunity attacks happen before the mover leaves reach, although its zone is already updated.
+		boolean close = opportunity || Combat.withinFiveFeet(tx, encounter.id(), actor.id(), target.id(), false);
+		boolean critical = hit && (natural == 20 || (targetConditions.criticalWithinFiveFeet() && close));
 
 		var ctx = new LinkedHashMap<String, Object>();
 		ctx.put("attacker", actor.id());
@@ -1348,7 +1349,8 @@ public final class EncounterService {
 			defaultMeleeAttack(tx, reactor).ifPresent(w -> action.put("weapon", w));
 		}
 		tx.update("encounter_participant", reactorParticipant.id(), Map.of("reaction_used", 1));
-		Map<String, Object> result = attack(tx, campaignId, encounter, reactor, reactorParticipant, action, round);
+		Map<String, Object> result = attack(tx, campaignId, encounter, reactor, reactorParticipant, action, round,
+				true);
 		result.put("reactor", Ref.of(Ref.CHARACTER, reactor.id()));
 		result.put("reactor_name", reactor.str("name"));
 		return result;

@@ -32,6 +32,7 @@ import se.hirt.mcp.rpg.dice.DiceExpression;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.persistence.Row;
+import se.hirt.mcp.rpg.persistence.Tx;
 
 import java.util.*;
 
@@ -47,6 +48,44 @@ public final class Combat {
 			"necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder");
 
 	private Combat() {
+	}
+
+	/** Attack benefits of the target's conditions (SRD 5.2.1 Conditions). */
+	public record TargetConditions(boolean advantage, boolean criticalWithinFiveFeet, List<String> reasons) {
+	}
+
+	public static TargetConditions targetConditions(Tx tx, Row target) {
+		var conditions = new HashSet<String>();
+		for (Row effect : tx.query("SELECT condition_ref FROM active_effect WHERE character_id = ?", target.id())) {
+			conditions.add(effect.str("condition_ref"));
+		}
+		if ("DYING".equals(target.str("life_state"))) {
+			conditions.add("srd5e:condition/unconscious");
+		}
+		var reasons = new ArrayList<String>();
+		for (String condition : List.of("stunned", "paralyzed", "petrified", "unconscious")) {
+			if (conditions.contains("srd5e:condition/" + condition)) {
+				reasons.add("target is " + condition);
+			}
+		}
+		boolean critical = conditions.contains("srd5e:condition/paralyzed")
+				|| conditions.contains("srd5e:condition/unconscious");
+		return new TargetConditions(!reasons.isEmpty(), critical, List.copyOf(reasons));
+	}
+
+	/**
+	 * As with Sneak Attack, a shared encounter zone represents being within 5 feet. Outside an
+	 * encounter the caller must establish proximity from the attack itself (an unextended Touch
+	 * spell); a melee attack's type alone does not establish distance.
+	 */
+	public static boolean withinFiveFeet(
+		Tx tx, Long encounterId, long attackerId, long targetId, boolean closeOutsideEncounter) {
+		if (encounterId == null) {
+			return closeOutsideEncounter;
+		}
+		return tx.count(
+				"SELECT COUNT(*) FROM encounter_participant a JOIN encounter_participant t ON t.encounter_id = a.encounter_id WHERE a.encounter_id = ? AND a.character_id = ? AND t.character_id = ? AND a.position_zone IS NOT NULL AND a.position_zone = t.position_zone",
+				encounterId, attackerId, targetId) > 0;
 	}
 
 	/** One attack option: weapon, unarmed strike or creature action. */

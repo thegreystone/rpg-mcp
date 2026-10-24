@@ -90,6 +90,14 @@ creature-backed characters: a stat block's listed skill or save number
 advantage / disadvantage: roll 2d20, take highest / lowest;
            sources never stack; adv + dis cancel to a flat roll
 
+target conditions: Stunned, Paralyzed, Petrified and Unconscious grant
+           advantage on attacks against the target (Incapacitated alone
+           does not). Paralyzed and Unconscious make hits from within
+           5 feet critical, including ranged and spell attacks. A shared
+           encounter zone represents 5-foot proximity, as for Sneak Attack.
+           Outside encounters, an unextended Touch spell establishes it;
+           otherwise unknown distance does not grant an automatic critical.
+
 proficiency_bonus: advancement table (data) by character level; by CR for
            creatures
 

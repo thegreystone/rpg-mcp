@@ -1019,8 +1019,8 @@ public final class SpellService {
 		}
 		Effects.Modifiers casterMods = Effects.modifiers(tx, rules, caster.id());
 		Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
-		boolean unconscious = "DYING".equals(target.str("life_state"));
-		boolean advantage = unconscious || targetMods.advantageOnAttacksAgainst;
+		Combat.TargetConditions targetConditions = Combat.targetConditions(tx, target);
+		boolean advantage = targetConditions.advantage() || targetMods.advantageOnAttacksAgainst;
 		boolean disadvantage = targetMods.disadvantageOnAttacksAgainst || tx.count(
 				"SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = 'srd5e:effect/dodging'",
 				target.id()) > 0;
@@ -1037,8 +1037,11 @@ public final class SpellService {
 		}
 		int natural = roll.dice().get(0);
 		int ac = RuntimeService.armorClass(tx, rules, target);
-		boolean melee = "MELEE_SPELL".equals(mech.get("attack"));
-		boolean critical = natural == 20 || (unconscious && melee);
+		boolean touch = "Touch".equalsIgnoreCase(String.valueOf(def.payload().get("range")))
+				&& (mm == null || !mm.has("distant"));
+		boolean conditionCritical = targetConditions.criticalWithinFiveFeet()
+				&& Combat.withinFiveFeet(tx, encounterId, caster.id(), target.id(), touch);
+		boolean critical = natural == 20 || conditionCritical;
 		boolean hit = natural != 1 && (natural == 20 || total >= ac);
 		if (!hit && Metamagic.seek(tx, mm)) {
 			// Seeking Spell: the d20 is rerolled and the new roll used (SRD 5.2.1 "Sorcerer").
@@ -1051,7 +1054,7 @@ public final class SpellService {
 				total += ((Number) bd.get("total")).intValue();
 			}
 			natural = roll.dice().get(0);
-			critical = natural == 20 || (unconscious && melee);
+			critical = natural == 20 || conditionCritical;
 			hit = natural != 1 && (natural == 20 || total >= ac);
 			t.put("seeking", Map.of("first_roll", first, "rerolled", true));
 		}
