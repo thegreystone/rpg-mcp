@@ -110,7 +110,7 @@ public class RpgResources {
 				"bootstrap_session", "suspend_session", "get_character_sheet", "resolve_check", "roll_dice",
 				"advance_time", "update_character", "record_memory", "query_memories", "query_timeline",
 				"create_checkpoint", "get_continuation_options", "restore_checkpoint", "get_content_definitions",
-				"define_content", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
+				"search_rules", "define_content", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
 				"materialize_character", "start_encounter", "get_encounter_state", "perform_encounter_action",
 				"resolve_pending_choice", "end_encounter", "recover_ammunition", "apply_runtime_change", "award_xp",
 				"transfer_player_control", "get_party", "begin_level_up", "get_level_up_choices", "update_level_up",

@@ -27,6 +27,8 @@ everything from the server.
 8. After a context reset or a checkpoint restore, trust server state over remembered conversation.
 9. Keep tool machinery, typed references (`character:1`) and YAML out of player-facing prose — use names.
 10. Every mutating call takes a client-generated `operation_id`; reuse it only to retry the identical call.
+11. Before answering rules questions or adjudicating unfamiliar situations, use `search_rules` for the
+    relevant rule text and references; include `campaign` to search custom content too.
 
 ## Lifecycle
 
