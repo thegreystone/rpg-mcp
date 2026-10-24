@@ -983,6 +983,7 @@ public class RpgTools {
 			+ "STORY_SEED {seed_kind: STORY_SEED|COMPANION_INTRO|PRESSURE|PACING_INTENT, intention, hooks, conditions, state, superseded_by, materialized_character}; "
 			+ "FACTION_STATE {name, goals, standing, agenda, members, secrets}; WORLD_EVENT {title, description, channels: [NEWSPAPER, RUMOR, TAVERN, TOWN_CRIER, REFUGEES, MERCHANT, PRICES, SOLDIERS, LETTER, WITNESS, ENVIRONMENT…], "
 			+ "locations: [location:N], affected, game_time, visibility}; LOCATION_DETAIL {description, tags, features} (existing location ref); NPC_AGENDA {goals, fears, secrets, current_plan} (character ref). "
+			+ "WORLD_EVENT updates preserve omitted/null locations and affected groups; [] clears that group. Location refs in affected add to the location scope. "
 			+ "Pass ref to update. Status/state transitions write ledger events. Fields that would force a player choice or relationship outcome are rejected.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse upsertNarrativeState(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)

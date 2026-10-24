@@ -609,6 +609,11 @@ Creates or updates one narrative aggregate by discriminated type: `QUEST`, `STOR
 lifecycle and transitions. Provenance MUST be recorded: `GM`, `DIRECTOR`, `MECHANICAL_CONSEQUENCE` or
 `ADMINISTRATIVE_OVERRIDE`.
 
+A `WORLD_EVENT` stores `locations` and other `affected` references together and returns the combined list as
+`affected`. Updates preserve each group when its input is omitted or null; an explicit empty list clears that group.
+Use `locations` to replace or clear the location scope. Location references supplied inside `affected` remain
+supported and add to the retained or supplied location scope. Duplicate references are stored once.
+
 A `STORY_BEAT` MAY carry an optional string `gm_brief`: a concise, actionable hook and plausible approaches for the
 GM. A supplied non-null value MUST be a string; null clears it and a blank value allows the legacy fallback in compact
 context. Further payload fields MAY hold location, actors and their intentions, availability conditions, discoverable

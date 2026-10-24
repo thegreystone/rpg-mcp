@@ -463,14 +463,7 @@ public final class NarrativeService {
 			cols.put("channels_json", Json.write(channels));
 		}
 		if (changes.get("locations") != null || changes.get("affected") != null) {
-			var refs = new ArrayList<String>();
-			for (Object o : changes.get("locations") instanceof List<?> l ? l : List.of()) {
-				refs.add(Ref.of(Ref.LOCATION, WorldService.location(tx, campaignId, o.toString()).id()));
-			}
-			for (Object o : changes.get("affected") instanceof List<?> l ? l : List.of()) {
-				refs.add(Ref.parse(o.toString()).toString());
-			}
-			cols.put("affected_refs_json", Json.write(refs));
+			cols.put("affected_refs_json", Json.write(worldEventReferences(tx, campaignId, existing, changes)));
 		}
 		if (changes.get("game_time") != null) {
 			long seq = GameTime.parse(changes.get("game_time").toString());
@@ -491,6 +484,44 @@ public final class NarrativeService {
 		}
 		tx.touched(Ref.of("world_event", id), w.lng("revision"));
 		return worldEventView(w);
+	}
+
+	/** Patch the two reference groups independently while retaining the combined storage format. */
+	private static List<String> worldEventReferences(
+		Tx tx, long campaignId, Row existing, Map<String, Object> changes) {
+		var locations = new LinkedHashSet<String>();
+		var affected = new LinkedHashSet<String>();
+		if (existing != null && !existing.isNull("affected_refs_json")) {
+			for (Object value : existing.list("affected_refs_json")) {
+				String ref = value.toString();
+				boolean location = ref.startsWith(Ref.LOCATION + ":");
+				if (changes.get(location ? "locations" : "affected") == null) {
+					(location ? locations : affected).add(ref);
+				}
+			}
+		}
+		for (String field : List.of("locations", "affected")) {
+			Object value = changes.get(field);
+			if (value == null) {
+				continue;
+			}
+			if (!(value instanceof List<?> refs)) {
+				throw RpgException.invalidArgument(field + " must be a list of references.");
+			}
+			for (Object entry : refs) {
+				if (entry == null) {
+					throw RpgException.invalidArgument(field + " must not contain null references.");
+				}
+				String ref = "locations".equals(field)
+						? Ref.of(Ref.LOCATION, WorldService.location(tx, campaignId, entry.toString()).id())
+						: Ref.parse(entry.toString()).toString();
+				// Older clients can also supply location references in the combined affected list.
+				(ref.startsWith(Ref.LOCATION + ":") ? locations : affected).add(ref);
+			}
+		}
+		var refs = new ArrayList<>(locations);
+		refs.addAll(affected);
+		return refs;
 	}
 
 	public static Map<String, Object> worldEventView(Row w) {
