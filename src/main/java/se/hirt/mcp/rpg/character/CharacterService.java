@@ -362,6 +362,10 @@ public final class CharacterService {
 				throw RpgException
 						.invalidArgument("Unknown character field '" + key + "'. Known: " + DRAFT_FIELDS + ".");
 			}
+			// Equipment answers apply to the final class, regardless of the input field order.
+			if ("starting_equipment".equals(key)) {
+				continue;
+			}
 			switch (key) {
 			case "name", "description", "appearance", "personality", "backstory", "presentation" ->
 				cols.put(key, value == null ? null : value.toString().trim());
@@ -390,6 +394,11 @@ public final class CharacterService {
 			case "class" -> {
 				RulesData.Definition cls = rules.resolve("CLASS", String.valueOf(value)).orElseThrow(() -> RpgException
 						.invalidArgument("Unknown class '" + value + "'; see get_character_choices CLASS."));
+				String previousClass = classOf(tx, c).map(RulesData.Definition::id).orElse(null);
+				if (!cls.id().equals(previousClass)) {
+					creation.remove("starting_equipment");
+					creationDirty = true;
+				}
 				for (Row existing : tx.query("SELECT id FROM character_class WHERE character_id = ?", c.id())) {
 					tx.delete("character_class", existing.id());
 				}
@@ -521,13 +530,6 @@ public final class CharacterService {
 					throw RpgException.validation(spellViolations);
 				}
 			}
-			case "starting_equipment" -> {
-				RulesData.Definition cls = classOf(tx, c).orElseThrow(
-						() -> RpgException.invalidArgument("Choose a class before choosing starting equipment."));
-				creation.put("starting_equipment", equipmentChoice(cls.name(),
-						(Map<String, Object>) cls.payload().get("starting_equipment"), value));
-				creationDirty = true;
-			}
 			case "background_equipment" -> {
 				RulesData.Definition bg = requireBackground(tx, c, cols);
 				creation.put("background_equipment", equipmentChoice(bg.name(),
@@ -536,6 +538,13 @@ public final class CharacterService {
 			}
 			default -> throw RpgException.invalidArgument("Unhandled field " + key);
 			}
+		}
+		if (changes.containsKey("starting_equipment")) {
+			RulesData.Definition cls = classOf(tx, c).orElseThrow(
+					() -> RpgException.invalidArgument("Choose a class before choosing starting equipment."));
+			creation.put("starting_equipment", equipmentChoice(cls.name(),
+					(Map<String, Object>) cls.payload().get("starting_equipment"), changes.get("starting_equipment")));
+			creationDirty = true;
 		}
 		// Final ability columns = base scores + the background increase (SRD 5.2.1 "Ability Scores" under Backgrounds).
 		if (creation.get("base_scores") instanceof Map<?, ?> baseRaw) {
