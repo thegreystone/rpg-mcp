@@ -290,7 +290,8 @@ public class RpgTools {
 	}
 
 	@Tool(name = "get_chronicle_material", description = "Read-only. Everything a summarizing agent needs to write one chronicle entry and nothing else. "
-			+ "kind CHAPTER: the previous chapter, the two before it in brief, every non-minor ledger event since the last chapter with its detail (paged by `cursor`), "
+			+ "kind CHAPTER: the previous chapter, the two before it in brief, every non-minor ledger event since the last chapter with its detail "
+			+ "(paged by `cursor` at whole journal entries; a page may exceed the size target to finish an entry), "
 			+ "the campaign's voice, the target length, and `through` (the journal position the chapter will close at; events recorded later stay uncovered). "
 			+ "kind SYNOPSIS: the current synopsis, the chapters written since it, the voice, the target, and `through` (the last chapter id). "
 			+ "Meant for a fresh agent delegated by the GM when bootstrap's chronicle.due says a chapter or synopsis is owed.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))

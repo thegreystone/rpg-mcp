@@ -589,9 +589,14 @@ Table rulings every client must see at bootstrap, stored as a list of short stri
 `get_chronicle_material {campaign, kind, cursor}` (read-only) returns:
 
 - `CHAPTER`: `previous_chapter` in full, `earlier_chapters` (two, shortened), `events` (every non-minor, non-director
-  event since the last chapter, with detail, paged at 40,000 characters by `next_cursor`), `events_uncovered`, `voice`
+  event since the last chapter, with detail, paged toward 40,000 characters by `next_cursor`), `events_uncovered`, `voice`
   (tone and style guidance), `target` (characters, ceiling, what a chapter contains), `through.journal_id`
 - `SYNOPSIS`: `current_synopsis`, `chapters_since`, `voice`, `target`, `through.chapter_id`
+
+Chapter pages keep each journal entry's eligible events together. The size target is soft: a page may exceed it
+to finish its final journal entry, so `through.journal_id` never covers an omitted sibling event. `next_cursor`
+continues after that complete entry. `events_uncovered` counts all currently uncovered eligible events, independently
+of the page or cursor.
 
 `write_chronicle {operation_id, campaign, kind, title, summary, through}` stores the entry. A chapter closes at
 `through` (now when omitted); later events stay uncovered for the next chapter. A stale or future marker is `CONFLICT`,

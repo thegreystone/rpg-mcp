@@ -77,7 +77,7 @@ public final class ChronicleService {
 	/** Target and ceiling of the synopsis (about 1,500 tokens). */
 	public static final int SYNOPSIS_TARGET_CHARS = 6_000;
 	public static final int SYNOPSIS_MAX_CHARS = 12_000;
-	/** Chapter material is paged at this many characters of events. */
+	/** Chapter material's soft page target; a page finishes its final journal entry. */
 	public static final int MATERIAL_PAGE_CHARS = 40_000;
 
 	private static final String UNCOVERED_EVENTS = "SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND importance <> 'MINOR' "
@@ -278,15 +278,15 @@ public final class ChronicleService {
 				Long lastJournal = null;
 				String lastTime = null;
 				Long nextCursor = null;
-				int total = 0;
-				for (Row e : tx.query(UNCOVERED_EVENTS, campaignId, from)) {
-					total++;
+				List<Row> uncoveredEvents = tx.query(UNCOVERED_EVENTS, campaignId, from);
+				for (Row e : uncoveredEvents) {
 					if (e.id() <= afterEvent) {
 						continue;
 					}
-					if (chars > MATERIAL_PAGE_CHARS) {
-						nextCursor = events.isEmpty() ? null
-								: ((Number) events.get(events.size() - 1).get("id")).longValue();
+					// Coverage is a journal position: never advertise a journal whose events are only partly shown.
+					if (chars >= MATERIAL_PAGE_CHARS && lastJournal != null
+							&& !lastJournal.equals(e.lng("recorded_journal_id"))) {
+						nextCursor = ((Number) events.get(events.size() - 1).get("id")).longValue();
 						break;
 					}
 					Map<String, Object> m = LedgerService.eventSummary(tx, e, true);
@@ -297,11 +297,11 @@ public final class ChronicleService {
 					lastTime = e.str("fictional_time");
 				}
 				if (nextCursor != null) {
-					// The page was cut: the marker is the last event shown, so the next page continues there.
+					// Continue after the final event of the last complete journal entry on this page.
 					out.put("next_cursor", String.valueOf(nextCursor));
 				}
 				out.put("events", events);
-				out.put("events_uncovered", total);
+				out.put("events_uncovered", uncoveredEvents.size());
 				out.put("nothing_to_cover", events.isEmpty() && nextCursor == null);
 				out.put("through", lastJournal == null ? null : Map.of("journal_id", lastJournal, "game_time", lastTime,
 						"note",
