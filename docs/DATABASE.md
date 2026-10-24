@@ -384,9 +384,10 @@ installed_content(kind, spell_level), (kind, cr_times_8), (kind, cost_cp)
 - V009 adds the non-rewindable `want_identity` registry and backfills mappings from current and historical want
   notes without rewriting profile JSON or checkpoint before-images (§3.3). Existing profiles are enriched on reads;
   only a later update or closure persists a want's ref in its profile entry.
-- A schema change to a rewindable table must state its effect on stored `undo_json`: a migration that renames or
-  retypes a column must rewrite stored before-images, or the release notes must invalidate pre-existing checkpoints
-  explicitly. A test restores a fixture checkpoint created on the previous schema version.
+- A schema change to a rewindable table must state its effect on stored `undo_json`: translate before-images at undo
+  replay, rewrite them in a migration, or explicitly invalidate old checkpoints. Test a previous-schema checkpoint.
+- V005 compatibility copies character undo rows and maps `background` to `backstory`; an existing `backstory` wins,
+  including NULL. `background_ref` and historical `undo_json` remain unchanged.
 
 ---
 

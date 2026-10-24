@@ -252,6 +252,14 @@ public final class Tx {
 		long pk = ((Number) op.get("pk")).longValue();
 		@SuppressWarnings("unchecked")
 		Map<String, Object> row = (Map<String, Object>) op.get("row");
+		if ("character".equals(table) && row != null && row.containsKey("background")) {
+			// V005 renamed the biography column; translate old images without changing journal history.
+			row = new LinkedHashMap<>(row);
+			Object background = row.remove("background");
+			if (!row.containsKey("backstory")) {
+				row.put("backstory", background);
+			}
+		}
 		switch (kind) {
 		case "delete" -> rawDelete(table, pk);
 		case "restore" -> rawUpdate(table, pk, row);
