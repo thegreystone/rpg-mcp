@@ -101,8 +101,12 @@ class ExhaustionTest {
 		}
 	}
 
+	/**
+	 * No SRD effect removes more than one Exhaustion level at a time (a Long Rest, Greater
+	 * Restoration); REMOVE_CONDITION takes one unless the GM says how many with {@code levels}.
+	 */
 	@Test
-	void explicitRemovalClearsAllLevelsAndLeavesOtherConditions() throws Exception {
+	void explicitRemovalTakesOneLevelUnlessLevelsIsGivenAndLeavesOtherConditions() throws Exception {
 		try (Engine engine = engine(tempDb("exhaustion-remove"))) {
 			String campaign = committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
@@ -110,15 +114,25 @@ class ExhaustionTest {
 			gain(engine, campaign, pc, 3);
 			engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "ADD_CONDITION", "condition", "PRONE", "reason", "fallen"));
-			Map<String, Object> cleared = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+			Map<String, Object> one = engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "REMOVE_CONDITION", "condition", "EXHAUSTION", "reason", "GM recovery"));
-			assertEquals(3, cleared.get("removed"));
+			assertEquals(1, one.get("removed"), "one level at a time by default (SRD 5.2.1)");
+			assertEquals(2, one.get("exhaustion"));
+			assertEquals(Boolean.FALSE, one.get("condition_ended"), "two levels remain, so the condition goes on");
+			assertTrue(String.valueOf(one.get("note")).contains("2 Exhaustion levels"),
+					String.valueOf(one.get("note")));
+			assertExhaustion(engine, campaign, pc, 2);
+			Map<String, Object> cleared = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "REMOVE_CONDITION", "condition", "EXHAUSTION", "levels", 2, "reason", "GM recovery"));
+			assertEquals(2, cleared.get("removed"), "an explicit levels count is the GM's call");
+			assertEquals(Boolean.TRUE, cleared.get("condition_ended"), "the condition ends at level 0 (SRD 5.2.1)");
 			assertExhaustion(engine, campaign, pc, 0);
 			assertEquals(List.of("PRONE"), list(sheet(engine, campaign, pc).get("conditions")).stream()
 					.map(condition -> condition.get("condition")).toList());
 			Map<String, Object> absent = engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "REMOVE_CONDITION", "condition", "EXHAUSTION", "reason", "already recovered"));
 			assertEquals(0, absent.get("removed"));
+			assertNull(absent.get("condition_ended"), "nothing was removed, so nothing ended: " + absent);
 			assertExhaustion(engine, campaign, pc, 0);
 		}
 	}

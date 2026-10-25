@@ -67,7 +67,7 @@ class ReactionTest {
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
 			engine.inventory().grantLoot(op(), campaign, pc, List.of(map("item", "Club", "quantity", 1)), null,
 					"GM_GRANT", "a stout branch");
-			dice.queue(20, 50, 1, 50);
+			dice.queue(20, 1);
 			String enc = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "raiders", List.of(bandit)), null, null, null, null, null)
 					.get("encounter");
@@ -128,8 +128,13 @@ class ReactionTest {
 					"already committed");
 			int banditHp = (Integer) m(list(m(resolved.get("state")).get("participants")).stream()
 					.filter(p -> p.get("character").equals(bandit)).findFirst().orElseThrow().get("hp")).get("current");
-			assertEquals(11 - (Integer) oa.get("damage"), banditHp,
-					"unarmed strike damage applied (1 + STR mod, floored at 0)");
+			// Unarmed Strike (SRD 5.2.1): attack bonus = STR modifier + Proficiency Bonus; damage 1 + STR modifier.
+			Map<String, Object> pcSheet = engine.characters().characterSheet(campaign, pc, "PLAY");
+			int strMod = (Integer) m(m(pcSheet.get("abilities")).get("STR")).get("modifier");
+			int proficiency = (Integer) pcSheet.get("proficiency_bonus");
+			assertEquals(19 + strMod + proficiency, m(oa.get("attack_roll")).get("total"), "d20 + STR + proficiency");
+			assertEquals(Math.max(0, 1 + strMod), oa.get("damage"), "1 + STR modifier Bludgeoning");
+			assertEquals(11 - Math.max(0, 1 + strMod), banditHp, "unarmed strike damage applied");
 
 			// The PC joins the bandit in "far" and ends the turn; the bandit Disengages and walks away: no choice is offered.
 			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "zone", "far"), true);
@@ -140,7 +145,8 @@ class ReactionTest {
 			assertNull(away.get("pending_choices"));
 			assertEquals(Boolean.TRUE, away.get("turn_advanced"));
 
-			// Knock-out: bring the bandit to 1 HP, then a nonlethal unarmed hit leaves it unconscious and stable rather than dead.
+			// Knock-out (SRD 5.2.1 "Knocking Out a Creature"): bring the bandit to 1 HP, then a nonlethal club hit that
+			// would drop it to 0 leaves it at 1 HP, alive and Unconscious until the end of a Short Rest, no death saves.
 			engine.runtime().applyRuntimeChange(op(), campaign, bandit,
 					map("kind", "DAMAGE", "amount", banditHp - 1, "damage_type", "bludgeoning", "reason", "test"));
 			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "zone", "near"), false);
@@ -148,11 +154,15 @@ class ReactionTest {
 			Map<String, Object> ko = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "ATTACK", "target", bandit, "weapon", "Club", "nonlethal", true), false);
 			assertEquals(Boolean.TRUE, ko.get("knocked_out"));
-			assertEquals("DYING", ko.get("life_state"));
+			assertEquals("ALIVE", ko.get("life_state"));
+			assertEquals(1, ko.get("hp_after"));
 			Map<String, Object> sheet = engine.characters().characterSheet(campaign, bandit, "PLAY");
-			assertEquals("DYING", sheet.get("life_state"));
-			assertEquals(Boolean.TRUE, m(sheet.get("death_saves")).get("stable"));
-			assertTrue(list(sheet.get("conditions")).stream().anyMatch(c -> "UNCONSCIOUS".equals(c.get("condition"))));
+			assertEquals("ALIVE", sheet.get("life_state"));
+			assertEquals(1, m(sheet.get("hp")).get("current"));
+			assertNull(sheet.get("death_saves"), "never dropped to 0: no death saves, no 'stable' flag");
+			Map<String, Object> unconscious = list(sheet.get("conditions")).stream()
+					.filter(c -> "UNCONSCIOUS".equals(c.get("condition"))).findFirst().orElseThrow();
+			assertEquals("SHORT_REST", m(unconscious.get("duration")).get("until"));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED,
 					assertThrows(RpgException.class,
 							() -> engine.encounters().perform(op(), campaign, enc, pc,
@@ -188,9 +198,13 @@ class ReactionTest {
 			engine.sessions().bootstrap(op(), campaign, null);
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
-			dice.queue(1, 50, 20, 50);
+			String second = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", "Hesk", null, null, null, null, false).get("character");
+			// Initiative: the wizard rolls 1; the two Bandits are identical creatures and share one roll of 20
+			// (SRD 5.2.1 "Initiative"), acting in roster order before the wizard.
+			dice.queue(1, 20);
 			String enc = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "raiders", List.of(bandit)), null, null, null, null, null)
+					map("party", List.of(pc), "raiders", List.of(bandit, second)), null, null, null, null, null)
 					.get("encounter");
 			// Bandit scimitar +3: 10 + 3 = 13 vs AC 12 hits, and Shield (+5) would turn it into a miss → the wizard is asked.
 			dice.queue(10);
@@ -214,9 +228,21 @@ class ReactionTest {
 					"no damage taken");
 			Map<String, Object> sc = m(engine.characters().characterSheet(campaign, pc, "PLAY").get("spellcasting"));
 			assertEquals(1, m(m(sc.get("slots")).get("1")).get("current"), "one slot spent on Shield");
-			// The turn advanced to the wizard, whose turn start ends the Shield effect (until the start of your next turn).
+			// The turn advanced to Hesk: the +5 persists against later attacks "until the start of your next turn"
+			// (SRD 5.2.1 "Shield"): 13 + 3 = 16 would hit AC 12 but misses AC 17.
 			assertEquals(Boolean.TRUE, resolved.get("turn_advanced"));
-			assertEquals(pc, m(resolved.get("next_turn")).get("character"));
+			assertEquals(second, m(resolved.get("next_turn")).get("character"));
+			assertEquals(17,
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"));
+			dice.queue(13);
+			Map<String, Object> later = engine.encounters().perform(op(), campaign, enc, second,
+					map("kind", "ATTACK", "target", pc, "attack", "Scimitar"), true);
+			assertEquals(17, later.get("target_armor_class"), "the Shield bonus is still up");
+			assertEquals(Boolean.FALSE, later.get("hit"));
+			assertEquals(hpBefore,
+					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("hp")).get("current"));
+			// The wizard's turn start ends the Shield effect.
+			assertEquals(pc, m(later.get("next_turn")).get("character"));
 			assertEquals(12,
 					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"));
 			// Without a reaction available (already used this round) a second hit would not ask; a new round resets it.

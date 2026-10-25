@@ -143,10 +143,13 @@ public final class Exhaustion {
 		return 2 * level(tx, characterId);
 	}
 
-	/** Walking speed after equipped/effect bonuses and Exhaustion's five feet per level. */
+	/**
+	 * Walking speed after equipped/effect bonuses, armor whose Strength requirement the wearer
+	 * misses (−10 feet, SRD 5.2.1 "Armor") and Exhaustion's five feet per level.
+	 */
 	public static int speed(Tx tx, RulesData rules, Row character) {
 		return Math.max(0, character.intOr("speed", 0) + Effects.modifiers(tx, rules, character.id()).speedBonus
-				- 5 * level(tx, character));
+				- Training.armorSpeedPenalty(tx, rules, character) - 5 * level(tx, character));
 	}
 
 	private static int storedLevel(Row character) {

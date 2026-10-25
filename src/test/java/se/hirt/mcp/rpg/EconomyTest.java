@@ -146,14 +146,18 @@ class EconomyTest {
 			assertEquals("5 sp", haggled.get("price_paid"));
 			assertEquals("1 gp", haggled.get("list_price"));
 
-			// Equip: AC = 11 + DEX, +2 shield; two-handed + shield is refused
+			// Equip: AC = 11 + DEX; the shield adds nothing to a Sorcerer, who has no armor training (SRD 5.2.1
+			// "Armor Training": "You gain the Armor Class benefit of a Shield only if you have training with it");
+			// two-handed + shield is refused
 			Map<String, Object> equipped = engine.inventory().equip(op(), campaign, pc, armorEntry, true);
 			Map<String, Object> sheet = engine.characters().characterSheet(campaign, pc, "PLAY");
 			int dexMod = (Integer) m(m(sheet.get("abilities")).get("DEX")).get("modifier");
 			assertEquals(11 + dexMod, m(equipped.get("armor_class")).get("value"));
 			engine.inventory().equip(op(), campaign, pc, (String) shield.get("entry"), true);
-			assertEquals(13 + dexMod,
-					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class")).get("value"));
+			Map<String, Object> shielded = m(
+					engine.characters().characterSheet(campaign, pc, "PLAY").get("armor_class"));
+			assertEquals(11 + dexMod, shielded.get("value"), "no Shield training: " + shielded);
+			assertTrue(String.valueOf(shielded.get("shield")).contains("no AC benefit"), String.valueOf(shielded));
 			Map<String, Object> bow = engine.inventory().trade(op(), campaign, pc, "BUY", "Shortbow", null, 1, null,
 					null, null);
 			RpgException hands = assertThrows(RpgException.class,

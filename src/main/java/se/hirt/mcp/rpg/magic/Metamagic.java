@@ -186,6 +186,20 @@ public final class Metamagic {
 				.toList();
 	}
 
+	/**
+	 * Whether {@code options.metamagic} names the given option (by id or name), judged before any
+	 * validation or spending so once-per-turn rules can refuse the casting first.
+	 */
+	public static boolean requested(Map<String, Object> opts, String id) {
+		Object asked = opts == null ? null : opts.get("metamagic");
+		if (asked == null) {
+			return false;
+		}
+		List<String> names = asked instanceof List<?> l ? l.stream().map(String::valueOf).toList()
+				: List.of(String.valueOf(asked));
+		return names.stream().map(n -> n.trim().toLowerCase()).anyMatch(n -> n.equals(id) || n.equals(id + " spell"));
+	}
+
 	/** Resolves an option by id or name ("empowered", "Empowered Spell", "Empowered"). */
 	public static Optional<Option> resolve(List<Option> options, String text) {
 		if (text == null) {
@@ -442,6 +456,11 @@ public final class Metamagic {
 		String transmuteTo;
 		int rerollBudget;
 		int seekingRerolls;
+		/**
+		 * Empowered's point: reserved at planning, spent the first time a damage die is rerolled.
+		 */
+		int empoweredCost;
+		boolean empoweredCharged;
 
 		public boolean has(String id) {
 			return used.stream().anyMatch(o -> o.id().equals(id));
@@ -538,17 +557,21 @@ public final class Metamagic {
 			}
 			checkApplies(tx, campaignId, caster, opt, p, mech, kind, targets, opts, plan, chaMod);
 			plan.used.add(opt);
-			if (!opt.id().equals("seeking")) {
+			if (opt.id().equals("empowered")) {
+				// "When you roll damage for a spell, you can spend 1 Sorcery Point" (SRD 5.2.1): the point goes when a
+				// die is actually rerolled, so a missed attack spell costs nothing; it is only reserved here.
+				plan.empoweredCost = opt.cost();
+			} else if (!opt.id().equals("seeking")) {
 				plan.pointsSpent += opt.cost();
 			}
 		}
 		Row points = pointsRow(tx, caster.id())
 				.orElseThrow(() -> RpgException.notAllowed(caster.str("name") + " has no sorcery points resource."));
 		int current = points.intOr("current", 0);
-		if (current < plan.pointsSpent) {
+		if (current < plan.pointsSpent + plan.empoweredCost) {
 			throw RpgException.insufficientResource(caster.str("name") + " has " + current + " sorcery point"
 					+ (current == 1 ? "" : "s") + "; " + plan.summary() + " cost" + (plan.used.size() == 1 ? "s" : "")
-					+ " " + plan.pointsSpent + ".");
+					+ " " + (plan.pointsSpent + plan.empoweredCost) + ".");
 		}
 		plan.pointsRowId = points.id();
 		plan.pointsMax = points.intOr("max", 0);
@@ -598,7 +621,7 @@ public final class Metamagic {
 			}
 			plan.rerollBudget = Math.max(1, chaMod);
 			plan.notes.add("Empowered: up to " + plan.rerollBudget
-					+ " damage dice rerolled across this casting, taking the lowest dice in each roll.");
+					+ " damage dice rerolled across this casting (the lowest dice that can improve); the point is spent when a die is rerolled.");
 		}
 		case "extended" -> {
 			if (!(duration.contains("minute") || duration.contains("hour") || duration.contains("day"))) {
@@ -679,12 +702,22 @@ public final class Metamagic {
 	/**
 	 * Empowered Spell: rerolls the lowest dice in this damage roll and uses the new results. The
 	 * casting's budget (Charisma modifier, minimum one) is shared across damage parts, darts and
-	 * attacks. Returns the roll unchanged when the plan does not empower or its budget is spent.
+	 * attacks. "Up to" (SRD 5.2.1): only dice that can improve are rerolled, so a die already at
+	 * its maximum is left alone; the sorcery point is spent the first time a die is rerolled and
+	 * never when nothing is. Returns the roll unchanged when the plan does not empower, nothing can
+	 * improve, the budget is spent or the point cannot be paid.
 	 */
 	public static Roll empower(
 		Tx tx, RollService roller, long campaignId, Plan plan, String expression, Roll roll, String label) {
 		if (plan == null || !plan.has("empowered") || plan.rerollBudget <= 0 || roll.dice().isEmpty()) {
 			return roll;
+		}
+		if (!plan.empoweredCharged) {
+			Row points = tx.get("resource_state", plan.pointsRowId);
+			if (points.intOr("current", 0) < plan.empoweredCost) {
+				plan.notes.add("Empowered: no sorcery point left to reroll " + label + ".");
+				return roll;
+			}
 		}
 		var sides = new ArrayList<Integer>();
 		try {
@@ -705,12 +738,26 @@ public final class Metamagic {
 		var dice = new ArrayList<>(roll.dice());
 		var order = new ArrayList<Integer>();
 		for (int i = 0; i < dice.size(); i++) {
-			order.add(i);
+			if (dice.get(i) < sides.get(i)) {
+				order.add(i); // a die at its maximum cannot improve: never rerolled ("up to")
+			}
 		}
 		order.sort((a, b) -> Integer.compare(dice.get(a), dice.get(b)));
+		int rerolls = Math.min(plan.rerollBudget, order.size());
+		if (rerolls == 0) {
+			plan.notes.add("Empowered on " + label + ": every die is at its maximum, nothing rerolled.");
+			return roll;
+		}
+		if (!plan.empoweredCharged) {
+			Row points = tx.get("resource_state", plan.pointsRowId);
+			tx.update("resource_state", points.id(),
+					Map.of("current", points.intOr("current", 0) - plan.empoweredCost));
+			plan.pointsSpent += plan.empoweredCost;
+			plan.pointsRemaining = points.intOr("current", 0) - plan.empoweredCost;
+			plan.empoweredCharged = true;
+		}
 		var rerolled = new ArrayList<Map<String, Object>>();
 		int total = roll.total();
-		int rerolls = Math.min(plan.rerollBudget, order.size());
 		for (int k = 0; k < rerolls; k++) {
 			int index = order.get(k);
 			int was = dice.get(index);

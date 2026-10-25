@@ -2184,9 +2184,10 @@
           "on_fail_condition": "INCAPACITATED",
           "area": "5-foot-radius sphere",
           "duration_minutes": 1,
-          "repeat_save": "end of each turn; on a second failure Unconscious"
+          "repeat_save": "end of its next turn; on a second failure Unconscious",
+          "ends_on_damage": true
         },
-        "text": "Each creature in a 5-foot-radius sphere makes a Wisdom save or is Incapacitated until the end of its next turn, when it repeats the save; a second failure means it is Unconscious for the duration or until damaged or shaken awake.",
+        "text": "Each creature in a 5-foot-radius sphere makes a Wisdom save or is Incapacitated until the end of its next turn, when it repeats the save once; a second failure means it is Unconscious for the duration. The spell ends on a target that takes damage or is shaken awake by an action.",
         "text_is_paraphrase": true
       }
     },
@@ -5771,14 +5772,14 @@
           "add_modifier": false,
           "cures": [
             "BLINDED",
-            "DEAFENED"
+            "DEAFENED",
+            "POISONED"
           ],
-          "also": "all diseases",
           "upcast": {
             "per_level_flat": 10
           }
         },
-        "text": "A creature regains 70 Hit Points and is no longer Blinded or Deafened, and any diseases end. +10 per slot level above 6.",
+        "text": "A creature regains 70 Hit Points and is no longer Blinded, Deafened or Poisoned. +10 per slot level above 6.",
         "text_is_paraphrase": true
       }
     },

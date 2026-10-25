@@ -42,11 +42,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
-/** Effect duration belongs to the source encounter, independently of recipient membership. */
+/**
+ * Effect duration belongs to the source encounter, independently of recipient membership. When the
+ * encounter ends, the rounds an effect has left become minutes on the game clock (6 seconds per
+ * round, SRD 5.2.1 "Combat") instead of ending with the fight.
+ */
 class EncounterEffectExpiryTest {
 
 	@Test
-	void removedParticipantsLoseRoundConditionsWhenTheirEncounterEnds() throws Exception {
+	void removedParticipantsKeepRoundConditionsAsMinutesWhenTheirEncounterEnds() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("removed-effect-expiry"))) {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
@@ -62,12 +66,28 @@ class EncounterEffectExpiryTest {
 
 			String operation = op();
 			engine.encounters().end(operation, campaign, encounter, "OTHER", "the danger passes");
-			assertEquals(Set.of("CHARMED", "PRONE"), conditions(engine, campaign, pc),
-					"both scoped and legacy round effects end, while minute and indefinite effects remain");
+			assertEquals(Set.of("BLINDED", "DEAFENED", "CHARMED", "PRONE"), conditions(engine, campaign, pc),
+					"both scoped and legacy round effects outlive the fight as game time");
+			assertEquals("MINUTES", duration(engine, pc, "BLINDED").get("kind"));
+			assertEquals(10, duration(engine, pc, "BLINDED").get("converted_from_rounds"), "ten rounds = one minute");
+			assertEquals(19, duration(engine, pc, "DEAFENED").get("converted_from_rounds"), "19 rounds = two minutes");
 			assertEquals(Boolean.TRUE, engine.encounters()
 					.end(operation, campaign, encounter, "OTHER", "the danger passes").get("replayed"));
-			assertEquals(Set.of("CHARMED", "PRONE"), conditions(engine, campaign, pc));
+			assertEquals(Set.of("BLINDED", "DEAFENED", "CHARMED", "PRONE"), conditions(engine, campaign, pc));
+
+			engine.sessions().advanceTime(op(), campaign, 1, "a minute");
+			assertEquals(Set.of("DEAFENED", "CHARMED", "PRONE"), conditions(engine, campaign, pc));
+			engine.sessions().advanceTime(op(), campaign, 1, "another minute");
+			assertEquals(Set.of("CHARMED", "PRONE"), conditions(engine, campaign, pc),
+					"the minute and indefinite effects remain");
 		}
+	}
+
+	private static Map<String, Object> duration(Engine engine, String character, String condition) {
+		return engine.db().read(tx -> tx
+				.queryOne("SELECT duration_json FROM active_effect WHERE character_id = ? AND condition_ref = ?",
+						Ref.id(character, Ref.CHARACTER), "srd5e:condition/" + condition.toLowerCase())
+				.orElseThrow().map("duration_json"));
 	}
 
 	@Test
@@ -101,8 +121,14 @@ class EncounterEffectExpiryTest {
 			assertTrue(concentratingBeforeEnd);
 
 			engine.encounters().end(op(), campaign, fight.ref(), "OTHER", "the wolf leaves");
-			assertTrue(conditions(engine, campaign, observer).isEmpty(),
-					"ending the fight also clears future round effects on a recipient who never joined");
+			assertEquals(Set.of("POISONED"), conditions(engine, campaign, observer),
+					"a future round effect on a recipient who never joined continues as game time");
+			assertEquals(1, duration(engine, observer, "POISONED").get("converted_from_rounds"),
+					"one round left after round 2");
+			boolean concentratingAfterConversion = engine.db().read(tx -> Effects.isConcentrating(tx, concentrator));
+			assertTrue(concentratingAfterConversion, "the converted effect is still concentrated on");
+			engine.sessions().advanceTime(op(), campaign, 1, "a minute");
+			assertTrue(conditions(engine, campaign, observer).isEmpty(), "the minute the round became has passed");
 			boolean concentratingAfterEnd = engine.db().read(tx -> Effects.isConcentrating(tx, concentrator));
 			assertFalse(concentratingAfterEnd,
 					"expired off-list effects must not leave the caster concentrating on them");
@@ -128,8 +154,14 @@ class EncounterEffectExpiryTest {
 			assertEquals(Ref.id(current, Ref.ENCOUNTER), ((Number) duration.get("encounter")).longValue(),
 					"a newly supplied expires_round value is scoped before the character can leave");
 			engine.encounters().end(op(), campaign, current, "OTHER", "the second wolf leaves");
-			assertEquals(Set.of("BLINDED"), conditions(engine, campaign, pc),
-					"current participant membership must not expire a duration owned by another encounter");
+			assertEquals(Set.of("BLINDED", "DEAFENED"), conditions(engine, campaign, pc));
+			assertEquals("MINUTES", duration(engine, pc, "DEAFENED").get("kind"),
+					"the ending encounter converts the duration it owns");
+			assertNotNull(duration(engine, pc, "BLINDED").get("expires_round"),
+					"current participant membership must not touch a duration owned by another encounter");
+			assertNull(duration(engine, pc, "BLINDED").get("expires_seq"));
+			engine.sessions().advanceTime(op(), campaign, 1, "a minute");
+			assertEquals(Set.of("BLINDED"), conditions(engine, campaign, pc));
 		}
 	}
 

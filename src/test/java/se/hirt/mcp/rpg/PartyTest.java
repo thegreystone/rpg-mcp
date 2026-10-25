@@ -113,7 +113,7 @@ class PartyTest {
 			// Mid-encounter: still readable, and the encounter is included.
 			String wolf = (String) engine.runtime()
 					.materialize(op(), campaign, "Wolf", null, null, null, null, null, false).get("character");
-			dice.queue(20, 50, 10, 50, 1, 50);
+			dice.queue(20, 10, 1);
 			engine.encounters().start(op(), campaign, map("party", List.of(pc, mara), "wild", List.of(wolf)), null,
 					null, null, null, null);
 			Map<String, Object> inFight = engine.sessions().party(campaign, "FULL");

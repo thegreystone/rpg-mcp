@@ -34,9 +34,9 @@ package se.hirt.mcp.rpg.choice;
  */
 public enum HpProgression implements Described {
 
-	FIRST_3_MAX("First three levels max", "Levels 2 and 3 gain the full hit die (level 1 always does); from level 4 on, the server rolls the die in the open.", true),
-	AVERAGE("Average", "Every level gains the fixed average (half the hit die + 1); steady and predictable."),
-	ROLL("Roll", "Every level's hit die is rolled by the server in the open; no rerolls.");
+	FIRST_3_MAX("First three levels max", "House rule: levels 2 and 3 gain the full hit die (level 1 always does); from level 4 on, the server rolls the die in the open.", true),
+	AVERAGE("Average", "SRD fixed value: every level gains half the hit die + 1; steady and predictable."),
+	ROLL("Roll", "SRD roll: every level's hit die is rolled by the server in the open; no rerolls.");
 
 	private final String label;
 	private final String description;

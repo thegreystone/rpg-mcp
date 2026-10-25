@@ -142,7 +142,7 @@ class SorcererTest {
 		String target = (String) engine.runtime()
 				.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
 		ScriptedRollService dice = (ScriptedRollService) engine.roller();
-		dice.queue(20, 100, 1, 1);
+		dice.queue(20, 1);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
 				map("party", List.of(pc), "foes", List.of(target)), null, null, null, null, null);
 		assertEquals(pc, m(started.get("turn")).get("character"));

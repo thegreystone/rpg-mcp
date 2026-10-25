@@ -94,7 +94,7 @@ class SpellTest {
 			assertTargetOverflow(engine, campaign, pc, null, "Chromatic Orb", 1, targets, 1);
 
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			dice.queue(20, 50, 1, 50, 1, 50);
+			dice.queue(20, 1); // the two identical ogres share one initiative roll
 			String encounter = (String) engine.encounters()
 					.start(op(), campaign, map("party", List.of(pc), "foes", targets), null, null, null, null, null)
 					.get("encounter");
@@ -495,7 +495,7 @@ class SpellTest {
 					() -> engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc), null)).code());
 			engine.rest().rest(op(), campaign, "LONG", null, null);
 			engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc), null);
-			dice.queue(20, 50, 1, 50, 1, 50);
+			dice.queue(20, 1, 1);
 			String enc = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc, mara), "raiders", List.of(bandit)), null, null, null, null, null)
 					.get("encounter");
@@ -675,14 +675,24 @@ class SpellTest {
 			assertEquals(1, m(normal.get("slot")).get("slot_level"));
 		}
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("ritual-sorcerer"))) {
-			// Sorcerers have no Ritual Casting: the ritual option is refused even for a ritual-tagged spell.
+			// No class feature is needed: "To cast a spell as a Ritual, a spellcaster must have it prepared" (SRD 5.2.1
+			// "Rituals"), so a Sorcerer with Detect Magic prepared casts it as a ritual too, spending no slot.
 			String[] ids = caster(engine, "Sorcerer",
 					map("CHA", 15, "CON", 14, "DEX", 13, "INT", 12, "WIS", 10, "STR", 8),
 					List.of("Arcana", "Persuasion"), List.of("Fire Bolt", "Light", "Mage Hand", "Prestidigitation"),
 					List.of("Detect Magic", "Magic Missile"));
-			RpgException refused = assertThrows(RpgException.class,
-					() -> engine.spells().cast(op(), ids[0], ids[1], "Detect Magic", null, null, map("ritual", true)));
-			assertEquals(ErrorCode.VALIDATION_FAILED, refused.code());
+			Map<String, Object> slotsBefore = m(
+					m(engine.characters().characterSheet(ids[0], ids[1], "PLAY").get("spellcasting")).get("slots"));
+			Map<String, Object> ritual = engine.spells().cast(op(), ids[0], ids[1], "Detect Magic", null, null,
+					map("ritual", true));
+			assertEquals(Boolean.TRUE, m(ritual.get("slot")).get("ritual"));
+			assertEquals(slotsBefore,
+					m(m(engine.characters().characterSheet(ids[0], ids[1], "PLAY").get("spellcasting")).get("slots")),
+					"no slot spent by the sorcerer's ritual");
+			// A spell that is not prepared cannot be cast as a ritual either.
+			assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(RpgException.class,
+					() -> engine.spells().cast(op(), ids[0], ids[1], "Find Familiar", null, null, map("ritual", true)))
+					.code());
 		}
 	}
 }

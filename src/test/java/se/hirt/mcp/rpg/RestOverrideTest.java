@@ -78,16 +78,17 @@ class RestOverrideTest {
 			Map<String, Object> richard = list(shortRest.get("characters")).get(0);
 			assertEquals(1, richard.get("hit_dice_spent"));
 			assertEquals(0, richard.get("hit_dice_left"), "level 1 has one die");
-			assertEquals(Math.min(max, 1 + Math.max(0, 4 + conMod)), m(richard.get("hp")).get("current"));
+			assertEquals(Math.min(max, 1 + Math.max(1, 4 + conMod)), m(richard.get("hp")).get("current"),
+					"each spent die regains at least 1 HP (SRD 5.2.1 \"Short Rest\")");
 			assertEquals(60L, shortRest.get("elapsed_minutes"));
 			assertEquals(ErrorCode.INSUFFICIENT_RESOURCE, assertThrows(RpgException.class,
 					() -> engine.rest().rest(op(), campaign, "SHORT", map(pc, 1), null)).code());
 
-			// Long rest: full HP, half the dice back (minimum 1), 8 hours.
+			// Long rest: full HP, all spent Hit Point Dice back (SRD 5.2.1 "Long Rest"), 8 hours.
 			Map<String, Object> longRest = engine.rest().rest(op(), campaign, "LONG", null, null);
 			Map<String, Object> rested = list(longRest.get("characters")).get(0);
 			assertEquals(max, m(rested.get("hp")).get("current"));
-			assertEquals(1, m(rested.get("hit_dice")).get("current"));
+			assertEquals(1, m(rested.get("hit_dice")).get("current"), "the single level-1 die is back");
 			assertEquals(480L, longRest.get("elapsed_minutes"));
 
 			// Overrides: audited, labeled, revision-checked.

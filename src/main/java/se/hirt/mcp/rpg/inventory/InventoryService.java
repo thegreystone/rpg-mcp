@@ -138,7 +138,8 @@ public final class InventoryService {
 			return m;
 		}
 		return Derived.armorClass(character.integer("dex_score"), equippedPayloads(tx, rules, character.id()),
-				mods.acBase, mods.acBonus, mods.acFloor);
+				mods.acBase, mods.acBonus, mods.acFloor,
+				se.hirt.mcp.rpg.rules.Training.shieldTrained(tx, rules, character));
 	}
 
 	public static Map<String, Object> carrying(Tx tx, RulesData rules, Row character) {
@@ -512,7 +513,23 @@ public final class InventoryService {
 						&& armor.get("strength_requirement") instanceof Number req
 						&& character.intOr("str_score", 10) < req.intValue()) {
 					warnings.add(item.name() + " requires Strength " + req
-							+ "; speed is reduced by 10 feet while wearing it.");
+							+ "; speed is reduced by 10 feet while wearing it (the sheet shows the reduced speed).");
+				}
+				// Armor training (SRD 5.2.1): an untrained shield gives no AC; untrained body armor gives Disadvantage
+				// on Strength and Dexterity D20 Tests and blocks spellcasting.
+				if (item.payload().get("armor") instanceof Map<?, ?> armor) {
+					String category = String.valueOf(armor.get("category")).toUpperCase();
+					var training = se.hirt.mcp.rpg.rules.Training.armorTraining(tx, rules, character);
+					if (training.isPresent() && "SHIELD".equals(category)
+							&& !training.get().contains(se.hirt.mcp.rpg.rules.Training.SHIELDS)) {
+						warnings.add(character.str("name") + " has no training with Shields: " + item.name()
+								+ " gives no Armor Class benefit (SRD 5.2.1 \"Armor Training\").");
+					} else if (training.isPresent() && !"SHIELD".equals(category)
+							&& !training.get().contains(category)) {
+						warnings.add(character.str("name") + " has no training with " + category.toLowerCase()
+								+ " armor: " + se.hirt.mcp.rpg.rules.Training.UNTRAINED_ARMOR_EFFECT + " while wearing "
+								+ item.name() + " (SRD 5.2.1 \"Armor Training\").");
+					}
 				}
 				if (entry.lng("quantity") > 1) {
 					// Split one unit off the stack so the equipped state is unambiguous.

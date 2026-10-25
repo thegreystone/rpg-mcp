@@ -43,6 +43,7 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * D20 Tests outside encounters: ability checks, skill checks and saving throws (MCP_PROTOCOL.md
@@ -122,7 +123,10 @@ public final class CheckService {
 			}
 			RulesData.Definition tool = null;
 			boolean toolProficient = false;
-			String advantageSource = null;
+			// Engine-side sources of Advantage and Disadvantage; the GM's declaration and the actor's conditions join
+			// them in one decision below.
+			boolean toolAdvantage = false;
+			var engineSources = new ArrayList<String>();
 			if (toolText != null && !toolText.isBlank()) {
 				if (k.equals("SAVING_THROW")) {
 					throw RpgException.invalidArgument("A tool does not apply to a saving throw.");
@@ -138,14 +142,9 @@ public final class CheckService {
 					// SRD 5.2.1 "Tools and Skills Together": proficiency in both the skill and the tool gives
 					// advantage; the skill's proficiency bonus is already in the modifier.
 					if (proficient && toolProficient) {
-						if (advantage.equals("NONE")) {
-							advantage = "ADVANTAGE";
-							advantageSource = "proficient in both " + skill.name() + " and " + tool.name();
-						} else if (advantage.equals("DISADVANTAGE")) {
-							advantage = "NONE";
-							advantageSource = "proficiency in both " + skill.name() + " and " + tool.name()
-									+ " cancels the disadvantage";
-						}
+						toolAdvantage = true;
+						engineSources
+								.add("proficient in both " + skill.name() + " and " + tool.name() + " (Advantage)");
 					}
 				} else {
 					// An ability check made with a tool: the tool proficiency is the proficiency.
@@ -155,6 +154,16 @@ public final class CheckService {
 			Integer score = actor.integer(ability.column());
 			if (score == null) {
 				throw RpgException.invalidArgument(actor.str("name") + " has no " + ability.fullName() + " score.");
+			}
+			// Untrained armor: "Disadvantage on any D20 Test that involves Strength or Dexterity" (SRD 5.2.1
+			// "Armor Training").
+			boolean untrainedArmor = false;
+			if (ability == Ability.STR || ability == Ability.DEX) {
+				Optional<String> untrained = Training.untrainedArmor(tx, rules, actor);
+				if (untrained.isPresent()) {
+					untrainedArmor = true;
+					engineSources.add("wearing " + untrained.get() + " without armor training (Disadvantage)");
+				}
 			}
 			int level = tx.query("SELECT level FROM character_class WHERE character_id = ?", actor.id()).stream()
 					.mapToInt(r -> r.intOr("level", 1)).sum();
@@ -177,6 +186,19 @@ public final class CheckService {
 				modifier = abilityMod + profBonus;
 			}
 			modifier -= Exhaustion.penalty(tx, actor.id());
+			// The actor's conditions (SRD 5.2.1 Rules Glossary): Poisoned and Frightened on ability checks,
+			// Restrained and Dodge on Dexterity saving throws.
+			Combat.D20Factors conditions = Combat.d20TestFactors(tx, rules, actor, k.equals("SAVING_THROW"),
+					ability.name());
+			// One decision over every source, the GM's declaration included: "If circumstances cause a roll to have
+			// both Advantage and Disadvantage, the roll has neither of them ... This is true even if multiple
+			// circumstances impose Disadvantage and only one grants Advantage or vice versa" (SRD 5.2.1 "Advantage
+			// and Disadvantage").
+			boolean adv = advantage.equals("ADVANTAGE") || toolAdvantage || conditions.advantage();
+			boolean dis = advantage.equals("DISADVANTAGE") || untrainedArmor || conditions.disadvantage();
+			advantage = adv && !dis ? "ADVANTAGE" : dis && !adv ? "DISADVANTAGE" : "NONE";
+			String advantageSource = engineSources.isEmpty() ? null : String.join("; ", engineSources)
+					+ (adv && dis ? "; Advantage and Disadvantage cancel to a plain d20" : "");
 
 			String dice = switch (advantage) {
 			case "ADVANTAGE" -> "2d20kh1";
@@ -221,6 +243,9 @@ public final class CheckService {
 			result.put("advantage", advantage);
 			if (advantageSource != null) {
 				result.put("advantage_source", advantageSource);
+			}
+			if (!conditions.reasons().isEmpty()) {
+				result.put("advantage_reasons", conditions.reasons());
 			}
 			var rollMap = roll.toMap();
 			rollMap.put("roll_ref", Ref.of(Ref.ROLL, rollId));

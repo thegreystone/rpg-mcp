@@ -140,6 +140,31 @@ class DeadHealingTest {
 			assertEquals(conditionsBefore,
 					engine.characters().characterSheet(campaign, bandit, "PLAY").get("conditions"));
 			assertEquals(0, slots(engine, campaign, 6));
+
+			// On a living target the same casting restores hit points and "ends the Blinded, Deafened, and Poisoned
+			// conditions" (SRD 5.2.1 "Heal"). A Long Rest first brings the level-6 slot back.
+			engine.rest().rest(op(), campaign, "LONG", null, null);
+			assertEquals(1, slots(engine, campaign, 6));
+			String living = (String) engine.runtime()
+					.materialize(op(), campaign, "Bandit", "Wounded", null, null, null, null, false).get("character");
+			engine.runtime().applyRuntimeChange(op(), campaign, living,
+					map("kind", "DAMAGE", "amount", 5, "reason", "a cut"));
+			for (String condition : List.of("BLINDED", "DEAFENED", "POISONED")) {
+				engine.runtime().applyRuntimeChange(op(), campaign, living, map("kind", "ADD_CONDITION", "condition",
+						condition, "duration", "long rest", "reason", "afflicted"));
+			}
+			assertTrue(conditionNames(engine.characters().characterSheet(campaign, living, "PLAY"))
+					.containsAll(List.of("BLINDED", "DEAFENED", "POISONED")));
+			int hpBefore = ((Number) characterRow(engine, living).get("current_hp")).intValue();
+			Map<String, Object> cured = engine.spells().cast(op(), campaign, "character:1", "Heal", null,
+					List.of(living), null);
+			assertEquals(5, list(cured.get("targets")).get(0).get("healed"), "healed up to the maximum");
+			assertEquals(hpBefore + 5, ((Number) characterRow(engine, living).get("current_hp")).intValue());
+			List<String> conditions = conditionNames(engine.characters().characterSheet(campaign, living, "PLAY"));
+			assertFalse(conditions.contains("BLINDED"), conditions.toString());
+			assertFalse(conditions.contains("DEAFENED"), conditions.toString());
+			assertFalse(conditions.contains("POISONED"), "Heal also ends Poisoned: " + conditions);
+			assertEquals(0, slots(engine, campaign, 6));
 		}
 	}
 
@@ -181,8 +206,6 @@ class DeadHealingTest {
 					map("kind", "DAMAGE", "amount", max, "reason", "knocked out"));
 			engine.runtime().applyRuntimeChange(op(), campaign, "character:1",
 					map("kind", "STABILIZE", "reason", "aid"));
-			engine.runtime().applyRuntimeChange(op(), campaign, "character:1",
-					map("kind", "ADD_CONDITION", "condition", "PRONE", "duration", "long rest", "reason", "fallen"));
 			Map<String, Object> before = engine.characters().characterSheet(campaign, "character:1", "PLAY");
 			assertEquals("DYING", before.get("life_state"));
 			assertEquals(Boolean.TRUE, m(before.get("death_saves")).get("stable"));
@@ -195,6 +218,7 @@ class DeadHealingTest {
 			assertEquals("ALIVE", after.get("life_state"));
 			assertEquals(3, m(after.get("hp")).get("current"));
 			assertNull(characterRow(engine, "character:1").get("death_saves_json"));
+			// "When this condition ends, you remain Prone" (SRD 5.2.1 "Unconscious"): nobody added it by hand.
 			assertEquals(List.of("PRONE"), conditionNames(after));
 		}
 	}

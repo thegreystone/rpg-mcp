@@ -78,6 +78,29 @@ class MagicItemTest {
 		return (String) l(r.get("granted")).get(0).get("entry");
 	}
 
+	/**
+	 * A committed campaign whose player character (character:1) is a level-1 Orc Fighter with the
+	 * gold option: trained with every armor category and Shields (SRD 5.2.1 "Fighter"), so armor
+	 * and shield tests measure the items, not the wearer's lack of training (a Sorcerer gains no AC
+	 * from a Shield and wears mail with Disadvantage, SRD 5.2.1 "Armor Training").
+	 */
+	private static String fighterCampaign(Engine engine) {
+		String campaign = (String) engine.campaigns().create(op(), null, null).get("campaign");
+		engine.campaigns().updateSetup(op(), campaign, null,
+				map("content_profile", "PEGI_16", "experience", "SURPRISE_ME", "rules", Map.of(), "continuation",
+						"CHECKPOINT", "party", "SURPRISE_ME", "adventure",
+						map("premise", "x", "opening_location", "Road", "immediate_goal", "y")));
+		String pc = (String) engine.characters().createDraft(op(), campaign,
+				map("name", "Brakk", "species", "Orc", "class", "Fighter", "ability_scores",
+						map("STR", 15, "CON", 14, "DEX", 13, "WIS", 12, "INT", 10, "CHA", 8), "background", "Criminal",
+						"background_ability_scores", map("DEX", 2, "CON", 1), "skills",
+						List.of("Athletics", "Perception"), "personality", "Loud.", "starting_equipment", "C"),
+				true).get("character");
+		engine.characters().commitDraft(op(), campaign, pc, null);
+		engine.campaigns().commitSetup(op(), campaign, null);
+		return campaign;
+	}
+
 	// ── the seed ───────────────────────────────────────────────────────
 
 	@Test
@@ -349,7 +372,7 @@ class MagicItemTest {
 	@Test
 	void aSecondShieldIsRejectedWithoutSplittingItsStack() throws Exception {
 		try (Engine engine = engine(tempDb("magic-one-shield"))) {
-			String campaign = committedCampaign(engine);
+			String campaign = fighterCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = "character:1";
 			int unarmored = ac(engine, campaign, pc);
@@ -420,7 +443,7 @@ class MagicItemTest {
 	void legacyMultipleShieldsUseOnlyTheStrongestBonusAndItsLabelInEitherOrder() throws Exception {
 		for (boolean strongestFirst : List.of(true, false)) {
 			try (Engine engine = engine(tempDb("magic-legacy-shields"))) {
-				String campaign = committedCampaign(engine);
+				String campaign = fighterCampaign(engine);
 				engine.sessions().bootstrap(op(), campaign, null);
 				String pc = "character:1";
 				int unarmored = ac(engine, campaign, pc);
@@ -451,7 +474,7 @@ class MagicItemTest {
 	@Test
 	void wornMagicChangesArmorClassAndSavesWhileEquipped() throws Exception {
 		try (Engine engine = engine(tempDb("magic-worn"))) {
-			String campaign = committedCampaign(engine);
+			String campaign = fighterCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = "character:1";
 			int unarmored = ac(engine, campaign, pc);
@@ -648,8 +671,9 @@ class MagicItemTest {
 					null, "QUEST", null);
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)), null, null, null, null, null)
+			// The ogre stands in another zone: a bow shot within 5 feet of an enemy would have Disadvantage.
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("a", List.of(pc), "b", List.of(ogre)), null, map(pc, "near", ogre, "far"), null, null, null)
 					.get("encounter");
 			if (!pc.equals(
 					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
@@ -915,9 +939,13 @@ class MagicItemTest {
 				engine.encounters().perform(op(), campaign, encounter, bandit, map("kind", "END_TURN"), true);
 			}
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			dice.queue(20); // a natural 20: the arrow hits
+			// Grubb stands within 5 feet of the archer, so the shot has Disadvantage: both dice are natural 20s, a hit
+			// (and a crit, doubling the bow's die and the fire die); the four damage dice are scripted low so the
+			// bandit survives for the second attack.
+			dice.queue(20, 20, 1, 1, 1, 1);
 			Map<String, Object> shot = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "attack", "Shortbow", "target", bandit, "ammunition", "Arrow of Fire"), true);
+			assertEquals("DISADVANTAGE", shot.get("advantage"), "a ranged attack within 5 feet of an enemy");
 			assertEquals("Arrow of Fire", m(shot.get("ammunition")).get("name"));
 			assertEquals(Map.of("dice", "1d6", "type", "fire"), m(shot.get("ammunition")).get("extra_damage"));
 			assertEquals(Boolean.TRUE, shot.get("hit"), String.valueOf(shot));
@@ -926,7 +954,7 @@ class MagicItemTest {
 
 			engine.inventory().equip(op(), campaign, pc, (String) g.get(2).get("entry"), true);
 			engine.encounters().perform(op(), campaign, encounter, bandit, map("kind", "END_TURN"), true);
-			dice.queue(20);
+			dice.queue(20, 1, 1, 1, 1);
 			Map<String, Object> slash = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "attack", "Frostbrand", "target", bandit), true);
 			assertEquals(Boolean.TRUE, slash.get("hit"), String.valueOf(slash));

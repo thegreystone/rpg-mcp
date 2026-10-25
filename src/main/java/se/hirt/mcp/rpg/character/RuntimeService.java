@@ -288,14 +288,24 @@ public final class RuntimeService {
 			}
 			case "ADD_CONDITION" -> {
 				String condition = condition(change);
+				Optional<String> immunity = "EXHAUSTION".equals(condition) ? Optional.empty()
+						: conditionImmunity(tx, rules, c, condition);
 				if ("EXHAUSTION".equals(condition)) {
 					result.putAll(Exhaustion.gain(tx, rules, c, reason));
+				} else if (immunity.isPresent()) {
+					// Reported the way Exhaustion.gain reports its immunity: nothing is added, the sheet is unchanged.
+					result.put("immune", condition);
+					result.put("skipped", immunity.get());
 				} else if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?",
 						c.id(), conditionRef(condition)) > 0) {
 					result.put("already_present", true);
 				} else {
+					// change.source names the creature behind the condition: the grappler of a Grappled creature, the
+					// source of a Frightened creature's fear (SRD 5.2.1 Rules Glossary); the attack rules read it.
+					Long source = change.get("source") == null ? null
+							: CharacterService.character(tx, campaignId, change.get("source").toString()).id();
 					long id = addCondition(tx, campaignId, c.id(), condition, se.hirt.mcp.rpg.rules.Effects
-							.parseDuration(tx, campaignId, c, change.get("duration"), condition), reason, "GM");
+							.parseDuration(tx, campaignId, c, change.get("duration"), condition), reason, "GM", source);
 					result.put("effect", id);
 				}
 				result.put("condition", condition);
@@ -304,8 +314,32 @@ public final class RuntimeService {
 				String condition = condition(change);
 				int removed = 0;
 				if ("EXHAUSTION".equals(condition)) {
-					removed = Exhaustion.reduce(tx, c.id(), 6);
-					result.put("exhaustion", Exhaustion.level(tx, c.id()));
+					// One level at a time, as a Long Rest or Greater Restoration removes it (SRD 5.2.1
+					// "Exhaustion"); a GM who clears more says how many with `levels`.
+					int levels = 1;
+					if (change.get("levels") != null) {
+						if (!(change.get("levels") instanceof Number n) || n.intValue() < 1) {
+							throw RpgException
+									.invalidArgument("change.levels must be a positive number of Exhaustion levels.");
+						}
+						levels = n.intValue();
+					}
+					removed = Exhaustion.reduce(tx, c.id(), levels);
+					int remaining = Exhaustion.level(tx, c.id());
+					result.put("exhaustion", remaining);
+					// The condition ends only when the level reaches 0 (SRD 5.2.1 "Exhaustion"), so a removal that
+					// leaves levels says what still applies rather than letting "removed: 1" read as recovery.
+					if (removed > 0) {
+						result.put("condition_ended", remaining == 0);
+					}
+					if (remaining > 0) {
+						result.put("note",
+								c.str("name") + " still has " + remaining + " Exhaustion level"
+										+ (remaining == 1 ? "" : "s") + ": D20 Tests -" + 2 * remaining + ", Speed -"
+										+ 5 * remaining + " ft; the condition ends at level 0.");
+					} else if (removed == 0) {
+						result.put("note", c.str("name") + " has no Exhaustion to remove.");
+					}
 				} else {
 					for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?",
 							c.id(), conditionRef(condition))) {
@@ -326,7 +360,7 @@ public final class RuntimeService {
 						Map.of("death_saves_json", Json.write(saves), "revision", c.lng("revision") + 1));
 				result.put("stable", true);
 				result.put("note",
-						"Stable at 0 HP and Unconscious; regains 1 HP after 1d4 hours unless healed (SRD 5.2.1).");
+						"Stable at 0 HP and Unconscious with both death-save counts reset; regains 1 HP after 1d4 hours unless healed, and damage makes it start Death Saving Throws again (SRD 5.2.1).");
 			}
 			case "USE_RESOURCE", "RESTORE_RESOURCE" -> {
 				// Species-trait and feat uses (Breath Weapon, Heroic Inspiration, ...) — tracked by the
@@ -454,23 +488,39 @@ public final class RuntimeService {
 		if (effective == 0 && !"DEAD".equals(refreshed.str("life_state"))) {
 			// Dead: the effects go, and with them the maximum they changed; write the death on the row we have.
 			tx.update("character", c.id(), Map.of("max_hp", effective, "current_hp", 0));
-			se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id());
-			se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+			dieOfZeroMaximum(tx, campaignId, c, reason, Map.of("max_hp_adjustment", amount));
 			cols.remove("max_hp");
 			cols.put("current_hp", 0);
 			cols.put("life_state", "DEAD");
 			cols.put("death_saves_json", null);
-			endMemberships(tx, campaignId, c.id(), "DEAD");
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
-					c.str("name") + " died: hit point maximum reduced to 0"
-							+ (reason == null ? "" : " (" + reason + ")") + ".",
-					List.of(c.id()), isPartyMember(tx, campaignId, c.id()) ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN",
-					"MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null, Map.of("max_hp_adjustment", amount)));
 			out.put("died", true);
 		}
 		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
 		tx.update("character", c.id(), cols);
 		return out;
+	}
+
+	/**
+	 * "A creature dies if its Hit Point maximum reaches 0" (SRD 5.2.1 "Hit Point Maximum of 0"),
+	 * whatever lowered it: a draining effect or a Constitution loss. Every effect ends (reversing
+	 * the maximum changes they made), memberships end, a running encounter counts the creature out.
+	 */
+	public static void dieOfZeroMaximum(Tx tx, long campaignId, Row c, String reason, Map<String, Object> detail) {
+		se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id());
+		se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+		var cols = new LinkedHashMap<String, Object>();
+		cols.put("current_hp", 0);
+		cols.put("life_state", "DEAD");
+		cols.put("death_saves_json", null);
+		cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
+		tx.update("character", c.id(), cols);
+		endMemberships(tx, campaignId, c.id(), "DEAD");
+		markDefeatedInRunningEncounter(tx, c.id());
+		LedgerService.append(tx, campaignId, new LedgerService.EventSpec("CHARACTER_DIED",
+				c.str("name") + " died: hit point maximum reduced to 0" + (reason == null ? "" : " (" + reason + ")")
+						+ ".",
+				List.of(c.id()), isPartyMember(tx, campaignId, c.id()) ? "CRITICAL" : "NOTABLE", "PARTY_KNOWN",
+				"MECHANICAL_CONSEQUENCE", null, c.lng("location_id"), null, detail));
 	}
 
 	private static int amount(Map<String, Object> change, String key) {
@@ -495,9 +545,21 @@ public final class RuntimeService {
 
 	public static long addCondition(
 		Tx tx, long campaignId, long characterId, String condition, Object duration, String reason, String provenance) {
+		return addCondition(tx, campaignId, characterId, condition, duration, reason, provenance, null);
+	}
+
+	/**
+	 * Adds a condition effect; {@code sourceCharacterId} is the creature behind it when known (the
+	 * grappler, the source of fear). Gaining an incapacitating condition breaks Concentration
+	 * (Effects.conditionGained), as it does on every other insertion path.
+	 */
+	public static long addCondition(
+		Tx tx, long campaignId, long characterId, String condition, Object duration, String reason, String provenance,
+		Long sourceCharacterId) {
 		var cols = new LinkedHashMap<String, Object>();
 		cols.put("campaign_id", campaignId);
 		cols.put("character_id", characterId);
+		cols.put("source_character_id", sourceCharacterId);
 		cols.put("source_description", reason);
 		cols.put("provenance", provenance);
 		cols.put("condition_ref", conditionRef(condition));
@@ -505,7 +567,34 @@ public final class RuntimeService {
 		cols.put("start_journal_id", tx.journalId());
 		cols.put("duration_json", duration == null ? null : Json.write(duration));
 		cols.put("stacking_key", condition);
-		return tx.insert("active_effect", cols);
+		long id = tx.insert("active_effect", cols);
+		se.hirt.mcp.rpg.rules.Effects.conditionGained(tx, characterId, conditionRef(condition));
+		return id;
+	}
+
+	/**
+	 * Why the creature cannot gain the condition, if it is immune: Petrified grants Immunity to the
+	 * Poisoned condition (SRD 5.2.1 "Petrified"), an active effect may grant immunities (Heroes'
+	 * Feast), and a stat block lists its own.
+	 */
+	public static Optional<String> conditionImmunity(Tx tx, RulesData rules, Row c, String condition) {
+		if ("POISONED".equals(condition)
+				&& tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
+						conditionRef("PETRIFIED")) > 0) {
+			return Optional.of("immune to the Poisoned condition while Petrified");
+		}
+		if (se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules, c.id()).immuneConditions.contains(condition)) {
+			return Optional.of("immune to " + condition + " (an active effect)");
+		}
+		if (rules != null && !c.isNull("origin_content_ref")) {
+			Object immunities = rules.find(c.str("origin_content_ref"))
+					.map(def -> def.payload().get("condition_immunities")).orElse(null);
+			if (immunities instanceof List<?> list
+					&& list.stream().anyMatch(i -> condition.equalsIgnoreCase(String.valueOf(i)))) {
+				return Optional.of("immune to " + condition + " (stat block)");
+			}
+		}
+		return Optional.empty();
 	}
 
 	public static List<Map<String, Object>> conditions(Tx tx, long characterId) {
@@ -532,7 +621,9 @@ public final class RuntimeService {
 
 	/**
 	 * Healing (SRD 5.2.1 "Healing"): HP can't exceed max; a creature at 0 HP that regains HP is no
-	 * longer dying. A dead creature cannot regain HP until restored to life.
+	 * longer dying, and a creature whose Unconscious condition ends because it regained Hit Points
+	 * remains Prone (SRD 5.2.1 "Unconscious"). A dead creature cannot regain HP until restored to
+	 * life.
 	 */
 	public static Map<String, Object> heal(Tx tx, Row c, int amount, String reason) {
 		int before = c.intOr("current_hp", 0);
@@ -545,14 +636,15 @@ public final class RuntimeService {
 		cols.put("current_hp", after);
 		cols.put("revision", c.lng("revision") + 1);
 		boolean revived = false;
+		boolean woke = false;
 		if ("DYING".equals(c.str("life_state")) && after > 0) {
 			cols.put("life_state", "ALIVE");
 			cols.put("death_saves_json", null);
-			for (Row e : tx.query("SELECT id FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
-					UNCONSCIOUS_REF)) {
-				tx.delete("active_effect", e.id());
-			}
+			woke = endUnconscious(tx, c, true);
 			revived = true;
+		} else if (after > before) {
+			// A knocked-out creature wakes when it regains any Hit Points (SRD 5.2.1 "Knocking Out a Creature").
+			woke = endUnconscious(tx, c, false);
 		}
 		tx.update("character", c.id(), cols);
 		var m = new LinkedHashMap<String, Object>();
@@ -562,20 +654,58 @@ public final class RuntimeService {
 		if (revived) {
 			m.put("revived", true);
 		}
+		if (woke) {
+			m.put("prone", "Unconscious ended; the creature remains Prone (SRD 5.2.1 \"Unconscious\")");
+		}
 		return m;
 	}
 
+	/**
+	 * Ends the Unconscious condition because the creature regained Hit Points: every Unconscious
+	 * row when the creature was Dying, otherwise only those that wait for that (a knock-out's
+	 * {@code until: SHORT_REST}, a drop to 0's {@code HP_ABOVE_ZERO}); a Sleep spell's Unconscious
+	 * is not healing's to end. "When this condition ends, you remain Prone" (SRD 5.2.1
+	 * "Unconscious"), so Prone is added unless already present. Returns whether anything ended.
+	 */
+	public static boolean endUnconscious(Tx tx, Row c, boolean dying) {
+		boolean ended = false;
+		for (Row e : tx.query("SELECT * FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
+				UNCONSCIOUS_REF)) {
+			Object until = e.isNull("duration_json") ? null : e.map("duration_json").get("until");
+			if (dying || "HP_ABOVE_ZERO".equals(until) || "SHORT_REST".equals(until)) {
+				tx.delete("active_effect", e.id());
+				ended = true;
+			}
+		}
+		if (ended && tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
+				conditionRef("PRONE")) == 0) {
+			addCondition(tx, c.lng("campaign_id"), c.id(), "PRONE", null,
+					"Unconscious ended: the creature remains Prone until it stands up", "MECHANICAL_CONSEQUENCE");
+		}
+		return ended;
+	}
+
 	public static Combat.Defenses defensesOf(Tx tx, RulesData rules, Row c) {
+		Combat.Defenses own;
 		if (!c.isNull("origin_content_ref")) {
-			return rules.find(c.str("origin_content_ref"))
+			own = rules.find(c.str("origin_content_ref"))
 					.map(d -> new Combat.Defenses(lower(d.payload().get("damage_resistances")),
 							lower(d.payload().get("damage_vulnerabilities")),
 							lower(d.payload().get("damage_immunities"))))
 					.orElse(Combat.Defenses.NONE);
+		} else {
+			// Built characters: resistances from species traits and the chosen lineage/ancestry (SRD 5.2.1).
+			Set<String> resistances = Origins.speciesResistances(tx, rules, c);
+			own = resistances.isEmpty() ? Combat.Defenses.NONE : new Combat.Defenses(resistances, Set.of(), Set.of());
 		}
-		// Built characters: resistances from species traits and the chosen lineage/ancestry (SRD 5.2.1).
-		Set<String> resistances = Origins.speciesResistances(tx, rules, c);
-		return resistances.isEmpty() ? Combat.Defenses.NONE : new Combat.Defenses(resistances, Set.of(), Set.of());
+		// Petrified: "Resist Damage. You have Resistance to all damage." (SRD 5.2.1 "Petrified").
+		if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
+				conditionRef("PETRIFIED")) > 0) {
+			var all = new java.util.HashSet<>(own.resistances());
+			all.addAll(Combat.DAMAGE_TYPES);
+			return new Combat.Defenses(all, own.vulnerabilities(), own.immunities());
+		}
+		return own;
 	}
 
 	private static Set<String> lower(Object list) {
@@ -616,11 +746,14 @@ public final class RuntimeService {
 					dr.hpBefore(), 1, false, false);
 			out.put("relentless_endurance", "dropped to 1 HP instead of 0; the use returns on a Long Rest");
 		}
-		// Concentration: taking damage forces a Constitution save, DC 10 or half the damage (SRD 5.2.1 "Concentration").
+		// Concentration: taking damage forces a Constitution save, "DC equals 10 or half the damage taken (round down),
+		// whichever number is higher, up to a maximum DC of 30" (SRD 5.2.1 "Concentration"); an Extended spell gives
+		// Advantage on it.
 		if (dr.totalDealt() > 0 && se.hirt.mcp.rpg.rules.Effects.isConcentrating(tx, c.id())) {
-			int dc = Math.max(10, dr.totalDealt() / 2);
+			int dc = Math.max(10, Math.min(30, dr.totalDealt() / 2));
 			int bonus = se.hirt.mcp.rpg.magic.SpellService.saveBonus(tx, rules, c, Ability.CON);
-			Roll save = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
+			Roll save = roller.roll(se.hirt.mcp.rpg.magic.SpellService.concentrationSaveDice(tx, c.id())
+					+ (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 			CharacterService.recordRoll(tx, campaignId, "concentration save " + Ref.of(Ref.CHARACTER, c.id()), save);
 			var conc = new LinkedHashMap<String, Object>();
 			conc.put("dc", dc);
@@ -630,6 +763,21 @@ public final class RuntimeService {
 				conc.put("ended", se.hirt.mcp.rpg.rules.Effects.breakConcentration(tx, c.id()));
 			}
 			out.put("concentration", conc);
+		}
+		// "The spell ends on a target if it takes damage" (Sleep; SRD 5.2.1): effects flagged ends_on_damage end here.
+		if (dr.totalDealt() > 0) {
+			var endedOnDamage = new ArrayList<String>();
+			for (Row e : tx.query(
+					"SELECT * FROM active_effect WHERE character_id = ? AND modifier_json LIKE '%ends_on_damage%'",
+					c.id())) {
+				if (Boolean.TRUE.equals(e.map("modifier_json").get("ends_on_damage"))) {
+					endedOnDamage.add(e.str("source_description"));
+					se.hirt.mcp.rpg.rules.Effects.end(tx, e);
+				}
+			}
+			if (!endedOnDamage.isEmpty()) {
+				out.put("ended_on_damage", endedOnDamage);
+			}
 		}
 		out.put("damage", dr.totalDealt());
 		out.put("breakdown", dr.breakdown());

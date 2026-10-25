@@ -369,7 +369,8 @@ class DamageResistanceTest {
 	}
 
 	private static String startEncounter(Engine engine, String campaign, String rogue, String ghost) {
-		((ScriptedRollService) engine.roller()).queue(20, 50, 1, 50);
+		// The rogue rolls 20 and the ghost 1; no tie-break die follows a d20 (SRD 5.2.1 "Initiative").
+		((ScriptedRollService) engine.roller()).queue(20, 1);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
 				map("party", List.of(rogue), "foes", List.of(ghost)), null, null, null, null, null);
 		assertEquals(rogue, m(started.get("turn")).get("character"));

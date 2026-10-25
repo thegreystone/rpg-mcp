@@ -946,6 +946,13 @@ public final class CharacterService {
 		m.put("skill_proficiencies", traits.stream().filter(t -> "SKILL".equals(t.str("kind")))
 				.map(t -> rules.find(t.str("content_ref")).map(RulesData.Definition::name).orElse(t.str("content_ref")))
 				.toList());
+		// Armor training and weapon proficiency by class (SRD 5.2.1 Core Traits tables); a stat block is unrestricted.
+		se.hirt.mcp.rpg.rules.Training.armorTraining(tx, rules, c)
+				.ifPresent(training -> m.put("armor_training", List.copyOf(training)));
+		se.hirt.mcp.rpg.rules.Training.weaponProficiencies(tx, rules, c)
+				.ifPresent(groups -> m.put("weapon_proficiencies", List.copyOf(groups)));
+		se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, c).ifPresent(armor -> m.put("untrained_armor",
+				Map.of("item", armor, "effect", se.hirt.mcp.rpg.rules.Training.UNTRAINED_ARMOR_EFFECT)));
 		m.put("speed", c.isNull("speed") ? null : se.hirt.mcp.rpg.rules.Exhaustion.speed(tx, rules, c));
 		m.put("xp", c.lng("xp"));
 		m.put("level_up_eligible", level > 0 && rules.levelForXp(c.lng("xp")) > level);

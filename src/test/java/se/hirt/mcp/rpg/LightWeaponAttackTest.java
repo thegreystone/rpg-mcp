@@ -310,8 +310,11 @@ class LightWeaponAttackTest {
 	void decliningShieldPreservesTheLightExtraAttacksReducedDamageAndSpentAllowance() throws Exception {
 		try (Fixture fixture = fixture(15)) {
 			giveTargetShield(fixture);
-			fixture.dice.queue(19, 2);
-			attack(fixture, fixture.dagger, false, false);
+			// Every hit by an attack roll offers Shield (SRD 5.2.1), the primary one included; declined here.
+			fixture.dice.queue(19);
+			Map<String, Object> primary = attack(fixture, fixture.dagger, false, false);
+			fixture.dice.queue(2);
+			resolveShield(fixture, primary, "DECLINE");
 			fixture.dice.queue(8);
 			Map<String, Object> pending = attack(fixture, fixture.handaxe, true, false);
 			assertEquals(Boolean.FALSE, pending.get("resolved"));
@@ -333,8 +336,10 @@ class LightWeaponAttackTest {
 	void shieldTurningTheExtraAttackIntoAMissStillSpendsItsAllowance() throws Exception {
 		try (Fixture fixture = fixture(15)) {
 			giveTargetShield(fixture);
-			fixture.dice.queue(19, 2);
-			attack(fixture, fixture.dagger, false, false);
+			fixture.dice.queue(19);
+			Map<String, Object> primary = attack(fixture, fixture.dagger, false, false);
+			fixture.dice.queue(2);
+			resolveShield(fixture, primary, "DECLINE");
 			fixture.dice.queue(8);
 			Map<String, Object> pending = attack(fixture, fixture.handaxe, true, false);
 			Object hpBefore = targetHp(fixture);
@@ -359,9 +364,12 @@ class LightWeaponAttackTest {
 			Map<String, Object> turn = m(m(resolved.get("state")).get("turn"));
 			assertEquals(fixture.actor, turn.get("character"));
 			assertTrue(((List<?>) turn.get("light_extra_attack_available")).contains(fixture.handaxe));
-			fixture.dice.queue(19, 3);
-			Map<String, Object> extra = attack(fixture, fixture.handaxe, true, true);
-			assertEquals(3, extra.get("damage"));
+			// The reaction is still unspent, so the extra attack's hit offers Shield again; declined, it lands.
+			fixture.dice.queue(19);
+			Map<String, Object> pendingExtra = attack(fixture, fixture.handaxe, true, true);
+			fixture.dice.queue(3);
+			Map<String, Object> extra = resolveShield(fixture, pendingExtra, "DECLINE");
+			assertEquals(3, m(extra.get("attack")).get("damage"));
 			assertEquals(Boolean.TRUE, extra.get("turn_advanced"));
 			assertEquals(fixture.target, m(extra.get("next_turn")).get("character"));
 		}
@@ -381,7 +389,7 @@ class LightWeaponAttackTest {
 			String secondSword = (String) fixture.engine.inventory().equip(op(), fixture.campaign, scout, stack, true)
 					.get("entry");
 			assertNotEquals(firstSword, secondSword);
-			fixture.dice.queue(20, 100, 1, 1);
+			fixture.dice.queue(20, 1);
 			Map<String, Object> started = fixture.engine.encounters().start(op(), fixture.campaign,
 					map("party", List.of(scout), "foes", List.of(fixture.target)), null, null, null, null, null);
 			String encounter = (String) started.get("encounter");
@@ -516,7 +524,7 @@ class LightWeaponAttackTest {
 			String target = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			dice.queue(20, 100, 1, 1);
+			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(actor), "foes", List.of(target)), null, null, null, null, null);
 			assertEquals(actor, m(started.get("turn")).get("character"));

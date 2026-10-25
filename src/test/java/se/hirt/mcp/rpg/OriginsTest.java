@@ -174,7 +174,7 @@ class OriginsTest {
 			// Alert (Criminal's feat): the proficiency bonus is added to initiative.
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", null, null, null, null, null, false).get("character");
-			dice.queue(10, 50, 10, 50);
+			dice.queue(10, 10);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "foes", List.of(bandit)), null, null, null, null, null);
 			Map<String, Object> pcRoll = list(started.get("initiative_rolls")).get(0);
@@ -182,7 +182,8 @@ class OriginsTest {
 			assertEquals(10 + 2 + 2, pcRoll.get("initiative"), "d20 10 + DEX 15 (+2) + Alert proficiency 2");
 			engine.encounters().end(op(), campaign, (String) started.get("encounter"), "NEGOTIATED", "x");
 
-			// Dwarven Toughness raises every gain by 1; default policy FIRST_3_MAX takes the full die at level 2.
+			// Dwarven Toughness raises every gain by 1; the default policy FIRST_3_MAX (a house rule, RULES_ENGINE.md §6)
+			// takes the full die at level 2.
 			engine.runtime().awardXp(op(), campaign, List.of(pc), 300, "MILESTONE", "x");
 			Map<String, Object> begun = engine.levelUps().begin(op(), campaign, pc);
 			assertEquals(10 + 2 + 1, m(begun.get("chosen")).get("hp_gain"),
@@ -254,7 +255,7 @@ class OriginsTest {
 			assertEquals("ALIVE", dropped.get("life_state"));
 
 			// Savage Attacker (Soldier's feat): the first weapon hit each turn rolls its dice twice, higher total kept.
-			dice.queue(20, 50, 1, 50);
+			dice.queue(20, 1);
 			String enc = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "foes", List.of(orc)), null, null, null, null, null).get("encounter");
 			dice.queue(15, 1, 1, 6, 6);

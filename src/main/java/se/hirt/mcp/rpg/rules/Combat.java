@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.rules;
 
+import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.dice.DiceExpression;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
@@ -51,27 +52,287 @@ public final class Combat {
 	private Combat() {
 	}
 
-	/** Attack benefits of the target's conditions (SRD 5.2.1 Conditions). */
-	public record TargetConditions(boolean advantage, boolean criticalWithinFiveFeet, List<String> reasons) {
+	/** Conditions that include Incapacitated (SRD 5.2.1 Rules Glossary). */
+	public static final List<String> INCAPACITATING_CONDITIONS = List.of("INCAPACITATED", "STUNNED", "PARALYZED",
+			"UNCONSCIOUS", "PETRIFIED");
+	/** Conditions whose Speed is 0 and can't increase (SRD 5.2.1 Rules Glossary). */
+	public static final List<String> SPEED_ZERO_CONDITIONS = List.of("PARALYZED", "UNCONSCIOUS", "PETRIFIED",
+			"GRAPPLED", "RESTRAINED");
+	/** The Dodge action's effect row, written by the encounter engine. */
+	public static final String DODGING_REF = "srd5e:effect/dodging";
+	private static final String CONDITION_PREFIX = "srd5e:condition/";
+
+	/**
+	 * One condition on a creature and, when the effect recorded it, the creature that caused it:
+	 * the grappler of a Grappled creature, the source of a Frightened creature's fear.
+	 */
+	public record Condition(String name, Long sourceCharacterId) {
 	}
 
-	public static TargetConditions targetConditions(Tx tx, Row target) {
-		var conditions = new HashSet<String>();
-		for (Row effect : tx.query("SELECT condition_ref FROM active_effect WHERE character_id = ?", target.id())) {
-			conditions.add(effect.str("condition_ref"));
+	/**
+	 * The creature's conditions as upper-case names. A DYING creature is Unconscious (SRD 5.2.1
+	 * "Dropping to 0 Hit Points") whether or not the effect row exists.
+	 */
+	public static List<Condition> conditionsOf(Tx tx, Row c) {
+		var out = new ArrayList<Condition>();
+		for (Row e : tx.query(
+				"SELECT condition_ref, source_character_id FROM active_effect WHERE character_id = ? AND condition_ref LIKE ?",
+				c.id(), CONDITION_PREFIX + "%")) {
+			out.add(new Condition(e.str("condition_ref").substring(CONDITION_PREFIX.length()).toUpperCase(),
+					e.lng("source_character_id")));
 		}
-		if ("DYING".equals(target.str("life_state"))) {
-			conditions.add("srd5e:condition/unconscious");
+		if ("DYING".equals(c.str("life_state"))) {
+			out.add(new Condition("UNCONSCIOUS", null));
 		}
+		return out;
+	}
+
+	public static boolean has(List<Condition> conditions, String name) {
+		return conditions.stream().anyMatch(c -> c.name().equals(name));
+	}
+
+	public static boolean hasAny(List<Condition> conditions, Collection<String> names) {
+		return conditions.stream().anyMatch(c -> names.contains(c.name()));
+	}
+
+	/**
+	 * Whether the Dodge action protects the creature right now: "You lose these benefits if you
+	 * have the Incapacitated condition or if your Speed is 0" (SRD 5.2.1 "Dodge").
+	 */
+	public static boolean dodging(Tx tx, RulesData rules, Row c, List<Condition> conditions) {
+		if (tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
+				DODGING_REF) == 0) {
+			return false;
+		}
+		return !hasAny(conditions, INCAPACITATING_CONDITIONS) && !hasAny(conditions, SPEED_ZERO_CONDITIONS)
+				&& Exhaustion.speed(tx, rules, c) > 0;
+	}
+
+	/**
+	 * Advantage and Disadvantage on one attack roll and whether the target's condition turns a hit
+	 * within 5 feet into a critical hit. Any source of each cancels the other to a plain d20 (SRD
+	 * 5.2.1 "Advantage and Disadvantage").
+	 */
+	public record AttackRollFactors(boolean advantage, boolean disadvantage, boolean criticalWithinFiveFeet,
+			List<String> reasons) {
+
+		/** The d20 part of the roll expression. */
+		public String form() {
+			return advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
+		}
+
+		public String label() {
+			return advantage && !disadvantage ? "ADVANTAGE" : disadvantage && !advantage ? "DISADVANTAGE" : "NONE";
+		}
+	}
+
+	/**
+	 * The condition table for attack rolls (SRD 5.2.1 Rules Glossary), the Dodge action, the
+	 * effects on the target (Blur, Faerie Fire) and "Ranged Attacks in Close Combat" (p.15), on top
+	 * of what the GM declared. Attacker's conditions: Blinded, Restrained, Prone and Poisoned give
+	 * Disadvantage; Grappled gives Disadvantage against any target other than the recorded grappler
+	 * (an unrecorded grappler imposes nothing); Frightened gives Disadvantage while the recorded
+	 * source of fear is an active participant of the same encounter; Invisible gives Advantage.
+	 * Target's conditions: Blinded, Restrained, Stunned, Paralyzed, Petrified and Unconscious grant
+	 * Advantage (Paralyzed and Unconscious also the critical hit within 5 feet); Prone grants
+	 * Advantage within 5 feet and Disadvantage beyond; Invisible grants Disadvantage. The "if a
+	 * creature can somehow see you" exceptions are the GM's call. A ranged attack has Disadvantage
+	 * if an enemy who can see the attacker (is not Blinded, and the attacker is not Invisible) and
+	 * is not Incapacitated shares the attacker's zone.
+	 */
+	public static AttackRollFactors attackRollFactors(
+		Tx tx, RulesData rules, Long encounterId, Row attacker, Row target, boolean withinFiveFeet, boolean ranged,
+		boolean declaredAdvantage, boolean declaredDisadvantage) {
+		boolean advantage = declaredAdvantage;
+		boolean disadvantage = declaredDisadvantage;
 		var reasons = new ArrayList<String>();
-		for (String condition : List.of("stunned", "paralyzed", "petrified", "unconscious")) {
-			if (conditions.contains("srd5e:condition/" + condition)) {
-				reasons.add("target is " + condition);
+		if (declaredAdvantage) {
+			reasons.add("advantage declared with the action");
+		}
+		if (declaredDisadvantage) {
+			reasons.add("disadvantage declared with the action");
+		}
+		List<Condition> mine = conditionsOf(tx, attacker);
+		List<Condition> theirs = conditionsOf(tx, target);
+		for (String condition : List.of("BLINDED", "RESTRAINED", "PRONE", "POISONED")) {
+			if (has(mine, condition)) {
+				disadvantage = true;
+				reasons.add("attacker is " + condition.toLowerCase());
 			}
 		}
-		boolean critical = conditions.contains("srd5e:condition/paralyzed")
-				|| conditions.contains("srd5e:condition/unconscious");
-		return new TargetConditions(!reasons.isEmpty(), critical, List.copyOf(reasons));
+		List<Long> grapplers = mine.stream().filter(c -> "GRAPPLED".equals(c.name())).map(Condition::sourceCharacterId)
+				.filter(Objects::nonNull).toList();
+		if (!grapplers.isEmpty() && !grapplers.contains(target.id())) {
+			disadvantage = true;
+			reasons.add("attacker is grappled by someone other than the target");
+		}
+		Optional<String> fear = fearInSight(tx, encounterId, mine);
+		if (fear.isPresent()) {
+			disadvantage = true;
+			reasons.add("attacker is frightened of " + fear.get() + ", who is in sight");
+		}
+		if (has(mine, "INVISIBLE")) {
+			advantage = true;
+			reasons.add("attacker is invisible");
+		}
+		for (String condition : List.of("BLINDED", "RESTRAINED", "STUNNED", "PARALYZED", "PETRIFIED", "UNCONSCIOUS")) {
+			if (has(theirs, condition)) {
+				advantage = true;
+				reasons.add("target is " + condition.toLowerCase());
+			}
+		}
+		if (has(theirs, "PRONE")) {
+			if (withinFiveFeet) {
+				advantage = true;
+				reasons.add("target is prone and the attacker is within 5 feet");
+			} else {
+				disadvantage = true;
+				reasons.add("target is prone and the attacker is more than 5 feet away");
+			}
+		}
+		if (has(theirs, "INVISIBLE")) {
+			disadvantage = true;
+			reasons.add("target is invisible");
+		}
+		boolean critical = has(theirs, "PARALYZED") || has(theirs, "UNCONSCIOUS");
+		if (dodging(tx, rules, target, theirs)) {
+			disadvantage = true;
+			reasons.add("target is dodging");
+		}
+		Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
+		if (targetMods.disadvantageOnAttacksAgainst) {
+			disadvantage = true;
+			reasons.add("target is protected (e.g. Blur)");
+		}
+		if (targetMods.advantageOnAttacksAgainst) {
+			advantage = true;
+			reasons.add("target is exposed (e.g. Faerie Fire)");
+		}
+		if (ranged && !has(mine, "INVISIBLE")) {
+			Optional<String> enemy = adjacentEnemyWhoCanSee(tx, encounterId, attacker);
+			if (enemy.isPresent()) {
+				disadvantage = true;
+				reasons.add("ranged attack within 5 feet of an enemy (" + enemy.get() + ")");
+			}
+		}
+		return new AttackRollFactors(advantage, disadvantage, critical, List.copyOf(reasons));
+	}
+
+	/**
+	 * Advantage and Disadvantage the actor's conditions impose on an ability check or saving throw.
+	 */
+	public record D20Factors(boolean advantage, boolean disadvantage, List<String> reasons) {
+	}
+
+	/**
+	 * Conditions on D20 Tests other than attack rolls (SRD 5.2.1 Rules Glossary): Poisoned and
+	 * Frightened (source of fear in sight) give Disadvantage on ability checks; Restrained gives
+	 * Disadvantage on Dexterity saving throws, which the Dodge action makes with Advantage.
+	 */
+	public static D20Factors d20TestFactors(Tx tx, RulesData rules, Row actor, boolean savingThrow, String ability) {
+		boolean advantage = false;
+		boolean disadvantage = false;
+		var reasons = new ArrayList<String>();
+		List<Condition> mine = conditionsOf(tx, actor);
+		if (!savingThrow) {
+			if (has(mine, "POISONED")) {
+				disadvantage = true;
+				reasons.add("poisoned");
+			}
+			Optional<String> fear = fearInSight(tx, runningEncounterOf(tx, actor.id()), mine);
+			if (fear.isPresent()) {
+				disadvantage = true;
+				reasons.add("frightened of " + fear.get() + ", who is in sight");
+			}
+		} else if ("DEX".equals(ability)) {
+			if (has(mine, "RESTRAINED")) {
+				disadvantage = true;
+				reasons.add("restrained: Disadvantage on Dexterity saving throws");
+			}
+			if (dodging(tx, rules, actor, mine)) {
+				advantage = true;
+				reasons.add("dodging: Dexterity saving throws have Advantage");
+			}
+		}
+		return new D20Factors(advantage, disadvantage, List.copyOf(reasons));
+	}
+
+	/** The encounter the character is an active participant of, if one is running. */
+	public static Long runningEncounterOf(Tx tx, long characterId) {
+		return tx.queryOne(
+				"SELECT p.encounter_id FROM encounter_participant p JOIN encounter e ON e.id = p.encounter_id WHERE p.character_id = ? AND p.status = 'ACTIVE' AND e.status IN ('RUNNING','WAITING_CHOICE')",
+				characterId).map(r -> r.lng("encounter_id")).orElse(null);
+	}
+
+	/**
+	 * Frightened: "while the source of fear is within line of sight". Zones have no sight lines, so
+	 * the source is in sight while it is an active participant of the same encounter; a fear whose
+	 * source was never recorded, or one outside an encounter, is the GM's to adjudicate.
+	 */
+	private static Optional<String> fearInSight(Tx tx, Long encounterId, List<Condition> conditions) {
+		if (encounterId == null) {
+			return Optional.empty();
+		}
+		for (Condition c : conditions) {
+			if ("FRIGHTENED".equals(c.name()) && c.sourceCharacterId() != null && tx.count(
+					"SELECT COUNT(*) FROM encounter_participant WHERE encounter_id = ? AND character_id = ? AND status = 'ACTIVE'",
+					encounterId, c.sourceCharacterId()) > 0) {
+				return tx.find("character", c.sourceCharacterId()).map(source -> source.str("name"));
+			}
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * "Ranged Attacks in Close Combat" (SRD 5.2.1 p.15): an enemy in the attacker's zone who is
+	 * alive, still in the fight, not Incapacitated and not Blinded.
+	 */
+	@SuppressWarnings("unchecked")
+	private static Optional<String> adjacentEnemyWhoCanSee(Tx tx, Long encounterId, Row attacker) {
+		if (encounterId == null) {
+			return Optional.empty();
+		}
+		Row me = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
+				encounterId, attacker.id()).orElse(null);
+		if (me == null || me.str("position_zone") == null) {
+			return Optional.empty();
+		}
+		Row encounter = tx.get("encounter", encounterId);
+		Map<String, Object> sides = encounter.isNull("sides_json") ? Map.of() : encounter.map("sides_json");
+		Map<String, Object> stances = sides.get("stances") instanceof Map<?, ?> s ? (Map<String, Object>) s : Map.of();
+		for (Row p : tx.query(
+				"SELECT * FROM encounter_participant WHERE encounter_id = ? AND position_zone = ? AND status = 'ACTIVE' AND character_id <> ? ORDER BY id",
+				encounterId, me.str("position_zone"), attacker.id())) {
+			if (!hostile(stances, me.str("side"), p.str("side"))) {
+				continue;
+			}
+			Row enemy = tx.get("character", p.lng("character_id"));
+			if (!"ALIVE".equals(enemy.str("life_state"))) {
+				continue;
+			}
+			List<Condition> theirs = conditionsOf(tx, enemy);
+			if (hasAny(theirs, INCAPACITATING_CONDITIONS) || has(theirs, "BLINDED")) {
+				continue;
+			}
+			return Optional.of(enemy.str("name"));
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * Two sides are hostile unless their recorded stance says otherwise; a side is never hostile to
+	 * itself, so allies neither provoke nor take opportunity attacks on each other and their stat
+	 * blocks never count toward the XP pool. The one reading for attacks, reactions and XP.
+	 */
+	public static boolean hostile(Map<String, Object> stances, String a, String b) {
+		if (a == null || b == null || a.equals(b)) {
+			return false;
+		}
+		Object s = stances.get(a + "|" + b);
+		if (s == null) {
+			s = stances.get(b + "|" + a);
+		}
+		return s == null || "HOSTILE".equals(s.toString());
 	}
 
 	/**
@@ -399,7 +660,11 @@ public final class Combat {
 		return deathSave(natural, natural, saves);
 	}
 
-	/** Natural 1 and 20 keep their special effects even when a modifier changes the total. */
+	/**
+	 * Natural 1 and 20 keep their special effects even when a modifier changes the total. "The
+	 * number of both is reset to zero when you regain any Hit Points or become Stable" (SRD 5.2.1
+	 * "Death Saving Throws"): a stable creature that is hurt again starts a fresh count.
+	 */
 	public static Map<String, Object> deathSave(int natural, int total, Map<String, Object> saves) {
 		int successes = ((Number) saves.getOrDefault("successes", 0)).intValue();
 		int failures = ((Number) saves.getOrDefault("failures", 0)).intValue();
@@ -414,6 +679,10 @@ public final class Combat {
 		} else if (total >= 10) {
 			successes += 1;
 			outcome = successes >= 3 ? "STABLE" : "SUCCESS";
+			if (successes >= 3) {
+				successes = 0;
+				failures = 0;
+			}
 		} else {
 			failures += 1;
 			outcome = failures >= 3 ? "DEAD" : "FAILURE";

@@ -184,9 +184,19 @@ class AttackConditionTest {
 					() -> assertEquals(Boolean.TRUE, result.get("hit")),
 					() -> assertEquals(critical, result.get("critical")),
 					() -> assertTrue(fixture.dice.exhausted(), "the expected attack and damage dice are consumed"));
-			Map<String, Object> damageRoll = m(list(result.get("breakdown")).get(0).get("roll"));
+			Map<String, Object> damage = list(result.get("breakdown")).get(0);
+			Map<String, Object> damageRoll = m(damage.get("roll"));
 			assertEquals(critical ? 2 : 1, ((List<?>) damageRoll.get("dice")).size(),
 					"a nearby automatic critical doubles damage dice, while a distant hit leaves them alone");
+			int rolled = ((Number) damage.get("rolled")).intValue();
+			if ("PETRIFIED".equals(condition)) {
+				// SRD 5.2.1 "Petrified": "Resist Damage. You have Resistance to all damage." (halved, rounded down).
+				assertEquals(rolled / 2, damage.get("applied"), "a petrified target halves the damage: " + damage);
+				assertEquals("resistant (halved)", damage.get("note"));
+				assertEquals(rolled / 2, result.get("damage"));
+			} else {
+				assertEquals(rolled, damage.get("applied"), "no resistance applies: " + damage);
+			}
 			if (!attack.spell) {
 				assertEquals(advantage ? "ADVANTAGE" : "NONE", result.get("advantage"));
 			}
@@ -244,7 +254,7 @@ class AttackConditionTest {
 			String target = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", "Target", null, null, null, null, false).get("character");
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			dice.queue(20, 100, 1, 1);
+			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(actor), "enemy", List.of(target)), null,
 					map(actor, "near", target, nearby ? "near" : "far"), null, null, null);

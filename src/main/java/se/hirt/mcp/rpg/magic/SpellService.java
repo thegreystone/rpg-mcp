@@ -60,6 +60,7 @@ public final class SpellService {
 
 	public static final String SLOT_PREFIX = "slot:";
 	public static final String PACT_SLOT = "pact_slot";
+	public static final String MAGIC_MISSILE = "srd5e:spell/magic-missile";
 
 	/**
 	 * Full-caster slots per spell level, indexed by character level 1..20 (SRD 5.2.1 class tables).
@@ -74,7 +75,7 @@ public final class SpellService {
 
 	/** A character's spellcasting profile. */
 	public record Casting(String classRef, String classSlug, Ability ability, String progression, int level,
-			int cantripsKnown, int preparedCount, boolean ritual) {
+			int cantripsKnown, int preparedCount) {
 
 		public boolean pact() {
 			return "PACT".equals(progression);
@@ -132,10 +133,9 @@ public final class SpellService {
 		List<Object> cantrips = (List<Object>) s.get("cantrips_known");
 		List<Object> prepared = (List<Object>) s.get("prepared");
 		String id = def.get().id();
-		return Optional.of(
-				new Casting(id, id.substring(id.lastIndexOf('/') + 1), Ability.parse(String.valueOf(s.get("ability"))),
-						String.valueOf(s.get("progression")), level, ((Number) cantrips.get(level - 1)).intValue(),
-						((Number) prepared.get(level - 1)).intValue(), Boolean.TRUE.equals(s.get("ritual"))));
+		return Optional.of(new Casting(id, id.substring(id.lastIndexOf('/') + 1),
+				Ability.parse(String.valueOf(s.get("ability"))), String.valueOf(s.get("progression")), level,
+				((Number) cantrips.get(level - 1)).intValue(), ((Number) prepared.get(level - 1)).intValue()));
 	}
 
 	public static int abilityModifier(Row c, Casting casting) {
@@ -221,7 +221,8 @@ public final class SpellService {
 		m.put("max_spell_level", cast.maxSpellLevel());
 		m.put("cantrips_known_limit", cast.cantripsKnown());
 		m.put("prepared_limit", cast.preparedCount());
-		m.put("ritual_casting", cast.ritual());
+		m.put("ritual_casting",
+				"any prepared spell with the Ritual tag: cast_spell options.ritual (ten minutes longer, no slot; SRD 5.2.1 \"Rituals\")");
 		if (cast.pact()) {
 			tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(), PACT_SLOT)
 					.ifPresent(r -> m.put("pact_slots", Map.of("current", r.intOr("current", 0), "max",
@@ -430,6 +431,12 @@ public final class SpellService {
 		List<String> targetRefs, Map<String, Object> options, Long encounterId, long round) {
 		RulesData.Definition def = rules.resolve("SPELL", spellText).orElseThrow(() -> RpgException
 				.invalidArgument("Unknown spell '" + spellText + "'; see get_content_definitions with kind SPELL."));
+		// "If you wear Light, Medium, or Heavy armor and lack training with it ... you can't cast spells"
+		// (SRD 5.2.1 "Armor Training").
+		se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, caster).ifPresent(armor -> {
+			throw RpgException.notAllowed(caster.str("name") + " is wearing " + armor
+					+ " without armor training and can't cast spells (SRD 5.2.1 \"Armor Training\"); take it off first.");
+		});
 		Map<String, Object> p = def.payload();
 		int level = ((Number) p.get("level")).intValue();
 		Optional<Casting> castingOpt = castingOf(tx, rules, caster);
@@ -447,14 +454,33 @@ public final class SpellService {
 			grantedAbility = Ability.CHA;
 		}
 		Map<String, Object> opts = options == null ? Map.of() : options;
+		// One spell slot per turn and Quickened Spell's level 1+ clauses (SRD 5.2.1 "One Spell with a Spell Slot per
+		// Turn", "Quickened Spell") are judged on the caster's own turn of a running encounter, before any slot,
+		// sorcery point or Bonus Action is spent. A reaction on another creature's turn belongs to that turn.
+		Row turnEncounter = turnEncounter(tx, caster, encounterId);
+		boolean quickenedAsked = Metamagic.requested(opts, "quickened");
+		if (turnEncounter != null) {
+			if (level > 0 && TurnEconomy.markedThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.QUICKENED)) {
+				throw RpgException.notAllowed(caster.str("name")
+						+ " already cast a Quickened spell this turn: no level 1+ spell can be cast on the same turn (SRD 5.2.1 \"Quickened Spell\").");
+			}
+			if (quickenedAsked
+					&& TurnEconomy.markedThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.LEVELED_SPELL)) {
+				throw RpgException.notAllowed(caster.str("name")
+						+ " already cast a level 1+ spell this turn: Quickened Spell cannot modify another spell on the same turn (SRD 5.2.1 \"Quickened Spell\").");
+			}
+		}
 		// Slot — or a free cast granted by the species trait or feat that taught the spell.
 		int used = 0;
 		Map<String, Object> slotInfo = null;
+		boolean slotExpended = false;
 		boolean ritual = Boolean.TRUE.equals(opts.get("ritual"))
 				|| "true".equalsIgnoreCase(String.valueOf(opts.get("ritual")));
 		if (ritual) {
-			// SRD 5.2.1 Rituals: a spell with the Ritual tag, cast by a class with Ritual Casting, takes ten minutes
-			// longer and spends no spell slot. Encounter turns never reach here (the CAST action has no ritual option).
+			// SRD 5.2.1 "Rituals": a prepared spell with the Ritual tag takes ten minutes longer and spends no spell
+			// slot; no class feature is needed (the Wizard's Ritual Adept only relaxes "prepared" to "in the
+			// spellbook", a concept the engine does not model). Encounter turns never reach here (the CAST action has
+			// no ritual option).
 			if (level == 0) {
 				throw RpgException.validation(List.of(new Violation("options.ritual", "NOT_A_RITUAL",
 						def.name() + " is a cantrip; it is cast without a slot anyway.")));
@@ -462,10 +488,6 @@ public final class SpellService {
 			if (!Boolean.TRUE.equals(p.get("ritual"))) {
 				throw RpgException.validation(List.of(new Violation("options.ritual", "NOT_A_RITUAL",
 						def.name() + " does not have the Ritual tag.")));
-			}
-			if (castingOpt.isEmpty() || !castingOpt.get().ritual()) {
-				throw RpgException.validation(List.of(new Violation("options.ritual", "NO_RITUAL_CASTING",
-						caster.str("name") + " cannot cast rituals; the class has no Ritual Casting feature.")));
 			}
 			if (slotLevel != null && slotLevel != level) {
 				throw RpgException.validation(List.of(new Violation("slot_level", "RITUAL",
@@ -504,7 +526,9 @@ public final class SpellService {
 					throw RpgException.insufficientResource(
 							caster.str("name") + " has no pact slots left (they return on a Short Rest).");
 				}
+				requireNoSlotSpentThisTurn(tx, turnEncounter, caster);
 				tx.update("resource_state", res.id(), Map.of("current", res.intOr("current", 0) - 1));
+				slotExpended = true;
 				slotInfo = Map.of("pact_slot_level", used, "remaining", res.intOr("current", 0) - 1);
 			} else {
 				used = slotLevel == null ? level : slotLevel;
@@ -523,8 +547,18 @@ public final class SpellService {
 					throw RpgException
 							.insufficientResource(caster.str("name") + " has no level " + used + " spell slots left.");
 				}
+				requireNoSlotSpentThisTurn(tx, turnEncounter, caster);
 				tx.update("resource_state", res.get().id(), Map.of("current", res.get().intOr("current", 0) - 1));
+				slotExpended = true;
 				slotInfo = Map.of("slot_level", used, "remaining", res.get().intOr("current", 0) - 1);
+			}
+		}
+		if (turnEncounter != null) {
+			if (slotExpended) {
+				TurnEconomy.markThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.SLOT_SPENT);
+			}
+			if (level > 0) {
+				TurnEconomy.markThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.LEVELED_SPELL);
 			}
 		}
 		int upcast = level == 0 ? 0 : Math.max(0, used - level);
@@ -562,13 +596,16 @@ public final class SpellService {
 		Metamagic.Plan mm = Metamagic.plan(tx, rules, campaignId, caster, opts, def, mech, targets);
 		boolean bonusAction = "1 bonus action".equalsIgnoreCase(String.valueOf(p.get("casting_time")))
 				|| mm != null && mm.has("quickened");
+		if (mm != null && mm.has("quickened") && turnEncounter != null) {
+			TurnEconomy.markThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.QUICKENED);
+		}
 		if (bonusAction) {
-			Long turnEncounterId = encounterId == null ? caster.lng("encounter_id") : encounterId;
-			if (turnEncounterId != null) {
-				Row turnEncounter = tx.get("encounter", turnEncounterId);
-				if (encounterId != null || "RUNNING".equals(turnEncounter.str("status"))
-						|| "WAITING_CHOICE".equals(turnEncounter.str("status"))) {
-					TurnEconomy.spendBonusAction(tx, turnEncounter, caster.id(), def.name());
+			Long bonusEncounterId = encounterId == null ? caster.lng("encounter_id") : encounterId;
+			if (bonusEncounterId != null) {
+				Row bonusEncounter = tx.get("encounter", bonusEncounterId);
+				if (encounterId != null || "RUNNING".equals(bonusEncounter.str("status"))
+						|| "WAITING_CHOICE".equals(bonusEncounter.str("status"))) {
+					TurnEconomy.spendBonusAction(tx, bonusEncounter, caster.id(), def.name());
 				}
 			}
 			result.put("action_cost", "BONUS_ACTION");
@@ -641,10 +678,13 @@ public final class SpellService {
 				targets.add(caster);
 			}
 			String dice = scaledDice(String.valueOf(mech.get("dice")), mech, upcast, casterLevel);
+			// A flat amount per slot level above the spell's (Heal: +10 per level above 6; SRD 5.2.1 "Heal").
+			int flat = upcastCount(mech, "per_level_flat", upcast);
 			for (Row target : targets) {
 				Roll roll = roller.roll(dice);
 				CharacterService.recordRoll(tx, campaignId, "healing " + def.name(), roll);
-				int amount = Math.max(0, roll.total()) + (Boolean.TRUE.equals(mech.get("add_modifier")) ? mod : 0);
+				int amount = Math.max(0, roll.total()) + flat
+						+ (Boolean.TRUE.equals(mech.get("add_modifier")) ? mod : 0);
 				Map<String, Object> healed = RuntimeService.heal(tx, tx.get("character", target.id()), amount,
 						def.name());
 				if (!"DEAD".equals(target.str("life_state")) && mech.get("cures") instanceof List<?> cures) {
@@ -664,6 +704,12 @@ public final class SpellService {
 			}
 			int darts = ((Number) mech.get("darts")).intValue() + upcastCount(mech, "per_level_darts", upcast);
 			List<Map<String, Object>> perDart = (List<Map<String, Object>>) mech.get("per_dart");
+			// Shield (SRD 5.2.1): a reaction "when ... targeted by the Magic Missile spell"; the caster of Shield takes
+			// no damage from it. Inside an encounter each target that can react is asked (or, by the NPC policy,
+			// casts it outright) before any dart lands: its darts are rolled now and applied only on DECLINE.
+			boolean magicMissile = MAGIC_MISSILE.equals(def.id());
+			var reactions = new LinkedHashMap<Long, String>();
+			var deferred = new LinkedHashMap<Long, List<Map<String, Object>>>();
 			for (int i = 0; i < darts; i++) {
 				Row target = tx.get("character", targets.get(Math.min(i, targets.size() - 1)).id());
 				var rolled = new ArrayList<Combat.RolledDamage>();
@@ -674,15 +720,45 @@ public final class SpellService {
 							def.name() + " dart " + (i + 1));
 					rolled.add(new Combat.RolledDamage(String.valueOf(d.get("type")), roll, Math.max(0, roll.total())));
 				}
-				Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0), target.intOr("temp_hp", 0),
-						Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), rolled,
-						RuntimeService.defensesOf(tx, rules, target));
 				var t = targetView(target);
 				t.put("dart", i + 1);
-				t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, false, caster.id(),
-						"slain by " + def.name()));
+				String reaction = magicMissile && encounterId != null
+						? reactions.computeIfAbsent(target.id(), id -> se.hirt.mcp.rpg.encounter.ShieldSpell
+								.againstMagicMissile(tx, rules, campaignId, encounterId, round, caster, target))
+						: "NONE";
+				switch (reaction) {
+				case "IMMUNE", "CAST_SHIELD" -> {
+					t.put("rolled", rolled.stream().map(d -> dartView(d)).toList());
+					t.put("damage", 0);
+					t.put("negated", "Shield: no damage from Magic Missile (SRD 5.2.1)");
+				}
+				case "PENDING" -> {
+					var dart = new LinkedHashMap<String, Object>();
+					dart.put("dart", i + 1);
+					dart.put("breakdown", rolled.stream().map(d -> dartView(d)).toList());
+					deferred.computeIfAbsent(target.id(), id -> new ArrayList<>()).add(dart);
+					t.put("rolled", dart.get("breakdown"));
+					t.put("pending", "SHIELD_SPELL");
+				}
+				default -> {
+					Combat.DamageResult dr = Combat.applyDamage(target.intOr("current_hp", 0),
+							target.intOr("temp_hp", 0), Math.max(1, RuntimeService.effectiveMaxHp(tx, target)), rolled,
+							RuntimeService.defensesOf(tx, rules, target));
+					t.putAll(RuntimeService.applyDamageResult(tx, rules, roller, target, dr, false, caster.id(),
+							"slain by " + def.name()));
+					markDefeated(tx, encounterId, target.id());
+				}
+				}
 				perTarget.add(t);
-				markDefeated(tx, encounterId, target.id());
+			}
+			for (var e : deferred.entrySet()) {
+				se.hirt.mcp.rpg.encounter.ShieldSpell.openMagicMissileChoice(tx, campaignId, encounterId, caster,
+						tx.get("character", e.getKey()), def, e.getValue());
+			}
+			if (!deferred.isEmpty()) {
+				result.put("pending", "SHIELD_SPELL");
+				result.put("next_step",
+						"Shield is offered against Magic Missile: resolve_pending_choice (CAST_SHIELD negates every dart aimed at the chooser; DECLINE applies the rolled damage).");
 			}
 		}
 		case "TEMP_HP" -> {
@@ -875,6 +951,11 @@ public final class SpellService {
 			result.put("note", "No structured mechanics for " + def.name() + "; adjudicate from the rules text.");
 		}
 		}
+		if (mm != null && mm.extended() && concentration) {
+			// Extended Spell: Advantage on the saves made to keep this concentration (SRD 5.2.1 "Extended Spell");
+			// recorded on the effects that carry the concentration, where the damage hook reads it.
+			markExtended(tx, caster.id(), effectsCreated);
+		}
 		if (mm != null) {
 			result.put("metamagic", mm.toMap());
 		}
@@ -915,6 +996,71 @@ public final class SpellService {
 		t.put("target", Ref.of(Ref.CHARACTER, target.id()));
 		t.put("name", target.str("name"));
 		return t;
+	}
+
+	/** One rolled dart as stored on a deferred Magic Missile choice and shown in the result. */
+	private static Map<String, Object> dartView(Combat.RolledDamage d) {
+		var m = new LinkedHashMap<String, Object>();
+		m.put("type", d.type());
+		m.put("roll", d.roll().toMap());
+		m.put("amount", d.amount());
+		return m;
+	}
+
+	/**
+	 * The running encounter the casting happens in (the CAST action's, else the caster's own), for
+	 * the once-per-turn spell rules; null outside encounters.
+	 */
+	private static Row turnEncounter(Tx tx, Row caster, Long encounterId) {
+		Long id = encounterId != null ? encounterId : caster.lng("encounter_id");
+		if (id == null) {
+			return null;
+		}
+		return tx.find("encounter", id)
+				.filter(e -> "RUNNING".equals(e.str("status")) || "WAITING_CHOICE".equals(e.str("status")))
+				.orElse(null);
+	}
+
+	/** SRD 5.2.1 "One Spell with a Spell Slot per Turn": refused before the slot is touched. */
+	private static void requireNoSlotSpentThisTurn(Tx tx, Row turnEncounter, Row caster) {
+		if (turnEncounter != null
+				&& TurnEconomy.markedThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.SLOT_SPENT)) {
+			throw RpgException.notAllowed(caster.str("name")
+					+ " already expended a spell slot this turn; only one spell slot can be expended per turn (SRD 5.2.1 \"One Spell with a Spell Slot per Turn\"). A cantrip is still allowed.");
+		}
+	}
+
+	/**
+	 * Records Extended Spell on the effects that carry the caster's concentration from this
+	 * casting.
+	 */
+	private static void markExtended(Tx tx, long casterId, List<String> effectsCreated) {
+		for (String ref : effectsCreated) {
+			Row e = tx.find("active_effect", Ref.id(ref, "effect")).orElse(null);
+			if (e == null || e.lng("concentration_character_id") == null
+					|| e.lng("concentration_character_id") != casterId) {
+				continue;
+			}
+			var mods = e.isNull("modifier_json") ? new LinkedHashMap<String, Object>()
+					: new LinkedHashMap<>(e.map("modifier_json"));
+			mods.put("extended_spell", true);
+			tx.update("active_effect", e.id(), Map.of("modifier_json", Json.write(mods)));
+		}
+	}
+
+	/**
+	 * The d20 expression for a concentration save: 2d20 keep highest while the concentrated spell
+	 * was Extended (SRD 5.2.1 "Extended Spell"), else 1d20.
+	 */
+	public static String concentrationSaveDice(Tx tx, long characterId) {
+		for (Row e : tx.query(
+				"SELECT modifier_json FROM active_effect WHERE concentration_character_id = ? AND modifier_json IS NOT NULL",
+				characterId)) {
+			if (Boolean.TRUE.equals(e.map("modifier_json").get("extended_spell"))) {
+				return "2d20kh1";
+			}
+		}
+		return "1d20";
 	}
 
 	/**
@@ -1066,13 +1212,18 @@ public final class SpellService {
 			return t;
 		}
 		Effects.Modifiers casterMods = Effects.modifiers(tx, rules, caster.id());
-		Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
-		Combat.TargetConditions targetConditions = Combat.targetConditions(tx, target);
-		boolean advantage = targetConditions.advantage() || targetMods.advantageOnAttacksAgainst;
-		boolean disadvantage = targetMods.disadvantageOnAttacksAgainst || tx.count(
-				"SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = 'srd5e:effect/dodging'",
-				target.id()) > 0;
-		String dice = advantage && !disadvantage ? "2d20kh1" : disadvantage && !advantage ? "2d20kl1" : "1d20";
+		boolean touch = "Touch".equalsIgnoreCase(String.valueOf(def.payload().get("range")))
+				&& (mm == null || !mm.has("distant"));
+		boolean close = Combat.withinFiveFeet(tx, encounterId, caster.id(), target.id(), touch);
+		// The same table as weapon attacks: the caster's and the target's conditions, Dodge, Blur/Faerie Fire and a
+		// ranged spell attack within 5 feet of an enemy (SRD 5.2.1 "Ranged Attacks in Close Combat").
+		Combat.AttackRollFactors factors = Combat.attackRollFactors(tx, rules, encounterId, caster, target, close,
+				!touch, false, false);
+		String dice = factors.form();
+		t.put("advantage", factors.label());
+		if (!factors.reasons().isEmpty()) {
+			t.put("advantage_reasons", factors.reasons());
+		}
 		int bonus = atk + casterMods.attackBonus - Exhaustion.penalty(tx, caster.id());
 		Roll roll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
 		long rollId = CharacterService.recordRoll(tx, campaignId, "spell attack " + def.name(), roll);
@@ -1085,10 +1236,7 @@ public final class SpellService {
 		}
 		int natural = roll.dice().get(0);
 		int ac = RuntimeService.armorClass(tx, rules, target);
-		boolean touch = "Touch".equalsIgnoreCase(String.valueOf(def.payload().get("range")))
-				&& (mm == null || !mm.has("distant"));
-		boolean conditionCritical = targetConditions.criticalWithinFiveFeet()
-				&& Combat.withinFiveFeet(tx, encounterId, caster.id(), target.id(), touch);
+		boolean conditionCritical = factors.criticalWithinFiveFeet() && close;
 		boolean critical = natural == 20 || conditionCritical;
 		boolean hit = natural != 1 && (natural == 20 || total >= ac);
 		if (!hit && Metamagic.seek(tx, mm)) {
@@ -1229,7 +1377,7 @@ public final class SpellService {
 			// A spell whose description grants the target another save carries that instruction onto the effect,
 			// so the encounter can roll it at the end of the target's turn instead of the GM remembering to
 			// (SRD 5.2.1 spell descriptions; RULES_ENGINE.md §3).
-			Map<String, Object> repeat = null;
+			var effectMods = new LinkedHashMap<String, Object>();
 			if (mech.get("repeat_save") instanceof String note && mech.get("save") instanceof String ability) {
 				var spec = new LinkedHashMap<String, Object>();
 				spec.put("ability", ability);
@@ -1242,8 +1390,17 @@ public final class SpellService {
 				} else if (note.toLowerCase().contains("unconscious")) {
 					spec.put("on_second_failure", "UNCONSCIOUS");
 				}
-				repeat = Map.of("repeat_save", spec);
+				if (Boolean.TRUE.equals(t.get("heightened"))) {
+					// Heightened Spell: Disadvantage on saves against the spell, the repeat ones included (SRD 5.2.1).
+					spec.put("disadvantage", true);
+				}
+				effectMods.put("repeat_save", spec);
 			}
+			if (Boolean.TRUE.equals(mech.get("ends_on_damage"))) {
+				// "The spell ends on a target if it takes damage" (Sleep; SRD 5.2.1): the damage pipeline ends it.
+				effectMods.put("ends_on_damage", true);
+			}
+			Map<String, Object> repeat = effectMods.isEmpty() ? null : effectMods;
 			for (String cond : conditions) {
 				if ("EXHAUSTION".equalsIgnoreCase(cond)) {
 					t.putAll(Exhaustion.gain(tx, rules, target, def.name()));

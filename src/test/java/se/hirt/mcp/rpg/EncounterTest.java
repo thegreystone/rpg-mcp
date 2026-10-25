@@ -61,6 +61,22 @@ class EncounterTest {
 		return (Integer) m(engine.characters().characterSheet(campaign, character, "SUMMARY").get("hp")).get("current");
 	}
 
+	/**
+	 * The ogre ends its turn; the dying player character's automatic death saving throw rolls the
+	 * scripted natural and the event for it is returned.
+	 */
+	private static Map<String, Object> ogreEndsTurn(
+		Engine engine, ScriptedRollService dice, String campaign, String encounter, String ogre, int natural) {
+		dice.queue(natural);
+		Map<String, Object> turn = engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"),
+				true);
+		assertTrue(dice.exhausted(), "exactly one death save was rolled");
+		List<Map<String, Object>> saves = list(turn.get("death_saves"));
+		assertEquals(1, saves.size(), "one death save per turn of the dying character: " + turn);
+		assertEquals(natural, saves.get(0).get("natural"));
+		return saves.get(0);
+	}
+
 	@Test
 	void combatArithmetic() {
 		assertEquals("2d6+3", Combat.critical("1d6+3"));
@@ -124,8 +140,8 @@ class EncounterTest {
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, early.code(),
 					"harness gating: no encounter tools in EXPLORATION");
 
-			// Initiative: Richard (DEX 14+) rolls 20, bandits roll 5 and 3 → Richard first.
-			dice.queue(20, 50, 5, 50, 3, 50);
+			// Initiative: Richard (DEX 14+) rolls 20; the two identical bandits share one roll of 5 (SRD 5.2.1) → Richard first.
+			dice.queue(20, 5);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "raiders", List.of(b1, b2)), null, map(b1, "near", b2, "far"),
 					"a muddy road at dusk", List.of("survive"), null);
@@ -141,14 +157,18 @@ class EncounterTest {
 					() -> engine.encounters().perform(op(), campaign, encounter, b1, map("kind", "DODGE"), true));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, notTurn.code());
 
-			// Richard shoots Grubb: natural 15 → hit vs AC 12; damage die 4 + DEX mod.
+			// Richard shoots Grubb, who stands in his own zone: a ranged attack within 5 feet of an enemy has
+			// Disadvantage (SRD 5.2.1 "Ranged Attacks in Close Combat"), so 2d20kl1 keeps the 15 of 15 and 18 → hit
+			// vs AC 12; damage die 4 + DEX mod.
 			int dexMod = (Integer) m(
 					m(engine.characters().characterSheet(campaign, pc, "PLAY").get("abilities")).get("DEX"))
 					.get("modifier");
-			dice.queue(15, 4);
+			dice.queue(15, 18, 4);
 			Map<String, Object> shot = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "target", b1, "weapon", "Shortbow"), true);
 			assertEquals(Boolean.TRUE, shot.get("hit"));
+			assertEquals("DISADVANTAGE", shot.get("advantage"), "an enemy stands within 5 feet of the archer");
+			assertEquals(List.of(15), m(shot.get("attack_roll")).get("dice"), "the lower die is kept");
 			assertEquals(15, shot.get("natural"));
 			assertEquals(15 + dexMod + 2, m(shot.get("attack_roll")).get("total"), "d20 + DEX + proficiency");
 			assertEquals(4 + dexMod, shot.get("damage"));
@@ -169,15 +189,17 @@ class EncounterTest {
 			assertEquals(2L, dodge.get("round"));
 			assertEquals(pc, m(dodge.get("next_turn")).get("character"));
 
-			// Richard attacks the dodging bandit: disadvantage → 2d20kl1; queue 18 and 2 → 2.
+			// Richard attacks the dodging bandit: disadvantage (Dodge, and Grubb still beside him) → 2d20kl1; queue
+			// 18 and 2 → 2.
 			dice.queue(18, 2);
 			Map<String, Object> vsDodge = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "target", b2, "weapon", "Shortbow"), false);
 			assertEquals("DISADVANTAGE", vsDodge.get("advantage"));
 			assertEquals(Boolean.FALSE, vsDodge.get("hit"));
 			assertEquals(Boolean.FALSE, vsDodge.getOrDefault("turn_advanced", false));
-			// Still Richard's turn: finish Grubb with a critical (natural 20 → doubled dice: 2d6 → 6 + 6 + DEX mod).
-			dice.queue(20, 6, 6);
+			// Still Richard's turn: finish Grubb with a critical (natural 20 on both dice of the Disadvantage roll →
+			// doubled dice: 2d6 → 6 + 6 + DEX mod).
+			dice.queue(20, 20, 6, 6);
 			Map<String, Object> crit = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "target", b1, "weapon", "Shortbow"), true);
 			assertEquals(Boolean.TRUE, crit.get("critical"));
@@ -229,71 +251,82 @@ class EncounterTest {
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
 
 			// Ogre wins initiative.
-			dice.queue(1, 50, 20, 50);
+			dice.queue(1, 20);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "monsters", List.of(ogre)), null, null, null, null, null);
 			String encounter = (String) started.get("encounter");
 			assertEquals(ogre, m(started.get("turn")).get("character"));
 
-			// Ogre hits (natural 19) with the greatclub for exactly enough to drop Richard to 0 without massive damage: 2d8+4 → queue 1,1 → 6.
-			// Richard has maxHp (6 + CON mod); we need damage >= hp but overflow < maxHp.
-			dice.queue(19, 1, 1);
-			Map<String, Object> smash = engine.encounters().perform(op(), campaign, encounter, ogre,
-					map("kind", "ATTACK", "target", pc, "attack", "Greatclub"), false);
-			assertEquals(Boolean.TRUE, smash.get("hit"));
-			int dealt = (Integer) smash.get("damage");
-			assertEquals(6, dealt);
-			if (dealt >= maxHp) {
-				assertEquals("DYING", smash.get("life_state"), "party members drop to 0 and start dying");
-			} else {
-				// Not enough: hit again with a bigger club roll.
-				dice.queue(19, 8, 8);
+			// The ogre's greatclub (2d8+4) at its minimum of 6 (natural 19, dice 1 and 1) lands as often as it takes to
+			// bring Richard to exactly 0: each blow is short of massive damage (the overflow stays below his maximum),
+			// so he drops to 0 and starts dying rather than dying outright. The ogre's turn stays open (end_turn false).
+			Map<String, Object> smash = null;
+			while (hp(engine, campaign, pc) > 0) {
+				dice.queue(19, 1, 1);
 				smash = engine.encounters().perform(op(), campaign, encounter, ogre,
 						map("kind", "ATTACK", "target", pc, "attack", "Greatclub"), false);
-				assertTrue(List.of("DYING", "DEAD").contains(smash.get("life_state")));
+				assertEquals(Boolean.TRUE, smash.get("hit"));
+				assertEquals(6, smash.get("damage"));
+				assertTrue(dice.exhausted());
 			}
+			assertEquals("DYING", smash.get("life_state"), "party members drop to 0 and start dying: " + smash);
+			assertEquals(Boolean.TRUE, smash.get("dropped_to_zero"));
 			Map<String, Object> pcState = engine.characters().characterSheet(campaign, pc, "PLAY");
-			if ("DYING".equals(pcState.get("life_state"))) {
-				assertEquals(0, m(pcState.get("hp")).get("current"));
-				assertTrue(list(pcState.get("conditions")).stream()
-						.anyMatch(c -> "UNCONSCIOUS".equals(c.get("condition"))));
-				assertEquals(0, m(pcState.get("death_saves")).get("failures"));
+			assertEquals("DYING", pcState.get("life_state"));
+			assertEquals(0, m(pcState.get("hp")).get("current"));
+			assertTrue(
+					list(pcState.get("conditions")).stream().anyMatch(c -> "UNCONSCIOUS".equals(c.get("condition"))));
+			assertEquals(0, m(pcState.get("death_saves")).get("failures"));
+			assertEquals(0, m(pcState.get("death_saves")).get("successes"));
 
-				// Healing revives: a potion via apply_runtime_change.
-				Map<String, Object> healed = engine.runtime().applyRuntimeChange(op(), campaign, pc,
-						map("kind", "HEAL", "amount", 3, "reason", "companion's potion"));
-				assertEquals("ALIVE", healed.get("life_state"));
-				assertEquals(3, m(healed.get("hp")).get("current"));
-				assertTrue(list(healed.get("conditions")).isEmpty());
+			// Healing revives: a potion via apply_runtime_change. Unconscious ends; he remains Prone (SRD 5.2.1
+			// "Unconscious") until he stands up (STAND on his own turn) or, as here during the ogre's turn, the GM
+			// records it by removing the condition.
+			Map<String, Object> healed = engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "HEAL", "amount", 3, "reason", "companion's potion"));
+			assertEquals("ALIVE", healed.get("life_state"));
+			assertEquals(Boolean.TRUE, healed.get("revived"));
+			assertEquals(3, m(healed.get("hp")).get("current"));
+			assertEquals(List.of("PRONE"),
+					list(healed.get("conditions")).stream().map(c -> c.get("condition")).toList(),
+					"Unconscious ended, Prone remains");
+			assertNull(engine.characters().characterSheet(campaign, pc, "PLAY").get("death_saves"));
+			engine.runtime().applyRuntimeChange(op(), campaign, pc,
+					map("kind", "REMOVE_CONDITION", "condition", "PRONE", "reason", "staggers to his feet"));
 
-				// Ogre drops Richard again; then Richard's turns roll death saves: 5 (fail), 1 (two failures) → dead.
-				dice.queue(19, 1, 1);
-				Map<String, Object> again = engine.encounters().perform(op(), campaign, encounter, ogre,
-						map("kind", "ATTACK", "target", pc, "attack", "Greatclub"), true);
-				assertEquals("DYING", again.get("life_state"));
-				// Turn passed to Richard: a death save is rolled automatically at the start of his turn, then he is skipped back to the ogre.
-				List<Map<String, Object>> saves = list(again.get("death_saves"));
-				assertEquals(1, saves.size());
-				assertNotNull(m(again.get("next_turn")));
-				assertEquals(ogre, m(again.get("next_turn")).get("character"),
-						"unconscious characters skip their turn");
-				// Ogre dodges (ends turn) → Richard's turn again → another save.
-				dice.queue(1);
-				Map<String, Object> ogreTurn = engine.encounters().perform(op(), campaign, encounter, ogre,
-						map("kind", "DODGE"), true);
-				List<Map<String, Object>> saves2 = list(ogreTurn.get("death_saves"));
-				assertEquals(1, saves2.size());
-				Map<String, Object> pcNow = engine.characters().characterSheet(campaign, pc, "PLAY");
-				if (!"DEAD".equals(pcNow.get("life_state"))) {
-					// keep rolling low until dead
-					for (int i = 0; i < 3 && !"DEAD".equals(
-							engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state")); i++) {
-						dice.queue(2);
-						engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "DODGE"), true);
-					}
-				}
-				assertEquals("DEAD", engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state"));
-			}
+			// The ogre drops Richard again (3 HP, one minimum blow) and ends its turn: the turn passes to Richard,
+			// whose death saving throw is rolled at the start of his turn (natural 5: a failure), and he is skipped
+			// back to the ogre.
+			dice.queue(19, 1, 1, 5);
+			Map<String, Object> again = engine.encounters().perform(op(), campaign, encounter, ogre,
+					map("kind", "ATTACK", "target", pc, "attack", "Greatclub"), true);
+			assertEquals("DYING", again.get("life_state"));
+			assertTrue(dice.exhausted(), "one death save was rolled for Richard's skipped turn");
+			List<Map<String, Object>> saves = list(again.get("death_saves"));
+			assertEquals(1, saves.size());
+			assertEquals("FAILURE", saves.get(0).get("outcome"));
+			assertEquals(1, saves.get(0).get("failures"));
+			assertEquals(0, saves.get(0).get("successes"));
+			assertEquals(ogre, m(again.get("next_turn")).get("character"), "unconscious characters skip their turn");
+			assertTrue(list(engine.characters().characterSheet(campaign, pc, "PLAY").get("conditions")).stream()
+					.anyMatch(c -> "UNCONSCIOUS".equals(c.get("condition"))));
+
+			// Each ogre turn that ends hands Richard another save: 12 succeeds (1/1), 3 fails (1/2), 2 fails: dead.
+			Map<String, Object> second = ogreEndsTurn(engine, dice, campaign, encounter, ogre, 12);
+			assertEquals("SUCCESS", second.get("outcome"));
+			assertEquals(1, second.get("successes"));
+			assertEquals(1, second.get("failures"));
+			Map<String, Object> third = ogreEndsTurn(engine, dice, campaign, encounter, ogre, 3);
+			assertEquals("FAILURE", third.get("outcome"));
+			assertEquals(2, third.get("failures"));
+			assertEquals("DYING", engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state"));
+			Map<String, Object> last = ogreEndsTurn(engine, dice, campaign, encounter, ogre, 2);
+			assertEquals("DEAD", last.get("outcome"), "the third failure kills");
+			assertEquals(3, last.get("failures"));
+			assertEquals("DEAD", engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state"));
+			assertEquals("DEFEATED",
+					list(engine.encounters().encounterState(campaign, encounter, 3).get("participants")).stream()
+							.filter(p -> pc.equals(p.get("character"))).findFirst().orElseThrow().get("status"));
 
 			// Ending with a dead player character → CHECKPOINT_DECISION with the campaign_start checkpoint restorable.
 			Map<String, Object> ended = engine.encounters().end(op(), campaign, encounter, "PARTY_DEFEAT",
@@ -341,7 +374,7 @@ class EncounterTest {
 					.materialize(op(), campaign, "Wolf", null, null, null, null, null, true).get("character");
 			int before = hp(engine, campaign, pc);
 
-			dice.queue(20, 50, 1, 50);
+			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "wild", List.of(wolf)), null, null, null, null, null);
 			String retry = (String) started.get("retry_checkpoint");
@@ -369,7 +402,7 @@ class EncounterTest {
 			assertTrue(engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM encounter WHERE campaign_id = 1")) == 0,
 					"the encounter itself was rewound");
 			// And the fight can be started again.
-			dice.queue(10, 50, 10, 50);
+			dice.queue(10, 10);
 			Map<String, Object> again = engine.encounters().start(op(), campaign,
 					map("party", List.of(pc), "wild", List.of(wolf)), null, null, null, null, null);
 			assertNotNull(again.get("retry_checkpoint"));
@@ -410,7 +443,7 @@ class EncounterTest {
 					});
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
-			dice.queue(20, 50, 5, 50, 1, 50);
+			dice.queue(20, 5, 1);
 			String encounter = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc, mara), "monsters", List.of(ogre)), null, null, null, null, null)
 					.get("encounter");

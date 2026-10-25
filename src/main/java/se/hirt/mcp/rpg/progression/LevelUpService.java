@@ -75,17 +75,22 @@ public final class LevelUpService {
 
 	/**
 	 * Moves the working max_hp / current_hp columns by a delta the way SET_MAX_HP does: a raise
-	 * carries current hit points up with it, a cut clamps them to the new maximum (never below 1).
+	 * carries current hit points up with it, a cut clamps them to the new maximum. A maximum of 0
+	 * is written as such (current HP 0): "A creature dies if its Hit Point maximum reaches 0" (SRD
+	 * 5.2.1 "Hit Point Maximum of 0"), and the caller applies the death.
+	 *
+	 * @return true when the maximum reached 0
 	 */
-	public static void shiftMaxHp(Map<String, Object> cols, int delta) {
+	public static boolean shiftMaxHp(Map<String, Object> cols, int delta) {
 		if (delta == 0) {
-			return;
+			return false;
 		}
 		int max = ((Number) cols.get("max_hp")).intValue();
 		int current = ((Number) cols.get("current_hp")).intValue();
-		int target = Math.max(1, max + delta);
+		int target = Math.max(0, max + delta);
 		cols.put("max_hp", target);
-		cols.put("current_hp", delta > 0 ? current + delta : Math.max(1, Math.min(current, target)));
+		cols.put("current_hp", delta > 0 ? current + delta : Math.max(0, Math.min(current, target)));
+		return target == 0;
 	}
 
 	/** Origin answers a promotion may carry, applied at commit in this order. */
@@ -227,8 +232,8 @@ public final class LevelUpService {
 
 	/**
 	 * The Metamagic options a sorcerer owes at the new level: the class feature's count for that
-	 * level minus the options already known (SRD 5.2.1 "Sorcerer": two at level 2, one more at 10
-	 * and 17). Empty when nothing is owed.
+	 * level minus the options already known (SRD 5.2.1 "Sorcerer": two at level 2, "two more
+	 * options at Sorcerer level 10 and two more at Sorcerer level 17"). Empty when nothing is owed.
 	 */
 	private Optional<Map<String, Object>> metamagicChoice(Tx tx, Map<String, Object> payload, Row c) {
 		if (!(payload.get("class_ref") instanceof String classRef)) {

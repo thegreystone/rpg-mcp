@@ -99,11 +99,18 @@ class WeaponBuffTest {
 	 * acting first.
 	 */
 	private static String[] fight(Engine engine, String campaign, String pc) {
+		return fight(engine, campaign, pc, false);
+	}
+
+	/**
+	 * With {@code apart} the ogre starts in another zone, so bow shots are not made within 5 feet
+	 * of an enemy (SRD 5.2.1 "Ranged Attacks in Close Combat": Disadvantage) and one d20 suffices.
+	 */
+	private static String[] fight(Engine engine, String campaign, String pc, boolean apart) {
 		String ogre = (String) engine.runtime()
 				.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
-		String encounter = (String) engine.encounters()
-				.start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)), null, null, null, null, null)
-				.get("encounter");
+		String encounter = (String) engine.encounters().start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)),
+				null, apart ? map(pc, "near", ogre, "far") : null, null, null, null).get("encounter");
 		if (!pc.equals(m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
 			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
 		}
@@ -183,7 +190,7 @@ class WeaponBuffTest {
 											"damage_type", "cold", "text",
 											"A +2 arrow that deals an extra 1d4 cold damage."))),
 					null, "QUEST", null);
-			String[] f = fight(engine, campaign, pc);
+			String[] f = fight(engine, campaign, pc, true);
 			String encounter = f[0], ogre = f[1];
 
 			// Extra-only ammunition preserves the bow's existing modifiers and adds its own damage.
@@ -285,7 +292,8 @@ class WeaponBuffTest {
 			String encounter = f[0], ogre = f[1];
 			Map<String, Object> sword = hit(engine, campaign, encounter, pc, ogre,
 					map("kind", "ATTACK", "attack", "Longsword", "target", ogre));
-			assertEquals(2 + 3 + 2, attackModifier(sword), "STR +2, proficiency +3, Magic Weapon +2: " + sword);
+			// A Wizard is proficient with Simple weapons only (SRD 5.2.1 "Wizard"): no Proficiency Bonus on a Longsword.
+			assertEquals(2 + 2, attackModifier(sword), "STR +2, no Martial proficiency, Magic Weapon +2: " + sword);
 			assertEquals("1d8+4", expression(part(sword, "slashing")), "STR +2 and Magic Weapon +2 on the damage roll");
 			Map<String, Object> dagger = hit(engine, campaign, encounter, pc, ogre,
 					map("kind", "ATTACK", "attack", "Dagger", "target", ogre));
@@ -469,7 +477,8 @@ class WeaponBuffTest {
 			assertEquals("1d8+3", expression(part(staff, "force")), "a d8 of Force with WIS +2 and the staff's +1");
 			Map<String, Object> sword = hit(engine, campaign, encounter, pc, ogre,
 					map("kind", "ATTACK", "attack", "Longsword", "target", ogre));
-			assertEquals(-1 + 2, attackModifier(sword), "the longsword still swings with STR -1: " + sword);
+			// A Druid is proficient with Simple weapons only (SRD 5.2.1 "Druid"): STR -1 and no Proficiency Bonus.
+			assertEquals(-1, attackModifier(sword), "the longsword still swings with STR -1, unproficient: " + sword);
 		}
 	}
 
