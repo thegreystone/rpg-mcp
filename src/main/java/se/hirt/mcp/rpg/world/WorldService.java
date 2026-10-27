@@ -38,7 +38,6 @@ import se.hirt.mcp.rpg.protocol.Json;
 import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
-import se.hirt.mcp.rpg.session.GameTime;
 
 import java.util.*;
 
@@ -53,7 +52,8 @@ public final class WorldService {
 	public static final Set<String> KINDS = Set.of("REGION", "SETTLEMENT", "DISTRICT", "SITE", "BUILDING", "AREA");
 	public static final Set<String> CONNECTION_KINDS = Set.of("ROAD", "PATH", "TRAIL", "RIVER", "SEA_ROUTE", "STREET",
 			"DOOR", "PASSAGE", "STAIRS", "PORTAL", "OTHER");
-	public static final Set<String> CONNECTION_STATES = Set.of("OPEN", "LOCKED", "BLOCKED", "SECRET");
+	public static final Set<String> CONNECTION_STATES = Set.of("OPEN", "CLOSED", "LOCKED", "BLOCKED", "SECRET",
+			"BREACHED", "DESTROYED");
 	private static final int DEFAULT_TRAVEL_MINUTES = 60;
 
 	private final Database db;
@@ -188,7 +188,9 @@ public final class WorldService {
 				connections.add(connect(tx, campaignId, location.id(), otherId,
 						c.get("kind") == null ? null : String.valueOf(c.get("kind")),
 						c.get("state") == null ? null : String.valueOf(c.get("state")).toUpperCase(), minutes, miles,
-						c.get("visibility") == null ? null : String.valueOf(c.get("visibility")).toUpperCase()));
+						c.get("visibility") == null ? null : String.valueOf(c.get("visibility")).toUpperCase(),
+						c.get("connection_ref") == null ? null : String.valueOf(c.get("connection_ref")),
+						Boolean.TRUE.equals(c.get("create_new"))));
 			}
 			Row after = tx.get("location", location.id());
 			tx.touched(Ref.of(Ref.LOCATION, after.id()), after.lng("revision"));
@@ -307,12 +309,22 @@ public final class WorldService {
 	public static Map<String, Object> connect(
 		Tx tx, long campaignId, long a, long b, String kind, String state, Integer minutes, Object miles,
 		String visibility) {
+		return connect(tx, campaignId, a, b, kind, state, minutes, miles, visibility, null, false);
+	}
+
+	public static Map<String, Object> connect(
+		Tx tx, long campaignId, long a, long b, String kind, String state, Integer minutes, Object miles,
+		String visibility, String connectionRef, boolean createNew) {
 		if (a == b) {
 			throw RpgException.invalidArgument("A location cannot connect to itself.");
 		}
 		long lo = Math.min(a, b);
 		long hi = Math.max(a, b);
-		Optional<Row> existing = connection(tx, campaignId, a, b);
+		Optional<Row> existing = createNew ? Optional.empty() : connectionRef == null ? connection(tx, campaignId, a, b)
+				: tx.find("location_connection", Ref.id(connectionRef, Ref.CONNECTION));
+		if (connectionRef != null && (existing.isEmpty() || existing.get().lng("campaign_id") != campaignId
+				|| existing.get().lng("location_a_id") != lo || existing.get().lng("location_b_id") != hi))
+			throw RpgException.invalidArgument("Passage reference does not match these endpoints/campaign.");
 		String k = kind == null ? existing.map(row -> row.str("kind")).orElse("PATH") : kind.toUpperCase();
 		if (!CONNECTION_KINDS.contains(k)) {
 			throw RpgException.invalidArgument("Connection kind must be one of " + CONNECTION_KINDS + ".");
@@ -356,15 +368,20 @@ public final class WorldService {
 	}
 
 	private static Optional<Row> connection(Tx tx, long campaignId, long a, long b) {
-		return tx.queryOne(
+		var candidates = tx.query(
 				"SELECT * FROM location_connection WHERE campaign_id = ? AND location_a_id = ? AND location_b_id = ?",
 				campaignId, Math.min(a, b), Math.max(a, b));
+		if (candidates.size() > 1)
+			throw RpgException.invalidArgument("Multiple passages connect these locations; supply connection_ref.")
+					.withDetail("connections", candidates.stream().map(c -> Ref.of(Ref.CONNECTION, c.id())).toList());
+		return candidates.stream().findFirst();
 	}
 
 	static Map<String, Object> connectionSummary(Tx tx, Row c, long from) {
 		long other = c.lng("location_a_id") == from ? c.lng("location_b_id") : c.lng("location_a_id");
 		Row o = tx.get("location", other);
 		var m = new LinkedHashMap<String, Object>();
+		m.put("ref", Ref.of(Ref.CONNECTION, c.id()));
 		m.put("to", Ref.of(Ref.LOCATION, other));
 		m.put("name", o.str("name"));
 		m.put("kind", c.str("kind"));
@@ -462,21 +479,27 @@ public final class WorldService {
 		return db.mutate(Database.Mutation.of("move_party", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "move_party");
 			Row destination = location(tx, campaignId, toRef);
+			Map<String, Object> resumed = TravelJourneyService.resumeInTx(tx, campaign, destination, characterRefs,
+					rules, roller);
+			if (resumed != null)
+				return resumed;
+			if (characterRefs != null && characterRefs.isEmpty())
+				throw RpgException.invalidArgument(
+						"Select at least one character in characters, or omit characters to move the party at its current location.");
 			Row from = campaign.isNull("current_location_id") ? null
 					: tx.get("location", campaign.lng("current_location_id"));
-			if (from != null && from.id() == destination.id()) {
-				throw RpgException.invalidArgument("The party is already at " + destination.str("name") + ".");
-			}
 			var movers = new ArrayList<Row>();
 			var leftBehind = new ArrayList<Map<String, Object>>();
-			if (characterRefs == null || characterRefs.isEmpty()) {
+			Row departurePlace = from == null ? null : travelAnchor(tx, campaignId, from.id());
+			if (characterRefs == null) {
 				// The party is whoever is with it: active members and guests standing where the party stands. A guest
 				// left at the manor, or a member who stayed behind without being separated, does not teleport.
 				for (Row m : tx.query(
 						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
 								+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
 						campaignId)) {
-					boolean here = from == null || m.isNull("location_id") || m.lng("location_id") == from.id();
+					boolean here = from == null || m.isNull("location_id") || m.lng("location_id") == from.id()
+							|| travelAnchor(tx, campaignId, m.lng("location_id")).id() == departurePlace.id();
 					if (here) {
 						movers.add(m);
 					} else {
@@ -489,21 +512,67 @@ public final class WorldService {
 					}
 				}
 			} else {
-				for (String ref : characterRefs) {
+				for (String ref : new LinkedHashSet<>(characterRefs)) {
 					Row c = CharacterService.character(tx, campaignId, ref);
-					if (!"ACTIVE".equals(c.str("lifecycle")) || "DEAD".equals(c.str("life_state"))) {
-						throw RpgException.notAllowed(ref + " cannot travel.");
-					}
+					if (!travelMember(tx, campaignId, c.id()))
+						throw RpgException.notAllowed(c.str("name") + " (" + ref
+								+ ") is not a current party traveler. Use update_party_membership to JOIN or GUEST_ADD a legitimate companion before move_party; no travel time or route was changed.")
+								.withDetail("character", ref)
+								.withDetail("membership_required", List.of("ACTIVE", "GUEST", "SEPARATED"));
 					movers.add(c);
 				}
+				var origins = new ArrayList<Map<String, Object>>();
+				Long shared = null;
+				for (Row character : movers) {
+					Long actual = actualTravelLocation(tx, campaignId, character);
+					var origin = new LinkedHashMap<String, Object>();
+					origin.put("character", Ref.of(Ref.CHARACTER, character.id()));
+					origin.put("name", character.str("name"));
+					origin.put("location", Ref.ofNullable(Ref.LOCATION, actual));
+					origins.add(origin);
+					if (actual == null)
+						throw RpgException
+								.notAllowed("The actual travel origin of " + character.str("name")
+										+ " is unknown. Establish its location before travel.")
+								.withDetail("origins", origins);
+					if (shared == null)
+						shared = actual;
+				}
+				if (origins.stream().map(origin -> origin.get("location")).distinct().count() > 1)
+					throw RpgException.notAllowed(
+							"The named travelers occupy different locations. Move each group from its own shared origin; no traveler was moved and no travel time was spent.")
+							.withDetail("origins", origins);
+				from = shared == null ? null : tx.get("location", shared);
 			}
 			if (movers.isEmpty()) {
 				throw RpgException.notAllowed("Nobody can travel.");
 			}
-			List<Row> path = from == null ? List.of() : route(tx, campaignId, from.id(), destination.id());
+			if (from != null && from.id() == destination.id())
+				throw RpgException
+						.invalidArgument("The selected travelers are already at " + destination.str("name") + ".");
+			TravelJourneyService.requireTravelReady(tx, rules, movers);
+			if (from != null) {
+				Map<String, Object> contact = TravelJourneyService.startFromContactInTx(tx, campaign, from, destination,
+						movers, rules, roller);
+				if (contact != null)
+					return contact;
+			}
+			RoutePlan plan = from == null ? new RoutePlan(null, List.of(), false)
+					: travelRoute(tx, campaignId, from, destination);
+			if (from != null && plan.path().isEmpty() && sameRoomMap(tx, campaignId, from, destination))
+				throw roomArrivalRefusal(tx, campaignId, destination, from);
+			if (!roomArrivalAllowed(tx, campaignId, destination, plan.path()))
+				throw roomArrivalRefusal(tx, campaignId, destination);
+			if (plan.withinPlace()) {
+				Map<String, Object> result = TravelJourneyService.withinPlace(tx, campaign, from, destination, movers);
+				if (!leftBehind.isEmpty())
+					result.put("left_behind", leftBehind);
+				return result;
+			}
+			Row graphFrom = plan.origin();
+			List<Row> path = plan.path();
 			long minutes;
-			var hops = new ArrayList<Map<String, Object>>();
-			if (from != null && path.isEmpty()) {
+			if (graphFrom != null && path.isEmpty()) {
 				if (!authorizedRoute) {
 					throw RpgException.validation(List.of(new Violation("to", "NO_KNOWN_ROUTE",
 							"No known traversable route from " + from.str("name") + " to " + destination.str("name")
@@ -513,106 +582,345 @@ public final class WorldService {
 					throw RpgException.invalidArgument("An authorized route needs a reason.");
 				}
 				minutes = travelMinutes == null ? DEFAULT_TRAVEL_MINUTES : Math.max(1, travelMinutes);
-				connect(tx, campaignId, from.id(), destination.id(), "OTHER", "OPEN", (int) minutes, null,
+				Row graphDestination = travelAnchor(tx, campaignId, destination.id());
+				if (tx.count(
+						"SELECT COUNT(*) FROM location_connection WHERE campaign_id=? AND location_a_id=? "
+								+ "AND location_b_id=?",
+						campaignId, Math.min(graphFrom.id(), graphDestination.id()),
+						Math.max(graphFrom.id(), graphDestination.id())) > 0)
+					throw RpgException.notAllowed("An established connection joins " + graphFrom.str("name") + " and "
+							+ graphDestination.str("name")
+							+ " but is not traversable. Resolve its passage state, or explicitly "
+							+ "materialize a different route; authorized_route does not replace an established connection.");
+				connect(tx, campaignId, graphFrom.id(), graphDestination.id(), "OTHER", "OPEN", (int) minutes, null,
 						"PARTY_KNOWN");
+				path = route(tx, campaignId, graphFrom.id(), graphDestination.id());
+				plan = appendInteriorRoute(tx, campaignId, graphFrom, graphDestination, destination, path);
+				plan = prependInteriorRoute(tx, campaignId, from, plan);
+				graphFrom = plan.origin();
+				path = plan.path();
+				minutes = path.stream().mapToLong(edge -> ((Number) edge.map("distance_json")
+						.getOrDefault("travel_minutes", DEFAULT_TRAVEL_MINUTES)).longValue()).sum();
 			} else {
 				minutes = 0;
-				long cursor = from == null ? destination.id() : from.id();
 				for (Row edge : path) {
-					long next = edge.lng("location_a_id") == cursor ? edge.lng("location_b_id")
-							: edge.lng("location_a_id");
 					Map<String, Object> distance = edge.map("distance_json");
 					long hop = distance.get("travel_minutes") instanceof Number n ? n.longValue()
 							: DEFAULT_TRAVEL_MINUTES;
 					minutes += hop;
-					hops.add(Map.of("to", Ref.of(Ref.LOCATION, next), "name", tx.get("location", next).str("name"),
-							"minutes", hop, "via", edge.str("kind")));
-					cursor = next;
 				}
 				if (travelMinutes != null) {
 					minutes = Math.max(1, travelMinutes);
 				}
 			}
-			Row clock = GameTime.clock(tx, campaignId);
-			long newSeq = clock.lng("seq") + minutes;
-			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
-			int expiredEffects = se.hirt.mcp.rpg.rules.Effects.expireByTime(tx, campaignId, newSeq);
-			boolean pcMoved = false;
-			Long pcId = tx.queryOne(
-					"SELECT character_id AS id FROM player_control_assignment WHERE campaign_id = ? AND active = 1",
-					campaignId).map(Row::id).orElse(null);
-			for (Row c : movers) {
-				tx.update("character", c.id(),
-						Map.of("location_id", destination.id(), "revision", c.lng("revision") + 1));
-				if (pcId != null && c.id() == pcId) {
-					pcMoved = true;
-				}
-			}
-			var ccols = new LinkedHashMap<String, Object>();
-			if (pcMoved || pcId == null) {
-				ccols.put("current_location_id", destination.id());
-			}
-			ccols.put("revision", campaign.lng("revision") + 1);
-			tx.update("campaign", campaignId, ccols);
-			String names = String.join(", ", movers.stream().map(c -> c.str("name")).toList());
-			long eventId = LedgerService.append(tx, campaignId, new LedgerService.EventSpec("PARTY_MOVED",
-					names + " travelled from " + (from == null ? "nowhere" : from.str("name")) + " to "
-							+ destination.str("name") + " (" + GameTime.render(newSeq) + ")"
-							+ (reason == null || reason.isBlank() ? "." : ": " + reason),
-					movers.stream().map(Row::id).toList(), minutes >= GameTime.MINUTES_PER_DAY ? "NOTABLE" : "MINOR",
-					"PARTY_KNOWN", "GM", null, destination.id(), null,
-					Map.of("from", Ref.ofNullable(Ref.LOCATION, from == null ? null : from.id()), "minutes", minutes)));
-			var result = new LinkedHashMap<String, Object>();
-			result.put("from", from == null ? null : summary(from));
-			result.put("arrived_at", detail(tx, tx.get("location", destination.id())));
-			result.put("moved", movers.stream().map(c -> Ref.of(Ref.CHARACTER, c.id())).toList());
-			if (!leftBehind.isEmpty()) {
+			Row journeyFrom = graphFrom != null && from != null && lineage(tx, graphFrom.id()).contains(from.id())
+					? from : graphFrom;
+			Map<String, Object> result = TravelJourneyService.startOrAdvance(tx, campaign, journeyFrom, graphFrom,
+					destination, movers, path, plan.segmentOrigins(), minutes, rules, roller);
+			if (!leftBehind.isEmpty())
 				result.put("left_behind", leftBehind);
-			}
-			result.put("route", hops);
-			result.put("travel_minutes", minutes);
-			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
-			result.put("event", Ref.of(Ref.EVENT, eventId));
-			result.put("interrupted", false);
-			var consequences = new ArrayList<Object>();
-			if (expiredEffects > 0) {
-				consequences.add(expiredEffects + " timed effect(s) expired");
-			}
-			consequences
-					.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"), newSeq));
-			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
-			if (due != null) {
-				consequences.add(due);
-			}
-			// Travel encounters (RULES_ENGINE.md, "Travel encounters"): a suggestion the GM may take or ignore; the
-			// engine changes no state for it. The roll is made through the RollService so tests can script it.
-			Map<String, Object> suggestion = TravelEncounters.suggest(tx, rules, roller, campaignId, movers,
-					from == null ? List.of() : path, destination, minutes);
-			if (suggestion != null) {
-				consequences.add(suggestion);
-			}
-			result.put("consequences", consequences);
-			var trigger = new LinkedHashMap<String, Object>();
-			boolean significant = minutes >= GameTime.MINUTES_PER_DAY;
-			var reasons = new ArrayList<String>();
-			if (significant) {
-				reasons.add("SIGNIFICANT_TRAVEL");
-			}
-			if (suggestion != null) {
-				reasons.add("TRAVEL_ENCOUNTER_SUGGESTED");
-			}
-			trigger.put("recommended", !reasons.isEmpty());
-			trigger.put("reasons", reasons);
-			trigger.put("urgency", reasons.isEmpty() ? "NONE" : "NORMAL");
-			result.put("director_trigger", trigger);
-			var warnings = new ArrayList<String>();
-			if ("SEMANTIC".equals(destination.str("materialization"))) {
-				warnings.add(destination.str("name")
-						+ " is only a semantic node; materialize_location it now that the party has arrived.");
-			}
-			result.put("meta", Harness.meta(tx.get("campaign", campaignId), warnings));
 			return result;
 		});
+	}
+
+	static boolean travelMember(Tx tx, long campaignId, long characterId) {
+		return tx.count(
+				"SELECT COUNT(*) FROM party_membership WHERE campaign_id=? AND character_id=? AND state IN ('ACTIVE','GUEST','SEPARATED')",
+				campaignId, characterId) > 0
+				|| tx.count(
+						"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id=? AND character_id=? AND active=1",
+						campaignId, characterId) > 0;
+	}
+
+	/**
+	 * Presentation-only presence for an unplaced companion at the building containing the party's
+	 * room.
+	 */
+	public static boolean partyCoLocated(Tx tx, long campaignId, Row character, Long partyLocationId) {
+		Map<String, Object> journey = TravelJourneyService.stateInTx(tx, campaignId);
+		if (Boolean.TRUE.equals(journey.get("active")) && journey.get("movers") instanceof Collection<?> movers) {
+			boolean moving = movers.contains(Ref.of(Ref.CHARACTER, character.id()));
+			var controlled = tx.queryOne(
+					"SELECT character_id AS id FROM player_control_assignment WHERE campaign_id=? AND active=1",
+					campaignId);
+			boolean partyMoving = controlled.isEmpty() || movers.contains(Ref.of(Ref.CHARACTER, controlled.get().id()));
+			if (moving || partyMoving)
+				return moving && partyMoving;
+		}
+		if (partyLocationId == null || character.isNull("location_id")
+				|| partyLocationId.equals(character.lng("location_id")))
+			return true;
+		if (tx.count("SELECT COUNT(*) FROM map_actor WHERE campaign_id=? AND character_id=?", campaignId,
+				character.id()) > 0)
+			return false;
+		Row place = tx.find("location", character.lng("location_id")).orElse(null);
+		if (place == null || !Set.of("SITE", "BUILDING").contains(place.str("kind")))
+			return false;
+		if (tx.count("SELECT COUNT(*) FROM map_scene s,json_each(s.document_json,'$.rooms') r "
+				+ "WHERE s.campaign_id=? AND s.preparation_id IS NOT NULL AND s.kind IN ('SCENE','DUNGEON') AND s.location_id=? "
+				+ "AND json_extract(r.value,'$.location_ref')=? AND COALESCE(json_extract(r.value,'$.level'),0)=0",
+				campaignId, place.id(), Ref.of(Ref.LOCATION, partyLocationId)) == 0)
+			return false;
+		Row partyRoom = tx.get("location", partyLocationId);
+		if (entryRoutes(tx, campaignId, partyRoom, false, place).stream()
+				.noneMatch(entry -> entry.entrance() == partyLocationId))
+			return false;
+		var entrances = tx
+				.query("SELECT * FROM location_connection WHERE campaign_id=? AND (location_a_id=? OR location_b_id=?)",
+						campaignId, partyLocationId, partyLocationId)
+				.stream().filter(edge -> {
+					long other = edge.lng("location_a_id") == partyLocationId ? edge.lng("location_b_id")
+							: edge.lng("location_a_id");
+					return other == place.id() || !lineage(tx, other).contains(place.id());
+				}).toList();
+		return entrances.isEmpty() || entrances.stream().anyMatch(edge -> {
+			var state = edge.map("state_json");
+			// A normal shut street door does not separate arrival presence; this does not open it.
+			return Set.of("OPEN", "CLOSED", "BREACHED", "DESTROYED").contains(state.get("state"))
+					&& !Boolean.TRUE.equals(state.get("locked")) && !Boolean.TRUE.equals(state.get("sealed"))
+					&& !Boolean.TRUE.equals(state.get("secret")) && !Boolean.TRUE.equals(state.get("concealed"));
+		});
+	}
+
+	private static Long actualTravelLocation(Tx tx, long campaignId, Row character) {
+		for (Row actor : tx.query("SELECT * FROM map_actor WHERE campaign_id=? AND character_id=? ORDER BY id",
+				campaignId, character.id())) {
+			Row scene = tx.get("map_scene", actor.lng("scene_id"));
+			if (!List.of("SCENE", "DUNGEON").contains(scene.str("kind")))
+				continue;
+			for (var room : se.hirt.mcp.rpg.maps.SceneService.maps(scene.map("document_json").get("rooms"))) {
+				var polygon = se.hirt.mcp.rpg.maps.SceneService.polygon(room);
+				if (room.get("location_ref") instanceof String ref
+						&& polygon != null && se.hirt.mcp.rpg.maps.SceneService.number(room, "level", 0)
+								.intValue() == actor.intOr("level", 0)
+						&& polygon.contains(se.hirt.mcp.rpg.maps.SceneService.footprint(actor).center()))
+					return Ref.id(ref, Ref.LOCATION);
+			}
+			if (scene.map("document_json").containsKey("journey_ref") && !scene.isNull("location_id"))
+				return scene.lng("location_id");
+		}
+		return character.lng("location_id");
+	}
+
+	record RoutePlan(Row origin, List<Row> path, boolean withinPlace, Map<Integer, Long> segmentOrigins) {
+		RoutePlan(Row origin, List<Row> path, boolean withinPlace) {
+			this(origin, path, withinPlace, Map.of());
+		}
+	}
+
+	/** A tactical room refines its place; it does not create a new disconnected overland origin. */
+	public static Row travelAnchor(Tx tx, long campaignId, long locationId) {
+		Row current = location(tx, campaignId, Ref.of(Ref.LOCATION, locationId));
+		Set<Long> seen = new HashSet<>();
+		while (seen.add(current.id()) && "AREA".equals(current.str("kind")) && !current.isNull("parent_id")) {
+			if (tx.count(
+					"SELECT COUNT(*) FROM map_scene s,json_each(s.document_json,'$.rooms') r "
+							+ "WHERE s.campaign_id=? AND s.kind IN ('SCENE','DUNGEON') "
+							+ "AND json_extract(r.value,'$.location_ref')=?",
+					campaignId, "location:" + current.id()) == 0)
+				break;
+			long parent = current.lng("parent_id");
+			// An explicit room-to-parent passage carries its own state and duration; do not bypass it.
+			if (tx.count(
+					"SELECT COUNT(*) FROM location_connection WHERE campaign_id=? "
+							+ "AND location_a_id=? AND location_b_id=?",
+					campaignId, Math.min(current.id(), parent), Math.max(current.id(), parent)) > 0)
+				break;
+			current = tx.get("location", parent);
+		}
+		return current;
+	}
+
+	static RoutePlan travelRoute(Tx tx, long campaignId, Row from, Row destination) {
+		Row origin = travelAnchor(tx, campaignId, from.id()), target = travelAnchor(tx, campaignId, destination.id());
+		for (Row start : origin.id() == from.id() ? List.of(from) : List.of(from, origin))
+			for (Row end : target.id() == destination.id() ? List.of(destination) : List.of(destination, target)) {
+				List<Row> path = route(tx, campaignId, start.id(), end.id());
+				if (!path.isEmpty())
+					return prependInteriorRoute(tx, campaignId, from,
+							appendInteriorRoute(tx, campaignId, start, end, destination, path));
+			}
+		if (from.id() == origin.id() && origin.id() == target.id() && destination.id() != target.id())
+			return appendInteriorRoute(tx, campaignId, from, target, destination, List.of());
+		return new RoutePlan(origin, List.of(), origin.id() == target.id());
+	}
+
+	private static RoutePlan appendInteriorRoute(
+		Tx tx, long campaignId, Row start, Row end, Row destination, List<Row> path) {
+		if (end.id() == destination.id())
+			return new RoutePlan(start, path, path.isEmpty());
+		EntryRoute interior = entryRoutes(tx, campaignId, destination, false).stream()
+				.filter(entry -> entry.entrance() == destination.id() || !entry.path().isEmpty())
+				.min(Comparator.comparingDouble(entry -> entry.path().stream().mapToDouble(
+						edge -> ((Number) edge.map("distance_json").getOrDefault("travel_minutes", 60)).doubleValue())
+						.sum()))
+				.orElse(null);
+		if (interior == null || interior.path().isEmpty())
+			return new RoutePlan(start, path, path.isEmpty());
+		var combined = new ArrayList<>(path);
+		combined.addAll(interior.path());
+		return new RoutePlan(start, combined, false, Map.of(path.size(), interior.entrance()));
+	}
+
+	private static RoutePlan prependInteriorRoute(Tx tx, long campaignId, Row from, RoutePlan plan) {
+		if (from == null || plan.origin() == null || from.id() == plan.origin().id())
+			return plan;
+		EntryRoute departure = entryRoutes(tx, campaignId, from, false).stream()
+				.filter(entry -> entry.entrance() == from.id() || !entry.path().isEmpty())
+				.min(Comparator.comparingDouble(entry -> entry.path().stream().mapToDouble(
+						edge -> ((Number) edge.map("distance_json").getOrDefault("travel_minutes", 60)).doubleValue())
+						.sum()))
+				.orElse(null);
+		if (departure == null) {
+			var blocked = entryRoutes(tx, campaignId, from, true).stream().map(entry -> {
+				var reverse = new ArrayList<>(entry.path());
+				Collections.reverse(reverse);
+				return new EntryRoute(from.id(), reverse);
+			}).toList();
+			throw interiorPassageRefusal(tx, campaignId, from, blocked, true);
+		}
+		if (departure.path().isEmpty())
+			return plan;
+		var prefix = new ArrayList<>(departure.path());
+		Collections.reverse(prefix);
+		var origins = new LinkedHashMap<Integer, Long>();
+		origins.put(prefix.size(), plan.origin().id());
+		plan.segmentOrigins().forEach((index, origin) -> origins.put(index + prefix.size(), origin));
+		var combined = new ArrayList<>(prefix);
+		combined.addAll(plan.path());
+		return new RoutePlan(from, combined, false, origins);
+	}
+
+	/** A route to a building is not permission to appear beyond its locked interior passages. */
+	static boolean roomArrivalAllowed(Tx tx, long campaignId, Row destination, List<Row> path) {
+		if (!path.isEmpty()) {
+			Row last = path.getLast();
+			if (last.lng("location_a_id") == destination.id() || last.lng("location_b_id") == destination.id())
+				return true;
+		}
+		Row place = travelAnchor(tx, campaignId, destination.id());
+		if (place.id() == destination.id())
+			return true;
+		return entryRoutes(tx, campaignId, destination, false).stream()
+				.anyMatch(entry -> entry.entrance() == destination.id() || !entry.path().isEmpty());
+	}
+
+	private record EntryRoute(long entrance, List<Row> path) {
+	}
+
+	private static boolean sameRoomMap(Tx tx, long campaignId, Row from, Row destination) {
+		return tx.count(
+				"SELECT COUNT(*) FROM map_scene s,json_each(s.document_json,'$.rooms') a,json_each(s.document_json,'$.rooms') b "
+						+ "WHERE s.campaign_id=? AND s.kind IN ('SCENE','DUNGEON') AND json_extract(a.value,'$.location_ref')=? AND json_extract(b.value,'$.location_ref')=?",
+				campaignId, Ref.of(Ref.LOCATION, from.id()), Ref.of(Ref.LOCATION, destination.id())) > 0;
+	}
+
+	private static List<EntryRoute> entryRoutes(Tx tx, long campaignId, Row destination, boolean includeBlocked) {
+		Row place = travelAnchor(tx, campaignId, destination.id());
+		return entryRoutes(tx, campaignId, destination, includeBlocked, place);
+	}
+
+	private static List<EntryRoute> entryRoutes(
+		Tx tx, long campaignId, Row destination, boolean includeBlocked, Row place) {
+		var realized = tx.queryOne("SELECT s.* FROM map_scene s,json_each(s.document_json,'$.rooms') r "
+				+ "WHERE s.campaign_id=? AND s.kind IN ('SCENE','DUNGEON') AND json_extract(r.value,'$.location_ref')=? "
+				+ "ORDER BY s.preparation_id IS NULL,s.id DESC LIMIT 1", campaignId,
+				Ref.of(Ref.LOCATION, destination.id()));
+		if (realized.isEmpty())
+			return List.of(new EntryRoute(destination.id(), List.of()));
+		Map<String, Object> document = se.hirt.mcp.rpg.maps.SceneService.document(tx, realized.get());
+		var rooms = se.hirt.mcp.rpg.maps.SceneService.maps(document.get("rooms")).stream()
+				.filter(room -> room.get("location_ref") instanceof String ref
+						&& lineage(tx, Ref.id(ref, Ref.LOCATION)).contains(place.id()))
+				.toList();
+		if (rooms.isEmpty())
+			return List.of();
+		Set<String> legal = new LinkedHashSet<>();
+		rooms.forEach(room -> legal.add(room.get("location_ref").toString()));
+		var entries = rooms.stream().filter(room -> Boolean.TRUE.equals(room.get("entry"))
+				|| "ENTRY".equalsIgnoreCase(String.valueOf(room.get("role")))).toList();
+		if (entries.isEmpty())
+			entries = rooms.stream()
+					.filter(room -> se.hirt.mcp.rpg.maps.SceneService.maps(document.get("doors")).stream()
+							.anyMatch(door -> Objects.equals(room.get("location_ref"), door.get("from_location_ref"))
+									&& !legal.contains(door.get("to_location_ref"))
+									|| Objects.equals(room.get("location_ref"), door.get("to_location_ref"))
+											&& !legal.contains(door.get("from_location_ref"))))
+					.toList();
+		if (entries.isEmpty())
+			entries = List.of(rooms.getFirst());
+		var routes = new ArrayList<EntryRoute>();
+		for (var entry : entries) {
+			long entrance = Ref.id(entry.get("location_ref").toString(), Ref.LOCATION);
+			routes.add(new EntryRoute(entrance, route(tx, campaignId, entrance, destination.id(), includeBlocked, legal
+					.stream().map(ref -> Ref.id(ref, Ref.LOCATION)).collect(java.util.stream.Collectors.toSet()))));
+		}
+		return routes;
+	}
+
+	static RpgException roomArrivalRefusal(Tx tx, long campaignId, Row destination) {
+		return roomArrivalRefusal(tx, campaignId, destination, null);
+	}
+
+	private static RpgException roomArrivalRefusal(Tx tx, long campaignId, Row destination, Row from) {
+		var candidates = from == null ? entryRoutes(tx, campaignId, destination, true)
+				: List.of(new EntryRoute(from.id(), route(tx, campaignId, from.id(), destination.id(), true, null)));
+		return interiorPassageRefusal(tx, campaignId, destination, candidates, false);
+	}
+
+	private static RpgException interiorPassageRefusal(
+		Tx tx, long campaignId, Row destination, List<EntryRoute> candidates, boolean departure) {
+		Row blocker = candidates.stream().filter(entry -> !entry.path().isEmpty())
+				.min(Comparator.comparingInt(entry -> entry.path().size()))
+				.flatMap(entry -> entry.path().stream().filter(edge -> !traversable(edge)).findFirst()).orElse(null);
+		String guidance = " Travel to its entry room or resolve the authored interior passage before selecting this destination.";
+		var details = new LinkedHashMap<String, Object>();
+		details.put(departure ? "origin" : "destination", Ref.of(Ref.LOCATION, destination.id()));
+		if (blocker != null) {
+			var state = blocker.map("state_json");
+			String connection = Ref.of(Ref.CONNECTION, blocker.id());
+			String key = connection;
+			String mapRef = null;
+			for (Row scene : tx.query(
+					"SELECT * FROM map_scene WHERE campaign_id=? ORDER BY preparation_id IS NULL,id DESC",
+					campaignId)) {
+				Map<String, Object> document = se.hirt.mcp.rpg.maps.SceneService.document(tx, scene);
+				var openings = new ArrayList<>(se.hirt.mcp.rpg.maps.SceneService.maps(document.get("doors")));
+				openings.addAll(se.hirt.mcp.rpg.maps.SceneService.maps(document.get("portals")));
+				var opening = openings.stream().filter(door -> connection.equals(door.get("connection_ref")))
+						.findFirst();
+				if (opening.isPresent()) {
+					key = String.valueOf(opening.get().getOrDefault("key", connection));
+					mapRef = Ref.of(Ref.MAP, scene.id());
+					break;
+				}
+			}
+			details.put("connection_ref", connection);
+			details.put("key", key);
+			details.put("state", state.get("state"));
+			details.put("locked", Boolean.TRUE.equals(state.get("locked")) || "LOCKED".equals(state.get("state")));
+			if (mapRef != null)
+				details.put("map", mapRef);
+			guidance = " Passage '" + key + "' is " + state.get("state")
+					+ ("CLOSED".equals(state.get("state")) && Boolean.TRUE.equals(details.get("locked")) ? " and locked"
+							: "")
+					+ ".";
+			if ("CLOSED".equals(state.get("state")) && !Boolean.TRUE.equals(details.get("locked"))) {
+				guidance += " Open this unlocked door with update_map_object {key: '" + key
+						+ "', changes: {state: 'OPEN'}} before moving through it.";
+				details.put("next_tool", "update_map_object");
+				details.put("changes", Map.of("state", "OPEN"));
+			} else
+				guidance += " Resolve that authored passage's lock, concealment or obstruction before moving through it.";
+		}
+		RpgException refusal = RpgException.notAllowed(departure
+				? "The enclosing place's route does not provide an open exit from " + destination.str("name") + "."
+						+ guidance
+				: "The enclosing place's route does not provide an open entry to " + destination.str("name") + "."
+						+ guidance);
+		for (var detail : details.entrySet())
+			refusal.withDetail(detail.getKey(), detail.getValue());
+		return refusal;
 	}
 
 	/**
@@ -620,14 +928,15 @@ public final class WorldService {
 	 * (empty = none).
 	 */
 	static List<Row> route(Tx tx, long campaignId, long from, long to) {
+		return route(tx, campaignId, from, to, false, null);
+	}
+
+	private static List<Row> route(
+		Tx tx, long campaignId, long from, long to, boolean includeBlocked, Set<Long> allowed) {
 		Map<Long, List<Row>> adjacency = new HashMap<>();
 		for (Row c : tx.query("SELECT * FROM location_connection WHERE campaign_id = ?", campaignId)) {
-			Map<String, Object> state = c.map("state_json");
-			String s = String.valueOf(state.get("state"));
-			String vis = String.valueOf(state.getOrDefault("visibility", "PARTY_KNOWN"));
-			boolean traversable = s.equals("OPEN")
-					|| (s.equals("SECRET") && !vis.equals("GM_ONLY") && !vis.equals("DIRECTOR_ONLY"));
-			if (!traversable) {
+			if ((!includeBlocked && !traversable(c)) || allowed != null
+					&& (!allowed.contains(c.lng("location_a_id")) || !allowed.contains(c.lng("location_b_id")))) {
 				continue;
 			}
 			adjacency.computeIfAbsent(c.lng("location_a_id"), k -> new ArrayList<>()).add(c);
@@ -661,6 +970,14 @@ public final class WorldService {
 			}
 		}
 		return List.of();
+	}
+
+	static boolean traversable(Row connection) {
+		Map<String, Object> state = connection.map("state_json");
+		String value = String.valueOf(state.get("state")),
+				visibility = String.valueOf(state.getOrDefault("visibility", "PARTY_KNOWN"));
+		return Set.of("OPEN", "BREACHED", "DESTROYED").contains(value)
+				|| (value.equals("SECRET") && !visibility.equals("GM_ONLY") && !visibility.equals("DIRECTOR_ONLY"));
 	}
 
 	/** Ancestor chain including the location itself (innermost first). */

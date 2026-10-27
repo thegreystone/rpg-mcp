@@ -88,10 +88,14 @@ class WorldConnectionTest {
 					"travel_minutes", null, "distance_miles", null));
 			assertConnection(unchanged, "TRAIL", "BLOCKED", "GM_ONLY", 240, 12);
 			assertEquals(originalId, connectionId(fixture), "both endpoint orders update the existing edge");
-			long edgeCount = engine.db().read(tx -> tx
-					.count("SELECT COUNT(*) FROM location_connection WHERE campaign_id = ?", campaignId(fixture)));
+			long edgeCount = engine.db().read(tx -> tx.count(
+					"SELECT COUNT(*) FROM location_connection WHERE campaign_id=? AND location_a_id=? AND location_b_id=?",
+					campaignId(fixture),
+					Math.min(Ref.id(fixture.origin, "location"), Ref.id(fixture.destination, "location")),
+					Math.max(Ref.id(fixture.origin, "location"), Ref.id(fixture.destination, "location"))));
 			assertEquals(1L, edgeCount);
-			assertEquals(1, list(location(fixture).get("connections")).size());
+			assertEquals(1, list(location(fixture).get("connections")).stream()
+					.filter(c -> fixture.destination.equals(c.get("to"))).count());
 		}
 	}
 
@@ -114,8 +118,7 @@ class WorldConnectionTest {
 
 			assertConnection(patch(fixture, map("travel_minutes", 300)), "ROAD", "BLOCKED", "GM_ONLY", 300, 12);
 			assertConnection(patch(fixture, map("distance_miles", 15.5)), "ROAD", "BLOCKED", "GM_ONLY", 300, 15.5);
-			assertConnection(list(location(fixture).get("connections")).getFirst(), "ROAD", "BLOCKED", "GM_ONLY", 300,
-					15.5);
+			assertConnection(road(fixture), "ROAD", "BLOCKED", "GM_ONLY", 300, 15.5);
 			var persisted = engine.db().read(tx -> tx.get("location_connection", edgeId));
 			assertEquals("Fallen masonry", persisted.map("state_json").get("block_reason"));
 			assertEquals("Old paved road", persisted.map("distance_json").get("terrain_note"));
@@ -129,8 +132,7 @@ class WorldConnectionTest {
 			Map<String, Object> changed = patch(fixture, map("kind", "trail", "state", "open", "visibility",
 					"party_known", "travel_minutes", 90, "distance_miles", 4.5));
 			assertConnection(changed, "TRAIL", "OPEN", "PARTY_KNOWN", 90, 4.5);
-			assertConnection(list(location(fixture).get("connections")).getFirst(), "TRAIL", "OPEN", "PARTY_KNOWN", 90,
-					4.5);
+			assertConnection(road(fixture), "TRAIL", "OPEN", "PARTY_KNOWN", 90, 4.5);
 		}
 	}
 
@@ -217,8 +219,7 @@ class WorldConnectionTest {
 			assertEquals(before.get("location"), restored.get("location"));
 			assertEquals(before.get("location_connection"), restored.get("location_connection"));
 			engine.sessions().bootstrap(op(), fixture.campaign, null);
-			assertConnection(list(location(fixture).get("connections")).getFirst(), "ROAD", "BLOCKED", "GM_ONLY", 240,
-					12);
+			assertConnection(road(fixture), "ROAD", "BLOCKED", "GM_ONLY", 240, 12);
 		}
 	}
 
@@ -261,8 +262,17 @@ class WorldConnectionTest {
 
 	private static long connectionId(Fixture fixture) {
 		return fixture.engine.db()
-				.read(tx -> tx.queryOne("SELECT * FROM location_connection WHERE campaign_id = ?", campaignId(fixture))
+				.read(tx -> tx.queryOne(
+						"SELECT * FROM location_connection WHERE campaign_id=? AND location_a_id=? AND location_b_id=?",
+						campaignId(fixture),
+						Math.min(Ref.id(fixture.origin, "location"), Ref.id(fixture.destination, "location")),
+						Math.max(Ref.id(fixture.origin, "location"), Ref.id(fixture.destination, "location")))
 						.orElseThrow().id());
+	}
+
+	private static Map<String, Object> road(Fixture fixture) {
+		return list(location(fixture).get("connections")).stream().filter(c -> fixture.destination.equals(c.get("to")))
+				.findFirst().orElseThrow();
 	}
 
 	private static long clock(Fixture fixture) {

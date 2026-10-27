@@ -83,6 +83,7 @@ public class RpgResources {
 		caps.put("custom_content", true);
 		caps.put("progression", true);
 		caps.put("party_membership", true);
+		caps.put("companion_tactical_control", true);
 		caps.put("director", true);
 		caps.put("narrative_state", true);
 		caps.put("want_references", true);
@@ -95,11 +96,22 @@ public class RpgResources {
 		caps.put("relationship_memory", true);
 		caps.put("locations_and_travel", true);
 		caps.put("gm_overrides", true);
+		caps.put("persistent_maps", true);
+		caps.put("staged_map_authoring", true);
+		caps.put("party_visibility", true);
+		caps.put("living_atlas", true);
+		caps.put("finite_regional_patrols", true);
+		caps.put("interruptible_travel", true);
 		m.put("capabilities", caps);
 		var optional = new LinkedHashMap<String, Object>();
 		optional.put("full_text_memory_search", false);
 		optional.put("semantic_memory_search", false);
-		optional.put("tactical_grid", false);
+		optional.put("tactical_grid", true);
+		optional.put("map_images", true);
+		optional.put("map_text_fallback", true);
+		optional.put("portable_map_bundles", true);
+		optional.put("interactive_map_editor", false);
+		optional.put("automatic_image_provider", false);
 		optional.put("remote_transport", false);
 		m.put("optional_capabilities", optional);
 		m.put("limits", Map.of("maximum_page_size", 100, "maximum_context_budget", 32000));
@@ -112,14 +124,22 @@ public class RpgResources {
 				"create_checkpoint", "get_continuation_options", "restore_checkpoint", "get_content_definitions",
 				"search_rules", "define_content", "transfer_item", "give_money", "equip_item", "trade", "grant_loot",
 				"materialize_character", "start_encounter", "get_encounter_state", "perform_encounter_action",
-				"resolve_pending_choice", "end_encounter", "recover_ammunition", "apply_runtime_change", "award_xp",
-				"transfer_player_control", "get_party", "begin_level_up", "get_level_up_choices", "update_level_up",
-				"validate_level_up", "commit_level_up", "abandon_transaction", "update_party_membership",
-				"get_relationship", "update_relationship", "update_house_rules", "materialize_location", "move_party",
-				"upsert_narrative_state", "get_diegetic_information", "get_director_context", "commit_director_changes",
-				"get_context", "perform_rest", "apply_gm_override", "prepare_spells", "cast_spell", "set_calendar",
-				"create_account", "transfer_money", "get_accounts", "define_cash_flow", "update_cash_flow",
-				"list_cash_flows", "find", "get_chronicle_material", "write_chronicle"));
+				"resolve_pending_choice", "end_encounter", "annotate_encounter", "recover_ammunition",
+				"apply_runtime_change", "award_xp", "transfer_player_control", "set_tactical_control", "get_party",
+				"begin_level_up", "get_level_up_choices", "update_level_up", "validate_level_up", "commit_level_up",
+				"abandon_transaction", "update_party_membership", "get_relationship", "update_relationship",
+				"update_house_rules", "materialize_location", "move_party", "upsert_narrative_state",
+				"get_diegetic_information", "get_director_context", "commit_director_changes", "get_context",
+				"perform_rest", "apply_gm_override", "prepare_spells", "cast_spell", "set_calendar", "create_account",
+				"transfer_money", "get_accounts", "define_cash_flow", "update_cash_flow", "list_cash_flows", "find",
+				"get_chronicle_material", "write_chronicle", "begin_map_preparation", "revise_map_preparation",
+				"validate_map_preparation", "publish_map_preparation", "get_map_context", "find_maps", "render_map",
+				"import_map_asset", "place_map_actors", "move_map_actor", "observe_map", "update_map_object",
+				"correct_map_geometry", "get_actor_perception", "emit_map_sound", "preview_spatial_action",
+				"update_map_annotations", "use_map_transition", "convert_encounter_to_grid",
+				"add_encounter_participants", "export_map_bundle", "import_map_bundle", "schedule_world_event",
+				"perform_timed_action", "define_patrol", "update_patrol", "get_patrol_state", "define_travel_risk",
+				"get_travel_state", "continue_journey", "resolve_travel_opportunity"));
 		return new ResourceResponse(TextResourceContents.create("rpg://protocol/capabilities", Json.write(m)));
 	}
 

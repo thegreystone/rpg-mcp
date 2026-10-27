@@ -34,6 +34,8 @@ import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
 import se.hirt.mcp.rpg.harness.Harness;
+import se.hirt.mcp.rpg.maps.GridCombat;
+import se.hirt.mcp.rpg.maps.SceneService;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
@@ -207,11 +209,91 @@ public final class SpellService {
 		}
 	}
 
+	/** Explicit stat-block grants only: prose is never interpreted as permission to cast. */
+	private record CreatureGrant(String name, Ability ability, List<String> spells, String resourceRef, int uses,
+			String recharge, String actionCost) {
+	}
+
+	@SuppressWarnings("unchecked")
+	private static List<CreatureGrant> creatureGrants(Tx tx, RulesData rules, Row c) {
+		if (!RuntimeService.usesStatBlock(tx, c))
+			return List.of();
+		var grants = new ArrayList<CreatureGrant>();
+		Map<String, Object> payload = rules.find(c.str("origin_content_ref")).map(RulesData.Definition::payload)
+				.orElse(Map.of());
+		for (String section : List.of("actions", "bonus_actions")) {
+			if (!(payload.get(section) instanceof List<?> entries))
+				continue;
+			for (Object entry : entries) {
+				if (!(entry instanceof Map<?, ?> action) || !(action.get("spellcasting") instanceof Map<?, ?> raw))
+					continue;
+				Map<String, Object> sc = (Map<String, Object>) raw;
+				if (!(sc.get("ability") instanceof String ability) || !(sc.get("spells") instanceof List<?> spells)
+						|| !(sc.get("action_cost") instanceof String cost)
+						|| !Set.of("ACTION", "BONUS_ACTION").contains(cost))
+					continue;
+				boolean atWill = Boolean.TRUE.equals(sc.get("at_will"));
+				String resource = sc.get("resource_ref") instanceof String r ? r : null;
+				int uses = sc.get("uses") instanceof Number n ? n.intValue() : 0;
+				String recharge = String.valueOf(sc.get("recharge"));
+				if (!atWill && (resource == null || resource.isBlank() || uses < 1 || uses > 1000
+						|| !Set.of("SHORT_REST", "LONG_REST").contains(recharge)))
+					continue;
+				List<String> refs = spells.stream().map(String::valueOf).map(s -> rules.resolve("SPELL", s))
+						.flatMap(Optional::stream).map(RulesData.Definition::id).toList();
+				grants.add(new CreatureGrant(String.valueOf(action.get("name")), Ability.parse(ability), refs,
+						atWill ? null : resource, atWill ? 0 : uses, recharge, cost));
+			}
+		}
+		return grants;
+	}
+
+	private static Map<String, Object> creatureSheet(Tx tx, RulesData rules, Row c) {
+		List<CreatureGrant> grants = creatureGrants(tx, rules, c);
+		if (grants.isEmpty())
+			return null;
+		var entries = new ArrayList<Map<String, Object>>();
+		int prof = RuntimeService.proficiencyBonus(tx, rules, c);
+		for (CreatureGrant grant : grants) {
+			var entry = new LinkedHashMap<String, Object>();
+			int mod = Rules.modifier(c.intOr(grant.ability().column(), 10));
+			entry.put("name", grant.name());
+			entry.put("ability", grant.ability().name());
+			entry.put("save_dc", 8 + prof + mod);
+			entry.put("attack_bonus", prof + mod);
+			entry.put("action_cost", grant.actionCost());
+			entry.put("spells", grant.spells().stream().map(ref -> rules.require(ref, "SPELL").summary()).toList());
+			entry.put("at_will", grant.resourceRef() == null);
+			if (grant.resourceRef() != null) {
+				// A read-only sheet must not initialize or replenish a creature's finite resource.
+				int remaining = tx.queryOne("SELECT * FROM resource_state WHERE character_id=? AND resource_ref=?",
+						c.id(), grant.resourceRef()).map(r -> r.intOr("current", 0)).orElse(grant.uses());
+				entry.put("resource", Map.of("ref", grant.resourceRef(), "current", remaining, "max", grant.uses(),
+						"recharge", grant.recharge()));
+			}
+			entries.add(entry);
+		}
+		return Map.of("source", "STAT_BLOCK", "grants", entries, "ritual_casting", false, "upcasting", false);
+	}
+
+	/** Read-only action classification shared by encounter admission and casting resolution. */
+	public static String castingActionCost(
+		Tx tx, RulesData rules, Row caster, String spell, Map<String, Object> options) {
+		RulesData.Definition definition = rules.resolve("SPELL", spell)
+				.orElseThrow(() -> RpgException.invalidArgument("Unknown spell '" + spell + "'."));
+		CreatureGrant grant = creatureGrants(tx, rules, caster).stream()
+				.filter(g -> g.spells().contains(definition.id())).findFirst().orElse(null);
+		if (grant != null)
+			return grant.actionCost();
+		return "1 bonus action".equalsIgnoreCase(String.valueOf(definition.payload().get("casting_time")))
+				|| Metamagic.requested(options, "quickened") ? "BONUS_ACTION" : "ACTION";
+	}
+
 	/** The spellcasting block for character sheets. */
 	public static Map<String, Object> sheet(Tx tx, RulesData rules, Row c) {
 		Optional<Casting> casting = castingOf(tx, rules, c);
 		if (casting.isEmpty()) {
-			return null;
+			return creatureSheet(tx, rules, c);
 		}
 		Casting cast = casting.get();
 		var m = new LinkedHashMap<String, Object>();
@@ -408,9 +490,6 @@ public final class SpellService {
 		return db.mutate(Database.Mutation.of("cast_spell", campaignId, operationId, "PLAYER", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "cast_spell");
 			Row caster = CharacterService.character(tx, campaignId, casterRef);
-			if (!"ACTIVE".equals(caster.str("lifecycle")) || !"ALIVE".equals(caster.str("life_state"))) {
-				throw RpgException.notAllowed(caster.str("name") + " cannot cast right now.");
-			}
 			Map<String, Object> result = castCore(tx, rules, roller, campaignId, caster, spell, slotLevel, targets,
 					options, null, 0);
 			result.put("meta", Harness.meta(campaign, null));
@@ -421,6 +500,38 @@ public final class SpellService {
 	// ── the casting core ───────────────────────────────────────────────
 
 	/**
+	 * Validate the caster before resolving a spell, initializing a grant or spending a
+	 * resource/roll.
+	 */
+	private static void requireAbleToCast(Tx tx, Row caster) {
+		List<String> incapacitating = Combat.conditionsOf(tx, caster).stream().map(Combat.Condition::name)
+				.filter(Combat.INCAPACITATING_CONDITIONS::contains).distinct().toList();
+		var reasons = new ArrayList<String>();
+		if (!"ACTIVE".equals(caster.str("lifecycle")))
+			reasons.add("lifecycle " + caster.str("lifecycle"));
+		if (!"ALIVE".equals(caster.str("life_state")))
+			reasons.add("life state " + caster.str("life_state"));
+		if (caster.intOr("current_hp", 0) <= 0)
+			reasons.add(caster.intOr("current_hp", 0) + " HP");
+		if (!incapacitating.isEmpty())
+			reasons.add(String.join(", ", incapacitating) + " (includes Incapacitated)");
+		if (!reasons.isEmpty()) {
+			String guidance = "DEAD".equals(caster.str("life_state"))
+					? "Restore the caster to life before casting; ordinary healing cannot restore a dead creature."
+					: !"ACTIVE".equals(caster.str("lifecycle")) ? "Use an active character before casting."
+							: "Resolve the caster's recovery or incapacitating condition before casting.";
+			throw RpgException
+					.notAllowed(caster.str("name") + " cannot cast: " + String.join("; ", reasons) + ". " + guidance
+							+ " No spell resource or roll was spent.")
+					.withDetail("caster", Ref.of(Ref.CHARACTER, caster.id()))
+					.withDetail("life_state", caster.str("life_state")).withDetail("lifecycle", caster.str("lifecycle"))
+					.withDetail("current_hp", caster.intOr("current_hp", 0))
+					.withDetail("incapacitating_conditions", incapacitating)
+					.withDetail("harness_state", tx.get("campaign", caster.lng("campaign_id")).str("harness_state"));
+		}
+	}
+
+	/**
 	 * Validates preparation and slots, spends the slot, resolves the spell's structured mechanics
 	 * against the targets, applies effects and concentration, and records every roll. Shared with
 	 * encounters.
@@ -429,6 +540,7 @@ public final class SpellService {
 	public static Map<String, Object> castCore(
 		Tx tx, RulesData rules, RollService roller, long campaignId, Row caster, String spellText, Integer slotLevel,
 		List<String> targetRefs, Map<String, Object> options, Long encounterId, long round) {
+		requireAbleToCast(tx, caster);
 		RulesData.Definition def = rules.resolve("SPELL", spellText).orElseThrow(() -> RpgException
 				.invalidArgument("Unknown spell '" + spellText + "'; see get_content_definitions with kind SPELL."));
 		// "If you wear Light, Medium, or Heavy armor and lack training with it ... you can't cast spells"
@@ -440,20 +552,24 @@ public final class SpellService {
 		Map<String, Object> p = def.payload();
 		int level = ((Number) p.get("level")).intValue();
 		Optional<Casting> castingOpt = castingOf(tx, rules, caster);
+		CreatureGrant creatureGrant = creatureGrants(tx, rules, caster).stream()
+				.filter(g -> g.spells().contains(def.id())).findFirst().orElse(null);
 		String traitKind = level == 0 ? "SPELL_KNOWN" : "SPELL_PREPARED";
-		Row trait = tx
-				.queryOne("SELECT * FROM character_trait WHERE character_id = ? AND kind = ? AND content_ref = ?",
-						caster.id(), traitKind, def.id())
-				.orElseThrow(() -> RpgException.validation(
-						List.of(new Violation("spell", level == 0 ? "NOT_KNOWN" : "NOT_PREPARED", caster.str("name")
-								+ (level == 0 ? " does not know " : " has not prepared ") + def.name() + "."))));
-		Map<String, Object> traitPayload = trait.isNull("payload_json") ? Map.of() : trait.map("payload_json");
+		Optional<Row> trait = tx.queryOne(
+				"SELECT * FROM character_trait WHERE character_id = ? AND kind = ? AND content_ref = ?", caster.id(),
+				traitKind, def.id());
+		if (trait.isEmpty() && creatureGrant == null)
+			throw RpgException.validation(List.of(new Violation("spell", level == 0 ? "NOT_KNOWN" : "NOT_PREPARED",
+					caster.str("name") + (level == 0 ? " does not know " : " has not prepared ") + def.name() + ".")));
+		Map<String, Object> traitPayload = trait.filter(t -> !t.isNull("payload_json")).map(t -> t.map("payload_json"))
+				.orElse(Map.of());
 		// Species- and feat-granted spells use their recorded ability (Magic Initiate, lineages; SRD 5.2.1).
-		Ability grantedAbility = traitPayload.get("ability") instanceof String ga ? Ability.parse(ga) : null;
+		Ability grantedAbility = creatureGrant != null ? creatureGrant.ability()
+				: traitPayload.get("ability") instanceof String ga ? Ability.parse(ga) : null;
 		if (grantedAbility == null && castingOpt.isEmpty() && level == 0) {
 			grantedAbility = Ability.CHA;
 		}
-		Map<String, Object> opts = options == null ? Map.of() : options;
+		Map<String, Object> opts = new LinkedHashMap<>(options == null ? Map.of() : options);
 		// One spell slot per turn and Quickened Spell's level 1+ clauses (SRD 5.2.1 "One Spell with a Spell Slot per
 		// Turn", "Quickened Spell") are judged on the caster's own turn of a running encounter, before any slot,
 		// sorcery point or Bonus Action is spent. A reaction on another creature's turn belongs to that turn.
@@ -476,7 +592,34 @@ public final class SpellService {
 		boolean slotExpended = false;
 		boolean ritual = Boolean.TRUE.equals(opts.get("ritual"))
 				|| "true".equalsIgnoreCase(String.valueOf(opts.get("ritual")));
-		if (ritual) {
+		if (creatureGrant != null) {
+			if (ritual || slotLevel != null && slotLevel != level)
+				throw RpgException.invalidArgument(creatureGrant.name()
+						+ " casts only its listed spells at their base level, without ritual casting or upcasting; omit slot_level and ritual.");
+			used = level;
+			if (creatureGrant.resourceRef() != null) {
+				Optional<Row> saved = tx.queryOne(
+						"SELECT * FROM resource_state WHERE character_id=? AND resource_ref=?", caster.id(),
+						creatureGrant.resourceRef());
+				if (saved.isEmpty()) {
+					long id = tx.insert("resource_state",
+							Map.of("character_id", caster.id(), "resource_ref", creatureGrant.resourceRef(), "current",
+									creatureGrant.uses(), "max", creatureGrant.uses(), "recharge",
+									creatureGrant.recharge()));
+					saved = Optional.of(tx.get("resource_state", id));
+				}
+				Row resource = saved.get();
+				if (resource.intOr("current", 0) <= 0)
+					throw RpgException.insufficientResource(caster.str("name") + " has no " + creatureGrant.name()
+							+ " uses left; its listed spells share this resource, which returns on a "
+							+ ("LONG_REST".equals(creatureGrant.recharge()) ? "Long Rest." : "Short Rest."));
+				tx.update("resource_state", resource.id(), Map.of("current", resource.intOr("current", 0) - 1));
+				slotInfo = Map.of("creature_ability", creatureGrant.name(), "resource_ref", creatureGrant.resourceRef(),
+						"remaining", resource.intOr("current", 0) - 1, "slot_expended", false);
+			} else {
+				slotInfo = Map.of("creature_ability", creatureGrant.name(), "at_will", true, "slot_expended", false);
+			}
+		} else if (ritual) {
 			// SRD 5.2.1 "Rituals": a prepared spell with the Ritual tag takes ten minutes longer and spends no spell
 			// slot; no class feature is needed (the Wizard's Ritual Adept only relaxes "prepared" to "in the
 			// spellbook", a concept the engine does not model). Encounter turns never reach here (the CAST action has
@@ -588,14 +731,34 @@ public final class SpellService {
 		for (String ref : targetRefs == null ? List.<String> of() : targetRefs) {
 			targets.add(CharacterService.character(tx, campaignId, ref));
 		}
+		Long spatialEncounterId = encounterId == null ? caster.lng("encounter_id") : encounterId;
+		boolean areaFromGrid = false;
+		if (spatialEncounterId != null) {
+			Row spatialEncounter = tx.get("encounter", spatialEncounterId);
+			if (GridCombat.isGrid(spatialEncounter)) {
+				if (mech.containsKey("area") && !selfCentred(p, mech) && !opts.containsKey("center_ft")
+						&& !opts.containsKey("origin_ft") && !targets.isEmpty()) {
+					opts.put("center_ft", SceneService.feet(
+							SceneService.center(GridCombat.actor(tx, spatialEncounter, targets.getFirst().id()))));
+				}
+				List<Row> resolvedTargets = List
+						.copyOf(GridCombat.spellTargets(tx, spatialEncounter, caster, p, mech, targets, opts));
+				targets.clear();
+				targets.addAll(resolvedTargets);
+				areaFromGrid = mech.containsKey("area") && "SAVE".equals(kind);
+			}
+		}
 		var perTarget = new ArrayList<Map<String, Object>>();
 		var effectsCreated = new ArrayList<String>();
 		String source = def.name() + " (" + caster.str("name") + ")";
 		Long concentrator = concentration ? caster.id() : null;
 		// Metamagic (Sorcerer): validated against this spell and paid for before anything is rolled.
 		Metamagic.Plan mm = Metamagic.plan(tx, rules, campaignId, caster, opts, def, mech, targets);
-		boolean bonusAction = "1 bonus action".equalsIgnoreCase(String.valueOf(p.get("casting_time")))
-				|| mm != null && mm.has("quickened");
+		boolean bonusAction = "BONUS_ACTION".equals(castingActionCost(tx, rules, caster, def.id(), opts));
+		if (creatureGrant != null) {
+			result.put("creature_ability", creatureGrant.name());
+			result.put("action_cost", creatureGrant.actionCost());
+		}
 		if (mm != null && mm.has("quickened") && turnEncounter != null) {
 			TurnEconomy.markThisTurn(tx, turnEncounter, caster.id(), TurnEconomy.QUICKENED);
 		}
@@ -644,7 +807,7 @@ public final class SpellService {
 			}
 		}
 		case "SAVE" -> {
-			if (targets.isEmpty() && !selfCentred(p, mech)) {
+			if (targets.isEmpty() && !selfCentred(p, mech) && !areaFromGrid) {
 				throw RpgException
 						.invalidArgument(def.name() + " needs at least one target (the creatures in the area).");
 			}
@@ -984,7 +1147,7 @@ public final class SpellService {
 											+ (t.get("damage") != null ? " " + t.get("damage") + " dmg" : "")
 											+ (t.get("healed") != null ? " +" + t.get("healed") + " HP" : ""))
 							.toList());
-			log.put("payload_json", null);
+			log.put("payload_json", Json.write(result));
 			log.put("journal_id", tx.journalId());
 			tx.insert("encounter_log", log);
 		}
@@ -1217,8 +1380,20 @@ public final class SpellService {
 		boolean close = Combat.withinFiveFeet(tx, encounterId, caster.id(), target.id(), touch);
 		// The same table as weapon attacks: the caster's and the target's conditions, Dodge, Blur/Faerie Fire and a
 		// ranged spell attack within 5 feet of an enemy (SRD 5.2.1 "Ranged Attacks in Close Combat").
-		Combat.AttackRollFactors factors = Combat.attackRollFactors(tx, rules, encounterId, caster, target, close,
-				!touch, false, false);
+		Combat.AttackRollFactors base = Combat.attackRollFactors(tx, rules, encounterId, caster, target, close, !touch,
+				false, false);
+		boolean grid = encounterId != null && GridCombat.isGrid(tx.get("encounter", encounterId));
+		boolean unseenAttacker = grid
+				&& !GridCombat.canSee(tx, tx.get("encounter", encounterId), target.id(), caster.id());
+		boolean unseenTarget = grid
+				&& !GridCombat.canSee(tx, tx.get("encounter", encounterId), caster.id(), target.id());
+		var reasons = new ArrayList<String>(base.reasons());
+		if (unseenAttacker)
+			reasons.add("target cannot see the attacker");
+		if (unseenTarget)
+			reasons.add("attacker cannot see the target");
+		Combat.AttackRollFactors factors = new Combat.AttackRollFactors(base.advantage() || unseenAttacker,
+				base.disadvantage() || unseenTarget, base.criticalWithinFiveFeet(), List.copyOf(reasons));
 		String dice = factors.form();
 		t.put("advantage", factors.label());
 		if (!factors.reasons().isEmpty()) {
@@ -1235,7 +1410,9 @@ public final class SpellService {
 			bonusDice.add(b.toMap());
 		}
 		int natural = roll.dice().get(0);
-		int ac = RuntimeService.armorClass(tx, rules, target);
+		int coverBonus = encounterId != null && GridCombat.isGrid(tx.get("encounter", encounterId))
+				? GridCombat.coverBonus(tx, tx.get("encounter", encounterId), caster.id(), target.id()) : 0;
+		int ac = RuntimeService.armorClass(tx, rules, target) + coverBonus;
 		boolean conditionCritical = factors.criticalWithinFiveFeet() && close;
 		boolean critical = natural == 20 || conditionCritical;
 		boolean hit = natural != 1 && (natural == 20 || total >= ac);
@@ -1262,6 +1439,8 @@ public final class SpellService {
 		}
 		t.put("total", total);
 		t.put("target_armor_class", ac);
+		t.put("cover_bonus", coverBonus);
+		t.put("cover", coverBonus >= 5 ? "THREE_QUARTERS" : coverBonus >= 2 ? "HALF" : "NONE");
 		t.put("hit", hit);
 		t.put("critical", hit && critical);
 		if (hit) {
@@ -1324,6 +1503,14 @@ public final class SpellService {
 		if (!automatic) {
 			Ability ability = Ability.parse(saveAbility);
 			int bonus = saveBonus(tx, rules, target, ability);
+			int coverBonus = 0;
+			if (ability == Ability.DEX && encounterId != null && GridCombat.isGrid(tx.get("encounter", encounterId))) {
+				coverBonus = GridCombat.spellCoverBonus(tx, tx.get("encounter", encounterId), caster.id(), target.id(),
+						opts);
+				bonus += coverBonus;
+			}
+			t.put("cover_bonus", coverBonus);
+			t.put("cover", coverBonus >= 5 ? "THREE_QUARTERS" : coverBonus >= 2 ? "HALF" : "NONE");
 			Effects.Modifiers targetMods = Effects.modifiers(tx, rules, target.id());
 			bonus += targetMods.saveBonus;
 			boolean heightened = mm != null && mm.heightenedTarget() != null && mm.heightenedTarget() == target.id();

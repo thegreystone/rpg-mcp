@@ -77,6 +77,35 @@ class RpgToolsTest {
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
+	void companionControlIsAnExplicitSavedPreferenceThroughTheToolLayer() throws Exception {
+		try (Engine isolated = TestCampaigns.engine(TestCampaigns.tempDb("control-tools"))) {
+			RpgTools controlTools = new RpgTools();
+			controlTools.engine = isolated;
+			String campaign = (String) ((Map<String, Object>) json(controlTools.createCampaign(TestCampaigns.op(),
+					Optional.of("Tactical control tool test"), Optional.empty())).get("result")).get("campaign");
+			String op = TestCampaigns.op();
+			ToolResponse changed = controlTools.setTacticalControl(op, campaign, "PLAYER", Optional.empty(),
+					Optional.of("UNTIL_RELEASED"), Optional.empty(), Optional.of("The player wants party tactics."));
+			assertFalse(changed.isError(), () -> json(changed).toString());
+			Map<String, Object> replay = (Map<String, Object>) json(controlTools.setTacticalControl(op, campaign,
+					"PLAYER", Optional.empty(), Optional.of("UNTIL_RELEASED"), Optional.empty(),
+					Optional.of("The player wants party tactics."))).get("result");
+			assertEquals(Boolean.TRUE, replay.remove("replayed"));
+			assertEquals(json(changed).get("result"), replay);
+			Map<String, Object> party = (Map<String, Object>) json(controlTools.getParty(campaign, Optional.empty()))
+					.get("result");
+			Map<String, Object> control = (Map<String, Object>) party.get("tactical_control");
+			assertEquals("DM", control.get("default_companion_controller"));
+			assertTrue(Json.write(control.get("policies")).contains("PLAYER"));
+			ToolResponse invalid = controlTools.setTacticalControl(TestCampaigns.op(), campaign, "PLAYER",
+					Optional.empty(), Optional.of("ENCOUNTER"), Optional.empty(), Optional.empty());
+			assertTrue(invalid.isError(), "Encounter-scoped control requires a running encounter.");
+			assertTrue(text(resources.capabilities()).contains("set_tactical_control"));
+		}
+	}
+
+	@Test
 	void instructionsAreAvailableWithoutReadingAResource() {
 		ToolResponse response = tools.getInstructions();
 		assertFalse(response.isError());

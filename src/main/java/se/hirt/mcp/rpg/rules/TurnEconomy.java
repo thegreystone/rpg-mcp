@@ -54,10 +54,15 @@ public final class TurnEconomy {
 	}
 
 	/**
-	 * The Action was taken on this turn (SRD 5.2.1 "Your Turn"). Recorded, never refused: a second
-	 * Action in a turn is the GM's call (Action Surge, Haste).
+	 * The Action was taken on this turn (SRD 5.2.1 "Your Turn"). Additional attacks within that
+	 * Attack action and separately paid Bonus Actions do not grant another Action.
 	 */
 	public static final String ACTION = "action_turn";
+	/**
+	 * The Action was an Attack action; used to continue an existing Multiattack, not start one
+	 * after Dodge.
+	 */
+	public static final String ATTACK_ACTION = "attack_action_turn";
 	/** A MOVE or DASH was made on this turn; zones carry no distance, so only the fact is known. */
 	public static final String MOVED = "moved_turn";
 	/** The actor stood up from Prone on this turn, for half its Speed (SRD 5.2.1 "Prone"). */
@@ -67,6 +72,17 @@ public final class TurnEconomy {
 	public static boolean actionAvailable(Tx tx, Row encounter, long actorId) {
 		Turn turn = currentTurn(tx, encounter, actorId);
 		return turn != null && !turnKey(turn.encounter()).equals(flags(turn.participant()).get(ACTION));
+	}
+
+	public static void requireAction(Tx tx, Row encounter, long actorId) {
+		if (!actionAvailable(tx, encounter, actorId))
+			throw RpgException.notAllowed(
+					"The Action for this turn has already been spent. Continue any remaining attacks of the same Attack action, use a valid Bonus Action or movement, or END_TURN; another Action requires an explicitly supported additional-action feature.");
+	}
+
+	public static void spendAction(Tx tx, Row encounter, long actorId) {
+		requireAction(tx, encounter, actorId);
+		markThisTurn(tx, encounter, actorId, ACTION);
 	}
 
 	/** Spends the current turn's Bonus Action in the same journaled mutation as its effect. */

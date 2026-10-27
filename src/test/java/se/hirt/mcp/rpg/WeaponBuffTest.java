@@ -110,7 +110,7 @@ class WeaponBuffTest {
 		String ogre = (String) engine.runtime()
 				.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
 		String encounter = (String) engine.encounters().start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)),
-				null, apart ? map(pc, "near", ogre, "far") : null, null, null, null).get("encounter");
+				null, apart ? map(pc, "near", ogre, "far") : meleeZones(pc, ogre), null, null, null).get("encounter");
 		if (!pc.equals(m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
 			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
 		}
@@ -126,9 +126,10 @@ class WeaponBuffTest {
 		((ScriptedRollService) engine.roller()).queue(19);
 		Map<String, Object> out = engine.encounters().perform(op(), campaign, encounter, pc, action, true);
 		assertEquals(Boolean.TRUE, out.get("hit"), String.valueOf(out));
-		if (Boolean.TRUE.equals(out.get("turn_advanced"))) {
-			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
-		}
+		if (!Boolean.TRUE.equals(out.get("turn_advanced")))
+			// A Light weapon can leave its Bonus Action available; these comparisons use separate turns.
+			engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "END_TURN"), true);
+		engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
 		return out;
 	}
 

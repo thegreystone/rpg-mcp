@@ -36,6 +36,10 @@ import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.LinkedHashMap;
+import se.hirt.mcp.rpg.ledger.LedgerService;
+import se.hirt.mcp.rpg.encounter.EncounterDigest;
+import se.hirt.mcp.rpg.maps.SceneService;
 
 /**
  * The MCP tool surface (MCP_PROTOCOL.md §23) — the vertical slice: discovery, resumable campaign
@@ -321,7 +325,7 @@ public class RpgTools {
 	}
 
 	@Tool(name = "get_character_sheet", description = "Character sheet at detail SUMMARY, PLAY (default: abilities, proficiencies, HP, money, XP) or FULL "
-			+ "(+ narrative fields). Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "(+ narrative fields). All levels include current death-save counters, stable state and saved deadlines for dying creatures at 0 HP. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getCharacterSheet(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Character reference")
 	String character, @ToolArg(description = "SUMMARY, PLAY or FULL")
@@ -355,7 +359,7 @@ public class RpgTools {
 
 	@Tool(name = "resolve_check", description = "MUTATING (journaled roll). Resolves an ABILITY_CHECK, SKILL_CHECK or SAVING_THROW with authoritative "
 			+ "modifiers and server dice — in exploration and in the middle of an encounter alike (a parley, a shove, a lock under fire). "
-			+ "You supply the fictional intent and the DC; never supply a die result. Name the `tool` when one is used (thieves' tools, a forger's "
+			+ "You supply the fictional intent and the DC; use the saved challenges specification for an authored map feature rather than choosing a new difficulty on each attempt. Never supply a die result. Name the `tool` when one is used (thieves' tools, a forger's "
 			+ "calligrapher's supplies): a proficient actor adds their proficiency bonus, and proficiency in both the skill and the tool gives advantage. "
 			+ "Returns the full breakdown, success/margin against the DC, and a roll_ref. Narrate failure as new complications, not a dead end.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse resolveCheck(@ToolArg(description = OP)
@@ -377,8 +381,7 @@ public class RpgTools {
 						reason.orElse(null)));
 	}
 
-	@Tool(name = "advance_time", description = "MUTATING. Advances the world clock by minutes and returns the new time plus a Director trigger "
-			+ "recommendation when a lot of time passed. (Effect expiry and scheduled world events arrive in a later milestone.)", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	@Tool(name = "advance_time", description = "MUTATING. Requests elapsed minutes, resolving effect expiry and world events. Party death saves and other interruptions can stop time early: read elapsed_seconds, interruptions, consequences and current meta. Outside combat, unstable creatures make death saves every six seconds; provide aid or resume deliberately. A Director trigger may recommend review after significant elapsed time.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse advanceTime(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Minutes to advance (positive)")
@@ -655,7 +658,8 @@ public class RpgTools {
 	Optional<String> description, @ToolArg(description = "Personality summary")
 	Optional<String> personality,
 		@ToolArg(description = "Alignment, e.g. CHAOTIC_GOOD — set it for anyone who is a character rather than an opponent")
-		Optional<String> alignment, @ToolArg(description = "Location reference (default: the party's current location)")
+		Optional<String> alignment,
+		@ToolArg(description = "Location reference (default: the controlled player's current place/contact). Supply an explicit location for an away companion's encounter or another off-screen NPC.")
 		Optional<String> location,
 		@ToolArg(description = "Roll hit points from the stat block dice instead of using the average")
 		Optional<Boolean> roll_hp) {
@@ -668,7 +672,7 @@ public class RpgTools {
 	@Tool(name = "start_encounter", description = "MUTATING. Creates and starts an encounter: sides map names to character references "
 			+ "({\"party\": [\"character:1\"], \"raiders\": [\"character:5\", \"character:6\"]}), optional stances between sides "
 			+ "({\"party|raiders\": \"HOSTILE\"}; default HOSTILE), optional zones per character ({\"character:5\": \"far\"}). "
-			+ "Rolls initiative (d20 + DEX; one roll per group of identical creatures on a side; Incapacitated rolls with Disadvantage, Invisible with Advantage), creates the retry checkpoint under ENCOUNTER_RETRY, and returns the first turn. "
+			+ "Rolls initiative (d20 + DEX; one roll per group of identical creatures on a side; Incapacitated rolls with Disadvantage, Invisible with Advantage), creates an ENCOUNTER_RETRY checkpoint under non-IRONMAN policies, and returns the first turn. "
 			+ "Ties are not broken by the engine: `ties` lists them with who decides (GM for monsters and mixed ties, players among characters); the provisional order puts the party's side first. All participants must be materialized characters. "
 			+ "options.npc_reactions: AUTO (default; the engine resolves NPC opportunity attacks and Shield) or ASK (every reaction becomes a pending choice); options.surprised: [side names] roll initiative with Disadvantage (SRD Surprise). Allies never take opportunity attacks on each other.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse startEncounter(@ToolArg(description = OP)
@@ -678,11 +682,12 @@ public class RpgTools {
 		@ToolArg(description = "Stances between sides, e.g. {\"party|raiders\": \"HOSTILE\"}", required = false)
 		Map<String, Object> stances,
 		@ToolArg(description = "Starting zone per character reference, e.g. {\"character:5\": \"far\"}", required = false)
-		Map<String, Object> zones, @ToolArg(description = "Environment/terrain description")
+		Map<String, Object> zones,
+		@ToolArg(description = "Environment/terrain authoring brief; prose is retained but does not create walls, furnishings or finished geometry. Supply options.scene for physical details.")
 		Optional<String> environment, @ToolArg(description = "Encounter objectives")
 		Optional<List<String>> objectives, @ToolArg(description = "Location reference (default: current location)")
 		Optional<String> location,
-		@ToolArg(description = "Options: {npc_reactions: AUTO|ASK, surprised: [side names]}", required = false)
+		@ToolArg(description = "Options: {map_ref: map:N, npc_reactions: AUTO|ASK, surprised: [side names], placements: [{character,x_ft,y_ft}], scene: {bounds_ft,rooms,walls,doors,objects,features,illumination}}. map_ref explicitly selects coverage at the current location, migrating same-location figures. scene authors/refines incidental coverage without discarding historical boards. Published preparations are preferred automatically; correct published geometry with correct_map_geometry. Actor coordinates are southwest footprint origins in feet.", required = false)
 		Map<String, Object> options) {
 		return ToolSupport.run("start_encounter", () -> engine.encounters().start(operation_id, campaign, sides,
 				stances, zones, environment.orElse(null), objectives.orElse(null), location.orElse(null), options));
@@ -701,55 +706,91 @@ public class RpgTools {
 				() -> engine.encounters().resolveChoice(operation_id, campaign, transaction, choice));
 	}
 
-	@Tool(name = "get_encounter_state", description = "Authoritative encounter view: round, whose turn, participants with HP (enemy HP labeled GM_ONLY), AC, "
+	@Tool(name = "get_encounter_state", description = "Authoritative encounter view. Use audience GM when running the encounter: it includes every participant and the current turn even behind walls or when the party is unconscious. PLAYER is the safe default and filters unseen actors. Round, whose turn, participants with HP (enemy HP labeled GM_ONLY), AC, "
 			+ "conditions, death saves, zones, available attacks, and the recent log ('what happened last turn'). An ended encounter may offer optional ammunition_recovery. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getEncounterState(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Encounter reference (default: the running encounter)")
 	Optional<String> encounter, @ToolArg(description = "Number of recent log entries (default 10)")
-	Optional<Integer> log_limit) {
-		return ToolSupport.run("get_encounter_state",
-				() -> engine.encounters().encounterState(campaign, encounter.orElse(null), log_limit.orElse(10)));
+	Optional<Integer> log_limit,
+		@ToolArg(description = "PLAYER (default) filters unseen participants; GM includes the full roster for running enemy turns")
+		Optional<String> audience) {
+		return ToolSupport.run("get_encounter_state", () -> engine.encounters().encounterState(campaign,
+				encounter.orElse(null), log_limit.orElse(10), audience.orElse("PLAYER")));
 	}
 
 	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: "
 			+ "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), "
-			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; a creature that would drop to 0 HP is left at 1 HP, Unconscious until the end of a Short Rest or until it regains HP, no death saves)}; "
+			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), thrown:true or mode:RANGED selects the ranged option of a stat-block action with an authored range (for example Guard's Spear20/60), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; a creature that would drop to 0 HP is left at 1 HP, Unconscious until the end of a Short Rest or until it regains HP, no death saves), confirm_hostile_ally:true (required only for an explicitly intended attack on a downed same-side member; ordinary attacks otherwise return care guidance)}; "
 			+ "weapon proficiency and armor training follow the class tables (no Proficiency Bonus with an unproficient weapon; untrained armor: Disadvantage on STR/DEX rolls, no spellcasting; untrained shield: no AC). CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
-			+ "DODGE; DASH/MOVE {zone} (leaving a zone with hostile creatures provokes Opportunity Attacks unless you Disengaged; a Prone mover crawls); "
-			+ "STAND (a Prone creature rights itself for half its Speed: movement, not an action, so the turn stays open; refused at Speed 0); DISENGAGE; HELP; HIDE; "
+			+ "DODGE; DASH/MOVE {x_ft,y_ft,path_ft?} on the saved 5ft physical grid (movement follows traversable cells, spends actual distance and pauses at opportunity reactions; a Prone mover crawls); "
+			+ "STAND (a Prone creature rights itself for half its Speed: movement, not an action, so the turn stays open; refused at Speed 0); DISENGAGE; HELP; HIDE currently returns CAPABILITY_UNAVAILABLE because automatic concealment is not implemented; resolve Stealth checks and exceptional concealment explicitly with the GM; "
 			+ "USE_ITEM {item, target} (drinking or administering a potion spends the Bonus Action, action_cost BONUS_ACTION; a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
 			+ "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters "
 			+ "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. "
-			+ "end_turn (default true) advances to the next participant unless Multiattack attacks or an extra Light attack remain; END_TURN skips them. "
+			+ "MOVE, STAND and Bonus Action casts keep the turn open by default so movement or a Bonus Action can be followed by an Action. Other actions default end_turn=true; explicit end_turn overrides this. END_TURN always passes. Multiattack or an extra Light attack can keep a turn open. "
+			+ "Optional action.narration preserves the DM's words for a memorable beat (about 300 characters); use a handful per fight, rarely more than eight. Routine actions need none. "
 			+ "While the turn stays open the result's turn_economy lists what remains (action, bonus_action, reaction, movement) and next_step notes an unspent Action; "
 			+ "ask the player about a leftover only when their declaration was incomplete, it matters in the scene (an enemy in reach, somewhere to go) and they may not know the rule (standing up costs no action) - otherwise END_TURN quietly. "
-			+ "Rolls death saves for the dying.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "Rolls death saves for the dying. Returned state is PLAYER-safe; gm_handoff gives an explicit get_encounter_state audience GM request when an unseen actor must act.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performEncounterAction(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Acting character reference (must be the current turn)")
 	String actor, @ToolArg(description = "The action object; see description")
 	Map<String, Object> action, @ToolArg(description = "Encounter reference (default: the running encounter)")
 	Optional<String> encounter,
-		@ToolArg(description = "Advance after this action when no Multiattack or extra Light attack remains (default true); false keeps a multi-part turn open; END_TURN always passes")
+		@ToolArg(description = "Default false for MOVE/STAND/Bonus Action casts, true for other actions. False keeps a multi-part turn open; END_TURN always passes.")
 		Optional<Boolean> end_turn) {
 		return ToolSupport.run("perform_encounter_action", () -> engine.encounters().perform(operation_id, campaign,
-				encounter.orElse(null), actor, action, end_turn.orElse(true)));
+				encounter.orElse(null), actor, action, end_turn.orElse(null)));
 	}
 
 	@Tool(name = "end_encounter", description = "MUTATING. Ends the encounter with an outcome (PARTY_VICTORY, PARTY_DEFEAT, PARTY_FLED, ENEMIES_FLED, NEGOTIATED, OTHER): "
 			+ "a major encounter's result carries `treasure` (level-appropriate magic item suggestions for grant_loot); "
 			+ "awards the encounter's XP pool (fixed at start from every hostile participant) split among surviving party members whenever the encounter "
-			+ "was overcome — killed, captured, routed or talked down all pay the same; a defeat or flight pays nothing. Also reports level-up eligibility, advances the clock, writes the ledger event, "
+			+ "was overcome — killed, captured, routed or talked down all pay the same; otherwise awards XP for defeated hostiles. Also reports level-up eligibility, advances the clock, writes the ledger event, "
 			+ "and — if the player character died — moves the harness to the continuation decision (CHECKPOINT_DECISION, or PLAYER_CHARACTER_TRANSFER under IRONMAN). "
+			+ "Stores one mechanical encounter digest in the ledger; optional narrative preserves the fight as told to the player. Returns a bounded party_digest and a full_gm_record read pointer instead of repeating the mechanical record. The reply offers up to eight highlight narration slots for one annotate_encounter follow-up. "
 			+ "ammunition_recovery offers an optional one-minute search: use recover_ammunition only if the player asks or agrees; it never blocks play.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse endEncounter(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Outcome")
 	String outcome, @ToolArg(description = "Encounter reference (default: the running encounter)")
-	Optional<String> encounter, @ToolArg(description = "One-line summary for the ledger")
-	Optional<String> summary) {
-		return ToolSupport.run("end_encounter", () -> engine.encounters().end(operation_id, campaign,
-				encounter.orElse(null), outcome, summary.orElse(null)));
+	Optional<String> encounter,
+		@ToolArg(description = "One-line fight summary; saved in the GM record and included in the party-safe digest when appropriate.")
+		Optional<String> summary,
+		@ToolArg(description = "Optional longer account of the fight in the DM's voice; the player ledger receives only party-safe prose.")
+		Optional<String> narrative) {
+		return ToolSupport.run("end_encounter", () -> {
+			var result = new LinkedHashMap<>(engine.encounters().end(operation_id, campaign, encounter.orElse(null),
+					outcome, summary.orElse(null), narrative.orElse(null)));
+			result.remove("record");
+			var digest = LedgerService
+					.boundedRecallDigest(EncounterDigest.compactPublic(SceneService.map(result.get("party_digest"))));
+			result.put("party_digest", digest);
+			result.put("party_digest_bytes", LedgerService.serializedBytes(digest));
+			result.put("party_digest_max_bytes", LedgerService.ENCOUNTER_DIGEST_MAX_BYTES);
+			result.put("full_gm_record",
+					Map.of("tool", "get_encounter_state", "arguments",
+							Map.of("campaign", campaign, "encounter", result.get("encounter"), "audience", "GM"),
+							"field", "record"));
+			return result;
+		});
+	}
+
+	ToolResponse endEncounter(
+		String operation_id, String campaign, String outcome, Optional<String> encounter, Optional<String> summary) {
+		return endEncounter(operation_id, campaign, outcome, encounter, summary, Optional.empty());
+	}
+
+	@Tool(name = "annotate_encounter", description = "MUTATING. Fill a handful of the ended fight's engine-selected highlight narration slots (up to eight, about 300 characters each). narrations maps the offered log_id to the DM's words. Updates the existing encounter digest and ledger entry; never repeats XP, loot or combat. GM context may contain unseen facts: narrate only what belongs in the player account.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse annotateEncounter(@ToolArg(description = OP)
+	String operation_id, @ToolArg(description = REF)
+	String campaign, @ToolArg(description = "Ended encounter reference from end_encounter.")
+	String encounter,
+		@ToolArg(description = "Map of engine-selected highlight log_id strings to narration text. At most eight entries, about 300 characters each.")
+		Map<String, String> narrations) {
+		return ToolSupport.run("annotate_encounter",
+				() -> engine.encounters().annotate(operation_id, campaign, encounter, narrations));
 	}
 
 	@Tool(name = "recover_ammunition", description = "MUTATING, atomic. Only after the player asks or agrees, spend one minute searching an ended encounter for half the character's recorded fired ammunition, rounded down across all types. "
@@ -770,7 +811,7 @@ public class RpgTools {
 	}
 
 	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
-			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
+			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 minute', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; STAND (outside combat: timed half-speed movement; in combat use perform_encounter_action STAND); USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
 			+ "'Start of turn' requires an active encounter and expires at the recipient's next turn or encounter end. "
 			+ "ADD_CONDITION also takes source (a character ref): the grappler of a GRAPPLED creature or the source of a FRIGHTENED creature's fear, which the attack rules read; a creature immune to the condition (Petrified to Poisoned, a stat block's immunities) reports immune instead. "
 			+ "EXHAUSTION accumulates one level per ADD_CONDITION and ignores duration; REMOVE_CONDITION removes one level (like a Long Rest or Greater Restoration) unless {levels: N} says how many. "
@@ -804,6 +845,23 @@ public class RpgTools {
 				source.orElse(null), reason));
 	}
 
+	@Tool(name = "set_tactical_control", description = "MUTATING. Save who chooses companions' movements, actions and reactions. DM is the default; PLAYER explicitly requests detailed tactical control. "
+			+ "A broad order such as 'Mira, cover the stairs' does not require this tool. Omit characters for all companions, including future joined companions. "
+			+ "scope ENCOUNTER lasts for the current fight; UNTIL_RELEASED is persistent. Default scope is ENCOUNTER during a fight, otherwise UNTIL_RELEASED. "
+			+ "Use controller DM to hand control back. Existing pending choices remain pending. Never changes the primary player character or companions' narrative agency.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse setTacticalControl(@ToolArg(description = OP)
+	String operation_id, @ToolArg(description = REF)
+	String campaign, @ToolArg(description = "DM or PLAYER")
+	String controller, @ToolArg(description = "Selected companion character references; omitted means all companions")
+	Optional<List<String>> characters,
+		@ToolArg(description = "ENCOUNTER or UNTIL_RELEASED; default follows current play state")
+		Optional<String> scope, @ToolArg(description = "Running encounter reference; default is the current encounter")
+		Optional<String> encounter, @ToolArg(description = "Player's request or reason for handing control back")
+		Optional<String> reason) {
+		return ToolSupport.run("set_tactical_control", () -> engine.tacticalControl().set(operation_id, campaign,
+				characters.orElse(null), controller, scope.orElse(null), encounter.orElse(null), reason.orElse(null)));
+	}
+
 	@Tool(name = "transfer_player_control", description = "MUTATING. Makes a living party member the player character (IRONMAN death, or a voluntary switch). "
 			+ "The character keeps its identity, relationships, memories and items; only the control assignment changes.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse transferPlayerControl(@ToolArg(description = OP)
@@ -817,7 +875,8 @@ public class RpgTools {
 
 	@Tool(name = "get_party", description = "The party in detail — ALWAYS available, in every state (setup, exploration, mid-encounter, after a death): "
 			+ "every current member's sheet (HP, conditions, death saves, AC, abilities, inventory, money, XP), who the player controls, former/fallen members, "
-			+ "location, game time and any running encounter. Use it (with get_character_sheet FULL) whenever the player asks how they or their companions are doing. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+			+ "location, game time and any running encounter. When the controlled character travels the party location is JOURNEY; each saved mover has location_context for that journey, location:null and departure_location as provenance. Party location and with_party follow the controlled character, including companion-only trips. "
+			+ "Use it (with get_character_sheet FULL) whenever the player asks how they or their companions are doing. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse getParty(@ToolArg(description = REF)
 	String campaign, @ToolArg(description = "SUMMARY, PLAY (default) or FULL per member")
 	Optional<String> detail) {
@@ -976,12 +1035,16 @@ public class RpgTools {
 	@Tool(name = "move_party", description = "MUTATING. Moves the party (or named characters) to a location over known traversable connections, advancing the clock by "
 			+ "the route's travel time; with no known route, pass authorized_route=true with a reason and travel_minutes (the route is then remembered). "
 			+ "Without `characters`, whoever stands where the party stands travels (active members and guests); members and guests elsewhere stay and are listed in "
-			+ "`left_behind`; separated members never move. Returns the arrival view, elapsed time and a Director trigger for long journeys. Interruptions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "`left_behind`; separated members do not join a default departure. Explicit characters must be current party members/guests or actively player-controlled; unrelated NPCs cannot create a party journey. A new trip starts from the selected travellers' shared actual location, allowing an elsewhere companion to rejoin the player; mixed origins are refused. "
+			+ "Interrupted journeys retain progress and risk checks. Dead or departed travellers are removed with reasons. "
+			+ "Resume the saved destination with explicit characters to narrow its saved roster and deliberately leave someone behind; this cannot add new travellers. Alive incapacitated movers still require healing/recovery or explicit omission. "
+			+ "Returns the arrival/contact view, elapsed time, roster changes and a Director trigger for long journeys.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse moveParty(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "Destination location reference")
-	String to, @ToolArg(description = "Subset of character references (default: the whole party)")
-	Optional<List<String>> characters,
+	String to,
+		@ToolArg(description = "Optional current party member/guest or active player-controlled references sharing one actual departure location for a new trip. Unrelated NPCs are refused before travel. On an interrupted journey, may only narrow the saved movers; omitted characters are explicitly left behind at their current contact/anchor.")
+		Optional<List<String>> characters,
 		@ToolArg(description = "Allow a route with no known connection (requires reason)")
 		Optional<Boolean> authorized_route, @ToolArg(description = "Override the travel time in minutes")
 		Optional<Integer> travel_minutes, @ToolArg(description = "Why / how they travel")
@@ -1074,7 +1137,7 @@ public class RpgTools {
 
 	@Tool(name = "perform_rest", description = "MUTATING. SHORT rest (1 hour; characters may spend Hit Point Dice: hit_dice {\"character:1\": 2} — rolled by the server) or LONG rest "
 			+ "(8 hours; HP to maximum, temporary HP cleared, all spent Hit Point Dice regained, exhaustion −1, other resources recharged). A character needs at least 1 HP to start either rest, "
-			+ "and a LONG rest within 16 hours of finishing the previous one is refused (named characters) or reported skipped (party-wide rest). Each spent Hit Point Die on a SHORT rest regains at least 1 HP. Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+			+ "and a LONG rest within 16 hours of finishing the previous one is refused (named characters) or reported skipped (party-wide rest). Each spent Hit Point Die on a SHORT rest regains at least 1 HP. Death saves can interrupt after six seconds; read consequences and remaining_seconds before resuming. The original eligible roster persists, so skipped characters gain no retroactive rest benefits. Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse performRest(@ToolArg(description = OP)
 	String operation_id, @ToolArg(description = REF)
 	String campaign, @ToolArg(description = "SHORT or LONG")
@@ -1088,7 +1151,7 @@ public class RpgTools {
 	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. The only general exceptional mutation, permitted only when the campaign's gm_override_policy is EXPLICIT_AUDITED. "
 			+ "kind: ADJUST_HP {amount|set_to}, SET_MAX_HP {amount|set_to} (the only way to record a maximum granted outside a level-up: a subclass feature, a boon, a permanent injury), "
 			+ "SET_ARMOR_CLASS {armor_class} or {clear: true} (a fixed AC outside the equipment path — Draconic Resilience, Unarmored Defense; effect bonuses still apply on top), "
-			+ "SET_LIFE_STATE {life_state, hp}, SET_MONEY {money}, SET_XP {xp}, SET_ABILITY_SCORE {ability, score}, SET_LOCATION {location}, "
+			+ "SET_LIFE_STATE {life_state, hp} (ALIVE ends recovery-linked Unconscious but preserves Prone and independent conditions), SET_MONEY {money}, SET_XP {xp}, SET_ABILITY_SCORE {ability, score}, SET_LOCATION {location, clear_map_position?} (explicit true can release a stale same-place figure outside active participation), "
 			+ "SET_CAMPAIGN_RULE {rule, value} (retunes a committed house rule: hp_progression, xp_policy, companion_level_up, progression, gm_override_policy; no target), "
 			+ "REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE {to, state}. Requires a reason; writes an immutable audit record and a GM_ONLY ledger event; "
 			+ "the result is labeled as an override and must never be narrated as a normal roll.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))

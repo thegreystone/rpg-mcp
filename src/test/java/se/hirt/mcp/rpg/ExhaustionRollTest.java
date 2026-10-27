@@ -73,18 +73,20 @@ class ExhaustionRollTest {
 	}
 
 	@Test
-	void initiativeHideAndWeaponAttacksUseExhaustionWithoutReducingDamage() throws Exception {
+	void initiativeStealthAndWeaponAttacksUseExhaustionWithoutReducingDamage() throws Exception {
 		try (Fixture f = fixture(2, 30)) {
 			Map<String, Object> initiative = list(f.started.get("initiative_rolls")).get(0);
 			assertEquals(-2, m(initiative.get("roll")).get("modifier"));
 			assertEquals(18, initiative.get("initiative"));
 
 			f.dice.queue(14);
-			Map<String, Object> hidden = f.engine.encounters().perform(op(), f.campaign, f.encounter, f.pc,
-					map("kind", "HIDE"), true);
-			assertEquals(0, m(hidden.get("roll")).get("modifier"));
-			assertEquals(14, m(hidden.get("roll")).get("total"));
-			assertEquals(Boolean.FALSE, hidden.get("hidden"), "the exhausted Stealth check misses DC 15");
+			Map<String, Object> stealth = f.engine.checks().resolveCheck(op(), f.campaign, f.pc, "SKILL_CHECK", "DEX",
+					"Stealth", 15, null,
+					"The DM adjudicates a Stealth attempt; this check does not create concealment.");
+			assertEquals(0, m(stealth.get("roll")).get("modifier"));
+			assertEquals(14, m(stealth.get("roll")).get("total"));
+			assertEquals(Boolean.FALSE, stealth.get("success"), "the exhausted Stealth check misses DC 15");
+			f.engine.encounters().perform(op(), f.campaign, f.encounter, f.pc, map("kind", "END_TURN"), true);
 			f.engine.encounters().perform(op(), f.campaign, f.encounter, f.ogre, map("kind", "END_TURN"), true);
 
 			f.dice.queue(19, 3);
@@ -112,11 +114,11 @@ class ExhaustionRollTest {
 			}
 			Map<String, Object> state = f.engine.encounters().encounterState(f.campaign, f.encounter, 3);
 			assertEquals(f.pc, m(state.get("turn")).get("character"));
-			// Reducing exhaustion leaves 5 feet of Speed; a zone move is possible again.
+			// Reducing exhaustion leaves 5 feet of Speed; one adjacent physical step is possible again.
 			updateCharacter(f.engine, f.campaign, f.pc, map("exhaustion", 4));
 			Map<String, Object> moved = f.engine.encounters().perform(op(), f.campaign, f.encounter, f.pc,
-					map("kind", "MOVE", "zone", "far"), false);
-			assertEquals("far", moved.get("zone"));
+					map("kind", "MOVE", "x_ft", 30, "y_ft", 25), false);
+			assertEquals(5.0, moved.get("movement_cost_ft"));
 		}
 	}
 

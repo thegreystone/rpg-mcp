@@ -39,6 +39,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
@@ -147,10 +148,12 @@ class EncounterTest {
 					"a muddy road at dusk", List.of("survive"), null);
 			String encounter = (String) started.get("encounter");
 			assertEquals("ENCOUNTER", m(started.get("meta")).get("harness_state"));
-			assertNull(started.get("retry_checkpoint"), "CHECKPOINT policy: no automatic retry checkpoint");
+			assertNotNull(started.get("retry_checkpoint"),
+					"CHECKPOINT policy saves the encounter start for a bounded retry");
 			assertEquals(pc, m(started.get("turn")).get("character"));
 			assertEquals(1L, started.get("round"));
-			assertEquals("far", list(started.get("participants")).get(2).get("zone"));
+			assertEquals("GRID", started.get("spatial_model"));
+			assertNotNull(list(started.get("participants")).get(2).get("position_ft"));
 
 			// Not your turn (I-31).
 			RpgException notTurn = assertThrows(RpgException.class,
@@ -197,8 +200,11 @@ class EncounterTest {
 			assertEquals("DISADVANTAGE", vsDodge.get("advantage"));
 			assertEquals(Boolean.FALSE, vsDodge.get("hit"));
 			assertEquals(Boolean.FALSE, vsDodge.getOrDefault("turn_advanced", false));
-			// Still Richard's turn: finish Grubb with a critical (natural 20 on both dice of the Disadvantage roll →
+			// On Richard's next turn, finish Grubb with a critical (natural 20 on both dice of Disadvantage →
 			// doubled dice: 2d6 → 6 + 6 + DEX mod).
+			engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, encounter, b1, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, encounter, b2, map("kind", "END_TURN"), true);
 			dice.queue(20, 20, 6, 6);
 			Map<String, Object> crit = engine.encounters().perform(op(), campaign, encounter, pc,
 					map("kind", "ATTACK", "target", b1, "weapon", "Shortbow"), true);
@@ -220,7 +226,8 @@ class EncounterTest {
 			assertEquals(50L, list(ended.get("xp_awarded")).get(0).get("xp_gained"));
 			assertEquals("EXPLORATION", m(ended.get("meta")).get("harness_state"));
 			assertEquals(List.of(), ended.get("level_up_eligible"));
-			assertEquals(1L, ended.get("elapsed_minutes"));
+			assertEquals(18L, ended.get("elapsed_seconds"), "three legal grid rounds advance eighteen actual seconds");
+			assertEquals(0L, ended.get("elapsed_minutes"), "combat no longer rounds each encounter up to a minute");
 			assertNull(engine.characters().characterSheet(campaign, pc, "PLAY").get("encounter"));
 
 			// Memory: the death and the resolution are in the ledger.
@@ -253,13 +260,13 @@ class EncounterTest {
 			// Ogre wins initiative.
 			dice.queue(1, 20);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "monsters", List.of(ogre)), null, null, null, null, null);
+					map("party", List.of(pc), "monsters", List.of(ogre)), null, meleeZones(pc, ogre), null, null, null);
 			String encounter = (String) started.get("encounter");
 			assertEquals(ogre, m(started.get("turn")).get("character"));
 
 			// The ogre's greatclub (2d8+4) at its minimum of 6 (natural 19, dice 1 and 1) lands as often as it takes to
 			// bring Richard to exactly 0: each blow is short of massive damage (the overflow stays below his maximum),
-			// so he drops to 0 and starts dying rather than dying outright. The ogre's turn stays open (end_turn false).
+			// so he drops to 0 and starts dying rather than dying outright. Living Richard passes between blows.
 			Map<String, Object> smash = null;
 			while (hp(engine, campaign, pc) > 0) {
 				dice.queue(19, 1, 1);
@@ -268,6 +275,10 @@ class EncounterTest {
 				assertEquals(Boolean.TRUE, smash.get("hit"));
 				assertEquals(6, smash.get("damage"));
 				assertTrue(dice.exhausted());
+				if (hp(engine, campaign, pc) > 0) {
+					engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+					engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "END_TURN"), true);
+				}
 			}
 			assertEquals("DYING", smash.get("life_state"), "party members drop to 0 and start dying: " + smash);
 			assertEquals(Boolean.TRUE, smash.get("dropped_to_zero"));
@@ -293,6 +304,8 @@ class EncounterTest {
 			assertNull(engine.characters().characterSheet(campaign, pc, "PLAY").get("death_saves"));
 			engine.runtime().applyRuntimeChange(op(), campaign, pc,
 					map("kind", "REMOVE_CONDITION", "condition", "PRONE", "reason", "staggers to his feet"));
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "END_TURN"), true);
 
 			// The ogre drops Richard again (3 HP, one minimum blow) and ends its turn: the turn passes to Richard,
 			// whose death saving throw is rolled at the start of his turn (natural 5: a failure), and he is skipped
@@ -338,9 +351,11 @@ class EncounterTest {
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, noPlay.code());
 			Map<String, Object> options = engine.checkpoints().options(campaign);
 			List<Map<String, Object>> checkpoints = list(list(options.get("options")).get(0).get("checkpoints"));
-			assertEquals("campaign_start", checkpoints.get(0).get("reason"));
+			assertTrue(checkpoints.stream().anyMatch(c -> "encounter_retry".equals(c.get("reason"))));
+			Map<String, Object> campaignStart = checkpoints.stream()
+					.filter(c -> "campaign_start".equals(c.get("reason"))).findFirst().orElseThrow();
 			Map<String, Object> restored = engine.checkpoints().restore(op(), campaign,
-					(String) checkpoints.get(0).get("ref"), "rewind the crypt");
+					(String) campaignStart.get("ref"), "rewind the crypt");
 			assertEquals("EXPLORATION", m(restored.get("meta")).get("harness_state"));
 			assertEquals("ALIVE", engine.characters().characterSheet(campaign, pc, "SUMMARY").get("life_state"));
 			assertEquals(maxHp, hp(engine, campaign, pc));
@@ -376,7 +391,7 @@ class EncounterTest {
 
 			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "wild", List.of(wolf)), null, null, null, null, null);
+					map("party", List.of(pc), "wild", List.of(wolf)), null, meleeZones(pc, wolf), null, null, null);
 			String retry = (String) started.get("retry_checkpoint");
 			assertNotNull(retry, "ENCOUNTER_RETRY creates the retry checkpoint before the first round (I-35)");
 			// Greatsword (Option A) with two hands: 2d6 + STR.
@@ -404,7 +419,7 @@ class EncounterTest {
 			// And the fight can be started again.
 			dice.queue(10, 10);
 			Map<String, Object> again = engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "wild", List.of(wolf)), null, null, null, null, null);
+					map("party", List.of(pc), "wild", List.of(wolf)), null, meleeZones(pc, wolf), null, null, null);
 			assertNotNull(again.get("retry_checkpoint"));
 		}
 	}
@@ -444,8 +459,9 @@ class EncounterTest {
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
 			dice.queue(20, 5, 1);
-			String encounter = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc, mara), "monsters", List.of(ogre)), null, null, null, null, null)
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc, mara), "monsters", List.of(ogre)), null,
+							meleeZones(pc, mara, ogre), null, null, null)
 					.get("encounter");
 			// Ash dies to massive damage: 2d8+4 with 8,8 = 20 vs a level-1 wizard (max 6 + CON 1 = 7): overflow 13 >= 7.
 			engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "DODGE"), true);

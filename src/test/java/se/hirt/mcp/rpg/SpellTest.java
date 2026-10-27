@@ -39,6 +39,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
@@ -496,14 +497,19 @@ class SpellTest {
 			engine.rest().rest(op(), campaign, "LONG", null, null);
 			engine.spells().cast(op(), campaign, pc, "Bless", null, List.of(pc), null);
 			dice.queue(20, 1, 1);
-			String enc = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc, mara), "raiders", List.of(bandit)), null, null, null, null, null)
+			String enc = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc, mara), "raiders", List.of(bandit)), null,
+							meleeZones(pc, mara, bandit), null, null, null)
 					.get("encounter");
 			dice.queue(9, 3);
 			Map<String, Object> swing = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "ATTACK", "target", bandit, "weapon", "unarmed"), false);
 			assertEquals(9 + 1 + 2 + 3, swing.get("attack_total"), "d20 9 + STR 1 + prof 2 + Bless d4 3");
 			assertEquals(Boolean.TRUE, swing.get("hit"));
+			// The attack spent this turn's Action; both other participants pass before the cleric casts.
+			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, enc, mara, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, enc, bandit, map("kind", "END_TURN"), true);
 			// Sacred Flame in the encounter via CAST: DEX save vs DC 8+2+2=12; bandit rolls 5+1 → fails → 1d8 radiant 6.
 			dice.queue(5, 6);
 			Map<String, Object> flame = engine.encounters().perform(op(), campaign, enc, pc,

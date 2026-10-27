@@ -63,6 +63,9 @@ class WorldTest {
 			engine.sessions().bootstrap(op(), campaign, null);
 			String pc = "character:1";
 			String bellhaven = "location:1";
+			int openingConnections = list(
+					engine.narrative().context(campaign, "LOCATION", bellhaven, null, null, null).get("connections"))
+					.size();
 
 			// Materialize the opening location with features, a secret, children and a road to a new semantic node.
 			Map<String, Object> town = engine.world().materialize(op(), campaign, bellhaven,
@@ -78,8 +81,10 @@ class WorldTest {
 			assertEquals(3, list(town.get("features")).size());
 			assertEquals("GM_ONLY", list(town.get("features")).get(2).get("visibility"));
 			assertEquals(1, list(town.get("new_children")).size());
+			String harbour = (String) list(town.get("new_children")).getFirst().get("ref");
 			String tower = (String) list(town.get("new_connections")).get(0).get("to");
-			assertEquals("location:3", tower);
+			assertEquals("Ruined Tower",
+					engine.narrative().context(campaign, "LOCATION", tower, null, null, null).get("name"));
 			// Committed detail cannot be contradicted (I-41); it can be extended.
 			RpgException again = assertThrows(RpgException.class,
 					() -> engine.world().materialize(op(), campaign, bellhaven, map("description", "x"), "GM"));
@@ -119,7 +124,8 @@ class WorldTest {
 			Map<String, Object> here = engine.narrative().context(campaign, "LOCATION", null, null, null, null);
 			assertEquals("Bellhaven - South Gate", here.get("name"));
 			assertEquals(4, list(here.get("features")).size());
-			assertEquals(2, list(here.get("connections")).size(), "road to the tower and the district passage");
+			assertEquals(openingConnections + 2, list(here.get("connections")).size(),
+					"the new tower road and district passage supplement the initial regional roads");
 
 			// World events with channels and places; diegetic queries only read what is committed and already happened.
 			engine.narrative().upsert(op(), campaign, "WORLD_EVENT", null, map("title", "THIRD NORTH ROAD CARAVAN LOST",
@@ -143,7 +149,7 @@ class WorldTest {
 			assertEquals(2, list(any.get("items")).size(),
 					"global refugees + local caravan; not the cave-only crier, not the future");
 			// In the Harbour District (a child of Bellhaven) the town's news is still available.
-			assertEquals(1, list(engine.narrative().diegetic(campaign, "RUMOR", "location:2", 10).get("items")).size());
+			assertEquals(1, list(engine.narrative().diegetic(campaign, "RUMOR", harbour, 10).get("items")).size());
 
 			// Quests and story beats write ledger events on transitions.
 			String quest = (String) engine.narrative().upsert(op(), campaign, "QUEST", null, map("title",
@@ -275,7 +281,7 @@ class WorldTest {
 	}
 
 	@Test
-	void travelEncountersAreSuggestedFromTheGround() throws Exception {
+	void travelEncountersStopAtAnAuthoredPointAndPreservePrivateStoryContext() throws Exception {
 		try (Engine engine = TestCampaigns.engine(TestCampaigns.tempDb("travel-encounters"))) {
 			String campaign = TestCampaigns.committedCampaign(engine);
 			engine.sessions().bootstrap(op(), campaign, null);
@@ -301,29 +307,36 @@ class WorldTest {
 						"DIRECTOR");
 			}
 
-			// Two four-hour blocks: the first d6 misses, the second hits; then the table pick.
+			var journeys = new se.hirt.mcp.rpg.world.TravelJourneyService(engine.db(), engine.roller());
+			journeys.defineRisk(op(), campaign, "DEFAULT",
+					map("frequency_seconds", 14400, "chance_percent", 0, "authored_at_fraction", .5, "terrain",
+							"forest", "opposition", List.of("Displaced hunters"), "story",
+							"The wood's displaced hunters guard an old tollhouse."));
+			// Authored placement is saved and does not reroll opposition or route position.
 			dice.queue(4, 1, 1);
 			Map<String, Object> trip = engine.world().move(op(), campaign, wood, null, false, null, null);
 			List<?> consequences = (List<?>) trip.get("consequences");
-			assertEquals(1, consequences.size(), "one suggestion");
+			assertEquals(1, consequences.size(), "one saved contact opportunity");
 			Map<String, Object> suggestion = m(consequences.get(0));
-			assertEquals("TRAVEL_ENCOUNTER_SUGGESTED", suggestion.get("kind"));
+			assertEquals("TRAVEL_ENCOUNTER_OPPORTUNITY", suggestion.get("kind"));
 			assertEquals("forest", suggestion.get("terrain"));
-			assertEquals(8L, suggestion.get("at_hour"));
-			Map<String, Object> creature = m(suggestion.get("creature"));
-			assertTrue(((String) creature.get("id")).startsWith("srd5e:creature/"));
-			assertTrue(((Number) suggestion.get("count")).intValue() >= 1);
-			assertTrue(((Number) suggestion.get("xp_budget")).intValue() > 0);
+			assertEquals(14400L, trip.get("progress_seconds"));
+			assertEquals(true, trip.get("interrupted"));
+			assertEquals(List.of("Displaced hunters"), suggestion.get("opposition"));
 			assertEquals(1, ((List<?>) suggestion.get("hooks")).size());
 			assertTrue(suggestion.get("hooks").toString().contains(knownPressure),
 					"newer Director pressures must not consume the GM's hook limit");
 			assertFalse(suggestion.toString().contains(secretPressure));
 			assertTrue(engine.narrative().directorContext(campaign, null).toString().contains(secretPressure),
 					"the Director retains its unrevealed pressures");
-			assertTrue(
-					((List<?>) m(trip.get("director_trigger")).get("reasons")).contains("TRAVEL_ENCOUNTER_SUGGESTED"));
+			assertTrue(((List<?>) m(trip.get("director_trigger")).get("reasons"))
+					.contains("TRAVEL_ENCOUNTER_OPPORTUNITY"));
 			assertTrue(engine.db().read(tx -> tx.count("SELECT COUNT(*) FROM encounter")) == 0,
-					"a suggestion writes nothing");
+					"contact does not itself start combat");
+			journeys.resolveOpportunity(op(), campaign, "NEGOTIATED");
+			engine.world().move(op(), campaign, wood, null, false, null, "continue after negotiations");
+			journeys.defineRisk(op(), campaign, "DEFAULT",
+					map("chance_percent", 0, "story", "The negotiated passage is currently safe."));
 
 			// Back to town, then a long walk inside the walls: safe ground never rolls.
 			dice.queue(1, 1, 1);

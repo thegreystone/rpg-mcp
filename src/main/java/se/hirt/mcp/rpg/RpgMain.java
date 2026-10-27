@@ -61,8 +61,23 @@ public class RpgMain {
 
 	public static void main(String ... args) {
 		System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+		normalizeConfiguredDataDirectory();
 		ensureScannableWorkingDirectory();
 		Quarkus.run(args);
+	}
+
+	/**
+	 * Expand the portable bundle's explicit tilde before config expressions resolve the log path.
+	 */
+	static void normalizeConfiguredDataDirectory() {
+		String configured = System.getProperty("rpg.data-dir");
+		if (configured == null || configured.isBlank())
+			configured = System.getenv("RPG_DATA_DIR");
+		if (configured != null && !configured.isBlank()) {
+			String expanded = RpgConfig.expandHome(configured);
+			if (!expanded.equals(configured))
+				System.setProperty("rpg.data-dir", expanded);
+		}
 	}
 
 	private static void ensureScannableWorkingDirectory() {

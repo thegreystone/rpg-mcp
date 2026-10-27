@@ -35,6 +35,20 @@ Argument given: `$ARGUMENTS`
 3. **Play** by the guide's rules: never invent mechanical state, use the tools for every check, roll,
    trade and rest, keep tool machinery out of player-facing prose, and end a session with
    `suspend_session` when the player stops.
+4. **Use the saved world.** Bootstrap returns atlas/preparation context. Retrieve saved maps with
+   `get_map_context`/`find_maps`; author accepted dungeon blueprints before realizing them near approach.
+   Every new combat uses a local grid and established figurine placement. Show only PLAYER views;
+   GM authoring and patrol information stay private. Image display is optional: `render_map` also
+   returns text. Resolve interrupted travel at its actual position and retain the unfinished journey.
+   Regional timers pause when no party member remains; finite patrol rosters do not respawn.
+5. **Play the companions by default.** Choose their movement, actions and reactions from their own
+   capabilities, perception and personalities. Broad orders such as "Mira, cover the stairs" do not
+   hand every subsequent decision to the player. Use `set_tactical_control` for an explicit "I control
+   Mira this fight" (`PLAYER`, `ENCOUNTER`) or "DM, take over" (`DM`); omit `characters` to select all
+   current companions, and use `UNTIL_RELEASED` for a lasting preference. Follow the saved controllers
+   in party/bootstrap/encounter context. Pause at player-controlled decisions and meaningful shared
+   choices; handle routine companion turns yourself. This does not change the primary player character
+   or companions' narrative agency, and does not add automatic group movement.
 
 The setup conversation is disposable. Once setup is committed, suggest the player open a fresh conversation
 and say `/rpg continue` so play starts with a clean context.

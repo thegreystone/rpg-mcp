@@ -44,6 +44,7 @@ import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.magic.SpellService;
 import se.hirt.mcp.rpg.narrative.NarrativeService;
 import se.hirt.mcp.rpg.party.PartyService;
+import se.hirt.mcp.rpg.party.TacticalControl;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.progression.LevelUpService;
 import se.hirt.mcp.rpg.rules.CheckService;
@@ -75,6 +76,7 @@ public final class Engine implements AutoCloseable {
 	private final EncounterService encounters;
 	private final LevelUpService levelUps;
 	private final PartyService party;
+	private final TacticalControl tacticalControl;
 	private final WorldService world;
 	private final NarrativeService narrative;
 	private final RestService rest;
@@ -82,12 +84,17 @@ public final class Engine implements AutoCloseable {
 	private final se.hirt.mcp.rpg.economy.AccountService accounts;
 	private final se.hirt.mcp.rpg.economy.CashFlowService cashFlows;
 	private final se.hirt.mcp.rpg.session.ChronicleService chronicle;
+	private final se.hirt.mcp.rpg.maps.MapAuthoringService maps;
+	private final se.hirt.mcp.rpg.maps.SceneService scenes;
+	private final se.hirt.mcp.rpg.maps.AssetService mapAssets;
+	private final se.hirt.mcp.rpg.maps.MapRenderer mapRenderer;
 
 	public Engine(Path databaseFile, RollService roller, String serverVersion) {
 		this.db = new Database(databaseFile);
+		this.roller = roller == null ? new RandomRollService() : roller;
+		db.configureRollService(this.roller);
 		SeedImporter.importIfMissing(db, SeedImporter.DEFAULT_RULESET);
 		this.rules = new RulesData(db);
-		this.roller = roller == null ? new RandomRollService() : roller;
 		this.campaigns = new CampaignService(db, rules, session, serverVersion);
 		this.characters = new CharacterService(db, rules, this.roller);
 		this.encounters = new EncounterService(db, rules, this.roller, characters);
@@ -95,6 +102,7 @@ public final class Engine implements AutoCloseable {
 		this.sessions = new SessionService(db, rules, characters, encounters);
 		this.levelUps = new LevelUpService(db, rules, this.roller, characters);
 		this.party = new PartyService(db, rules, sessions);
+		this.tacticalControl = new TacticalControl(db);
 		this.world = new WorldService(db, rules, this.roller);
 		this.narrative = new NarrativeService(db, sessions, characters, rules, this.roller);
 		this.rest = new RestService(db, rules, this.roller, characters);
@@ -107,10 +115,30 @@ public final class Engine implements AutoCloseable {
 		this.checks = new CheckService(db, rules, this.roller);
 		this.content = new ContentService(db, rules);
 		this.inventory = new InventoryService(db, rules);
+		this.maps = new se.hirt.mcp.rpg.maps.MapAuthoringService(db, rules);
+		this.scenes = new se.hirt.mcp.rpg.maps.SceneService(db, rules);
+		this.mapAssets = new se.hirt.mcp.rpg.maps.AssetService(databaseFile.toAbsolutePath().getParent());
+		this.mapRenderer = new se.hirt.mcp.rpg.maps.MapRenderer();
 	}
 
 	public Database db() {
 		return db;
+	}
+
+	public se.hirt.mcp.rpg.maps.MapAuthoringService maps() {
+		return maps;
+	}
+
+	public se.hirt.mcp.rpg.maps.SceneService scenes() {
+		return scenes;
+	}
+
+	public se.hirt.mcp.rpg.maps.AssetService mapAssets() {
+		return mapAssets;
+	}
+
+	public se.hirt.mcp.rpg.maps.MapRenderer mapRenderer() {
+		return mapRenderer;
 	}
 
 	public RulesData rules() {
@@ -171,6 +199,10 @@ public final class Engine implements AutoCloseable {
 
 	public PartyService party() {
 		return party;
+	}
+
+	public TacticalControl tacticalControl() {
+		return tacticalControl;
 	}
 
 	public WorldService world() {

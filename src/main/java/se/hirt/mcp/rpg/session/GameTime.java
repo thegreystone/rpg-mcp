@@ -89,7 +89,14 @@ public final class GameTime {
 
 	/** As {@link #toMap(long)} plus the date under the campaign's calendar (or the default one). */
 	public static Map<String, Object> toMap(Tx tx, long campaignId, long seq) {
-		return toMap(seq, Calendar.forCampaign(tx, campaignId));
+		var result = toMap(seq, Calendar.forCampaign(tx, campaignId));
+		Row clock = clock(tx, campaignId);
+		int offset = clock.lng("seq") == seq ? clock.intOr("second_offset", 0) : 0;
+		result.put("second_offset", offset);
+		result.put("elapsed_seconds", Math.addExact(Math.multiplyExact(seq, 60), offset));
+		if (offset != 0)
+			result.put("precise_instant", render(seq) + String.format(":%02d", offset));
+		return result;
 	}
 
 	public static Row clock(Tx tx, long campaignId) {
@@ -99,5 +106,11 @@ public final class GameTime {
 
 	public static long currentSeq(Tx tx, long campaignId) {
 		return clock(tx, campaignId).lng("seq");
+	}
+
+	/** Exact seconds since the same campaign epoch, without reinterpreting legacy minute values. */
+	public static long currentSeconds(Tx tx, long campaignId) {
+		Row clock = clock(tx, campaignId);
+		return Math.addExact(Math.multiplyExact(clock.lng("seq"), 60), clock.intOr("second_offset", 0));
 	}
 }
