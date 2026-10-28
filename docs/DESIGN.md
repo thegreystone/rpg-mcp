@@ -55,7 +55,7 @@ Chat history must never be required to reconstruct the canonical state of a camp
 
 The initial project should also avoid:
 
-- Graphical map rendering as a core requirement.
+- Requiring a graphical client for play.
 - A large bespoke fantasy setting.
 - Reimplementing protected Dungeons & Dragons campaign settings or non-open content.
 - Premature distributed/server infrastructure.
@@ -148,7 +148,13 @@ This layer maintains the persistent fictional truth:
 - Discovered information.
 - Secrets.
 - Semantic maps.
+- Creative initial region generation and continuing map development.
 - Events and history.
+
+The Campaign/World Engine owns the initial world-map workflow during campaign creation. Creative
+authoring can come from the AI GM's proposals and seeded generation, guided by the campaign premise
+and player preferences. The engine validates spatial structure, assigns stable identities, persists
+the resulting geography and renders its map views.
 
 ### 3.5 Persistence
 
@@ -178,6 +184,7 @@ The wizard gathers enough information to create:
 
 - Campaign configuration.
 - Adventure seed.
+- Initial world/region map.
 - Player character.
 - Initial or planned companions.
 - Tone/content configuration.
@@ -223,6 +230,18 @@ material scaled down.
 
 Like `ContentProfile`, each `FantasyStyle` carries a `guidance()` string that is returned with the campaign context
 every session (`experience_guidance`), so the GM is held to the style while running, not only told about it at setup.
+
+Adventure design also produces a creative initial regional map through the Campaign/World Engine.
+It establishes the opening location, a few key cities or villages, their geographic relationships,
+routes/distances, major terrain and useful adventure landmarks. The region should be broad enough for
+meaningful travel and several settlement destinations, with its extent chosen for the campaign premise.
+Create the initial cities, towns, villages and key road network during this setup, with stable names,
+positions and connections that support the opening narrative and its relationships/tensions. Normally
+the main road continues beyond one or more land edges, suggesting a larger world. Hills, mountains,
+valleys and passes shape its routes; roads go around ridges where practical and use plausible crossings
+where going over them makes sense. A wholly enclosed island can connect outward through harbor/sea routes.
+Defaults and "surprise me" provide a complete starting region without requiring the player to specify
+every place or measurement. The player can revise this setup draft before the existing campaign commit.
 
 ### 4.3 Character Designer
 
@@ -319,15 +338,20 @@ Before commit, configuration can be revised freely.
 
 At commit:
 
-1. The configuration is validated.
+1. The configuration and initial regional-map draft are validated, including location references,
+   spatial consistency, route distances and initial party knowledge.
 2. Character and campaign state are persisted.
-3. Initial adventure state is generated/persisted.
+3. Initial adventure state and the accepted region/map are committed together. Persist the actual
+   generated geography, identities and creative choices as well as generation provenance.
 4. The design conversation is no longer required.
 5. Gameplay begins using a fresh runtime context reconstructed from persistent state.
 
 This is a major architectural principle.
 
 The potentially long conversation used to design a character or campaign must not consume runtime context forever.
+
+The initial map view is rendered from that saved state for the beginning of play. Rendering can be
+retried or restyled without repeating world generation or changing the accepted region.
 
 ---
 
@@ -535,6 +559,37 @@ The system should distinguish:
 - Guests.
 - Other encounter participants.
 
+### 10.1 Companion tactical control
+
+The DM plays companions by default, including their movement, actions and reactions. The player can
+give a broad intention or a specific order without taking over every subsequent decision. "Mira,
+cover the stairs" leaves Mira under DM control; the DM chooses sensible positioning and tactics
+from her abilities, perception, personality and the situation.
+
+Detailed control is an explicit, saved preference, separate from the primary player-character
+assignment. "I control Mira this fight" grants the player her tactical choices for that encounter.
+"Let me control the companions until I say otherwise" grants persistent control. "DM, take over"
+releases the selected companions. `set_tactical_control` records these changes; omitting the
+character list sets a policy for all current and later companions in that scope. The default scope
+is the running encounter when there is one, otherwise `UNTIL_RELEASED`. Encounter-scoped preferences
+expire when that encounter
+ends. Preferences survive reloads and checkpoint restoration.
+An encounter-only handback leaves an earlier persistent preference available for later fights.
+An explicit `UNTIL_RELEASED` change takes effect immediately, including during the running encounter.
+
+The primary player character remains player-controlled. `transfer_player_control` changes that
+primary identity; temporary tactical control does not. Companion personality, dialogue, loyalty
+and narrative agency remain with the DM under either tactical controller. Every actor still uses
+their own initiative, resources, movement budget and perception.
+
+The DM resolves routine companion turns and exploration movement without asking the player for
+each square. Pause for the player's own turn, an explicitly controlled companion's tactical or
+reaction decision, or a meaningful shared choice. The normal `npc_reactions: AUTO` policy follows
+the assigned controller; `ASK` can still request all NPC reaction decisions. Saved control context
+in party, bootstrap and encounter views lets a fresh conversation continue the same arrangement.
+These preferences guide the DM's tool use; automatic companion AI, path following and group
+movement batching are separate features.
+
 ---
 
 ## 11. Relationships
@@ -729,11 +784,46 @@ The AI should be able to ask the engine questions such as:
 - What happened on the previous turn?
 - Where is everyone positioned?
 
-Encounters take place somewhere — a road, a clearing, a dungeon room. For many encounters, zone-level positioning (
-near/far, cover, flanks) is enough. For tactically detailed encounters, especially in dungeon rooms, the model should
-support optional **grid positions** (x,y coordinates within the encounter area), like placing figurines on a tabletop
-map. Grid support is an optional layer over the encounter model, not a prerequisite for it; the exact representation is
-an open design question.
+Every combat takes place on a saved local tactical grid, whether it starts in a dungeon, on an inn's
+steps, in a street or on a forest road. Travel between places uses the location/route graph and journey
+progress. A local grid supplies the detailed geometry at that physical location; it does not require
+the whole travel map to be gridded. Image display and interactive markers remain optional capabilities.
+
+Before a new combat starts, resolve its exact location, reuse or prepare the relevant tactical scene,
+and persist valid terrain and participant positions. Preserve established positions, approach direction,
+formation, surroundings and actor identities. An encounter starting partway along a road attaches to
+that route position rather than moving to the nearest named location. Render requests remain read-only;
+grid preparation is part of the world/encounter preparation workflow and consumes no fictional time.
+
+Use the tabletop DM sequence: lay out the local battlefield, place the player/party and other relevant
+figurines, then run combat on that board. Resolve permitted player deployment conversationally or
+through markers, preserving established approach/positions and showing only observable opponents.
+Routine unambiguous placement does not require an extra confirmation step.
+
+The shared grid view combines the current line of sight of the party members present on the map,
+accounting for their positions, occluding terrain/doors, lighting, range and applicable senses. Each
+member contributes their visible area; targeting still uses the acting character's own sight. Areas
+no longer seen by anyone retain explored memory, and seeing their terrain does not reveal secrets or
+otherwise unperceived creatures. Visibility updates as positions, obstructions, lights or senses change.
+
+Enemies/NPCs use their own line of sight, hearing and awareness. Until they detect a party member or
+receive a relevant sound/alarm/report, they continue ordinary duties/patrols. Hearing can prompt
+investigation without identifying the party or locating every member precisely. Alerted creatures
+can search from remembered evidence after losing sight, but do not track further unseen movement.
+Communicated alarms have actual recipients/reach; the GM's full map and the party view do not grant
+enemies omniscience. Persist relevant awareness and last-known positions with normal world state.
+
+All combat movement, distance, reach, cover, sight and targeting use that grid's canonical physical
+geometry. Zone approximations do not decide grid actions. Crossing a scene boundary or moving through
+an inn's door can extend/link tactical coverage while preserving the encounter, initiative and action
+budgets. After combat, resume graph travel from the actual final position and update route/off-road
+progress. See [travel graphs and tactical scenes](MAP_FORMAT.md#travel-graph-with-local-tactical-scenes).
+
+This is the target design; the current implementation still uses zones. Existing saved zone encounters
+need a deliberate, validated conversion before continuing spatial combat under the new feature,
+preserving HP, initiative, conditions, resolved outcomes and pending actions. Zone labels do not imply
+invented exact coordinates. Conversion is journaled/idempotent and separate from rendering or regional
+map backfill. New combat cannot silently fall back to zone resolution if grid preparation fails.
 
 ### 15.1 GM Overrides
 
@@ -879,18 +969,182 @@ The world should be capable of changing even when the player is not directly int
 
 ## 20. Semantic Maps
 
-Maps should initially be **semantic**, not graphical.
+Maps have an authoritative **semantic and spatial model** of places, connections, terrain and physical
+scale. Rendered maps and text views present that saved model and its appropriate player/GM knowledge.
+The Campaign/World Engine creates fictional geography and maintains its continuity as the map develops.
+
+Keep three linked representations: geographic features describe the world's shapes and character,
+the travel graph describes connections/distances and traversal, and local tactical grids supply
+detailed playable space. Coastlines, islands, river/lake shapes, forests, fields, hills, ridges, passes
+and winding road paths remain saved world data for attractive, consistent world-map rendering. A road
+can have a cartographic path, connected travel legs and local grid segments, all referencing the same
+world feature. Graph connectivity alone does not determine its illustrated bends or surrounding terrain.
+
+Use the location/route graph for travel, with local tactical maps as detailed leaves in the spatial
+hierarchy. A leaf can attach to a named place or a physical point along a road/off-road journey. Every
+combat uses such a grid; dungeons prepare their relevant leaves in advance, while incidental outdoor
+encounters can fill in compatible local detail when needed. Connected/overlapping scenes share world
+features and state rather than duplicating geography.
 
 ### 20.1 World/Region Map
+
+Create the initial world-map overview during campaign setup, before play begins. Its first useful scope
+is a region covering a few key cities or villages, the opening location, connecting travel opportunities
+and distinctive terrain, potentially including coasts, ocean and islands. The engine deliberately chooses
+creative names, positions, distances and terrain consistent with the campaign's premise and preferences.
+Supplied images can guide visual style or layout, while the resulting campaign map is saved as its own
+world state. Establish the opening settlements and key roads during setup, supporting the story's
+situation while leaving the player several directions to explore. The initial region includes hills
+and mountains appropriate to the setting, with their geography reflected in travel choices.
+
+Establish the region's broad structure up front; add settlement interiors, encounters and other local
+detail when relevant. Newly materialized detail fits established positions, boundaries and distances.
+The atlas can expand into neighboring regions as the campaign grows. Initial party knowledge determines
+which known places, reports and geographic features appear on the player map.
 
 Represent:
 
 - Locations.
 - Connections/routes.
-- Approximate distances.
+- Geographic positions, scale and physical route distances, with explicit precision where approximate.
 - Travel constraints.
 - Regions.
 - Important landmarks.
+- Roadside stops and crossings.
+- Hills, mountain ranges, ridges, valleys and traversable passes.
+- Party knowledge, discoveries and sourced reports.
+
+#### 20.1.1 Neighboring regions and atlas expansion
+
+Choose the initial regional map's physical width and height during campaign setup. These become the
+sheet dimensions for that campaign's regional atlas. When the player leaves the area in any direction,
+the Campaign/World Engine can generate an adjoining map of the same physical size and scale. Road,
+cross-country, river and sea travel can all trigger expansion. For example, a road continues at the
+matching position on the adjoining sheet, while a sea journey may enter open ocean or reveal islands.
+Returning loads the saved region.
+
+Give each saved sheet a stable map reference (for example `map:123`) and an atlas coordinate address
+such as `atlas:7[2,-1]`: two sheets east and one south of atlas 7's origin. The initial sheet is `(0,0)`;
+X increases east and Y increases north, with negative values extending west/south. Fix the atlas origin
+and dimensions so later expansion never renumbers existing sheets. Titles such as "Sarg Coast" are
+searchable aliases. Style and detail changes retain the same map identity/address.
+
+Keep a sparse atlas index, expose the current sheet in fresh-session context, and support lookup by
+reference/address, neighboring sheet, world coordinate or linked known location. An ungenerated
+address can be reported without creating geography, and discovery results respect party knowledge.
+See [sheet references and discovery](MAP_FORMAT.md#sheet-references-and-discovery) for the proposed
+locator, coordinate ownership, index and export conventions.
+
+All sheets share atlas coordinates and a saved style profile: palette, materials, terrain/building
+symbols, typography and renderer settings. A matching output profile produces matching image sizes.
+The sheet layout is a cartographic partition; terrain and roads remain freeform and tactical grids
+are independent of it.
+
+New regions must match every existing neighbor, including roads, rivers, forest/lake boundaries,
+shorelines, land/water connectivity and elevation at shared edges/corners. Keep crossing features'
+identities, travel distances and party position continuous across the boundary.
+Generate only the needed adjoining region, persist the accepted result and boundary connections, and
+leave further expansion for later travel or explicit world building. Rendering an atlas does not
+generate additional geography. Normal party-knowledge filtering still applies to the new region.
+
+#### 20.1.2 Creative authoring guidance
+
+Give the authoring LLM actionable inspiration as well as spatial constraints. It should choose a
+distinctive geographic premise, let land/water/terrain shape settlement and travel, and use history,
+landmarks and deliberate fantasy features to create a believable, attractive region with several
+directions for play. Coastlines, oceans, islands and archipelagos are valid choices, and neighboring
+maps can vary in settlement density and terrain while sharing the atlas style.
+
+Normally give the initial main road one or more continuations beyond the map's land boundaries. Save
+these as actual route crossings for neighboring sheets. Road placement follows terrain: consider valley
+routes and practical ridge bypasses, using a mountain pass or another explained crossing when traversal
+over/through the barrier is appropriate. Give the pass actual spatial structure and travel properties.
+For a wholly enclosed island, connect roads to harbors and outward sea routes rather than forcing a
+land road across water. Geography and routes support narrative possibilities without prescribing the
+player's itinerary.
+
+Prefer an initial region bordering a coast when it suits the premise and player preferences; inland
+openings remain valid. An opening such as "the coastal town of Sarg, next to the Western Sea; this far
+south, the water is warm and accommodating" should establish matching geography, direction and regional
+climate. Those names and conditions are illustrative creative choices rather than fixed campaign defaults.
+
+Choose the opening position anywhere appropriate to the campaign premise: inland, coastal, on an
+island, in a remote location or aboard a vessel. Map centers, atlas origins and example roads do not
+dictate the opening. The [world-map authoring brief](WORLD_MAP_GENERATION.md) supplies reusable prompts,
+contrasting region examples and a short creative review. Generation tools should provide a concise
+version of that guidance with campaign preferences, saved style and all established neighbor constraints.
+
+#### 20.1.3 Existing campaigns and map completion
+
+On resuming a committed campaign whose regional map is missing or incomplete, the Campaign/World
+Engine should automatically begin or continue map completion. Analyze the saved location hierarchy and
+connections together with relevant descriptions, adventure facts, travel history and existing map
+fragments. Preserve established identities, geography, distances, current positions and party knowledge;
+creatively fill missing spatial structure using the same world-map authoring guidance.
+
+Fit the atlas to the existing campaign's extent, using several sheets when appropriate. Stage and
+validate the completion, then commit it through revision-checked, idempotent campaign mutations and
+render/store the result. Repeated resumes reuse the accepted map. A missing rendered image requires
+rendering that saved map rather than repeating world generation. Keep uncertain or contradictory legacy
+constraints explicit, preserving their sources instead of silently rewriting established facts.
+
+Map completion preserves current gameplay, including time, character location, encounters and pending
+choices. It uses the ordinary change journal and preserves existing checkpoints. After restoration,
+reconcile with the restored branch's geography and knowledge. The implemented resume workflow stages
+sourced map completion for explicit creative review; it does not generate a world inside a database
+schema migration. See [map usage](MAP_USAGE.md) for the supported sequence and limits.
+
+#### 20.1.4 Stable geography and restyling
+
+Persist the accepted geographic model independently of rendered artwork. Use complete winding paths
+for roads/rivers, polygons for terrain and water boundaries, and stable points/footprints for locations.
+Save bends, widths, crossings and connectivity rather than relying on a later model to reproduce them
+from endpoint links, prose or a seed. Restyling and different display detail reuse these saved shapes.
+
+Start with vector geometry in the campaign's versioned map data. Optional terrain paint rasters and
+numeric elevation fields can supplement it, with explicit physical alignment and a declared source of
+truth per layer. Keep land cover, relief and water properties separate: a forested hill expresses both
+forest and elevation. Display colors belong to the style rather than defining geographic meaning.
+
+Simplified views preserve significant bends, anchors and atlas seams; closer views add compatible
+detail. Meaningful geographic refinements are saved world changes, while textures, symbols, labels and
+line treatment are presentation. See the [shared format](MAP_FORMAT.md#stable-geography-and-alternative-renderings)
+for persistence, raster and reproducibility rules.
+
+#### 20.1.5 World size, latitude and climate
+
+Assume a roughly Earth-sized globe by default, saving its size, geographic north and equator with the
+world definition. Choose the opening's geographic coordinates for the requested climate; ordinary
+unspecified adventures default to around 43.5 degrees north, comparable to southern France in latitude.
+An explicit setting or established campaign facts override that default, and fictional longitude need
+not copy any Earth location.
+
+Climate generally becomes warmer toward the equator and colder toward either pole. From a northern
+opening, south leads toward warmth until the equator, then eventually toward a colder southern pole.
+Latitude supplies the broad baseline; elevation, coastal/ocean influences, moisture, season and saved
+fantasy effects shape local conditions. Preserve accepted climate context for coherent terrain,
+settlement life, narration and later map expansion, with gradual transitions over physical distance.
+Daily weather remains distinct from regional climate.
+
+The sheet origin `(0,0)` is a local atlas address rather than the equator. Anchor the actual opening
+position to the chosen latitude through a saved geographic transform. Keep sheet addresses stable;
+record projection extent/accuracy and handle distant, longitude-wrapping or polar travel through the
+world frame and explicitly connected atlas coverage. Regional metric coordinates do not imply an
+infinite flat world or exact scale over a whole sphere. See the [world-coordinate and climate model](MAP_FORMAT.md#world-size-latitude-and-climate).
+
+#### 20.1.6 Story-aware travel encounters
+
+Travel can produce random hostile encounters, with risk calibrated to the story and saved world
+conditions. Hostile country, bandit activity, faction control and recent events affect the relevant
+routes/areas; terrain, timing, protection and precautions can modify exposure. Frequency, severity and
+opponent selection are separate choices rather than one fixed difficulty for every journey.
+
+The DM can place a story/backstory-linked encounter at a fitting point, use engine-owned random
+checks and choose a suitable location for the result, or request a random valid point along the route.
+Keep authored events and random outcomes distinguishable. Save checks/exposure across travel calls
+and reloads, and make previews read-only. Stop at the encounter's actual location and elapsed time,
+prepare/reuse its local grid and retain the unfinished journey. Perception and player choices still
+determine how contact unfolds. See [travel risk and encounters](MAP_FORMAT.md#story-aware-travel-risk-and-hostile-encounters).
 
 ### 20.2 Settlement Map
 
@@ -911,6 +1165,19 @@ Details can be generated and persisted lazily as the player explores.
 
 ### 20.3 Dungeon Map
 
+A dungeon combines a tile/piece-based spatial layout with separate, linked room/area descriptions and
+live play state. The tactical grid measures physical space; reusable pieces build floors, walls and
+passages; room locations provide stable meaning and descriptive content. One room can occupy many
+pieces and have an irregular outline. Reusing a piece does not duplicate its room, occupants or secrets.
+Room descriptions link to map regions through location references, while doors, objects and actors
+have their own anchors and current state. Narration uses observable details and current conditions
+rather than exposing a full GM room entry on arrival. See [tile layout and room records](DUNGEON_MAPS.md#tile-layout-room-descriptions-and-live-state).
+
+Normal corridors default to 10 ft clear walkable width. Narrow 5 ft passages and wider halls remain
+explicit creative choices, and doorway widths are independent. A 10 ft corridor can therefore meet
+a 5 ft doorway choke point. The 5 ft placement lattice and optional 5 ft/10 ft display grids do not
+change physical corridor widths or existing saved layouts.
+
 A dungeon is naturally modeled as a graph:
 
 - Rooms/areas.
@@ -923,13 +1190,148 @@ A dungeon is naturally modeled as a graph:
 - Objects.
 - Environmental state.
 
-Generation can be seeded so that once a dungeon exists, it remains stable.
+The DM handles discovery checks on the player's behalf for traps, secret doors, hidden compartments
+and other concealed features. When an eligible observer's approach warrants a roll, the DM initiates
+it through the engine using that character's actual abilities and circumstances; the player need not
+request or supply the roll. Respect applicable passive detection and active-search time/action rules.
+Active searching has a saved actor/area/method/pace, with the applicable movement or time penalty and
+detection bonuses/Advantage applied together. Extra time advances active world events and patrols;
+ending or interrupting the mode cannot retain free benefits or manufacture fresh attempts.
+Narrate only what characters perceive, keep undiscovered features and hidden results out of player
+views, and persist resolved opportunities so movement calls or reloads cannot manufacture rerolls.
+Discovery is separate from identifying, opening, unlocking or disarming the feature. Companion
+tactical-control preferences do not change this DM responsibility.
+
+Support both creative briefs completed with generation helpers and fully model-authored dungeon
+designs. The model can choose custom geometry, room layout, contents and story relationships; the
+engine validates the proposal, assigns identities, persists it and renders the result. Default pieces
+and procedural generation are optional aids. Save the accepted result rather than relying on a seed
+or the next model to reproduce it.
+
+Begin with a semantic blueprint or related plot points; exact tiles need not be assigned at that stage.
+For example, specify sixteen rooms across two levels, a lower-level altar room, its secret entry to a
+treasure room and the ceremonial staff of lightning located there. Room counts, attributes, connections
+and loot relationships can be fixed while dimensions, tile arrangements and incidental details remain
+open. Accepted world facts constrain later generation; revisable story intentions remain distinguishable.
+
+As the party approaches, flesh out the blueprint and prepare most dungeon structure and meaningful
+content before entry so the whole site fits its story. Resolve tiles, object footprints/positions and
+connections while preserving room/item identities and specified constraints. Room attributes live on
+room records; a locked chest can belong to its room before gaining a precise tile anchor. Materializing
+the plan does not create a second chest/staff or expose secret facts to the player.
+
+A local gnoll gang's small house can be fully prepared, including furnishings and occupants. A vast,
+multilevel drow Underdark city needs a saved city-wide plan of caverns, districts, levels, major routes,
+vertical connections, factions and story sites, with most playable content established at the relevant
+scale. Use linked maps and resumable preparation rather than one giant image or a wholly improvised
+sequence of rooms. Optional minor interiors and decorative detail can be refined later within those
+established constraints. See [creative authoring and preparation](DUNGEON_MAPS.md#creative-authoring-and-preparation-before-entry).
+
+Creative preparation also places loot and establishes occupancy over time: guard posts, patrol
+routes, duty windows, alarms and potential reinforcements. Loot has actual location/container/character
+inventory ownership, access/discovery conditions and story links. Patrol plans have stable actors or
+finite population sources, starting phases, routes, timing and responses to events. Patrol casualties,
+capture and reinforcements update that finite roster; schedule checks cannot replenish it. Regional
+timers run only while any party member is present in that region. When the last member leaves, save
+remaining durations/phases and reactivate on return without catching up for time spent elsewhere;
+split parties keep their occupied regions active. The global calendar continues normally. Searching,
+waiting, resting and travel within an active region advance relevant activity, allowing consequences and
+player decisions along the way. Persist collected loot, patrol progress, resolved random outcomes
+and alarms; discovery/re-entry does not recreate them. See [loot placement](DUNGEON_MAPS.md#loot-rewards-and-access)
+and [patrols and encounter opportunities](DUNGEON_MAPS.md#patrols-schedules-and-encounter-opportunities).
+
+The dungeon is a living document: battle damage, destroyed/moved furniture, breached walls, repairs
+and other resolved changes persist in room/object state and applicable geometry. Update cover, sight,
+traversal, narration and rendering consistently. These are ordinary gameplay consequences, distinct
+from correcting established facts. Later visits/refinement preserve them, and checkpoints restore
+their matching state. See [living rooms](DUNGEON_MAPS.md#living-rooms-and-persistent-consequences).
 
 The guiding principle is:
 
-> Generate detail when it becomes relevant, then persist it.
+> Save the blueprint early; lay out the coherent site near approach, before entry; persist its changes.
 
-A graphical renderer can be added later without changing the underlying model.
+A graphical renderer derives images from the same saved model and can re-render it after discoveries,
+world-building edits or coordinate-based POI additions. See [dungeon maps](DUNGEON_MAPS.md)
+and [shared map format/outdoor cartography](MAP_FORMAT.md) for design targets, and
+[map usage](MAP_USAGE.md) for the implemented baseline.
+
+### 20.4 Player experience priorities
+
+Status: review recommendations for the map feature. The spatial/persistence design above provides the
+foundation; these proposed experience contracts should guide implementation and playtesting.
+
+1. **Understand a choice before spending it.** Support read-only tactical inspection and previews:
+   "Can I reach that pillar and still attack?" or "Show the cone from there." Explain path, movement
+   cost, relevant cover/range and observable consequences using the acting character's capabilities
+   and knowledge. Let the player revise a proposal freely; commit an unambiguous action without an
+   extra confirmation ritual. A preview does not reveal hidden targets, traps or obstacles, and party
+   shared vision does not grant every character individual line of sight.
+
+2. **Direct the party by intention.** Extend individual placement with persistent exploration orders:
+   "Dain leads, I follow, Mira watches our backs." Handle ordinary following and passage through doors
+   without asking for each token's next square. Stop when a threat, meaningful discovery, blocked order
+   or conflicting choice needs attention. On entering combat, preserve actual positions and apply
+   individual turn rules. Orders do not grant movement, awareness or abilities a companion lacks.
+
+3. **Make discovery invite curiosity.** Provide observable approach cues before complete identification:
+   a tower above the pines, distant bells, a cold draft behind a door. "What can we see from here?"
+   should give useful, bounded orientation and opportunities to investigate. Distinguish sight, sound,
+   reports and individual perception; hearing something does not locate a precise target. A few
+   authored observation/approach anchors can support this without a global visibility simulation.
+
+4. **Give places playable character.** Review important rooms and routes for recognizable landmarks,
+   meaningful environmental interaction and alternative approaches. A guardroom's doorway, side
+   passage and movable table can offer different tactics. An upland route's ruined aqueduct or ferry
+   custom can make it memorable. Functional props have explicit interaction/terrain properties where
+   relevant, while decoration remains lightweight. Variety should serve the place rather than force
+   every room or journey into an identical encounter formula.
+
+5. **Keep play readable and moving.** At ordinary chat image size, tokens, doors, paths, grid and fog
+   states should be clear without relying on color alone. Keep orientation, landmark names, actor
+   labels and grid references stable between refreshes; offer a sparse high-contrast style. Text
+   conveys equivalent actionable positions, known connections, terrain and distances. Follow an
+   action with its observable change and remaining movement where relevant. Summarize uneventful
+   exploration/travel, pause at consequential choices, and refresh images when useful without making
+   ordinary actions wait for new illustration generation. Summaries retain normal time, resource and
+   event accounting.
+
+6. **Make it the party's remembered world.** Surface saved player notes, nicknames, visited routes,
+   chosen campsites and unfinished map intentions when relevant. On resuming, orient the player to
+   their current place, nearby known choices and what they were doing. On returning, summarize changes
+   the party has learned about, including consequences of their actions. Keep annotations linked to
+   stable places and the current campaign branch; a personal recap cannot disclose off-screen changes.
+
+Prioritize previews, intention-based movement, readable feedback and reliable reorientation before
+additional visual styles or richer simulations. Review a short end-to-end play session in both image
+and text modes, measuring whether players can act confidently with few unnecessary clarifications.
+
+Suggested experience scenarios:
+
+- "Have the others follow until we see something unusual." Ordinary movement proceeds, then stops at
+  an observable cue with clear party placement and a useful choice.
+- "Can Mira cover the north door while I move behind the pillar? Actually, the other pillar."
+  Inspection permits revision, commitment respects turns/sight, and the response explains what changed.
+- Resume after marking a bronze door "return with the silver key": the current map and note return
+  with relevant known exits, without requiring the player to reconstruct their bearings.
+- Return along a familiar route after helping repair its bridge: recognize the same geography and
+  learned consequences, with uneventful travel summarized and meaningful decisions left to the player.
+
+### 20.5 Remaining map implementation contracts
+
+The main architecture is decided: saved geographic features for world maps, graph travel and persistent
+local grids for every combat. The following contracts remain open before implementation; they refine
+that architecture rather than reopen it. Proposed implementation defaults must preserve the accepted
+creative freedom, preparation, discovery and continuity requirements.
+
+| Contract | What still needs to be specified |
+| --- | --- |
+| Exact spatial rules | Versioned diagonal/corner, footprint, cover, sight, hearing/detection, area-effect and elevation rules shared by mechanics, previews and rendering. The 5 ft placement lattice and shared view as the union of party members' sight are already chosen; individual actions and enemy awareness use each actor's perception. |
+| Partial actions and time | One interruptible execution contract for movement, searches, rests, travel and combat; clock precision/round accounting, saved progress and completion effects. Unknown obstacles interrupt actual movement rather than produce free hidden-state probes. |
+| Preparation and publication | A per-site readiness manifest separating accepted semantic blueprints from staged tile layouts, with isolated drafts, validation and revision-checked publication. Lay out most meaningful content near approach before entry; unpublished actors, loot and routes cannot affect play. |
+| Passage identity | Exposed stable passage/route references supporting multiple independent connections between the same locations. Current endpoint-pair lookup needs adaptation. |
+| Map mutation authority | Concrete tool boundaries for draft authoring, presentation changes, audited corrections and resolved gameplay effects; generic spatial edits cannot bypass actions or inventory rules. |
+| Containers and item anchors | One canonical container/inventory relation, access-checked transfers and map-anchor behavior for moving, splitting or merging item stacks. |
+| Delivery and compatibility | Assign acceptance scenarios to explicit milestones, gate rendering dependencies in native/JVM builds, define the first complete playable slice and validate legacy encounter conversion. |
 
 ---
 
@@ -1529,6 +1931,7 @@ The first playable version should be deliberately small.
 ### Later
 
 - Graphical maps.
+- Campaign-creation integration for a creatively generated initial regional map (§4.2, §20.1).
 - Portrait/image generation integration.
 - Multiple rulesets.
 - Multiplayer/multiple human players.
@@ -1579,6 +1982,10 @@ The adventure outline should help the GM maintain pacing and continuity without 
 Do not build an entire city the player may never visit. But once an innkeeper has been invented and introduced, persist
 enough information that the same person exists next year.
 
+For a dungeon the party is preparing to enter, save a semantic blueprint early and materialize most
+of its layout and meaningful contents near approach, before entry. Large sites use prepared hierarchy
+and bounded refinement; lazy detail must respect accepted geography, story and subsequent gameplay changes.
+
 ### Mechanical truth lives outside the model.
 
 If the player has 7 HP, that should remain true regardless of context-window truncation or a new AI session.
@@ -1618,7 +2025,8 @@ These do not block the initial architecture:
 10. Exact MCP tool granularity.
 11. Whether GM overrides require an explicit server startup flag in addition to campaign configuration.
 12. Import/export format for campaigns and content packs.
-13. Exact tactical-grid representation for encounter positioning (zones vs. x,y grid, movement costs, ranges).
+13. Remaining map contracts are tracked in [§20.5](#205-remaining-map-implementation-contracts): exact
+    spatial rules, interruptible execution, publication, identity, mutation authority, containers and delivery.
 
 ---
 

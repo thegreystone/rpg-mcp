@@ -5,9 +5,26 @@ representation, checkpoint rollback, migrations, and integrity enforcement.
 **Scope:** Implements `DOMAIN_MODEL.md` (invariants `I-nn` point there). Per-kind content JSON schemas and derived
 values belong to `RULES_ENGINE.md`.
 
+The implemented spatial/timeline additions are migrations `V011__maps.sql` and `V012__timeline.sql`.
+See the [DM map workflow](MAP_USAGE.md) for authoring, image/text views and current limits. Their
+campaign-scoped canonical rows use the same journal/checkpoint machinery as existing domain state.
+
 ---
 
 ## 1. Storage Decisions
+
+Map state uses `map_preparation` (payload, commitments, source versions and resolved reference mapping),
+`map_atlas` (fixed sheet dimensions, geographic anchor and style), `map_scene` (identity/frame and layout),
+`map_feature` (canonical geographic shape and graph binding), `map_actor`, `map_object`,
+`map_observation` and `map_asset`. Actor/object/knowledge changes update small rows rather than rewriting
+the whole layout. Imported artwork is immutable data-directory content referenced by registered asset
+rows; an `asset:N` pins the physical repeat scale. Rendered PNGs are views rather than canonical maps.
+
+Timeline rows include `timeline_event`, `action_progress`, `patrol_plan`, `travel_risk`, `travel_journey`,
+`travel_exposure` and `travel_check`. Regional timer activity and remaining duration persist explicitly.
+`game_clock.second_offset` extends historical minute records rather than reinterpreting their units or
+rewriting old journal entries. New rewindable tables are registered in `Tables`; restoration retains
+their geometry, roster, observations, source mappings and required immutable artwork together.
 
 - **One SQLite file** per installation (`rpg.db` in the data directory). Campaigns are rows. Installed ruleset content
   is shared; campaign isolation is by `campaign_id` scoping, and cross-campaign references are rejected at the protocol
@@ -163,6 +180,18 @@ per `(campaign_id, seat)`. History rows record former control (I-10).
 `left_time/left_seq NULL`, `cause_event_id NULL → event` (I-18), `notes`. Partial unique index: one non-terminal row per
 character (I-17).
 
+**tactical_control** (V013) — `id`, `campaign_id`, `character_id NULL → character`,
+`encounter_id NULL → encounter`, `controller CHECK (IN ('DM','PLAYER'))`,
+`scope CHECK (IN ('ENCOUNTER','UNTIL_RELEASED'))`, `reason NULL`, `revision DEFAULT 0`.
+`ENCOUNTER` requires `encounter_id`; `UNTIL_RELEASED` requires it to be NULL. A NULL character
+means all current and future companions in the scope. The unique expression index on
+`(campaign_id, COALESCE(encounter_id,0), COALESCE(character_id,0))` allows one assignment per target
+and scope. Effective precedence is encounter-character, encounter-all, persistent-character,
+persistent-all, then DM default; primary identity always remains player-controlled.
+The table is rewindable. Encounter completion deletes its scoped rows through the journal;
+restoring an earlier checkpoint restores those rows. Changes never modify
+`player_control_assignment` or party membership.
+
 **relationship** — `id`, `campaign_id`, `from_character_id`, `to_character_id`, `dimensions_json`, `summary TEXT`,
 `profile_json NULL` (milestones, terms, preferences, wants, hard_lines; V007), `revision`.
 Unique `(campaign_id, from_character_id, to_character_id)`.
@@ -190,9 +219,19 @@ CHECK `0 <= current AND current <= max` (I-30), `recharge TEXT`.
 `objectives_json`, `spatial_model TEXT CHECK (IN ('ZONES','GRID'))`, `retry_checkpoint_id NULL → checkpoint` (I-35),
 `location_id NULL`, `revision`.
 
+V014 adds nullable `record_json`: a baseline during play and the completed mechanical encounter record,
+including private GM detail and a frozen party-safe projection for the existing resolved ledger event.
+The ledger exposes a compact party digest and a pointer to the full GM record. Its `episodic_detail`
+stores readable encounter prose; annotation updates that same event.
+
 **encounter_participant** — `id`, `encounter_id`, `character_id`, `side TEXT`, `initiative INTEGER`,
 `initiative_tiebreak INTEGER`, `position_zone TEXT NULL`, `position_x/position_y INTEGER NULL` (zone or x,y per
 `spatial_model`), `status TEXT CHECK (IN ('ACTIVE','DEFEATED','FLED','REMOVED'))`. Unique `(encounter_id, character_id)`.
+
+The participant columns above retain legacy zone storage. New encounters use the
+[mandatory-grid combat model](DESIGN.md#15-encounters): `environment_json.grid.map_ref` binds the saved scene,
+and V011 `map_actor` rows retain canonical physical figurines. Preserve legacy saves and references;
+convert deliberately at a safe action boundary rather than treating old zone labels as exact coordinates.
 
 Turn order is `ORDER BY initiative DESC, initiative_tiebreak`, total by construction (I-31).
 
@@ -207,6 +246,10 @@ adjudication before any draw or write. Operation replay returns the stored resul
 sealed search or reroll it. The log, returned inventory and game-clock changes use the same journaled mutation, so checkpoint
 restore rewinds search eligibility with inventory and time. These are extensions to existing JSON/log kinds;
 ammunition recovery adds no DDL or migration.
+
+V014 adds nullable `encounter_log.narration` for action prose. Highlight selection and annotations retain
+the original log identity; annotation updates the saved record and existing ledger event in one journaled
+mutation rather than creating another completion or reward event.
 
 ### 3.7 Narrative state
 
@@ -395,6 +438,12 @@ installed_content(kind, spell_level), (kind, cr_times_8), (kind, cost_cp)
 - V009 adds the non-rewindable `want_identity` registry and backfills mappings from current and historical want
   notes without rewriting profile JSON or checkpoint before-images (§3.3). Existing profiles are enriched on reads;
   only a later update or closure persists a want's ref in its profile entry.
+- V013 adds the rewindable `tactical_control` table. Existing campaigns need no backfill: the
+  primary character remains player-controlled and other party members default to DM decisions.
+  Existing before-images are unchanged because no existing table columns are added.
+- V014 adds nullable `encounter.record_json` and `encounter_log.narration`. Existing encounters need no
+  reconstructed record. Before-images from an older schema restore absent nullable columns as NULL,
+  preserving old checkpoint behavior; new records and annotations are rewindable with their log and ledger.
 - A schema change to a rewindable table must state its effect on stored `undo_json`: translate before-images at undo
   replay, rewrite them in a migration, or explicitly invalidate old checkpoints. Test a previous-schema checkpoint.
 - V005 compatibility copies character undo rows and maps `background` to `backstory`; an existing `backstory` wins,

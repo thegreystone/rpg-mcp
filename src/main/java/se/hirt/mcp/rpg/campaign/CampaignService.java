@@ -638,6 +638,8 @@ public final class CampaignService {
 			initial.put("factions", initialNarrative(tx, campaignId, "FACTION_STATE", adventure.get("factions")));
 			initial.put("world_events", initialNarrative(tx, campaignId, "WORLD_EVENT", adventure.get("world_events")));
 			initial.put("quests", initialNarrative(tx, campaignId, "QUEST", adventure.get("quests")));
+			initial.put("world_map",
+					se.hirt.mcp.rpg.maps.WorldMapPreparation.initialize(tx, rules, campaignId, locationId, adventure));
 
 			// Campaign configuration freeze
 			var prefs = new LinkedHashMap<String, Object>();

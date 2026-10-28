@@ -94,10 +94,18 @@ class SrdCombatAndEquipmentTest {
 	private static String duel(Engine engine, ScriptedRollService dice, String campaign, String pc, String foe) {
 		dice.queue(20, 1);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
-				map("party", List.of(pc), "foes", List.of(foe)), null, null, null, null, null);
+				map("party", List.of(pc), "foes", List.of(foe)), null, meleeZones(pc, foe), null, null, null);
 		assertEquals(pc, m(started.get("turn")).get("character"));
 		assertTrue(dice.exhausted(), "the scripted initiative has no leftover dice");
 		return (String) started.get("encounter");
+	}
+
+	/**
+	 * Independent Action comparisons each use a fresh player turn; the foe passes without a roll.
+	 */
+	private static void nextDuelTurn(Engine engine, String campaign, String encounter, String pc, String foe) {
+		engine.encounters().perform(op(), campaign, encounter, pc, map("kind", "END_TURN"), true);
+		engine.encounters().perform(op(), campaign, encounter, foe, map("kind", "END_TURN"), true);
 	}
 
 	/**
@@ -236,10 +244,11 @@ class SrdCombatAndEquipmentTest {
 			assertEquals(Boolean.TRUE, close.get("hit"));
 			assertTrue(dice.exhausted(), "two attack dice and one damage die were consumed");
 
+			nextDuelTurn(engine, campaign, enc, pc, bandit);
 			// Step away (the NPC bandit takes its opportunity attack: natural 1, a miss) and shoot from the other zone.
 			dice.queue(1);
 			Map<String, Object> move = engine.encounters().perform(op(), campaign, enc, pc,
-					map("kind", "MOVE", "zone", "far"), false);
+					map("kind", "MOVE", "x_ft", 35, "y_ft", 25), false);
 			assertEquals(1, list(move.get("opportunity_attacks")).size());
 			dice.queue(15, 1);
 			Map<String, Object> far = engine.encounters().perform(op(), campaign, enc, pc,
@@ -249,8 +258,9 @@ class SrdCombatAndEquipmentTest {
 			assertEquals("NONE", far.get("advantage"));
 			assertTrue(dice.exhausted());
 
-			// Back beside the bandit (its reaction is spent): a spell attack is a ranged attack too.
-			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "zone", "near"), false);
+			nextDuelTurn(engine, campaign, enc, pc, bandit);
+			// Returning beside the bandit does not provoke; a spell attack is a ranged attack too.
+			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "x_ft", 25, "y_ft", 25), false);
 			dice.queue(17, 19, 1);
 			Map<String, Object> cast = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "CAST", "spell", "Fire Bolt", "targets", List.of(bandit)), false);
@@ -262,6 +272,7 @@ class SrdCombatAndEquipmentTest {
 			assertTrue(dice.exhausted());
 
 			// An Incapacitated adjacent enemy does not impose it.
+			nextDuelTurn(engine, campaign, enc, pc, bandit);
 			engine.runtime().applyRuntimeChange(op(), campaign, bandit,
 					map("kind", "ADD_CONDITION", "condition", "INCAPACITATED", "reason", "test"));
 			dice.queue(15, 4);
@@ -450,6 +461,7 @@ class SrdCombatAndEquipmentTest {
 					"a Sorcerer is proficient with Simple weapons");
 			assertTrue(dice.exhausted());
 			// Longsword: a Martial weapon the Sorcerer lacks proficiency with: Strength only.
+			nextDuelTurn(engine, campaign, enc, pc, bandit);
 			dice.queue(19, 3);
 			Map<String, Object> longsword = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "ATTACK", "target", bandit, "weapon", "Longsword"), false);

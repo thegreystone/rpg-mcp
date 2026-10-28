@@ -54,12 +54,18 @@ public final class Tx {
 	private final Set<Long> invalidatedCharacters = new HashSet<>();
 	private Long campaignId;
 	private boolean checkpointMarker;
+	private final se.hirt.mcp.rpg.dice.RollService rollService;
 
-	Tx(Connection c, boolean mutable, long journalId, Long campaignId) {
+	Tx(Connection c, boolean mutable, long journalId, Long campaignId, se.hirt.mcp.rpg.dice.RollService rollService) {
 		this.c = c;
 		this.mutable = mutable;
 		this.journalId = journalId;
 		this.campaignId = campaignId;
+		this.rollService = rollService;
+	}
+
+	public se.hirt.mcp.rpg.dice.RollService rollService() {
+		return java.util.Objects.requireNonNull(rollService, "Bind the engine RollService before advancing mortality.");
 	}
 
 	// ── context ────────────────────────────────────────────────────────
@@ -147,6 +153,7 @@ public final class Tx {
 	public long insert(String table, Map<String, Object> columns) {
 		requireMutable();
 		checkTable(table);
+		columns = preciseEffectExpiry(table, columns, null);
 		long id = rawInsert(table, columns);
 		if (Tables.isRewindable(table)) {
 			undo.add(op("delete", table, id, null));
@@ -164,6 +171,7 @@ public final class Tx {
 			return;
 		}
 		Row before = Tables.isRewindable(table) ? get(table, id) : null;
+		columns = preciseEffectExpiry(table, columns, before);
 		if (before != null) {
 			undo.add(op("restore", table, id, before.asMap()));
 		}
@@ -185,6 +193,41 @@ public final class Tx {
 		} else if ("character".equals(table) && invalidatedCharacters.contains(id)) {
 			touched(Ref.of(Ref.CHARACTER, id), get(table, id).lng("revision"));
 		}
+	}
+
+	/**
+	 * Keep all effect writers precise, including spells that supply the legacy minute-shaped
+	 * duration.
+	 */
+	private Map<String, Object> preciseEffectExpiry(String table, Map<String, Object> columns, Row before) {
+		if (!"active_effect".equals(table) || !columns.containsKey("duration_json")
+				|| columns.containsKey("end_seconds")) {
+			return columns;
+		}
+		Object encoded = columns.get("duration_json");
+		Map<String, Object> duration = encoded == null ? Map.of()
+				: Json.readMap(encoded instanceof String text ? text : Json.write(encoded));
+		Long end = null;
+		if (duration.get("expires_seconds") instanceof Number exact) {
+			end = exact.longValue();
+		} else if (duration.get("expires_seq") instanceof Number minute) {
+			Map<String, Object> previous = before == null ? Map.of() : before.map("duration_json");
+			if (previous.get("expires_seq") instanceof Number old && old.longValue() == minute.longValue()) {
+				// Metadata-only rewrites must neither extend a timer nor reinterpret a historical effect.
+				end = before.lng("end_seconds");
+			} else {
+				Object owner = columns.getOrDefault("campaign_id",
+						before == null ? campaignId : before.lng("campaign_id"));
+				long offset = owner instanceof Number id
+						? queryOne("SELECT second_offset FROM game_clock WHERE campaign_id=?", id.longValue())
+								.map(clock -> clock.lng("second_offset")).orElse(0L)
+						: 0;
+				end = Math.addExact(Math.multiplyExact(minute.longValue(), 60), offset);
+			}
+		}
+		var result = new LinkedHashMap<>(columns);
+		result.put("end_seconds", end);
+		return result;
 	}
 
 	public void delete(String table, long id) {
@@ -210,6 +253,14 @@ public final class Tx {
 				continue;
 			}
 			invalidateCharacter(row.lng("character_id"));
+			if ("inventory_entry".equals(table)) {
+				Row owner = row;
+				var seen = new java.util.HashSet<Long>();
+				while (!owner.isNull("container_entry_id") && seen.add(owner.lng("container_entry_id"))) {
+					owner = get("inventory_entry", owner.lng("container_entry_id"));
+				}
+				invalidateCharacter(owner.lng("character_id"));
+			}
 			if ("active_effect".equals(table)) {
 				invalidateCharacter(row.lng("concentration_character_id"));
 			}
@@ -313,6 +364,23 @@ public final class Tx {
 		long pk = ((Number) op.get("pk")).longValue();
 		@SuppressWarnings("unchecked")
 		Map<String, Object> row = (Map<String, Object>) op.get("row");
+		if ("game_clock".equals(table) && row != null && !row.containsKey("second_offset")) {
+			row = new LinkedHashMap<>(row);
+			row.put("second_offset", 0);
+		}
+		if ("active_effect".equals(table) && row != null && !row.containsKey("end_seconds")) {
+			row = new LinkedHashMap<>(row);
+			row.put("end_seconds", null);
+		}
+		if ("encounter".equals(table) && row != null && !row.containsKey("record_json")) {
+			// V014 records did not exist in older before-images; a restore must clear later records.
+			row = new LinkedHashMap<>(row);
+			row.put("record_json", null);
+		}
+		if ("encounter_log".equals(table) && row != null && !row.containsKey("narration")) {
+			row = new LinkedHashMap<>(row);
+			row.put("narration", null);
+		}
 		if ("character".equals(table) && row != null && row.containsKey("background")) {
 			// V005 renamed the biography column; translate old images without changing journal history.
 			row = new LinkedHashMap<>(row);

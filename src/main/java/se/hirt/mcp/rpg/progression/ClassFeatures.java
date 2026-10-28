@@ -45,10 +45,10 @@ import java.util.Optional;
  * and adjudicated in prose - so adding one is a seed edit, not a code change, as long as its
  * {@code mechanic.kind} is understood here.
  * <p>
- * Understood kinds so far: {@code SNEAK_ATTACK} (EncounterService), {@code FONT_OF_MAGIC},
- * {@code METAMAGIC} and {@code SORCEROUS_RESTORATION} (magic.Metamagic). A feature may also carry a
- * top-level {@code resource} block ({@code ref}, {@code max}, {@code recharge}) that
- * Origins.initializeResources turns into a tracked pool.
+ * Understood kinds so far: {@code SNEAK_ATTACK} and {@code EXTRA_ATTACK} (EncounterService),
+ * {@code FONT_OF_MAGIC}, {@code METAMAGIC} and {@code SORCEROUS_RESTORATION} (magic.Metamagic). A
+ * feature may also carry a top-level {@code resource} block ({@code ref}, {@code max},
+ * {@code recharge}) that Origins.initializeResources turns into a tracked pool.
  */
 public final class ClassFeatures {
 

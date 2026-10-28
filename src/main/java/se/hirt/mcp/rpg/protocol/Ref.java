@@ -54,6 +54,11 @@ public record Ref(String type, long id) {
 	public static final String STORY_BEAT = "story_beat";
 	public static final String INVENTORY = "inventory";
 	public static final String WANT = "want";
+	public static final String MAP = "map";
+	public static final String PREPARATION = "preparation";
+	public static final String ATLAS = "atlas";
+	public static final String CONNECTION = "connection";
+	public static final String ASSET = "asset";
 
 	public static Ref parse(String text) {
 		if (text == null || text.isBlank()) {

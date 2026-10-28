@@ -124,6 +124,8 @@ class CheckpointRoundTripTest {
 						cols("character_id", charId, "resource_ref", "test:widget", "current", 1, "max", 2));
 				long encId = tx.insert("encounter",
 						cols("campaign_id", campaignId, "status", "RUNNING", "round", 1, "revision", 0));
+				tx.insert("tactical_control", cols("campaign_id", campaignId, "character_id", npcId, "encounter_id",
+						encId, "controller", "PLAYER", "scope", "ENCOUNTER"));
 				tx.insert("encounter_participant",
 						cols("encounter_id", encId, "character_id", charId, "side", "party", "status", "ACTIVE"));
 				tx.insert("encounter_log", cols("campaign_id", campaignId, "encounter_id", encId, "round", 1, "kind",
@@ -138,6 +140,43 @@ class CheckpointRoundTripTest {
 						cols("campaign_id", campaignId, "kind", "LEVEL_UP", "status", "ABANDONED", "revision", 0));
 				tx.insert("player_control_assignment",
 						cols("campaign_id", campaignId, "seat", "player-2", "character_id", npcId, "active", 0));
+				// New map/timeline aggregates exercise the same inverse journal as legacy campaign state.
+				long atlas = tx.insert("map_atlas", cols("campaign_id", campaignId, "name", "Discarded atlas",
+						"sheet_width_ft", 1000, "sheet_height_ft", 1000));
+				long prep = tx.insert("map_preparation", cols("campaign_id", campaignId, "kind", "SCENE", "stage",
+						"SCENE", "name", "Discarded tower", "payload_json", "{}"));
+				long scene = tx.insert("map_scene",
+						cols("campaign_id", campaignId, "location_id", locId, "preparation_id", prep, "atlas_id", atlas,
+								"sheet_x", 0, "sheet_y", 0, "name", "Tower interior", "kind", "SCENE", "document_json",
+								"{}"));
+				tx.insert("map_actor", cols("campaign_id", campaignId, "scene_id", scene, "character_id", npcId, "x_ft",
+						5, "y_ft", 5));
+				tx.insert("map_object",
+						cols("campaign_id", campaignId, "preparation_id", prep, "scene_id", scene, "object_key",
+								"broken-table", "room_id", locId, "properties_json", "{\"state\":\"DESTROYED\"}"));
+				tx.insert("map_observation", cols("campaign_id", campaignId, "scene_id", scene, "observer_key", "party",
+						"knowledge_json", "{\"cells\":{}}"));
+				tx.insert("map_feature",
+						cols("campaign_id", campaignId, "atlas_id", atlas, "map_id", scene, "feature_key", "tower",
+								"kind", "LANDMARK", "geometry_json", "{\"type\":\"POINT\",\"coordinates\":[5,5]}"));
+				tx.insert("map_asset", cols("campaign_id", campaignId, "content_hash", "0".repeat(64), "mime_type",
+						"image/png", "width", 1, "height", 1, "repeat_ft", 5));
+				tx.insert("timeline_event", cols("campaign_id", campaignId, "due_seconds", 999999999, "kind",
+						"PATROL_SIGNAL", "region_id", locId));
+				tx.insert("action_progress", cols("campaign_id", campaignId, "action_key", "tower-search", "kind",
+						"SEARCH", "required_seconds", 600, "completed_seconds", 180, "status", "PAUSED"));
+				tx.insert("patrol_plan", cols("campaign_id", campaignId, "name", "Tower sentry", "actors_json",
+						"[\"character:" + npcId + "\"]", "route_json", "[]", "next_due_seconds", 999999999));
+				tx.insert("travel_risk", cols("campaign_id", campaignId, "scope_ref", "location:" + locId,
+						"policy_json", "{\"chance_percent\":10}"));
+				long journey = tx.insert("travel_journey",
+						cols("campaign_id", campaignId, "from_location_id", homeId, "to_location_id", locId,
+								"route_json", "[]", "movers_json", "[\"character:" + charId + "\"]", "total_seconds",
+								600, "status", "INTERRUPTED"));
+				tx.insert("travel_exposure",
+						cols("campaign_id", campaignId, "scope_ref", "location:" + locId, "exposure_seconds", 300));
+				tx.insert("travel_check", cols("campaign_id", campaignId, "journey_id", journey, "exposure_seconds", 0,
+						"outcome_json", "{\"encounter\":false}"));
 				// Updates and deletes on existing rows.
 				tx.update("character", charId, cols("current_hp", 1, "money_cp", 1, "name", "Renamed", "xp", 300));
 				long beatId = tx.queryOne("SELECT id FROM story_beat WHERE campaign_id = ?", campaignId).orElseThrow()

@@ -82,7 +82,13 @@ class AttackConditionTest {
 								fixture.engine.encounters().end(op(), fixture.campaign, fixture.encounter, "OTHER",
 										"combat ends");
 								boolean critical = attack == Attack.SHOCKING_GRASP;
-								fixture.dice.queue(4, 19, 2);
+								boolean advantage = !"UNCONSCIOUS".equals(condition) || critical;
+								// Unconscious includes Prone: beyond proven five-foot proximity its Disadvantage
+								// cancels the Advantage from Unconscious, including for a ranged spell.
+								if (advantage) {
+									fixture.dice.queue(4);
+								}
+								fixture.dice.queue(19, 2);
 								if (critical) {
 									fixture.dice.queue(3);
 								}
@@ -91,6 +97,8 @@ class AttackConditionTest {
 								Map<String, Object> result = list(cast.get("targets")).get(0);
 								assertEquals(Boolean.TRUE, result.get("hit"));
 								assertEquals(critical, result.get("critical"));
+								assertTrue(m(result.get("attack_roll")).get("expression").toString()
+										.startsWith(advantage ? "2d20kh1" : "1d20"));
 								assertEquals(List.of(19), m(result.get("attack_roll")).get("dice"));
 								assertTrue(fixture.dice.exhausted());
 							}
@@ -106,23 +114,22 @@ class AttackConditionTest {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> automaticCriticalHitsRequireTheSameZoneForMeleeAndRangedAttacks() {
-		return Stream
-				.of("PARALYZED",
-						"UNCONSCIOUS")
-				.flatMap(
-						condition -> Stream
-								.of(Attack.GLAIVE, Attack.SHORTBOW, Attack.SHOCKING_GRASP,
-										Attack.FIRE_BOLT)
-								.flatMap(
-										attack -> Stream.of(true, false)
-												.map(nearby -> DynamicTest
-														.dynamicTest(
-																condition + " against " + attack.name
-																		+ (nearby ? " in the same zone"
-																				: " in another zone"),
-																() -> verifyHit(condition, attack, nearby, true, nearby,
-																		false)))));
+	Stream<DynamicTest> automaticCriticalHitsRequireFiveFootProximityForMeleeAndRangedAttacks() {
+		return Stream.of("PARALYZED", "UNCONSCIOUS").flatMap(condition -> Stream
+				.of(Attack.GLAIVE, Attack.SHORTBOW, Attack.SHOCKING_GRASP, Attack.FIRE_BOLT)
+				.flatMap(attack -> Stream.of(true, false).filter(nearby -> nearby || attack != Attack.SHOCKING_GRASP)
+						.map(nearby -> DynamicTest.dynamicTest(
+								condition + " against " + attack.name + (nearby ? " at 5 feet" : " at 10 feet"),
+								() -> verifyHit(condition, attack, nearby, !"UNCONSCIOUS".equals(condition) || nearby,
+										nearby, false)))));
+	}
+
+	@Test
+	void touchSpellCannotTargetTenFeetAwayWithoutAnExtension() throws Exception {
+		try (Fixture fixture = fixture("PARALYZED", false, false)) {
+			assertThrows(se.hirt.mcp.rpg.protocol.RpgException.class, () -> attack(fixture, Attack.SHOCKING_GRASP));
+			assertTrue(fixture.dice.exhausted(), "an out-of-range spell rolls no attack or damage dice");
+		}
 	}
 
 	@Test
@@ -257,7 +264,9 @@ class AttackConditionTest {
 			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
 					map("party", List.of(actor), "enemy", List.of(target)), null,
-					map(actor, "near", target, nearby ? "near" : "far"), null, null, null);
+					map(actor, "near", target, nearby ? "near" : "far"), null, null, null,
+					map("placements", List.of(map("character", actor, "x_ft", 0, "y_ft", 0),
+							map("character", target, "x_ft", nearby ? 5 : 10, "y_ft", 0))));
 			assertEquals(actor, m(started.get("turn")).get("character"));
 			assertTrue(dice.exhausted(), "the scripted initiative has no leftover dice");
 			engine.runtime().applyRuntimeChange(op(), campaign, target,

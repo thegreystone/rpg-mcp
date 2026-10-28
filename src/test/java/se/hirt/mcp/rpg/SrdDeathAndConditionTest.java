@@ -78,7 +78,7 @@ class SrdDeathAndConditionTest {
 	 */
 	@Test
 	void becomingStableResetsBothDeathSaveCounters() throws Exception {
-		// The ogre acts first and stands in another zone, so its club never lands an automatic critical hit.
+		// The ogre acts first and attacks at range, beyond automatic-critical proximity.
 		try (Arena a = arena("stable-reset", false, "near", "far", List.of())) {
 			dropToZero(a.engine, a.campaign, PC);
 			// Two failures, then three successes: 5, 5, 12, 12, 12.
@@ -96,16 +96,22 @@ class SrdDeathAndConditionTest {
 			assertEquals(0, saves.get("failures"), "becoming Stable resets the failures to zero: " + saves);
 
 			// The ogre hits the stable, unconscious sorcerer with a non-critical blow from across the room.
-			a.dice.queue(19, 19, 1, 1);
+			// Unconscious includes Prone; beyond 5 feet those Advantage/Disadvantage sources cancel.
+			a.dice.queue(19, 1, 1);
 			Map<String, Object> hit = a.engine.encounters().perform(op(), a.campaign, a.encounter, a.ogre,
-					map("kind", "ATTACK", "attack", "Greatclub", "target", PC), false);
+					map("kind", "ATTACK", "attack", "Javelin", "target", PC), false);
 			assertEquals(Boolean.TRUE, hit.get("hit"), hit.toString());
 			assertEquals(Boolean.FALSE, hit.get("critical"), "a natural 19 from another zone is no critical hit");
+			assertEquals("NONE", hit.get("advantage"));
+			assertEquals(List.of(19), m(hit.get("attack_roll")).get("dice"));
+			assertEquals(6, hit.get("damage"), "two d6 results of 1 plus Strength 4 cannot cause massive damage");
+			assertFalse(Boolean.TRUE.equals(hit.get("massive_damage")));
 			Map<String, Object> after = deathSaves(a.engine, a.campaign, PC);
 			assertEquals("DYING", sheet(a.engine, a.campaign, PC).get("life_state"),
 					"one failure after a reset cannot kill: " + after);
 			assertEquals(1, after.get("failures"), "damage at 0 HP is one failure on a fresh count: " + after);
 			assertEquals(Boolean.FALSE, after.get("stable"), "damage ends Stable");
+			assertTrue(a.dice.exhausted(), "one attack die and exactly two javelin damage dice were consumed");
 		}
 	}
 
@@ -118,24 +124,29 @@ class SrdDeathAndConditionTest {
 	void damageAtZeroHitPointsCountsOneFailureOrTwoOnACriticalHit() throws Exception {
 		try (Arena a = arena("zero-hp-damage", false, "near", "far", List.of())) {
 			dropToZero(a.engine, a.campaign, PC);
-			// An unconscious target grants Advantage: two d20s, then 2d8 for the club.
-			a.dice.queue(19, 19, 1, 1);
+			// Unconscious includes Prone: at range their Advantage/Disadvantage sources cancel.
+			a.dice.queue(19, 1, 1);
 			Map<String, Object> hit = a.engine.encounters().perform(op(), a.campaign, a.encounter, a.ogre,
-					map("kind", "ATTACK", "attack", "Greatclub", "target", PC), false);
+					map("kind", "ATTACK", "attack", "Javelin", "target", PC), false);
 			assertEquals(Boolean.TRUE, hit.get("hit"), hit.toString());
 			assertEquals(Boolean.FALSE, hit.get("critical"));
+			assertEquals("NONE", hit.get("advantage"));
+			assertEquals(List.of(19), m(hit.get("attack_roll")).get("dice"));
+			assertEquals(6, hit.get("damage"));
+			assertFalse(Boolean.TRUE.equals(hit.get("massive_damage")));
 			assertEquals("DYING", hit.get("life_state"));
 			assertEquals(1, deathSaves(a.engine, a.campaign, PC).get("failures"), "one failure for ordinary damage");
+			assertTrue(a.dice.exhausted(), "one attack die and exactly two javelin damage dice were consumed");
 			// Richard's own turn: a death save of 10 succeeds and leaves the failure count alone.
 			a.dice.queue(10);
 			a.engine.encounters().perform(op(), a.campaign, a.encounter, a.ogre, map("kind", "END_TURN"), true);
 			assertEquals(1, deathSaves(a.engine, a.campaign, PC).get("failures"));
 			assertEquals(1, deathSaves(a.engine, a.campaign, PC).get("successes"));
 
-			// A natural 20: the critical hit doubles the club's dice (4d8) and counts two failures: 1 + 2 = 3, dead.
-			a.dice.queue(20, 20, 1, 1, 1, 1);
+			// A natural 20 doubles the javelin's dice (4d6) and counts two failures: 1 + 2 = 3, dead.
+			a.dice.queue(20, 1, 1, 1, 1);
 			Map<String, Object> critical = a.engine.encounters().perform(op(), a.campaign, a.encounter, a.ogre,
-					map("kind", "ATTACK", "attack", "Greatclub", "target", PC), false);
+					map("kind", "ATTACK", "attack", "Javelin", "target", PC), false);
 			assertEquals(Boolean.TRUE, critical.get("critical"), critical.toString());
 			assertEquals("DEAD", critical.get("life_state"), "two failures from a critical hit complete the three");
 			assertEquals("DEAD", sheet(a.engine, a.campaign, PC).get("life_state"));
@@ -410,7 +421,7 @@ class SrdDeathAndConditionTest {
 			// Moving while Prone is crawling and does not end the condition (no hostile shares "far", so the move
 			// provokes no Opportunity Attack).
 			Map<String, Object> crawl = a.engine.encounters().perform(op(), a.campaign, a.encounter, PC,
-					map("kind", "MOVE", "zone", "ridge"), false);
+					map("kind", "MOVE", "x_ft", 50, "y_ft", 25), false);
 			assertNotNull(crawl.get("crawling"), "a Prone mover crawls: " + crawl);
 			assertTrue(conditionNames(sheet(a.engine, a.campaign, PC)).contains("PRONE"), "crawling keeps Prone");
 			assertEquals("USED", m(crawl.get("turn_economy")).get("movement"), "a zone move is movement: " + crawl);
@@ -442,7 +453,7 @@ class SrdDeathAndConditionTest {
 	/**
 	 * SRD 5.2.1 "Your Turn": an action, a Bonus Action and movement each turn. The engine records
 	 * the Action and reports what remains while the turn stays open, so the GM can tell an
-	 * incomplete declaration from a finished one; it never refuses a second Action.
+	 * incomplete declaration from a finished one, while refusing an ungranted second Action.
 	 */
 	@Test
 	void anOpenTurnReportsWhatRemainsOfIt() throws Exception {
@@ -475,12 +486,12 @@ class SrdDeathAndConditionTest {
 			assertFalse(attack.containsKey("next_step"), attack.toString());
 			assertEquals(Boolean.FALSE, attack.get("turn_advanced"));
 
-			// A second Action is reported, not refused (Action Surge and the like are the GM's call); once the turn
-			// ends there is nothing left to report.
-			Map<String, Object> dodge = a.engine.encounters().perform(op(), a.campaign, a.encounter, PC,
-					map("kind", "DODGE"), true);
-			assertEquals(Boolean.TRUE, dodge.get("turn_advanced"));
-			assertFalse(dodge.containsKey("turn_economy"), "the turn ended: " + dodge);
+			assertThrows(RpgException.class,
+					() -> a.engine.encounters().perform(op(), a.campaign, a.encounter, PC, map("kind", "DODGE"), true));
+			Map<String, Object> ended = a.engine.encounters().perform(op(), a.campaign, a.encounter, PC,
+					map("kind", "END_TURN"), true);
+			assertEquals(Boolean.TRUE, ended.get("turn_advanced"));
+			assertFalse(ended.containsKey("turn_economy"), "the turn ended: " + ended);
 		}
 	}
 

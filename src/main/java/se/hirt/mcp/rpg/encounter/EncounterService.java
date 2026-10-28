@@ -41,6 +41,9 @@ import se.hirt.mcp.rpg.inventory.InventoryService;
 import se.hirt.mcp.rpg.inventory.AmmunitionRecovery;
 import se.hirt.mcp.rpg.inventory.MagicItems;
 import se.hirt.mcp.rpg.ledger.LedgerService;
+import se.hirt.mcp.rpg.maps.GridCombat;
+import se.hirt.mcp.rpg.maps.SceneService;
+import se.hirt.mcp.rpg.party.TacticalControl;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
@@ -49,17 +52,24 @@ import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
 import se.hirt.mcp.rpg.protocol.Violation;
 import se.hirt.mcp.rpg.rules.Combat;
+import se.hirt.mcp.rpg.rules.DyingProgression;
 import se.hirt.mcp.rpg.rules.Exhaustion;
 import se.hirt.mcp.rpg.rules.Rules;
 import se.hirt.mcp.rpg.rules.TurnEconomy;
 import se.hirt.mcp.rpg.session.GameTime;
+import se.hirt.mcp.rpg.world.WorldTimeline;
+import se.hirt.mcp.rpg.world.TravelJourneyService;
+import se.hirt.mcp.rpg.spatial.Geometry.Footprint;
+import se.hirt.mcp.rpg.spatial.Geometry.Point;
+import se.hirt.mcp.rpg.spatial.Geometry.Scene;
+import se.hirt.mcp.rpg.spatial.SpatialRules;
 
 import java.util.*;
 
 /**
  * The encounter state machine (DESIGN.md §15, DOMAIN_MODEL.md §10, MCP_PROTOCOL.md §15): sides,
  * initiative, rounds and turns owned by the engine; one action resolves atomically (I-32);
- * zone-level positioning.
+ * persisted tactical grid positioning.
  */
 public final class EncounterService {
 
@@ -126,6 +136,8 @@ public final class EncounterService {
 		args.put("zones", zones);
 		args.put("environment", environment);
 		args.put("objectives", objectives);
+		if (locationRef != null)
+			args.put("location", locationRef);
 		return db.mutate(Database.Mutation.of("start_encounter", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "start_encounter");
 			if (tx.count(
@@ -199,10 +211,16 @@ public final class EncounterService {
 			if (locationRef != null && !locationRef.isBlank()) {
 				locationId = Ref.id(locationRef, Ref.LOCATION);
 			}
+			final String encounterPartySide = partySide;
+			locationId = GridCombat.encounterLocation(tx, campaignId, locationId,
+					participants.stream().map(p -> (Row) p.get("character")).toList(),
+					participants.stream().filter(p -> encounterPartySide.equals(p.get("side")))
+							.map(p -> Ref.of(Ref.CHARACTER, ((Row) p.get("character")).id())).toList(),
+					locationRef != null && !locationRef.isBlank());
 			String policy = campaign.str("continuation_policy");
 			String retryCheckpoint = null;
 			Long retryCheckpointId = null;
-			if ("ENCOUNTER_RETRY".equals(policy)) {
+			if (!"IRONMAN".equals(policy)) {
 				retryCheckpoint = CheckpointService.createInTx(tx, campaignId, "encounter_retry", true);
 				retryCheckpointId = Ref.id(retryCheckpoint, Ref.CHECKPOINT);
 			}
@@ -231,9 +249,22 @@ public final class EncounterService {
 			cols.put("round", 1);
 			cols.put("sides_json", Json.write(sidesJson));
 			cols.put("npc_reactions", npcReactions);
-			cols.put("environment_json", environment == null ? null : Json.write(Map.of("description", environment)));
+			var environmentState = new LinkedHashMap<String, Object>();
+			if (environment != null) {
+				environmentState.put("description", environment);
+			}
+			var gridOptions = new LinkedHashMap<String, Object>(options == null ? Map.of() : options);
+			final String deploymentPartySide = partySide;
+			gridOptions.put("deployment_party_refs",
+					participants.stream().filter(p -> deploymentPartySide.equals(p.get("side")))
+							.map(p -> Ref.of(Ref.CHARACTER, ((Row) p.get("character")).id())).toList());
+			if (environment != null && !environment.isBlank())
+				gridOptions.put("environment_description", environment);
+			environmentState.put("grid", GridCombat.ensureEncounterScene(tx, rules, campaignId, locationId,
+					participants.stream().map(p -> (Row) p.get("character")).toList(), zones, gridOptions));
+			cols.put("environment_json", Json.write(environmentState));
 			cols.put("objectives_json", objectives == null ? null : Json.write(objectives));
-			cols.put("spatial_model", "ZONES");
+			cols.put("spatial_model", "GRID");
 			cols.put("retry_checkpoint_id", retryCheckpointId);
 			cols.put("location_id", locationId);
 			cols.put("revision", 0);
@@ -247,7 +278,7 @@ public final class EncounterService {
 			var order = new ArrayList<Map<String, Object>>();
 			var groupRolls = new LinkedHashMap<String, Roll>();
 			for (Map<String, Object> p : participants) {
-				Row c = (Row) p.get("character");
+				Row c = tx.get("character", ((Row) p.get("character")).id());
 				String side = String.valueOf(p.get("side"));
 				int dexMod = Rules.modifier(c.intOr("dex_score", 10));
 				// Alert (Origin feat): the proficiency bonus is added to initiative (SRD 5.2.1 "Feats").
@@ -307,6 +338,11 @@ public final class EncounterService {
 				pc.put("position_zone", zones == null || zones.get(Ref.of(Ref.CHARACTER, c.id())) == null ? "near"
 						: zones.get(Ref.of(Ref.CHARACTER, c.id())).toString());
 				pc.put("status", "ACTIVE");
+				pc.put("once_per_turn_json", Json.write(Map.of("party_member_at_start",
+						RuntimeService.isPartyMember(tx, campaignId, c.id()), "party_membership_at_start",
+						tx.queryOne(
+								"SELECT state FROM party_membership WHERE campaign_id=? AND character_id=? AND state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY id DESC LIMIT 1",
+								campaignId, c.id()).map(m -> m.str("state")).orElse("NON_PARTY"))));
 				long participantId = tx.insert("encounter_participant", pc);
 				tx.update("character", c.id(), Map.of("encounter_id", encounterId, "revision", c.lng("revision") + 1));
 				var o = new LinkedHashMap<String, Object>();
@@ -336,17 +372,36 @@ public final class EncounterService {
 							r -> tx.get("character", r.lng("character_id")).str("name") + " " + r.lng("initiative"))
 							.toList(),
 					null);
-			LedgerService.append(tx, campaignId, new LedgerService.EventSpec("ENCOUNTER_STARTED",
-					"An encounter began between " + String.join(" and ", names)
-							+ (environment == null ? "" : " (" + environment + ")") + ".",
-					participants.stream().map(p -> ((Row) p.get("character")).id()).toList(), "NOTABLE", "PARTY_KNOWN",
-					"GM", null, locationId, null, Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounterId))));
-			tx.update("campaign", campaignId,
-					Map.of("harness_state", HarnessState.ENCOUNTER.name(), "revision", campaign.lng("revision") + 1));
+			Set<Long> observedAtStart = GridCombat.knownToParty(tx, tx.get("encounter", encounterId));
+			LedgerService.append(tx, campaignId,
+					new LedgerService.EventSpec("ENCOUNTER_STARTED",
+							"An encounter began" + (environment == null ? "" : " (" + environment + ")") + ".",
+							participants.stream().map(p -> ((Row) p.get("character")).id())
+									.filter(observedAtStart::contains).toList(),
+							"NOTABLE", "PARTY_KNOWN", "GM", null, locationId, null,
+							Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounterId))));
+			tx.update("campaign", campaignId, Map.of("harness_state", HarnessState.ENCOUNTER.name(), "revision",
+					tx.get("campaign", campaignId).lng("revision") + 1));
 			tx.touched(Ref.of(Ref.ENCOUNTER, encounterId), 1);
 			Map<String, Object> state = state(tx, tx.get("encounter", encounterId), 10);
 			state.put("retry_checkpoint", retryCheckpoint);
-			state.put("initiative_rolls", order);
+			Set<Long> knownAtStart = GridCombat.knownToParty(tx, tx.get("encounter", encounterId));
+			Set<Long> knownParticipants = new HashSet<>();
+			for (Row p : ordered)
+				if (knownAtStart.contains(p.lng("character_id")))
+					knownParticipants.add(p.id());
+			state.put("initiative_rolls",
+					order.stream()
+							.filter(roll -> knownParticipants.contains(((Number) roll.get("participant")).longValue()))
+							.toList());
+			ties = ties.stream().map(tie -> {
+				var filtered = new LinkedHashMap<String, Object>(tie);
+				filtered.put("participants",
+						SceneService.maps(tie.get("participants")).stream().filter(
+								member -> knownParticipants.contains(((Number) member.get("participant")).longValue()))
+								.toList());
+				return (Map<String, Object>) filtered;
+			}).filter(tie -> SceneService.maps(tie.get("participants")).size() > 1).toList();
 			if (!ties.isEmpty()) {
 				state.put("ties", ties);
 				state.put("ties_note",
@@ -355,6 +410,120 @@ public final class EncounterService {
 			state.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return state;
 		});
+	}
+
+	/** Admit finite, already placed reinforcements without resetting any existing combat state. */
+	public Map<String, Object> addParticipants(
+		String operationId, String campaignRef, String encounterRef, Map<String, List<String>> sides) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		return db.mutate(Database.Mutation.of("add_encounter_participants", campaignId, operationId, "GM",
+				Map.of("encounter", encounterRef, "sides", sides == null ? Map.of() : sides)), tx -> {
+					Harness.requireMutation(tx, campaignRef, "add_encounter_participants");
+					Row encounter = encounter(tx, campaignId, encounterRef);
+					if ("WAITING_CHOICE".equals(encounter.str("status"))
+							|| !pendingChoices(tx, encounter.id()).isEmpty())
+						throw RpgException.notAllowed("Resolve the pending choice, then retry adding reinforcements.");
+					if (!"RUNNING".equals(encounter.str("status")))
+						throw RpgException.notAllowed("Reinforcements can join only a running encounter.");
+					Row scene = GridCombat.scene(tx, encounter);
+					if (sides == null || sides.isEmpty())
+						throw RpgException.invalidArgument(
+								"sides must list the existing sides and their arriving character references.");
+					Map<String, Object> sideState = new LinkedHashMap<>(encounter.map("sides_json"));
+					List<?> sideNames = (List<?>) sideState.get("names");
+					String partySide = String.valueOf(sideState.get("party_side"));
+					Map<String, Object> stances = SceneService.map(sideState.get("stances"));
+					var arrivals = new LinkedHashMap<Long, String>();
+					for (var entry : sides.entrySet()) {
+						if (!sideNames.contains(entry.getKey()))
+							throw RpgException
+									.invalidArgument("Reinforcements must join an existing side: " + entry.getKey());
+						if (entry.getValue() == null || entry.getValue().isEmpty())
+							throw RpgException.invalidArgument("Each arriving side must list at least one character.");
+						for (String ref : entry.getValue()) {
+							Row actor = CharacterService.character(tx, campaignId, ref);
+							if (!"ACTIVE".equals(actor.str("lifecycle")) || !"ALIVE".equals(actor.str("life_state")))
+								throw RpgException.notAllowed("Only living active characters can join the encounter.");
+							if (arrivals.putIfAbsent(actor.id(), entry.getKey()) != null)
+								throw RpgException
+										.invalidArgument("An arriving character appears more than once: " + ref);
+							if (!actor.isNull("encounter_id") || tx.count(
+									"SELECT COUNT(*) FROM encounter_participant WHERE encounter_id=? AND character_id=?",
+									encounter.id(), actor.id()) > 0)
+								throw RpgException.notAllowed(ref + " is already assigned to an encounter.");
+							Row placement = SceneService.actor(tx, campaignId, ref);
+							if (placement.lng("scene_id") != scene.id())
+								throw RpgException.notAllowed(
+										"Move arriving actors onto the encounter's saved coverage before adding them; reinforcement admission does not teleport figurines.");
+							if (!SpatialRules.canPlace(
+									SceneService.geometry(SceneService.document(tx, scene),
+											placement.intOr("level", 0)),
+									SceneService.footprint(placement),
+									GridCombat.occupied(tx, scene.id(), placement.intOr("level", 0), actor.id())))
+								throw RpgException
+										.notAllowed("The arriving character's current placement is obstructed.");
+						}
+					}
+					if (arrivals.size() > 128)
+						throw RpgException
+								.invalidArgument("Add at most 128 existing actors in one reinforcement operation.");
+					long xp = SceneService.number(sideState, "xp_pool", 0).longValue();
+					var groupRolls = new HashMap<String, Roll>();
+					var initiative = new ArrayList<Map<String, Object>>();
+					for (var arrival : arrivals.entrySet()) {
+						Row actor = tx.get("character", arrival.getKey());
+						String side = arrival.getValue();
+						int bonus = Rules.modifier(actor.intOr("dex_score", 10))
+								+ (se.hirt.mcp.rpg.character.Origins.initiativeProficient(tx, rules, actor)
+										? RuntimeService.proficiencyBonus(tx, rules, actor) : 0)
+								- Exhaustion.penalty(tx, actor.id());
+						boolean advantage = conditionAmong(tx, actor, List.of("INVISIBLE")).isPresent();
+						boolean disadvantage = conditionAmong(tx, actor, Combat.INCAPACITATING_CONDITIONS).isPresent()
+								|| se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, actor).isPresent();
+						String dice = advantage && !disadvantage ? "2d20kh1"
+								: disadvantage && !advantage ? "2d20kl1" : "1d20";
+						String expression = dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus));
+						String group = RuntimeService.usesStatBlock(tx, actor)
+								? side + "|" + actor.str("origin_content_ref") + "|" + expression : null;
+						Roll roll = group == null ? null : groupRolls.get(group);
+						boolean shared = roll != null;
+						if (roll == null) {
+							roll = roller.roll(expression);
+							CharacterService.recordRoll(tx, campaignId,
+									"reinforcement initiative " + Ref.of(Ref.CHARACTER, actor.id()), roll);
+							if (group != null)
+								groupRolls.put(group, roll);
+						}
+						long id = tx.insert("encounter_participant",
+								Map.of("encounter_id", encounter.id(), "character_id", actor.id(), "side", side,
+										"initiative", roll.total(), "initiative_tiebreak",
+										partySide.equals(side) ? 1 : 0, "status", "ACTIVE"));
+						tx.update("character", actor.id(),
+								Map.of("encounter_id", encounter.id(), "revision", actor.lng("revision") + 1));
+						initiative.add(Map.of("participant", id, "character", Ref.of(Ref.CHARACTER, actor.id()),
+								"initiative", roll.total(), "roll", roll.toMap(), "shared_roll", shared));
+						if (Combat.hostile(stances, partySide, side) && !actor.isNull("origin_content_ref"))
+							xp += rules.find(actor.str("origin_content_ref")).map(d -> d.payload().get("xp_value"))
+									.map(v -> ((Number) v).longValue()).orElse(0L);
+						log(tx, campaignId, encounter.id(), encounter.lng("round"), actor.id(), "REINFORCEMENT",
+								actor.str("name") + " joins the encounter at their existing position.", null);
+					}
+					sideState.put("xp_pool", xp);
+					tx.update("encounter", encounter.id(),
+							Map.of("sides_json", Json.write(sideState), "revision", encounter.lng("revision") + 1));
+					SceneService.remember(tx, scene);
+					Set<Long> known = GridCombat.knownToParty(tx, tx.get("encounter", encounter.id()));
+					var result = new LinkedHashMap<String, Object>();
+					result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
+					result.put("applied", true);
+					result.put("initiative_rolls",
+							initiative.stream()
+									.filter(r -> known.contains(Ref.id(r.get("character").toString(), Ref.CHARACTER)))
+									.toList());
+					result.put("state", state(tx, tx.get("encounter", encounter.id()), 10));
+					result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
+					return result;
+				});
 	}
 
 	/**
@@ -394,10 +563,15 @@ public final class EncounterService {
 	// ── get_encounter_state ────────────────────────────────────────────
 
 	public Map<String, Object> encounterState(String campaignRef, String encounterRef, int logLimit) {
+		return encounterState(campaignRef, encounterRef, logLimit, "PLAYER");
+	}
+
+	public Map<String, Object> encounterState(String campaignRef, String encounterRef, int logLimit, String audience) {
 		return db.read(tx -> {
 			Row campaign = Harness.campaign(tx, campaignRef);
 			Row encounter = encounter(tx, campaign.id(), encounterRef);
-			Map<String, Object> state = state(tx, encounter, Math.max(1, Math.min(logLimit <= 0 ? 10 : logLimit, 100)));
+			Map<String, Object> state = state(tx, encounter, Math.max(1, Math.min(logLimit <= 0 ? 10 : logLimit, 100)),
+					audience);
 			state.put("meta", Harness.meta(campaign, null));
 			return state;
 		});
@@ -424,13 +598,48 @@ public final class EncounterService {
 	}
 
 	public Map<String, Object> state(Tx tx, Row encounter, int logLimit) {
+		return state(tx, encounter, logLimit, "PLAYER");
+	}
+
+	public Map<String, Object> state(Tx tx, Row encounter, int logLimit, String audience) {
+		if (!Set.of("GM", "PLAYER").contains(audience.toUpperCase(Locale.ROOT))) {
+			throw RpgException.invalidArgument("Encounter audience must be GM or PLAYER.");
+		}
+		boolean gm = "GM".equalsIgnoreCase(audience);
+		if ("ENDED".equals(encounter.str("status")))
+			return historicalState(tx, encounter, logLimit, gm);
+		Set<Long> known = GridCombat.knownToParty(tx, encounter);
 		Map<String, Object> sides = encounter.map("sides_json");
 		String partySide = String.valueOf(sides.get("party_side"));
 		var m = new LinkedHashMap<String, Object>();
 		m.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
 		m.put("status", encounter.str("status"));
 		m.put("round", encounter.lng("round"));
-		m.put("sides", sides);
+		m.put("audience", gm ? "GM" : "PLAYER");
+		var visibleSides = new LinkedHashMap<String, Object>(sides);
+		if (!gm) {
+			if (known.size() < turnOrder(tx, encounter.id()).size())
+				visibleSides.remove("xp_pool");
+			Set<String> names = new LinkedHashSet<>();
+			for (Row p : turnOrder(tx, encounter.id())) {
+				if (known.contains(p.lng("character_id")))
+					names.add(p.str("side"));
+			}
+			visibleSides.put("names", List.copyOf(names));
+			if (sides.get("surprised") instanceof List<?> surprised)
+				visibleSides.put("surprised", surprised.stream().filter(names::contains).toList());
+			var stances = new LinkedHashMap<String, Object>();
+			SceneService.map(sides.get("stances")).forEach((key, value) -> {
+				String[] pair = key.split("\\|", 2);
+				if (pair.length == 2 && names.contains(pair[0]) && names.contains(pair[1]))
+					stances.put(key, value);
+			});
+			visibleSides.put("stances", stances);
+		}
+		m.put("sides", visibleSides);
+		m.put("spatial_model", encounter.str("spatial_model"));
+		if (GridCombat.isGrid(encounter))
+			m.put("grid", GridCombat.binding(encounter));
 		m.put("environment",
 				encounter.isNull("environment_json") ? null : encounter.map("environment_json").get("description"));
 		m.put("objectives", encounter.isNull("objectives_json") ? List.of() : encounter.list("objectives_json"));
@@ -438,13 +647,38 @@ public final class EncounterService {
 		var participants = new ArrayList<Map<String, Object>>();
 		for (Row p : turnOrder(tx, encounter.id())) {
 			Row c = tx.get("character", p.lng("character_id"));
+			if (!gm && !known.contains(c.id()))
+				continue;
 			var pm = new LinkedHashMap<String, Object>();
 			pm.put("participant", p.id());
 			pm.put("character", Ref.of(Ref.CHARACTER, c.id()));
 			pm.put("name", c.str("name"));
 			pm.put("side", p.str("side"));
+			String membership = tx.queryOne(
+					"SELECT state FROM party_membership WHERE campaign_id=? AND character_id=? ORDER BY id DESC LIMIT 1",
+					encounter.lng("campaign_id"), c.id()).map(member -> member.str("state")).orElse("NON_PARTY");
+			boolean primary = tx.count(
+					"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id=? AND character_id=? AND active=1",
+					encounter.lng("campaign_id"), c.id()) > 0;
+			pm.put("membership", membership);
+			pm.put("role", primary ? "PLAYER_CHARACTER"
+					: Set.of("ACTIVE", "SEPARATED", "GUEST").contains(membership)
+							|| Boolean.TRUE.equals(p.map("once_per_turn_json").get("party_member_at_start"))
+									? "COMPANION" : p.str("side").equals(partySide) ? "ENCOUNTER_ALLY" : "NON_PARTY");
+			if (!RuntimeService.careGuidance(c).isEmpty())
+				pm.put("care", RuntimeService.careGuidance(c));
+			pm.put("controller",
+					TacticalControl.playerControlled(tx, encounter.lng("campaign_id"), c.id()) ? "PLAYER" : "DM");
+			pm.put("tactical_control", TacticalControl.assignment(tx, encounter.lng("campaign_id"), c.id()));
 			pm.put("initiative", p.lng("initiative"));
-			pm.put("zone", p.str("position_zone"));
+			if (GridCombat.isGrid(encounter)) {
+				Row placement = GridCombat.actor(tx, encounter, c.id());
+				pm.put("position_ft", List.of(placement.get("x_ft"), placement.get("y_ft")));
+				pm.put("level", placement.intOr("level", 0));
+				pm.put("footprint_ft", placement.get("footprint_ft"));
+				pm.put("movement", GridCombat.movementView(tx, rules, encounter, p, c));
+			} else
+				pm.put("zone", p.str("position_zone"));
 			pm.put("status", p.str("status"));
 			pm.put("life_state", c.str("life_state"));
 			boolean party = p.str("side").equals(partySide);
@@ -473,21 +707,212 @@ public final class EncounterService {
 			participants.add(pm);
 		}
 		m.put("participants", participants);
-		m.put("turn", turnId == null ? null : participants.stream()
-				.filter(p -> Boolean.TRUE.equals(p.get("current_turn"))).findFirst().orElse(null));
-		m.put("recent_log", tx.query("SELECT * FROM encounter_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?",
-				encounter.id(), logLimit).stream().map(EncounterService::logEntry).toList());
-		List<Map<String, Object>> pending = pendingChoices(tx, encounter.id());
+		if (gm && "ENDED".equals(encounter.str("status")) && !encounter.map("record_json").isEmpty())
+			m.put("record", EncounterDigest.gmRecord(encounter.map("record_json")));
+		Map<String, Object> current = turnId == null ? null : participants.stream()
+				.filter(p -> Boolean.TRUE.equals(p.get("current_turn"))).findFirst().orElse(null);
+		m.put("turn", current);
+		if (!gm && turnId != null && current == null)
+			m.put("gm_handoff", gmHandoff(encounter));
+		boolean playerTurn = current != null && "PLAYER".equals(current.get("controller"));
+		m.put("awaiting_player_input", playerTurn);
+		if (turnId != null) {
+			m.put("awaiting_gm", !playerTurn);
+			m.put("turn_guidance", playerTurn
+					? "Use the player's declared tactical decision for this character; ask only for meaningful unspecified choices."
+					: "The DM resolves this turn from the actor's own perception, personality and applicable player orders.");
+		}
+		m.put("recent_log",
+				tx.query("SELECT * FROM encounter_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?", encounter.id(),
+						logLimit).stream()
+						.filter(log -> gm || log.lng("actor_character_id") == null
+								|| known.contains(log.lng("actor_character_id")))
+						.filter(log -> gm || !"DEATH_SAVE".equals(log.str("kind"))
+								|| !Boolean.FALSE.equals(log.map("payload_json").get("party_observed")))
+						.map(log -> filteredLogEntry(tx, encounter, log, known, gm)).toList());
+		List<Map<String, Object>> allPending = pendingChoices(tx, encounter.id());
+		List<Map<String, Object>> pending = allPending;
+		if (!gm)
+			pending = pending.stream()
+					.filter(choice -> known.contains(Ref.id(choice.get("chooser").toString(), Ref.CHARACTER)))
+					.map(choice -> playerChoice(tx, encounter, choice, known)).toList();
+		if (!gm && pending.size() < allPending.size())
+			m.put("gm_handoff", gmHandoff(encounter));
 		m.put("pending_choices", pending);
+		if (!allPending.isEmpty()) {
+			boolean playerDecision = pending.stream()
+					.anyMatch(choice -> Boolean.TRUE.equals(choice.get("player_controlled")));
+			m.put("awaiting_player_input", playerDecision);
+			m.put("awaiting_gm", !playerDecision);
+			m.put("turn_guidance",
+					playerDecision ? "Resolve the player's offered reaction before continuing the suspended action."
+							: "The DM resolves the existing reaction choice before the suspended action continues.");
+		}
+		if (m.containsKey("gm_handoff"))
+			m.put("turn_guidance",
+					"The current actor is outside party sight. The DM can read the full turn using get_encounter_state with audience GM; follow gm_handoff. Player knowledge is unchanged.");
 		m.put("npc_reactions", encounter.str("npc_reactions"));
 		m.put("legal_actions",
-				pending.isEmpty() ? ACTIONS.stream().sorted().toList() : List.of("resolve_pending_choice"));
+				allPending.isEmpty() ? ACTIONS.stream().filter(action -> !"HIDE".equals(action)).sorted().toList()
+						: List.of("resolve_pending_choice"));
+		m.put("unsupported_actions", Map.of("HIDE",
+				"Requires the shared Stealth, concealment and observer discovery lifecycle; resolve_check supports a GM-adjudicated Stealth check."));
 		m.put("revision", encounter.lng("revision"));
 		List<Map<String, Object>> recovery = AmmunitionRecovery.offers(tx, rules, encounter);
 		if (!recovery.isEmpty()) {
 			m.put("ammunition_recovery", recovery);
 		}
 		return m;
+	}
+
+	/**
+	 * Historical reads use saved end-time facts, never the actors' present boards or later
+	 * knowledge.
+	 */
+	private Map<String, Object> historicalState(Tx tx, Row encounter, int logLimit, boolean gm) {
+		Map<String, Object> stored = encounter.map("record_json"),
+				digest = SceneService.map(stored.get("party_digest"));
+		List<Map<String, Object>> roster = SceneService.maps((gm ? stored : digest).get("final_roster"));
+		String partySide = String.valueOf(encounter.map("sides_json").get("party_side"));
+		boolean hasSnapshot = (gm ? stored : digest).containsKey("final_roster");
+		var participants = new ArrayList<Map<String, Object>>();
+		for (Row p : turnOrder(tx, encounter.id())) {
+			String ref = Ref.of(Ref.CHARACTER, p.lng("character_id"));
+			Map<String, Object> saved = roster.stream().filter(person -> ref.equals(person.get("character")))
+					.findFirst().orElse(null);
+			if (saved == null && (hasSnapshot || !gm && !partySide.equals(p.str("side"))))
+				continue;
+			var person = new LinkedHashMap<String, Object>();
+			person.put("participant", p.id());
+			person.put("character", ref);
+			person.put("side", p.str("side"));
+			person.put("initiative", p.lng("initiative"));
+			person.put("current_turn", false);
+			if (saved != null) {
+				person.putAll(saved);
+				if (!gm)
+					SceneService.maps(stored.get("party_final_positions")).stream()
+							.filter(position -> ref.equals(position.get("character"))).findFirst()
+							.ifPresent(position -> {
+								person.putAll(position);
+								person.put("position_status", "ENCOUNTER_END");
+							});
+				if (saved.containsKey("current_hp")) {
+					var hp = new LinkedHashMap<String, Object>();
+					hp.put("current", saved.get("current_hp"));
+					hp.put("temp", saved.get("temp_hp"));
+					person.put("hp", hp);
+				}
+			} else {
+				person.put("name", tx.get("character", p.lng("character_id")).str("name"));
+				person.put("status", p.str("status"));
+				person.put("snapshot_status", "UNAVAILABLE");
+			}
+			participants.add(person);
+		}
+		var out = new LinkedHashMap<String, Object>();
+		out.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
+		out.put("status", "ENDED");
+		out.put("round", encounter.lng("round"));
+		out.put("audience", gm ? "GM" : "PLAYER");
+		out.put("historical", true);
+		out.put("snapshot_status", hasSnapshot ? "ENCOUNTER_END" : "UNAVAILABLE");
+		boolean savedPositions = "ENCOUNTER_END".equals(stored.get("position_status"));
+		out.put("position_status", savedPositions ? "ENCOUNTER_END" : "NOT_RECORDED");
+		out.put("note", savedPositions
+				? "This is a saved encounter record. Final positions are frozen at encounter end."
+						+ (gm ? "" : " Includes the party's own final positions and other positions seen at that time.")
+				: "This is a saved encounter record. Exact final grid positions were not recorded; current figurines and later character changes are not historical evidence.");
+		out.put("spatial_model", encounter.str("spatial_model"));
+		if (GridCombat.isGrid(encounter))
+			out.put("grid", GridCombat.binding(encounter));
+		out.put("sides", gm ? encounter.map("sides_json") : Map.of("party_side", partySide, "names",
+				participants.stream().map(person -> person.get("side")).distinct().toList()));
+		if (stored.get("outcome") != null)
+			out.put("outcome", stored.get("outcome"));
+		if (stored.get("resolved_event") != null)
+			out.put("resolved_event", stored.get("resolved_event"));
+		out.put("participants", participants);
+		out.put("turn", null);
+		out.put("awaiting_player_input", false);
+		out.put("awaiting_gm", false);
+		out.put("pending_choices", List.of());
+		out.put("legal_actions", List.of());
+		out.put("revision", encounter.lng("revision"));
+		if (gm) {
+			if (!stored.isEmpty())
+				out.put("record", EncounterDigest.gmRecord(stored));
+			out.put("recent_log", tx.query("SELECT * FROM encounter_log WHERE encounter_id=? ORDER BY id DESC LIMIT ?",
+					encounter.id(), logLimit).stream().map(EncounterService::logEntry).toList());
+		} else {
+			out.put("digest", digest);
+			// Only the saved, already filtered highlights are safe after the party has left the scene.
+			out.put("recent_log", SceneService.maps(digest.get("highlights")).stream().limit(logLimit).toList());
+			out.put("log_scope", "SAVED_PARTY_KNOWN_HIGHLIGHTS");
+		}
+		List<Map<String, Object>> recovery = AmmunitionRecovery.offers(tx, rules, encounter);
+		if (!recovery.isEmpty())
+			out.put("ammunition_recovery", recovery);
+		return out;
+	}
+
+	private static Map<String, Object> gmHandoff(Row encounter) {
+		return Map.of("tool", "get_encounter_state", "arguments",
+				Map.of("campaign", Ref.of(Ref.CAMPAIGN, encounter.lng("campaign_id")), "encounter",
+						Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM"),
+				"read_only", true, "purpose",
+				"DM decision context for the full encounter; do not narrate unseen identities or positions to the player.");
+	}
+
+	private static Map<String, Object> filteredLogEntry(Tx tx, Row encounter, Row row, Set<Long> known, boolean gm) {
+		Map<String, Object> entry = logEntry(row);
+		if (!gm) {
+			entry.remove("narration");
+			String summary = String.valueOf(entry.get("summary"));
+			for (Row p : tx.query("SELECT * FROM encounter_participant WHERE encounter_id=?", encounter.id())) {
+				if (!known.contains(p.lng("character_id"))) {
+					String name = tx.get("character", p.lng("character_id")).str("name");
+					if (name != null && !name.isBlank())
+						summary = summary.replace(name, "an unseen creature");
+				}
+			}
+			entry.put("summary", "ENCOUNTER_STARTED".equals(row.str("kind")) ? "An encounter begins." : summary);
+		}
+		return entry;
+	}
+
+	/**
+	 * Project offered decisions only; their stored context remains authoritative for resolution.
+	 */
+	private static Map<String, Object> playerChoice(Tx tx, Row encounter, Map<String, Object> choice, Set<Long> known) {
+		var unseen = new LinkedHashMap<String, String>();
+		for (Row participant : tx.query("SELECT * FROM encounter_participant WHERE encounter_id=?", encounter.id())) {
+			long id = participant.lng("character_id");
+			if (!known.contains(id))
+				unseen.put(Ref.of(Ref.CHARACTER, id), tx.get("character", id).str("name"));
+		}
+		var projected = new LinkedHashMap<>(choice);
+		if (choice.get("prompt") instanceof String prompt)
+			projected.put("prompt", redactChoiceText(prompt, unseen));
+		var options = new ArrayList<Map<String, Object>>();
+		for (Map<String, Object> option : SceneService.maps(choice.get("options"))) {
+			var visibleOption = new LinkedHashMap<>(option);
+			if (option.get("description") instanceof String description)
+				visibleOption.put("description", redactChoiceText(description, unseen));
+			options.add(visibleOption);
+		}
+		projected.put("options", options);
+		return projected;
+	}
+
+	/** Human text only: names must never rewrite transaction, option or controller tokens. */
+	private static String redactChoiceText(String text, Map<String, String> unseen) {
+		for (var hidden : unseen.entrySet()) {
+			text = text.replaceAll(java.util.regex.Pattern.quote(hidden.getKey()) + "(?![0-9])", "an unseen creature");
+			if (hidden.getValue() != null && !hidden.getValue().isBlank())
+				text = text.replace(hidden.getValue(), "an unseen creature");
+		}
+		return text;
 	}
 
 	/** Open pending choices of an encounter, as the protocol presents them. */
@@ -512,7 +937,13 @@ public final class EncounterService {
 		m.put("kind", payload.get("choice_kind"));
 		m.put("chooser", Ref.of(Ref.CHARACTER, chooser));
 		m.put("chooser_name", tx.get("character", chooser).str("name"));
-		m.put("player_controlled", playerControlled(tx, t.lng("campaign_id"), chooser));
+		boolean player = playerControlled(tx, t.lng("campaign_id"), chooser);
+		m.put("player_controlled", player);
+		m.put("decision_controller", player ? "PLAYER" : "DM");
+		m.put("tactical_control", TacticalControl.assignment(tx, t.lng("campaign_id"), chooser));
+		m.put("awaiting_player_input", player);
+		m.put("decision_guidance", player ? "Use the player's reaction decision, then resolve this existing choice."
+				: "The DM decides this existing reaction choice; changing control does not resolve or discard it.");
 		m.put("prompt", payload.get("prompt"));
 		m.put("options", payload.get("options"));
 		m.put("mandatory", true);
@@ -522,10 +953,13 @@ public final class EncounterService {
 
 	private static Map<String, Object> logEntry(Row r) {
 		var m = new LinkedHashMap<String, Object>();
+		m.put("log_id", r.id());
 		m.put("round", r.lng("round"));
 		m.put("kind", r.str("kind"));
 		m.put("actor", Ref.ofNullable(Ref.CHARACTER, r.lng("actor_character_id")));
 		m.put("summary", r.str("summary"));
+		if (r.str("narration") != null)
+			m.put("narration", r.str("narration"));
 		return m;
 	}
 
@@ -579,8 +1013,14 @@ public final class EncounterService {
 	// ── perform_encounter_action ───────────────────────────────────────
 
 	public Map<String, Object> perform(
+		String operationId, String campaignRef, String encounterRef, String actorRef, Map<String, Object> action) {
+		return perform(operationId, campaignRef, encounterRef, actorRef, action, null);
+	}
+
+	public Map<String, Object> perform(
 		String operationId, String campaignRef, String encounterRef, String actorRef, Map<String, Object> action,
-		boolean endTurn) {
+		Boolean endTurn) {
+		EncounterDigest.validateNarration(action);
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
@@ -605,6 +1045,7 @@ public final class EncounterService {
 				throw RpgException.notAllowed("The encounter is " + encounter.str("status") + ".");
 			}
 			Row actor = CharacterService.character(tx, campaignId, actorRef);
+			GridCombat.scene(tx, encounter);
 			Row participant = tx
 					.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
 							encounter.id(), actor.id())
@@ -624,12 +1065,46 @@ public final class EncounterService {
 				throw RpgException.invalidArgument(
 						"Unknown action kind '" + kind + "'; legal kinds: " + ACTIONS.stream().sorted().toList());
 			}
+			if ("HIDE".equals(kind)) {
+				throw RpgException.capabilityUnavailable(
+						"HIDE is not mechanically supported yet: it requires cover or obscurement, enemy sight checks, a Stealth DC and concealment that ends on revealing actions. No Action or roll was spent. The DM can resolve a Dexterity (Stealth) check with resolve_check and adjudicate what observers know; that check alone does not create automatic hidden or Invisible state.")
+						.withDetail("supported_alternative", "resolve_check").withDetail("action_spent", false);
+			}
+			if ("END_TURN".equals(kind) && !turnsSkipped.isEmpty()
+					&& Objects.equals(opened.lng("turn_participant_id"), participant.id())) {
+				// Older saves can point at a mover already defeated by a reaction. Passing that displayed
+				// turn acknowledges the reconciliation, rather than rejecting and rolling it back, or ending
+				// the next living creature's turn as well.
+				var recovered = new LinkedHashMap<String, Object>();
+				recovered.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
+				recovered.put("actor", actorRef);
+				recovered.put("kind", kind);
+				recovered.put("turn_advanced", true);
+				recovered.put("turns_skipped", turnsSkipped);
+				Row live = tx.get("encounter", encounter.id());
+				tx.update("encounter", live.id(), Map.of("revision", live.lng("revision") + 1));
+				recovered.put("encounter_revision", live.lng("revision") + 1);
+				Map<String, Object> current = state(tx, tx.get("encounter", encounter.id()), 5);
+				recovered.put("state", current);
+				recovered.put("next_turn", current.get("turn"));
+				recovered.put("round", current.get("round"));
+				if (current.containsKey("gm_handoff"))
+					recovered.put("gm_handoff", current.get("gm_handoff"));
+				recovered.put("note", "The unavailable saved turn was passed; the next creature's turn remains open.");
+				automaticDeathReports(tx, campaignId, encounter, recovered);
+				recovered.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
+				return recovered;
+			}
 			Long turnId = encounter.lng("turn_participant_id");
 			if (turnId == null || turnId != participant.id()) {
 				String whose = turnId == null ? "nobody"
 						: tx.get("character", tx.get("encounter_participant", turnId).lng("character_id")).str("name");
+				if (turnId != null && !GridCombat.knownToParty(tx, encounter)
+						.contains(tx.get("encounter_participant", turnId).lng("character_id")))
+					whose = "an unobserved participant";
 				throw RpgException.notAllowed("It is " + whose + "'s turn, not " + actor.str("name")
-						+ "'s (I-31). Reactions are offered by the engine as pending choices.");
+						+ "'s (I-31). Reactions are offered by the engine as pending choices. The DM can inspect the full turn with get_encounter_state audience GM.")
+						.withDetail("gm_handoff", gmHandoff(encounter));
 			}
 			if (!"ACTIVE".equals(participant.str("status")) || !"ALIVE".equals(actor.str("life_state"))) {
 				throw RpgException.notAllowed(actor.str("name") + " cannot act (" + actor.str("life_state") + ").");
@@ -653,6 +1128,13 @@ public final class EncounterService {
 				}
 			}
 			long round = encounter.lng("round");
+			boolean continuationAttack = "ATTACK".equals(kind) && !lightExtra
+					&& TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.ATTACK_ACTION)
+					&& attacksRemaining(tx, encounter, actor, round, false) > 0;
+			boolean bonusAction = lightExtra || actionUsesBonusAction(tx, actor, kind, action);
+			boolean requiresAction = ACTION_KINDS.contains(kind) && !bonusAction && !continuationAttack;
+			if (requiresAction)
+				TurnEconomy.spendAction(tx, encounter, actor.id());
 			var result = new LinkedHashMap<String, Object>();
 			result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
 			result.put("actor", Ref.of(Ref.CHARACTER, actor.id()));
@@ -694,21 +1176,18 @@ public final class EncounterService {
 						+ " have Disadvantage until the start of their next turn; Dexterity saves have Advantage.");
 			}
 			case "MOVE", "DASH" -> {
-				String from = participant.str("position_zone");
-				String zone = action.get("zone") == null ? from : action.get("zone").toString();
-				tx.update("encounter_participant", participant.id(), Map.of("position_zone", zone));
-				log(tx, campaignId, encounter.id(), round, actor.id(), kind,
-						actor.str("name") + (kind.equals("DASH") ? " dashes" : " moves") + " to " + zone + ".", null);
-				result.put("zone", zone);
-				if (conditionAmong(tx, actor, List.of("PRONE")).isPresent()) {
-					// "Your only movement options are to crawl or to spend an amount of movement equal to half your
-					// Speed (round down) to right yourself" (SRD 5.2.1 "Prone"); crawling costs 1 extra foot per foot.
-					result.put("crawling", actor.str("name")
-							+ " is Prone and crawls: each foot of movement costs 1 extra foot; STAND ends the condition for half their Speed.");
+				if ("DASH".equals(kind))
+					GridCombat.dash(tx, rules, encounter, participant, actor);
+				if (!"DASH".equals(kind) || action.containsKey("x_ft") || action.containsKey("destination_ft")
+						|| action.containsKey("zone") || action.containsKey("path_ft")
+						|| action.containsKey("portal")) {
+					result.putAll(moveOnGrid(tx, campaignId, encounter, actor, participant, action));
 				}
-				if (from != null && !from.equals(zone)) {
-					result.putAll(opportunityAttacks(tx, campaignId, encounter, actor, participant, from, round));
-				}
+				result.put("movement", GridCombat.movementView(tx, rules, encounter, participant, actor));
+				if (action.get("zone") != null)
+					result.put("zone", action.get("zone"));
+				if (conditionAmong(tx, actor, List.of("PRONE")).isPresent())
+					result.put("crawling", true);
 			}
 			case "STAND" -> {
 				// "Spend an amount of movement equal to half your Speed (round down) to right yourself and thereby end
@@ -724,6 +1203,7 @@ public final class EncounterService {
 				}
 				int speed = Exhaustion.speed(tx, rules, actor);
 				int cost = speed / 2;
+				GridCombat.spendMovement(tx, rules, encounter, participant, actor, cost * 12L);
 				log(tx, campaignId, encounter.id(), round, actor.id(), "STAND",
 						actor.str("name") + " stands up, spending " + cost + " of " + speed + " feet of movement.",
 						null);
@@ -734,23 +1214,6 @@ public final class EncounterService {
 						"Prone has ended. Standing up is movement, not an action: it spends half of "
 								+ actor.str("name") + "'s Speed (" + cost + " of " + speed
 								+ " ft), leaving the rest of this turn's movement (SRD 5.2.1 \"Prone\").");
-			}
-			case "HIDE" -> {
-				int dexMod = Rules.modifier(actor.intOr("dex_score", 10));
-				boolean proficient = tx.count(
-						"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'SKILL' AND content_ref = 'srd5e:skill/stealth'",
-						actor.id()) > 0;
-				// One source of truth: the character's own Stealth when they have a sheet, the stat block's when
-				// they are still a stat block (RULES_ENGINE.md §3).
-				int bonus = creatureSkill(tx, actor, "Stealth") - Exhaustion.penalty(tx, actor.id());
-				Roll roll = roller.roll("1d20" + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
-				CharacterService.recordRoll(tx, campaignId, "stealth (hide)", roll);
-				boolean hidden = roll.total() >= 15;
-				log(tx, campaignId, encounter.id(), round, actor.id(), "HIDE", actor.str("name")
-						+ " tries to hide: Stealth " + roll.total() + (hidden ? " (hidden)" : " (not hidden)"), null);
-				result.put("roll", roll.toMap());
-				result.put("hidden", hidden);
-				result.put("note", "Hide DC 15 (SRD 5.2.1); the GM decides who can perceive the hidden creature.");
 			}
 			case "USE_ITEM" -> result.putAll(useItem(tx, campaignId, encounter, actor, action, round));
 			case "DISENGAGE", "HELP", "INTERACT", "OTHER_RULES_ACTION" -> {
@@ -770,11 +1233,10 @@ public final class EncounterService {
 			}
 			default -> throw RpgException.invalidArgument("Unhandled action " + kind);
 			}
-			// The turn's economy (SRD 5.2.1 "Your Turn"): the Action is recorded, never refused, so the GM can tell
-			// an incomplete declaration from a finished turn; movement is a fact without a distance.
-			if (ACTION_KINDS.contains(kind) && !lightExtra && !"BONUS_ACTION".equals(result.get("action_cost"))) {
-				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.ACTION);
-			}
+			// A continuing Multiattack spends its original Action; a Light extra attack spends the Bonus Action.
+			if ("ATTACK".equals(kind) && !lightExtra)
+				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.ATTACK_ACTION);
+			EncounterDigest.captureNarration(tx, encounter.id(), actor.id(), action, result);
 			if ("MOVE".equals(kind) || "DASH".equals(kind)) {
 				TurnEconomy.markThisTurn(tx, encounter, actor.id(), TurnEconomy.MOVED);
 			} else if ("STAND".equals(kind)) {
@@ -794,8 +1256,18 @@ public final class EncounterService {
 				result.put("next_step", (remaining > 0 ? result.get("next_step") + " " : "") + actor.str("name")
 						+ " can make an extra Light-weapon attack: ATTACK with light_extra_attack:true and a listed weapon ref, or END_TURN.");
 			}
-			boolean advance = kind.equals("END_TURN") || (endTurn && remaining == 0 && lightWeapons.isEmpty());
+			boolean finish = endTurn == null
+					? !Set.of("MOVE", "STAND").contains(kind) && !"BONUS_ACTION".equals(result.get("action_cost"))
+					: endTurn;
 			List<Map<String, Object>> pending = pendingChoices(tx, encounter.id());
+			Row liveActor = tx.get("character", actor.id()),
+					liveParticipant = tx.get("encounter_participant", participant.id());
+			boolean forcedEnd = pending.isEmpty()
+					&& Objects.equals(tx.get("encounter", encounter.id()).lng("turn_participant_id"), participant.id())
+					&& (!"ACTIVE".equals(liveParticipant.str("status"))
+							|| !"ALIVE".equals(liveActor.str("life_state")));
+			boolean advance = kind.equals("END_TURN") || forcedEnd
+					|| (finish && remaining == 0 && lightWeapons.isEmpty());
 			if (!advance && pending.isEmpty()) {
 				// Facts for the GM, not a prompt for the player: whether to ask about a leftover is a judgment of the
 				// declaration and the scene, which the tool description leaves to the GM.
@@ -803,7 +1275,7 @@ public final class EncounterService {
 				result.put("turn_economy", economy);
 				if (!result.containsKey("next_step") && "AVAILABLE".equals(economy.get("action"))) {
 					result.put("next_step", actor.str("name")
-							+ "'s Action is still available this turn (ATTACK, CAST, DODGE, DASH, DISENGAGE, HELP, HIDE, USE_ITEM); END_TURN when the turn is done.");
+							+ "'s Action is still available this turn (ATTACK, CAST, DODGE, DASH, DISENGAGE, HELP, USE_ITEM); END_TURN when the turn is done.");
 				}
 			}
 			if (!pending.isEmpty()) {
@@ -820,6 +1292,11 @@ public final class EncounterService {
 				result.put("next_step", "Ask the chooser(s) and call resolve_pending_choice; the turn "
 						+ (advance ? "advances afterwards." : "continues afterwards."));
 			} else if (advance) {
+				if (forcedEnd) {
+					result.put("turn_end_reason", "ACTOR_CAN_NO_LONGER_ACT");
+					log(tx, campaignId, encounter.id(), encounter.lng("round"), actor.id(), "TURN_SKIPPED",
+							actor.str("name") + " can no longer take this turn; the turn moves on.", null);
+				}
 				result.put("turn_advanced", true);
 				result.putAll(advanceTurn(tx, campaignId, tx.get("encounter", encounter.id())));
 			}
@@ -827,17 +1304,341 @@ public final class EncounterService {
 			tx.update("encounter", after.id(), Map.of("revision", after.lng("revision") + 1));
 			result.put("encounter_revision", after.lng("revision") + 1);
 			result.put("state", state(tx, tx.get("encounter", encounter.id()), 5));
+			automaticDeathReports(tx, campaignId, encounter, result);
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return result;
 		});
+	}
+
+	private boolean actionUsesBonusAction(Tx tx, Row actor, String kind, Map<String, Object> action) {
+		if ("CAST".equals(kind) && action.get("spell") != null)
+			return "BONUS_ACTION".equals(se.hirt.mcp.rpg.magic.SpellService.castingActionCost(tx, rules, actor,
+					action.get("spell").toString(), action));
+		if ("USE_ITEM".equals(kind) && action.get("item") != null) {
+			String text = action.get("item").toString();
+			Row entry = text.startsWith(Ref.INVENTORY + ":") ? tx.get("inventory_entry", Ref.id(text, Ref.INVENTORY))
+					: carriedAny(tx, actor, text);
+			return "POTION".equals(ContentService.itemForEntry(tx, rules, entry).payload().get("type"));
+		}
+		return false;
+	}
+
+	private Map<String, Object> moveOnGrid(
+		Tx tx, long campaignId, Row encounter, Row actor, Row participant, Map<String, Object> action) {
+		if (action.get("portal") != null)
+			return moveViaPortal(tx, campaignId, encounter, actor, participant, action.get("portal").toString(),
+					new HashSet<>());
+		Row placement = GridCombat.actor(tx, encounter, actor.id());
+		Footprint start = SceneService.footprint(placement);
+		var origins = new ArrayList<Point>();
+		if (action.get("path_ft") instanceof List<?> supplied) {
+			if (supplied.size() > 1000)
+				throw RpgException.invalidArgument("Movement paths are limited to 1000 steps per action.");
+			for (Object value : supplied) {
+				if (!(value instanceof List<?> pair) || pair.size() != 2 || !(pair.get(0) instanceof Number x)
+						|| !(pair.get(1) instanceof Number y))
+					throw RpgException.invalidArgument("path_ft requires [x,y] coordinates in feet.");
+				Point point = SceneService.point(x.doubleValue(), y.doubleValue());
+				start.at(point);
+				if (origins.isEmpty() && point.equals(start.origin()))
+					continue;
+				origins.add(point);
+			}
+			Point previous = start.origin();
+			for (Point point : origins) {
+				if (Math.max(Math.abs(point.x() - previous.x()), Math.abs(point.y() - previous.y())) != 60)
+					throw RpgException.invalidArgument("Each explicit movement step must be one adjacent 5 ft cell.");
+				previous = point;
+			}
+			if (!origins.isEmpty())
+				GridCombat.extendIncidentalCoverage(tx, encounter, start.at(origins.getLast()));
+		} else {
+			Point destination = GridCombat.destination(action);
+			start.at(destination);
+			GridCombat.extendIncidentalCoverage(tx, encounter, start.at(destination));
+			Row map = GridCombat.scene(tx, encounter);
+			Scene geometry = SceneService.geometry(SceneService.document(tx, map), placement.intOr("level", 0));
+			int crawl = conditionAmong(tx, actor, List.of("PRONE")).isPresent() ? 2 : 1;
+			var path = SpatialRules.path(geometry, start, destination,
+					GridCombat.occupied(tx, map.id(), placement.intOr("level", 0), actor.id()), 10000,
+					GridCombat.remainingMovement(tx, rules, encounter, participant, actor) / crawl);
+			if (path.found())
+				origins.addAll(path.origins().subList(1, path.origins().size()));
+			else if (path.status() == SpatialRules.PathStatus.INVALID_DESTINATION
+					|| path.status() == SpatialRules.PathStatus.NO_PATH) {
+				// A hidden obstruction is learned by approaching it, not by a free all-or-nothing validation probe.
+				Point cursor = start.origin();
+				while (!cursor.equals(destination) && origins.size() < 1000) {
+					cursor = cursor.translate(Long.compare(destination.x(), cursor.x()) * 60L,
+							Long.compare(destination.y(), cursor.y()) * 60L);
+					origins.add(cursor);
+				}
+				if (!cursor.equals(destination))
+					throw RpgException.invalidArgument("Choose a bounded movement destination.");
+			} else
+				throw RpgException
+						.notAllowed("The requested route exceeds this turn's movement or bounded path search.");
+		}
+		return executeGridPath(tx, campaignId, encounter, actor, participant, origins, new HashSet<>());
+	}
+
+	private Map<String, Object> executeGridPath(
+		Tx tx, long campaignId, Row encounter, Row actor, Row participant, List<Point> origins,
+		Set<Long> handledAtBoundary) {
+		var output = new LinkedHashMap<String, Object>();
+		var reactions = new ArrayList<Map<String, Object>>();
+		var moved = new ArrayList<List<Double>>();
+		Row map = GridCombat.scene(tx, encounter);
+		Map<String, Object> stances = SceneService.map(encounter.map("sides_json").get("stances"));
+		long spent = 0;
+		for (int index = 0; index < origins.size(); index++) {
+			actor = tx.get("character", actor.id());
+			if (!"ALIVE".equals(actor.str("life_state"))) {
+				output.put("interruption", "The mover can no longer continue.");
+				break;
+			}
+			Row placement = GridCombat.actor(tx, encounter, actor.id());
+			Footprint from = SceneService.footprint(placement), to = from.at(origins.get(index));
+			Scene geometry = SceneService.geometry(SceneService.document(tx, map), placement.intOr("level", 0));
+			if (!SpatialRules.transition(geometry, from, to,
+					GridCombat.occupied(tx, map.id(), placement.intOr("level", 0), actor.id()))) {
+				output.put("interruption", "Movement stops at a newly encountered or changed obstruction.");
+				break;
+			}
+			int crawl = conditionAmong(tx, actor, List.of("PRONE")).isPresent() ? 2 : 1;
+			long cost = SpatialRules.movementCost(geometry, to) * crawl;
+			if (cost > GridCombat.remainingMovement(tx, rules, encounter, participant, actor)) {
+				output.put("interruption", "The remaining movement is insufficient for the next step.");
+				break;
+			}
+			boolean disengaged = tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id=? AND condition_ref=?",
+					actor.id(), DISENGAGING_REF) > 0;
+			if (!disengaged)
+				for (Row other : turnOrder(tx, encounter.id())) {
+					if (other.id() == participant.id() || handledAtBoundary.contains(other.id())
+							|| !Combat.hostile(stances, other.str("side"), participant.str("side")))
+						continue;
+					Row reactor = tx.get("character", other.lng("character_id"));
+					if (!"ACTIVE".equals(other.str("status")) || !reactionAvailable(tx, other, reactor)
+							|| !GridCombat.canSee(tx, encounter, reactor.id(), actor.id()))
+						continue;
+					Row reactorPlacement = GridCombat.actor(tx, encounter, reactor.id());
+					if (reactorPlacement.intOr("level", 0) != placement.intOr("level", 0))
+						continue;
+					var attackAction = new LinkedHashMap<String, Object>();
+					attackAction.put("weapon", defaultMeleeAttack(tx, reactor).orElse("unarmed"));
+					Combat.AttackProfile profile = resolveProfile(tx, reactor, attackAction).profile();
+					if (profile.ranged())
+						continue;
+					long reach = SceneService.number(profile.range() == null ? Map.of() : profile.range(), "reach", 5)
+							.longValue() * 12;
+					Footprint enemy = SceneService.footprint(reactorPlacement);
+					if (SpatialRules.distance(enemy, from) > reach || SpatialRules.distance(enemy, to) <= reach)
+						continue;
+					handledAtBoundary.add(other.id());
+					if (asksBeforeReacting(tx, campaignId, encounter, reactor.id())) {
+						reactions.add(openChoice(tx, campaignId, encounter, reactor.id(), "OPPORTUNITY_ATTACK",
+								actor.str("name") + " is about to leave " + reactor.str("name")
+										+ "'s reach. Opportunity Attack?",
+								List.of(Map.of("option", "TAKE", "description",
+										"Make one melee attack before the mover leaves reach; optionally choose weapon and nonlethal:true to knock out."),
+										Map.of("option", "DECLINE", "description", "Let the mover continue.")),
+								Map.of("mover", actor.id(), "grid", true)));
+					} else
+						reactions.add(reactionAttack(tx, campaignId, encounter, reactor, other, actor, null,
+								encounter.lng("round")));
+					if (!pendingChoices(tx, encounter.id()).isEmpty()) {
+						saveGridContinuation(tx, encounter, actor.id(), origins.subList(index, origins.size()),
+								handledAtBoundary);
+						output.put("paused_for_reaction", true);
+						output.put("path_ft", moved);
+						output.put("movement_cost_ft", spent / 12.0);
+						output.put("opportunity_attacks", reactions);
+						SceneService.remember(tx, map);
+						return output;
+					}
+					if (!"ALIVE".equals(tx.get("character", actor.id()).str("life_state")))
+						break;
+				}
+			actor = tx.get("character", actor.id());
+			if (!"ALIVE".equals(actor.str("life_state"))
+					|| !"ACTIVE".equals(tx.get("encounter_participant", participant.id()).str("status"))
+					|| conditionAmong(tx, actor, Combat.SPEED_ZERO_CONDITIONS).isPresent()) {
+				output.put("interruption", "The mover falls before leaving reach.");
+				break;
+			}
+			cost = SpatialRules.movementCost(geometry, to)
+					* (conditionAmong(tx, actor, List.of("PRONE")).isPresent() ? 2 : 1);
+			if (cost > GridCombat.remainingMovement(tx, rules, encounter, participant, actor)) {
+				output.put("interruption", "A reaction prevents the remaining movement.");
+				break;
+			}
+			GridCombat.spendMovement(tx, rules, encounter, participant, actor, cost);
+			GridCombat.moveActor(tx, encounter, placement, to.origin());
+			SceneService.remember(tx, map);
+			spent += cost;
+			moved.add(SceneService.feet(to.origin()));
+			handledAtBoundary.clear();
+		}
+		clearGridContinuation(tx, encounter);
+		Row placed = GridCombat.actor(tx, encounter, actor.id());
+		output.put("position_ft", List.of(placed.get("x_ft"), placed.get("y_ft")));
+		output.put("path_ft", moved);
+		output.put("movement_cost_ft", spent / 12.0);
+		output.put("completed", !output.containsKey("interruption"));
+		output.put("opportunity_attacks",
+				reactions.isEmpty()
+						&& tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id=? AND condition_ref=?",
+								actor.id(), DISENGAGING_REF) > 0 ? "none (Disengage)" : reactions);
+		log(tx, campaignId, encounter.id(), encounter.lng("round"), actor.id(), "MOVE",
+				actor.str("name") + " moves " + spent / 12.0 + " ft on the battlefield.", output);
+		return output;
+	}
+
+	private Map<String, Object> moveViaPortal(
+		Tx tx, long campaignId, Row encounter, Row actor, Row participant, String key, Set<Long> handled) {
+		Row map = GridCombat.scene(tx, encounter), placement = GridCombat.actor(tx, encounter, actor.id());
+		SceneService.Transition transition;
+		try {
+			transition = SceneService.resolveTransition(tx, map, placement, key);
+		} catch (RpgException error) {
+			if (handled.isEmpty())
+				throw error;
+			clearGridContinuation(tx, encounter);
+			return Map.of("completed", false, "interruption", "The passage changed before movement could continue.");
+		}
+		long cost = transition.costInches() * (conditionAmong(tx, actor, List.of("PRONE")).isPresent() ? 2 : 1);
+		if (cost > GridCombat.remainingMovement(tx, rules, encounter, participant, actor)) {
+			if (handled.isEmpty())
+				throw RpgException.notAllowed("The passage exceeds this turn's remaining movement.");
+			clearGridContinuation(tx, encounter);
+			return Map.of("completed", false, "interruption", "A reaction prevents movement through the passage.");
+		}
+		var reactions = new ArrayList<Map<String, Object>>();
+		Footprint from = SceneService.footprint(placement), to = from.at(transition.origin());
+		Map<String, Object> stances = SceneService.map(encounter.map("sides_json").get("stances"));
+		boolean disengaged = tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id=? AND condition_ref=?",
+				actor.id(), DISENGAGING_REF) > 0;
+		if (!disengaged)
+			for (Row other : turnOrder(tx, encounter.id())) {
+				if (other.id() == participant.id() || handled.contains(other.id())
+						|| !Combat.hostile(stances, other.str("side"), participant.str("side")))
+					continue;
+				Row reactor = tx.get("character", other.lng("character_id"));
+				if (!"ACTIVE".equals(other.str("status")) || !reactionAvailable(tx, other, reactor)
+						|| !GridCombat.canSee(tx, encounter, reactor.id(), actor.id()))
+					continue;
+				Row enemyPlacement = GridCombat.actor(tx, encounter, reactor.id());
+				if (enemyPlacement.intOr("level", 0) != placement.intOr("level", 0))
+					continue;
+				Combat.AttackProfile profile = resolveProfile(tx, reactor,
+						Map.of("weapon", defaultMeleeAttack(tx, reactor).orElse("unarmed"))).profile();
+				long reach = SceneService.number(profile.range() == null ? Map.of() : profile.range(), "reach", 5)
+						.longValue() * 12;
+				Footprint enemy = SceneService.footprint(enemyPlacement);
+				if (SpatialRules.distance(enemy, from) > reach || transition.level() == placement.intOr("level", 0)
+						&& SpatialRules.distance(enemy, to) <= reach)
+					continue;
+				handled.add(other.id());
+				if (asksBeforeReacting(tx, campaignId, encounter, reactor.id())) {
+					reactions.add(openChoice(tx, campaignId, encounter, reactor.id(), "OPPORTUNITY_ATTACK",
+							actor.str("name") + " is about to leave reach through the passage. Opportunity Attack?",
+							List.of(Map.of("option", "TAKE", "description",
+									"Make one melee attack before the mover enters the passage; optionally choose weapon and nonlethal:true to knock out."),
+									Map.of("option", "DECLINE", "description", "Let the mover continue.")),
+							Map.of("mover", actor.id(), "grid", true)));
+				} else
+					reactions.add(reactionAttack(tx, campaignId, encounter, reactor, other, actor, null,
+							encounter.lng("round")));
+				if (!pendingChoices(tx, encounter.id()).isEmpty()) {
+					var environment = new LinkedHashMap<>(tx.get("encounter", encounter.id()).map("environment_json"));
+					environment.put("portal_continuation", Map.of("actor", actor.id(), "portal", key,
+							"handled_participants", handled.stream().sorted().toList()));
+					tx.update("encounter", encounter.id(), Map.of("environment_json", Json.write(environment)));
+					return Map.of("paused_for_reaction", true, "opportunity_attacks", reactions, "movement_cost_ft",
+							0.0);
+				}
+				if (!"ALIVE".equals(tx.get("character", actor.id()).str("life_state")))
+					break;
+			}
+		actor = tx.get("character", actor.id());
+		cost = transition.costInches() * (conditionAmong(tx, actor, List.of("PRONE")).isPresent() ? 2 : 1);
+		if (!"ALIVE".equals(actor.str("life_state"))
+				|| !"ACTIVE".equals(tx.get("encounter_participant", participant.id()).str("status"))
+				|| conditionAmong(tx, actor, Combat.SPEED_ZERO_CONDITIONS).isPresent()
+				|| cost > GridCombat.remainingMovement(tx, rules, encounter, participant, actor)) {
+			clearGridContinuation(tx, encounter);
+			return Map.of("completed", false, "interruption", "A reaction prevents movement through the passage.",
+					"opportunity_attacks", reactions);
+		}
+		GridCombat.spendMovement(tx, rules, encounter, participant, actor, cost);
+		tx.update("map_actor", placement.id(),
+				Map.of("x_ft", transition.origin().x() / 12.0, "y_ft", transition.origin().y() / 12.0, "level",
+						transition.level(), "revision", placement.lng("revision") + 1));
+		SceneService.syncLocation(tx, map, tx.get("map_actor", placement.id()));
+		SceneService.remember(tx, map);
+		clearGridContinuation(tx, encounter);
+		log(tx, campaignId, encounter.id(), encounter.lng("round"), actor.id(), "MOVE",
+				actor.str("name") + " traverses " + key + ".", Map.of("portal", key, "level", transition.level()));
+		return Map.of("completed", true, "portal", key, "level", transition.level(), "position_ft",
+				SceneService.feet(transition.origin()), "movement_cost_ft", cost / 12.0, "opportunity_attacks",
+				reactions);
+	}
+
+	private static void saveGridContinuation(Tx tx, Row encounter, long actor, List<Point> origins, Set<Long> handled) {
+		var environment = new LinkedHashMap<>(tx.get("encounter", encounter.id()).map("environment_json"));
+		environment.put("movement_continuation",
+				Map.of("actor", actor, "origins_inches",
+						origins.stream().map(point -> List.of(point.x(), point.y())).toList(), "handled_participants",
+						handled.stream().sorted().toList()));
+		tx.update("encounter", encounter.id(), Map.of("environment_json", Json.write(environment)));
+	}
+
+	private static void clearGridContinuation(Tx tx, Row encounter) {
+		var environment = new LinkedHashMap<>(tx.get("encounter", encounter.id()).map("environment_json"));
+		boolean changed = environment.remove("movement_continuation") != null;
+		changed |= environment.remove("portal_continuation") != null;
+		if (changed) {
+			EncounterDigest.movementContinuationCleared(environment, tx.journalId());
+			tx.update("encounter", encounter.id(), Map.of("environment_json", Json.write(environment)));
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> resumeGridMovement(Tx tx, long campaignId, Row encounter) {
+		Map<String, Object> portal = SceneService
+				.map(tx.get("encounter", encounter.id()).map("environment_json").get("portal_continuation"));
+		if (!portal.isEmpty()) {
+			long actor = ((Number) portal.get("actor")).longValue();
+			Row participant = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id=? AND character_id=?",
+					encounter.id(), actor).orElseThrow();
+			Set<Long> handled = new HashSet<>();
+			for (Number value : (List<Number>) portal.get("handled_participants"))
+				handled.add(value.longValue());
+			return moveViaPortal(tx, campaignId, encounter, tx.get("character", actor), participant,
+					portal.get("portal").toString(), handled);
+		}
+		Map<String, Object> continuation = SceneService
+				.map(tx.get("encounter", encounter.id()).map("environment_json").get("movement_continuation"));
+		if (continuation.isEmpty())
+			return Map.of();
+		long actorId = ((Number) continuation.get("actor")).longValue();
+		Row actor = tx.get("character", actorId);
+		Row participant = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id=? AND character_id=?",
+				encounter.id(), actorId).orElseThrow();
+		List<Point> origins = ((List<List<Number>>) continuation.get("origins_inches")).stream()
+				.map(pair -> new Point(pair.get(0).longValue(), pair.get(1).longValue())).toList();
+		Set<Long> handled = new HashSet<>();
+		for (Number value : (List<Number>) continuation.get("handled_participants"))
+			handled.add(value.longValue());
+		return executeGridPath(tx, campaignId, encounter, actor, participant, origins, handled);
 	}
 
 	/**
 	 * What remains of the actor's turn while it stays open (SRD 5.2.1 "Your Turn"): the Action, the
 	 * Bonus Action, the Reaction and movement, which zones carry without a distance.
 	 */
-	private static Map<String, Object> turnEconomy(
-		Tx tx, Row encounter, Row actor, Row participant, int attacksRemaining) {
+	private Map<String, Object> turnEconomy(Tx tx, Row encounter, Row actor, Row participant, int attacksRemaining) {
 		var economy = new LinkedHashMap<String, Object>();
 		economy.put("action",
 				TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.ACTION) ? "SPENT" : "AVAILABLE");
@@ -848,6 +1649,8 @@ public final class EncounterService {
 		boolean moved = TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.MOVED);
 		boolean stood = TurnEconomy.markedThisTurn(tx, encounter, actor.id(), TurnEconomy.STOOD_UP);
 		economy.put("movement", moved ? "USED" : stood ? "HALF_SPENT" : "AVAILABLE");
+		if (GridCombat.isGrid(encounter))
+			economy.put("movement_budget", GridCombat.movementView(tx, rules, encounter, participant, actor));
 		if (attacksRemaining > 0) {
 			economy.put("attacks_remaining", attacksRemaining);
 		}
@@ -855,17 +1658,22 @@ public final class EncounterService {
 	}
 
 	/**
-	 * How many attacks the actor still has this turn, optionally counting the one just made. Zero
-	 * for anyone without a Multiattack, so ordinary attackers behave exactly as before.
+	 * Attacks remaining in one Attack action, from a creature's Multiattack or reached class Extra
+	 * Attack features. Multiclass features use the largest count, never a sum.
 	 */
 	@SuppressWarnings("unchecked")
 	private int attacksRemaining(Tx tx, Row encounter, Row actor, long round, boolean countAttack) {
-		if (!RuntimeService.usesStatBlock(tx, actor)) {
-			return 0;
+		int count = 1;
+		if (RuntimeService.usesStatBlock(tx, actor)) {
+			count = rules.find(actor.str("origin_content_ref")).map(d -> d.payload().get("multiattack"))
+					.filter(m -> m instanceof Map<?, ?>).map(m -> ((Map<String, Object>) m).get("count"))
+					.filter(c -> c instanceof Number).map(c -> ((Number) c).intValue()).orElse(1);
+		} else {
+			for (var feature : se.hirt.mcp.rpg.progression.ClassFeatures.featuresOf(tx, rules, actor))
+				if (feature.get("mechanic") instanceof Map<?, ?> mechanic && "EXTRA_ATTACK".equals(mechanic.get("kind"))
+						&& mechanic.get("attacks") instanceof Number attacks)
+					count = Math.max(count, attacks.intValue());
 		}
-		int count = rules.find(actor.str("origin_content_ref")).map(d -> d.payload().get("multiattack"))
-				.filter(m -> m instanceof Map<?, ?>).map(m -> ((Map<String, Object>) m).get("count"))
-				.filter(c -> c instanceof Number).map(c -> ((Number) c).intValue()).orElse(1);
 		if (count <= 1) {
 			return 0;
 		}
@@ -941,7 +1749,9 @@ public final class EncounterService {
 						encounter.id(), actorParticipant.str("side"), actor.id())) {
 					// Within 5 feet of the target: in the target's zone (the column is position_zone), still in
 					// the fight, alive and not incapacitated (SRD 5.2.1 "Sneak Attack").
-					if (!java.util.Objects.equals(p.str("position_zone"), targetParticipant.str("position_zone"))
+					if (!(GridCombat.isGrid(encounter)
+							? GridCombat.distance(tx, encounter, p.lng("character_id"), target.id()) <= 60
+							: java.util.Objects.equals(p.str("position_zone"), targetParticipant.str("position_zone")))
 							|| !"ACTIVE".equals(p.str("status"))) {
 						continue;
 					}
@@ -978,18 +1788,6 @@ public final class EncounterService {
 		return Optional.of(new FeatureDamage(new Combat.RolledDamage(type, roll, Math.max(0, roll.total())), report));
 	}
 
-	@SuppressWarnings("unchecked")
-	private int creatureSkill(Tx tx, Row actor, String skill) {
-		if (!RuntimeService.usesStatBlock(tx, actor)) {
-			// A classed character rolls Stealth from its own sheet like anything else (RULES_ENGINE.md §3).
-			Integer own = se.hirt.mcp.rpg.rules.CheckService.characterSkill(tx, rules, actor, skill);
-			return own != null ? own : Rules.modifier(actor.intOr("dex_score", 10));
-		}
-		return rules.find(actor.str("origin_content_ref")).map(d -> (Map<String, Object>) d.payload().get("skills"))
-				.filter(s -> s != null && s.get(skill) instanceof Number).map(s -> ((Number) s.get(skill)).intValue())
-				.orElse(Rules.modifier(actor.intOr("dex_score", 10)));
-	}
-
 	// ── attack resolution ──────────────────────────────────────────────
 
 	/**
@@ -1018,7 +1816,8 @@ public final class EncounterService {
 			// it happens to carry.
 			Optional<Map<String, Object>> creatureAction = creatureAction(actor, named);
 			if (creatureAction.isPresent()) {
-				profile = Combat.creatureAction(creatureAction.get());
+				profile = Combat.creatureAction(creatureAction.get(), Boolean.TRUE.equals(action.get("thrown"))
+						|| "RANGED".equalsIgnoreCase(String.valueOf(action.get("mode"))));
 			} else if (named != null) {
 				return carriedProfile(tx, actor, named, prof, action, warnings);
 			} else {
@@ -1038,7 +1837,8 @@ public final class EncounterService {
 				if (creatureAction.isEmpty()) {
 					throw notCarried;
 				}
-				profile = Combat.creatureAction(creatureAction.get());
+				profile = Combat.creatureAction(creatureAction.get(), Boolean.TRUE.equals(action.get("thrown"))
+						|| "RANGED".equalsIgnoreCase(String.valueOf(action.get("mode"))));
 				warnings.add(named + " is not a carried weapon; using the stat-block action of that name.");
 			}
 		} else {
@@ -1176,12 +1976,41 @@ public final class EncounterService {
 				.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
 						encounter.id(), target.id())
 				.orElseThrow(() -> RpgException.invalidArgument(targetRef + " is not part of this encounter."));
+		if (action.containsKey("confirm_hostile_ally") && !(action.get("confirm_hostile_ally") instanceof Boolean))
+			throw RpgException.invalidArgument("action.confirm_hostile_ally must be a boolean.");
+		if (action.containsKey("nonlethal") && !(action.get("nonlethal") instanceof Boolean))
+			throw RpgException.invalidArgument("action.nonlethal must be a boolean.");
+		boolean sameSide = Objects.equals(participant.str("side"), targetParticipant.str("side"));
+		boolean downed = "DYING".equals(target.str("life_state")) || target.intOr("current_hp", 0) == 0
+				|| conditionAmong(tx, target, List.of("UNCONSCIOUS")).isPresent();
+		if (sameSide && downed && !"DEAD".equals(target.str("life_state"))
+				&& !Boolean.TRUE.equals(action.get("confirm_hostile_ally"))) {
+			Map<String, Object> care = RuntimeService.careGuidance(target);
+			if (care.isEmpty())
+				care = Map.of("guidance",
+						"Assess the Unconscious condition and use applicable healing or care; a knocked-out creature recovers when its Short Rest ends.");
+			throw RpgException.notAllowed(target.str("name")
+					+ " is a downed ally on the same encounter side. To help them, use applicable healing, or after successful first aid apply_runtime_change STABILIZE if Dying. An intentional attack requires action.confirm_hostile_ally:true.")
+					.withDetail("target", targetRef).withDetail("life_state", target.str("life_state"))
+					.withDetail("care", care).withDetail("confirmation_required", "confirm_hostile_ally");
+		}
 		if ("DEAD".equals(target.str("life_state")) || !"ACTIVE".equals(targetParticipant.str("status"))) {
-			throw RpgException.notAllowed(target.str("name") + " is already out of the fight.");
+			String guidance = "DYING".equals(target.str("life_state"))
+					? " is at 0 Hit Points and Dying. Healing can restore consciousness; after successful first aid use apply_runtime_change STABILIZE to stop Death Saving Throws."
+					: "DEAD".equals(target.str("life_state")) ? sameSide
+							? " is Dead; ordinary healing and stabilization cannot revive them. Use an applicable resurrection spell or an explicit audited revival."
+							: " is Dead and is no longer a legal attack target."
+							: " is already out of the fight (" + targetParticipant.str("status")
+									+ "). They remain a saved character and can still receive applicable healing or care.";
+			throw RpgException.notAllowed(target.str("name") + guidance).withDetail("target", targetRef)
+					.withDetail("life_state", target.str("life_state"));
 		}
 		boolean reaction = Boolean.TRUE.equals(action.get("reaction"));
 		Setup setup = resolveProfile(tx, actor, action);
 		Combat.AttackProfile profile = setup.profile();
+		GridCombat.AttackGeometry geometry = GridCombat.isGrid(encounter)
+				? GridCombat.validateAttack(tx, encounter, actor.id(), target.id(), profile)
+				: new GridCombat.AttackGeometry(0, 0, false);
 		boolean lightExtra = Boolean.TRUE.equals(action.get("light_extra_attack"));
 		if (lightExtra && (opportunity || reaction)) {
 			throw RpgException.notAllowed("An extra Light-weapon attack is taken on your turn, not as a reaction.");
@@ -1254,6 +2083,16 @@ public final class EncounterService {
 		Combat.AttackRollFactors factors = Combat.attackRollFactors(tx, rules, encounter.id(), actor, target, close,
 				profile.ranged(), adv.equals("ADVANTAGE"), adv.equals("DISADVANTAGE"));
 		var reasons = new ArrayList<String>(factors.reasons());
+		boolean unseenAttacker = GridCombat.isGrid(encounter)
+				&& !GridCombat.canSee(tx, encounter, target.id(), actor.id());
+		boolean unseenTarget = GridCombat.isGrid(encounter)
+				&& !GridCombat.canSee(tx, encounter, actor.id(), target.id());
+		if (unseenAttacker)
+			reasons.add("target cannot see the attacker");
+		if (unseenTarget)
+			reasons.add("attacker cannot see the target");
+		if (geometry.longRange())
+			reasons.add("target is beyond the weapon's normal range");
 		se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
 				actor.id());
 		// Untrained armor: "Disadvantage on any D20 Test that involves Strength or Dexterity" (SRD 5.2.1 "Armor
@@ -1262,9 +2101,9 @@ public final class EncounterService {
 		if (untrainedArmor.isPresent()) {
 			reasons.add("attacker wears " + untrainedArmor.get() + " without armor training");
 		}
-		final Combat.AttackRollFactors rollFactors = untrainedArmor.isPresent()
-				? new Combat.AttackRollFactors(factors.advantage(), true, factors.criticalWithinFiveFeet(), reasons)
-				: factors;
+		final Combat.AttackRollFactors rollFactors = new Combat.AttackRollFactors(factors.advantage() || unseenAttacker,
+				factors.disadvantage() || unseenTarget || geometry.longRange() || untrainedArmor.isPresent(),
+				factors.criticalWithinFiveFeet(), reasons);
 		String dice = rollFactors.form();
 		int bonus = profile.attackBonus() + actorMods.attackBonus - Exhaustion.penalty(tx, actor.id());
 		Roll attackRoll = roller.roll(dice + (bonus >= 0 ? "+" + bonus : Integer.toString(bonus)));
@@ -1279,7 +2118,7 @@ public final class EncounterService {
 			bonusDice.add(b.toMap());
 		}
 		int natural = attackRoll.dice().get(0);
-		int targetAc = RuntimeService.armorClass(tx, rules, target);
+		int targetAc = RuntimeService.armorClass(tx, rules, target) + geometry.coverBonus();
 		boolean hit = natural != 1 && (natural == 20 || attackTotal >= targetAc);
 		boolean critical = hit && (natural == 20 || (rollFactors.criticalWithinFiveFeet() && close));
 
@@ -1287,6 +2126,11 @@ public final class EncounterService {
 		ctx.put("attacker", actor.id());
 		ctx.put("target", target.id());
 		ctx.put("action", action);
+		ctx.put("attack_mode", profile.ranged() ? "RANGED" : "MELEE");
+		ctx.put("thrown", profile.ranged() && RuntimeService.usesStatBlock(tx, actor)
+				&& creatureAction(actor, profile.name())
+						.filter(a -> "MELEE_ATTACK".equals(a.get("kind")) && a.get("range") instanceof Map<?, ?>)
+						.isPresent());
 		ctx.put("reaction", reaction);
 		var roll = attackRoll.toMap();
 		roll.put("roll_ref", Ref.of(Ref.ROLL, rollId));
@@ -1297,6 +2141,7 @@ public final class EncounterService {
 		ctx.put("advantage", rollFactors.label());
 		ctx.put("advantage_reasons", reasons);
 		ctx.put("target_armor_class", targetAc);
+		ctx.put("cover_bonus", geometry.coverBonus());
 		ctx.put("critical", critical);
 		ctx.put("hit", hit);
 		ctx.put("ammunition", ammoUsed);
@@ -1344,6 +2189,10 @@ public final class EncounterService {
 		var out = new LinkedHashMap<String, Object>();
 		out.put("target", Ref.of(Ref.CHARACTER, ((Number) ctx.get("target")).longValue()));
 		out.put("attack", profile.name());
+		out.put("attack_mode", ctx.getOrDefault("attack_mode", profile.ranged() ? "RANGED" : "MELEE"));
+		out.put("thrown", Boolean.TRUE.equals(ctx.get("thrown")));
+		if (ctx.get("action") instanceof Map<?, ?> declared && Boolean.TRUE.equals(declared.get("nonlethal")))
+			out.put("nonlethal", true);
 		if (ctx.get("action") instanceof Map<?, ?> action && Boolean.TRUE.equals(action.get("light_extra_attack"))) {
 			out.put("light_extra_attack", true);
 			out.put("action_cost", "BONUS_ACTION");
@@ -1362,6 +2211,9 @@ public final class EncounterService {
 			out.put("advantage_reasons", l);
 		}
 		out.put("target_armor_class", ctx.get("target_armor_class"));
+		int coverBonus = ((Number) ctx.getOrDefault("cover_bonus", 0)).intValue();
+		out.put("cover_bonus", coverBonus);
+		out.put("cover", coverBonus >= 5 ? "THREE_QUARTERS" : coverBonus >= 2 ? "HALF" : "NONE");
 		if (ctx.get("shield") != null) {
 			out.put("shield", ctx.get("shield"));
 		}
@@ -1388,7 +2240,8 @@ public final class EncounterService {
 		var out = attackView(ctx, profile);
 		out.put("target_name", target.str("name"));
 		out.put("resolved", true);
-		String label = (reaction ? "opportunity attack with " : "") + profile.name();
+		String label = (reaction ? "opportunity attack with " : "") + profile.name()
+				+ (Boolean.TRUE.equals(ctx.get("thrown")) ? " (thrown)" : "");
 		String summary;
 		if (hit) {
 			se.hirt.mcp.rpg.rules.Effects.Modifiers actorMods = se.hirt.mcp.rpg.rules.Effects.modifiers(tx, rules,
@@ -1495,12 +2348,14 @@ public final class EncounterService {
 			}
 			out.putAll(applied);
 			summary = actor.str("name") + " hits " + target.str("name") + " with " + label
-					+ (critical ? " (critical)" : "") + " for " + dr.totalDealt() + " damage (" + dr.hpBefore() + " → "
-					+ (knockOut ? 1 : dr.hpAfter()) + " HP)"
-					+ (knockOut ? " — " + target.str("name") + " is knocked out (Unconscious at 1 HP)."
-							: Boolean.TRUE.equals(applied.get("died")) ? " — " + target.str("name") + " dies."
-									: "DYING".equals(applied.get("life_state"))
-											? " — " + target.str("name") + " drops to 0 HP." : ".");
+					+ (critical ? " (critical)" : "") + " for " + dr.totalDealt() + " damage"
+					+ (knockOut
+							? " — " + target.str("name")
+									+ " is knocked out instead of dropping to 0 HP, and is Unconscious at 1 HP."
+							: " (" + dr.hpBefore() + " → " + dr.hpAfter() + " HP)"
+									+ (Boolean.TRUE.equals(applied.get("died")) ? " — " + target.str("name") + " dies."
+											: "DYING".equals(applied.get("life_state"))
+													? " — " + target.str("name") + " drops to 0 HP." : "."));
 		} else {
 			summary = actor.str("name") + " misses " + target.str("name") + " with " + label + " (" + attackTotal
 					+ " vs AC " + targetAc + (ctx.get("shield") != null ? ", Shield" : "") + ").";
@@ -1513,6 +2368,8 @@ public final class EncounterService {
 		payload.put("target", target.id());
 		payload.put("hit", hit);
 		payload.put("total", attackTotal);
+		payload.put("attack_mode", out.get("attack_mode"));
+		payload.put("thrown", out.get("thrown"));
 		if (ctx.get("ammunition") instanceof Map<?, ?> ammunition
 				&& ctx.get("ammunition_recovery") instanceof Map<?, ?> recovery) {
 			var spent = new LinkedHashMap<String, Object>();
@@ -1522,15 +2379,14 @@ public final class EncounterService {
 		}
 		log(tx, campaignId, encounter.id(), round, actor.id(), reaction ? "OPPORTUNITY_ATTACK" : "ATTACK", summary,
 				payload);
+		EncounterDigest.captureNarration(tx, encounter.id(), actor.id(), action, out);
 		return out;
 	}
 
 	// ── reactions ──────────────────────────────────────────────────────
 
 	static boolean playerControlled(Tx tx, long campaignId, long characterId) {
-		return tx.count(
-				"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id = ? AND character_id = ? AND active = 1",
-				campaignId, characterId) > 0;
+		return TacticalControl.playerControlled(tx, campaignId, characterId);
 	}
 
 	private boolean asksBeforeReacting(Tx tx, long campaignId, Row encounter, long characterId) {
@@ -1609,7 +2465,7 @@ public final class EncounterService {
 				var options = List.of(
 						Map.of("option", "TAKE", "description",
 								"Make one melee attack against " + mover.str("name")
-										+ " as a reaction (optionally name the weapon)."),
+										+ " as a reaction (optionally choose weapon and nonlethal:true to knock out)."),
 						Map.of("option", "DECLINE", "description", "Let " + mover.str("name") + " go."));
 				var ctx = new LinkedHashMap<String, Object>();
 				ctx.put("mover", mover.id());
@@ -1630,10 +2486,17 @@ public final class EncounterService {
 	private Map<String, Object> reactionAttack(
 		Tx tx, long campaignId, Row encounter, Row reactor, Row reactorParticipant, Row mover, String weapon,
 		long round) {
+		return reactionAttack(tx, campaignId, encounter, reactor, reactorParticipant, mover, weapon, round, false);
+	}
+
+	private Map<String, Object> reactionAttack(
+		Tx tx, long campaignId, Row encounter, Row reactor, Row reactorParticipant, Row mover, String weapon,
+		long round, boolean nonlethal) {
 		var action = new LinkedHashMap<String, Object>();
 		action.put("kind", "ATTACK");
 		action.put("target", Ref.of(Ref.CHARACTER, mover.id()));
 		action.put("reaction", true);
+		action.put("nonlethal", nonlethal);
 		String selected = weapon != null && !weapon.isBlank() ? weapon
 				: defaultMeleeAttack(tx, reactor).orElse("unarmed");
 		action.put("weapon", selected);
@@ -1760,8 +2623,10 @@ public final class EncounterService {
 						throw RpgException.notAllowed(chooser.str("name") + " no longer has a reaction available.");
 					}
 					String weapon = choice.get("weapon") == null ? null : choice.get("weapon").toString();
+					if (choice.containsKey("nonlethal") && !(choice.get("nonlethal") instanceof Boolean))
+						throw RpgException.invalidArgument("choice.nonlethal must be a boolean.");
 					result.put("attack", reactionAttack(tx, campaignId, encounter, chooser, chooserParticipant, mover,
-							weapon, round));
+							weapon, round, Boolean.TRUE.equals(choice.get("nonlethal"))));
 				} else {
 					log(tx, campaignId, encounter.id(), round, chooser.id(), "REACTION",
 							chooser.str("name") + " lets " + mover.str("name") + " go.", null);
@@ -1816,18 +2681,38 @@ public final class EncounterService {
 			}
 			tx.update("pending_transaction", t.id(), Map.of("status", "COMMITTED", "revision", t.lng("revision") + 1));
 			List<Map<String, Object>> remaining = pendingChoices(tx, encounter.id());
+			if (remaining.isEmpty() && GridCombat.isGrid(encounter)) {
+				Map<String, Object> resumed = resumeGridMovement(tx, campaignId, encounter);
+				if (!resumed.isEmpty())
+					result.put("movement_resumed", resumed);
+				remaining = pendingChoices(tx, encounter.id());
+				for (Map<String, Object> pending : remaining) {
+					Row transaction = tx.get("pending_transaction",
+							Ref.id(pending.get("transaction").toString(), Ref.TRANSACTION));
+					var next = new LinkedHashMap<>(transaction.map("payload_json"));
+					next.put("advance_turn_after", Boolean.TRUE.equals(payload.get("advance_turn_after")));
+					tx.update("pending_transaction", transaction.id(), Map.of("payload_json", Json.write(next)));
+				}
+			}
 			result.put("remaining_choices", remaining);
 			if (remaining.isEmpty()) {
 				tx.update("encounter", encounter.id(), Map.of("status", "RUNNING"));
-				if (Boolean.TRUE.equals(payload.get("advance_turn_after"))) {
+				Row live = tx.get("encounter", encounter.id());
+				Row currentParticipant = live.isNull("turn_participant_id") ? null
+						: tx.get("encounter_participant", live.lng("turn_participant_id"));
+				boolean currentCannotAct = currentParticipant != null
+						&& (!"ACTIVE".equals(currentParticipant.str("status")) || !"ALIVE"
+								.equals(tx.get("character", currentParticipant.lng("character_id")).str("life_state")));
+				if (Boolean.TRUE.equals(payload.get("advance_turn_after")) || currentCannotAct) {
 					result.put("turn_advanced", true);
-					result.putAll(advanceTurn(tx, campaignId, tx.get("encounter", encounter.id())));
+					result.putAll(advanceTurn(tx, campaignId, live));
 				}
 			}
 			Row after = tx.get("encounter", encounter.id());
 			tx.update("encounter", after.id(), Map.of("revision", after.lng("revision") + 1));
 			result.put("encounter_revision", after.lng("revision") + 1);
 			result.put("state", state(tx, tx.get("encounter", encounter.id()), 5));
+			automaticDeathReports(tx, campaignId, encounter, result);
 			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return result;
 		});
@@ -2040,7 +2925,8 @@ public final class EncounterService {
 					if ("ACTIVE".equals(p.str("status")) && "ALIVE".equals(c.str("life_state"))) {
 						tx.update("encounter", live.id(), Map.of("turn_participant_id", p.id()));
 						tx.update("encounter_participant", p.id(), Map.of("reaction_used", 0));
-						skipped.add("(nobody's turn) -> " + c.str("name"));
+						skipped.add("(nobody's turn) -> " + (GridCombat.knownToParty(tx, live).contains(c.id())
+								? c.str("name") : "an unobserved participant"));
 						log(tx, campaignId, live.id(), live.lng("round"), null, "TURN_SKIPPED",
 								"The turn passes to " + c.str("name") + ".", null);
 						return skipped;
@@ -2057,12 +2943,64 @@ public final class EncounterService {
 				tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
 			}
 			String why = "ACTIVE".equals(p.str("status")) ? c.str("life_state") : p.str("status");
-			skipped.add(c.str("name"));
+			skipped.add(
+					GridCombat.knownToParty(tx, live).contains(c.id()) ? c.str("name") : "an unobserved participant");
 			log(tx, campaignId, live.id(), live.lng("round"), c.id(), "TURN_SKIPPED",
 					c.str("name") + " cannot take a turn (" + why + "); the turn moves on.", null);
 			advanceTurn(tx, campaignId, live);
 		}
 		return skipped;
+	}
+
+	/**
+	 * Collect every save emitted by this operation, including saved-turn reconciliation and
+	 * reactions.
+	 */
+	private static void automaticDeathReports(Tx tx, long campaignId, Row encounter, Map<String, Object> result) {
+		var reports = new ArrayList<Map<String, Object>>();
+		boolean privateReport = false;
+		for (Row entry : tx.query(
+				"SELECT * FROM encounter_log WHERE encounter_id=? AND journal_id=? AND kind='DEATH_SAVE' ORDER BY id",
+				encounter.id(), tx.journalId())) {
+			Map<String, Object> payload = entry.map("payload_json");
+			if (!Boolean.TRUE.equals(payload.get("party_observed"))) {
+				privateReport = true;
+				continue;
+			}
+			var report = new LinkedHashMap<String, Object>();
+			for (String field : List.of("kind", "character", "name", "round", "death_save", "natural", "outcome",
+					"successes", "failures", "stable", "life_state", "died", "summary", "at_seconds"))
+				if (payload.get(field) != null)
+					report.put(field, payload.get(field));
+			reports.add(report);
+		}
+		// advanceTurn also serves internal reconciliation; only this event-time projection is public.
+		result.remove("death_saves");
+		if (!reports.isEmpty())
+			result.put("death_saves", reports);
+		var deaths = reports.stream().filter(report -> Boolean.TRUE.equals(report.get("died"))).map(report -> {
+			var death = new LinkedHashMap<String, Object>();
+			for (String field : List.of("character", "name", "round", "summary"))
+				death.put(field, report.get(field));
+			death.put("cause", "FAILED_DEATH_SAVES");
+			return death;
+		}).toList();
+		if (!deaths.isEmpty())
+			result.put("deaths", deaths);
+		if (privateReport)
+			result.put("gm_handoff", gmHandoff(encounter));
+		tx.queryOne(
+				"SELECT c.* FROM player_control_assignment p JOIN character c ON c.id=p.character_id WHERE p.campaign_id=? AND p.active=1",
+				campaignId).filter(pc -> "DEAD".equals(pc.str("life_state"))).ifPresent(pc -> {
+					result.put("player_character_status", "DEAD");
+					result.put("encounter_end_required", true);
+					result.put("next_step",
+							pc.str("name") + " has died. " + (tx.count(
+									"SELECT COUNT(*) FROM pending_transaction WHERE campaign_id=? AND status='OPEN'",
+									campaignId) > 0 ? "Resolve the remaining pending choices, then call end_encounter. "
+											: "Call end_encounter. ")
+									+ "Then use get_continuation_options for the campaign's continuation choices.");
+				});
 	}
 
 	/**
@@ -2085,6 +3023,8 @@ public final class EncounterService {
 		for (int step = 0; step < order.size() * 2; step++) {
 			index = (index + 1) % order.size();
 			if (index == 0) {
+				if (GridCombat.isGrid(encounter))
+					chargeGridRound(tx, campaignId, encounter, round);
 				round++;
 				tx.update("encounter", encounter.id(), Map.of("round", round));
 				log(tx, campaignId, encounter.id(), round, null, "ROUND", "Round " + round + " begins.", null);
@@ -2107,53 +3047,22 @@ public final class EncounterService {
 				Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
 						: c.map("death_saves_json");
 				if (!Boolean.TRUE.equals(saves.get("stable"))) {
-					int penalty = Exhaustion.penalty(tx, c.id());
-					Roll roll = roller.roll("1d20" + (penalty == 0 ? "" : "-" + penalty));
-					CharacterService.recordRoll(tx, campaignId, "death saving throw " + Ref.of(Ref.CHARACTER, c.id()),
-							roll);
-					int natural = roll.dice().get(0);
-					Map<String, Object> after = Combat.deathSave(natural, roll.total(), saves);
-					String outcome = String.valueOf(after.get("outcome"));
-					var ev = new LinkedHashMap<String, Object>();
-					ev.put("character", Ref.of(Ref.CHARACTER, c.id()));
-					ev.put("name", c.str("name"));
-					ev.put("death_save", roll.total());
-					ev.put("natural", natural);
-					ev.put("outcome", outcome);
-					ev.put("successes", after.get("successes"));
-					ev.put("failures", after.get("failures"));
-					events.add(ev);
-					if (outcome.equals("REGAIN_1_HP")) {
-						RuntimeService.heal(tx, c, 1, "natural 20 on a death saving throw");
-						log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE",
-								c.str("name") + " rolls a natural 20 on a death save and regains 1 HP!", null);
-						c = tx.get("character", c.id());
-					} else if (outcome.equals("DEAD")) {
-						se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
-						var cols = new LinkedHashMap<String, Object>();
-						cols.put("life_state", "DEAD");
-						cols.put("death_saves_json", null);
-						cols.put("revision", tx.get("character", c.id()).lng("revision") + 1);
-						tx.update("character", c.id(), cols);
-						RuntimeService.endMemberships(tx, campaignId, c.id(), "DEAD");
-						tx.update("encounter_participant", p.id(), Map.of("status", "DEFEATED"));
-						LedgerService.append(tx, campaignId,
-								new LedgerService.EventSpec("CHARACTER_DIED",
-										c.str("name") + " died of their wounds (three failed death saves).",
-										List.of(c.id()), "CRITICAL", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
-										c.lng("location_id"), null, null));
-						log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE",
-								c.str("name") + " fails a third death save and dies.", null);
+					boolean observed = GridCombat.knownToParty(tx, encounter).contains(c.id());
+					var ev = new LinkedHashMap<>(DyingProgression.resolveSave(tx, roller, campaignId, c,
+							observed ? "PARTY_KNOWN" : "GM_ONLY",
+							Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()))));
+					ev.put("round", round);
+					String summary = c.str("name") + " death saving throw in round " + round + ": rolled "
+							+ ev.get("death_save") + " (natural " + ev.get("natural") + "), " + ev.get("outcome") + " ("
+							+ ev.get("successes") + " successes, " + ev.get("failures") + " failures)."
+							+ (Boolean.TRUE.equals(ev.get("died")) ? " " + c.str("name") + " dies." : "");
+					ev.put("summary", summary);
+					log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE", summary, ev);
+					if (observed)
+						events.add(ev);
+					c = tx.get("character", c.id());
+					if ("DEAD".equals(c.str("life_state")))
 						continue;
-					} else {
-						tx.update("character", c.id(),
-								Map.of("death_saves_json", Json.write(after), "revision", c.lng("revision") + 1));
-						log(tx, campaignId, encounter.id(), round, c.id(), "DEATH_SAVE",
-								c.str("name") + " death save " + roll.total() + ": " + outcome + " ("
-										+ after.get("successes") + " successes, " + after.get("failures")
-										+ " failures).",
-								null);
-					}
 				}
 				if ("DYING".equals(c.str("life_state"))) {
 					continue; // unconscious creatures skip their turn
@@ -2166,8 +3075,19 @@ public final class EncounterService {
 				out.put("repeat_saves", ending.get("saves"));
 			}
 			out.put("round", round);
-			out.put("next_turn", Map.of("participant", p.id(), "character", Ref.of(Ref.CHARACTER, c.id()), "name",
-					c.str("name"), "side", p.str("side")));
+			boolean player = TacticalControl.playerControlled(tx, campaignId, c.id());
+			out.put("next_turn",
+					Map.of("participant", p.id(), "character", Ref.of(Ref.CHARACTER, c.id()), "name", c.str("name"),
+							"side", p.str("side"), "controller", player ? "PLAYER" : "DM", "tactical_control",
+							TacticalControl.assignment(tx, campaignId, c.id())));
+			out.put("awaiting_player_input", player);
+			out.put("awaiting_gm", !player);
+			if (GridCombat.isGrid(encounter)
+					&& !GridCombat.nameKnownToParty(tx, tx.get("encounter", encounter.id()), c.id())) {
+				out.put("next_turn", null);
+				out.put("awaiting_gm", true);
+				out.put("gm_handoff", gmHandoff(encounter));
+			}
 			if (!events.isEmpty()) {
 				out.put("death_saves", events);
 			}
@@ -2191,14 +3111,110 @@ public final class EncounterService {
 
 	// ── end_encounter ──────────────────────────────────────────────────
 
+	private static void chargeGridRound(Tx tx, long campaignId, Row encounter, long round) {
+		var environment = new LinkedHashMap<>(tx.get("encounter", encounter.id()).map("environment_json"));
+		var grid = new LinkedHashMap<>(SceneService.map(environment.get("grid")));
+		if (SceneService.number(grid, "charged_through_round", 0).longValue() >= round)
+			return;
+		WorldTimeline.advanceRound(tx, campaignId);
+		grid.put("charged_through_round", round);
+		environment.put("grid", grid);
+		tx.update("encounter", encounter.id(), Map.of("environment_json", Json.write(environment)));
+	}
+
+	/**
+	 * Explicit, journaled adoption for an already-running legacy encounter; no initiative is
+	 * rerolled.
+	 */
+	public Map<String, Object> convertToGrid(
+		String operationId, String campaignRef, String encounterRef, Map<String, Object> options) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		var args = new LinkedHashMap<String, Object>();
+		args.put("campaign", campaignRef);
+		args.put("encounter", encounterRef);
+		args.put("options", options);
+		return db.mutate(Database.Mutation.of("convert_encounter_to_grid", campaignId, operationId, "GM", args), tx -> {
+			Row campaign = Harness.requireMutation(tx, campaignRef, "convert_encounter_to_grid");
+			Row encounter = encounter(tx, campaignId, encounterRef);
+			if ("ENDED".equals(encounter.str("status")))
+				throw RpgException.notAllowed("Convert a live encounter before its next grid action.");
+			if (!GridCombat.isGrid(encounter)) {
+				List<Row> participants = tx
+						.query("SELECT * FROM encounter_participant WHERE encounter_id=? ORDER BY id", encounter.id());
+				for (Map<String, Object> pending : pendingChoices(tx, encounter.id())) {
+					if (!"OPPORTUNITY_ATTACK".equals(pending.get("kind")))
+						continue;
+					Row transaction = tx.get("pending_transaction",
+							Ref.id(pending.get("transaction").toString(), Ref.TRANSACTION));
+					Map<String, Object> context = SceneService.map(transaction.map("payload_json").get("context"));
+					if (context.get("mover") instanceof Number mover
+							&& "ALIVE".equals(tx.get("character", mover.longValue()).str("life_state"))
+							&& tx.count("SELECT COUNT(*) FROM map_actor WHERE campaign_id=? AND character_id=?",
+									campaignId, mover.longValue()) == 0
+							&& (options == null || SceneService.maps(options.get("placements")).isEmpty()))
+						throw RpgException.validation(List.of(new Violation("options.placements",
+								"LEGACY_REACTION_DEPLOYMENT",
+								"Place the unrolled opportunity reaction at its pre-departure reach boundary; a legacy destination zone is not an exact historical position.")));
+				}
+				var zones = new LinkedHashMap<String, Object>();
+				for (Row participant : participants)
+					zones.put(Ref.of(Ref.CHARACTER, participant.lng("character_id")),
+							participant.str("position_zone") == null ? "near" : participant.str("position_zone"));
+				var environment = new LinkedHashMap<>(encounter.map("environment_json"));
+				var grid = new LinkedHashMap<>(
+						GridCombat.ensureEncounterScene(tx, rules, campaignId, encounter.lng("location_id"),
+								participants.stream().map(p -> tx.get("character", p.lng("character_id"))).toList(),
+								zones, options));
+				grid.put("legacy_conversion", true);
+				grid.put("placement_provenance",
+						"Derived from coarse legacy zones and explicit DM deployment; not historical exact coordinates.");
+				grid.put("charged_through_round", Math.max(0, encounter.lng("round") - 1));
+				environment.put("grid", grid);
+				tx.update("encounter", encounter.id(), Map.of("spatial_model", "GRID", "environment_json",
+						Json.write(environment), "revision", encounter.lng("revision") + 1));
+				Map<String, Object> remaining = options == null ? Map.of()
+						: SceneService.map(options.get("remaining_movement_ft"));
+				for (Row participant : participants) {
+					var flags = new LinkedHashMap<>(participant.map("once_per_turn_json"));
+					String turn = TurnEconomy.turnKey(encounter);
+					long budget = Exhaustion.speed(tx, rules, tx.get("character", participant.lng("character_id")))
+							* 12L;
+					long spent = turn.equals(flags.get(TurnEconomy.MOVED)) ? budget
+							: turn.equals(flags.get(TurnEconomy.STOOD_UP)) ? budget / 2 : 0;
+					String ref = Ref.of(Ref.CHARACTER, participant.lng("character_id"));
+					if (remaining.get(ref) instanceof Number value) {
+						double feet = value.doubleValue();
+						if (!Double.isFinite(feet) || feet < 0 || feet * 12 > budget)
+							throw RpgException.invalidArgument(
+									"Legacy remaining_movement_ft must fit the actor's current Speed.");
+						spent = budget - Math.round(feet * 12);
+					}
+					flags.put("grid_movement", Map.of("turn", turn, "spent_inches", spent, "dash_inches", 0L));
+					tx.update("encounter_participant", participant.id(),
+							Map.of("once_per_turn_json", Json.write(flags)));
+				}
+			}
+			var result = new LinkedHashMap<String, Object>();
+			result.put("state", state(tx, tx.get("encounter", encounter.id()), 10));
+			result.put("meta", Harness.meta(campaign, null));
+			return result;
+		});
+	}
+
 	public Map<String, Object> end(
 		String operationId, String campaignRef, String encounterRef, String outcome, String summary) {
+		return end(operationId, campaignRef, encounterRef, outcome, summary, null);
+	}
+
+	public Map<String, Object> end(
+		String operationId, String campaignRef, String encounterRef, String outcome, String summary, String narrative) {
 		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
 		var args = new LinkedHashMap<String, Object>();
 		args.put("campaign", campaignRef);
 		args.put("encounter", encounterRef);
 		args.put("outcome", outcome);
 		args.put("summary", summary);
+		args.put("narrative", narrative);
 		return db.mutate(Database.Mutation.of("end_encounter", campaignId, operationId, "GM", args), tx -> {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "end_encounter");
 			Row encounter = encounter(tx, campaignId, encounterRef);
@@ -2219,6 +3235,13 @@ public final class EncounterService {
 			Map<String, Object> stances = (Map<String, Object>) sides.get("stances");
 			List<Row> participants = tx.query("SELECT * FROM encounter_participant WHERE encounter_id = ? ORDER BY id",
 					encounter.id());
+			if (GridCombat.isGrid(encounter)) {
+				Optional<Row> controlled = tx.queryOne(
+						"SELECT * FROM player_control_assignment WHERE campaign_id=? AND active=1", campaignId);
+				if (controlled.isPresent())
+					TravelJourneyService.captureFinalPosition(tx, campaignId, GridCombat.scene(tx, encounter).id(),
+							Ref.of(Ref.CHARACTER, controlled.get().lng("character_id")));
+			}
 
 			// Mechanically defined XP: the pool fixed at start pays out when the encounter is overcome,
 			// however it was overcome (RULES_ENGINE.md §6); defeated hostiles are still itemized.
@@ -2253,7 +3276,7 @@ public final class EncounterService {
 				}
 			}
 			boolean overcome = Set.of("PARTY_VICTORY", "NEGOTIATED", "ENEMIES_FLED").contains(o);
-			long xpPool = !overcome ? 0 : sides.get("xp_pool") instanceof Number pool ? pool.longValue() : defeatedXp;
+			long xpPool = overcome && sides.get("xp_pool") instanceof Number pool ? pool.longValue() : defeatedXp;
 			var awards = new ArrayList<Map<String, Object>>();
 			List<Row> earners = se.hirt.mcp.rpg.progression.PartyXp.recipients(tx, campaign, recipients);
 			if (xpPool > 0 && !earners.isEmpty()) {
@@ -2263,12 +3286,16 @@ public final class EncounterService {
 				}
 				awards.addAll(se.hirt.mcp.rpg.progression.PartyXp.lockstep(tx, rules, campaign));
 			}
-			// Time: six seconds per round, rounded up to the clock's minutes.
+			// Grid rounds have already advanced world time; charge the final partial round only once.
 			long rounds = encounter.lng("round");
-			long minutes = se.hirt.mcp.rpg.rules.Effects.minutesForRounds(rounds);
-			Row clock = GameTime.clock(tx, campaignId);
-			long newSeq = clock.lng("seq") + minutes;
-			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
+			long minutes = GridCombat.isGrid(encounter) ? 0 : se.hirt.mcp.rpg.rules.Effects.minutesForRounds(rounds);
+			WorldTimeline.Progress legacyTime = null;
+			if (GridCombat.isGrid(encounter))
+				chargeGridRound(tx, campaignId, encounter, rounds);
+			else
+				legacyTime = WorldTimeline.advanceSeconds(tx, campaignId, Math.multiplyExact(minutes, 60),
+						"LEGACY_COMBAT", false);
+			long newSeq = GameTime.currentSeq(tx, campaignId);
 			// A 10-round condition is a 1-minute condition (SRD 5.2.1 "Combat"): the rounds it has left after the
 			// final round continue on the clock instead of ending with the fight.
 			int converted = se.hirt.mcp.rpg.rules.Effects.convertRoundsAtEncounterEnd(tx, encounter.id(), rounds,
@@ -2280,6 +3307,8 @@ public final class EncounterService {
 			cols.put("turn_participant_id", null);
 			cols.put("revision", encounter.lng("revision") + 1);
 			tx.update("encounter", encounter.id(), cols);
+			DyingProgression.resumeAfterEncounter(tx, campaignId, encounter.id());
+			TacticalControl.endEncounter(tx, campaignId, encounter.id());
 			log(tx, campaignId, encounter.id(), rounds, null, "ENCOUNTER_ENDED",
 					"Encounter ends: " + o + (summary == null ? "" : " — " + summary), Map.of("outcome", o));
 
@@ -2321,15 +3350,21 @@ public final class EncounterService {
 				continuation.put("continuation_policy", policy);
 			}
 			long xpTotal = awards.stream().mapToLong(a -> ((Number) a.get("xp_gained")).longValue()).sum();
-			LedgerService.append(tx, campaignId,
+			Map<String, Object> travelRoster = TravelJourneyService.reconcileInTx(tx, campaignId);
+			Map<String, Object> record = EncounterDigest.build(tx, tx.get("encounter", encounter.id()), o, summary,
+					narrative, xpPool, awards);
+			Map<String, Object> publicDigest = SceneService.map(record.get("party_digest"));
+			List<Long> knownParticipants = SceneService.maps(publicDigest.get("final_roster")).stream()
+					.map(person -> Ref.id(person.get("character").toString(), Ref.CHARACTER)).toList();
+			long resolvedEventId = LedgerService.append(tx, campaignId,
 					new LedgerService.EventSpec("ENCOUNTER_RESOLVED",
-							"Encounter " + o.toLowerCase().replace('_', ' ')
-									+ (summary == null || summary.isBlank() ? "" : ": " + summary)
-									+ (defeated.isEmpty() ? "" : " Defeated: " + String.join(", ", defeated) + "."),
-							participants.stream().map(p -> p.lng("character_id")).toList(),
-							pcDead ? "MAJOR" : "NOTABLE", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE", null,
-							encounter.lng("location_id"), null,
-							Map.of("outcome", o, "xp_awarded", xpTotal, "rounds", rounds)));
+							"Encounter " + o.toLowerCase().replace('_', ' ') + "; " + rounds + " rounds.",
+							knownParticipants, pcDead ? "MAJOR" : "NOTABLE", "PARTY_KNOWN", "MECHANICAL_CONSEQUENCE",
+							null, encounter.lng("location_id"), EncounterDigest.story(publicDigest),
+							Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()), "outcome", o, "xp_awarded",
+									xpTotal, "rounds", rounds, "digest", publicDigest)));
+			record.put("resolved_event", Ref.of(Ref.EVENT, resolvedEventId));
+			tx.update("encounter", encounter.id(), Map.of("record_json", record));
 			var ccols = new LinkedHashMap<String, Object>();
 			ccols.put("harness_state", next.name());
 			ccols.put("status", campaignStatus);
@@ -2339,13 +3374,49 @@ public final class EncounterService {
 			var result = new LinkedHashMap<String, Object>();
 			result.put("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()));
 			result.put("outcome", o);
+			if (!travelRoster.isEmpty())
+				result.put("travel_roster", travelRoster);
+			result.put("current_board", GridCombat.currentBoard(tx, campaignId));
+			result.put("party_positions", tx.query(
+					"SELECT a.*,c.name,s.name AS map_name FROM map_actor a JOIN character c ON c.id=a.character_id "
+							+ "JOIN map_scene s ON s.id=a.scene_id WHERE a.campaign_id=? AND "
+							+ "(EXISTS(SELECT 1 FROM party_membership m WHERE m.character_id=c.id AND m.state IN ('ACTIVE','GUEST','SEPARATED')) "
+							+ "OR EXISTS(SELECT 1 FROM player_control_assignment p WHERE p.character_id=c.id AND p.active=1)) ORDER BY c.id",
+					campaignId).stream()
+					.map(a -> Map.<String, Object> of("character", Ref.of(Ref.CHARACTER, a.lng("character_id")), "name",
+							a.str("name"), "map_ref", Ref.of(Ref.MAP, a.lng("scene_id")), "map_name", a.str("map_name"),
+							"move_origin_ft", List.of(a.get("x_ft"), a.get("y_ft")), "level", a.intOr("level", 0)))
+					.toList());
 			result.put("rounds", rounds);
+			result.put("record", EncounterDigest.gmRecord(record));
+			result.put("party_digest", publicDigest);
+			List<Map<String, Object>> annotationSlots = EncounterDigest.annotationSlots(record);
+			result.put("highlights_needing_narration", annotationSlots);
+			result.put("highlights_needing_narration_bytes", Json.utf8(Json.write(annotationSlots)).length);
+			result.put("highlights_needing_narration_max_bytes", EncounterDigest.ANNOTATION_SLOTS_MAX_BYTES);
+			result.put("highlights_needing_narration_detail",
+					"Brief prompts; full mechanics remain in record.highlights.");
+			result.put("full_gm_record",
+					Map.of("tool", "get_encounter_state", "arguments", Map.of("campaign", campaignRef, "encounter",
+							Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM"), "field", "record"));
+			result.put("annotation_tool", "annotate_encounter");
+			result.put("resolved_event", Ref.of(Ref.EVENT, resolvedEventId));
 			result.put("elapsed_minutes", minutes);
+			if (legacyTime != null) {
+				result.put("elapsed_seconds", legacyTime.elapsedSeconds());
+				result.put("consequences", legacyTime.consequences());
+			}
+			if (GridCombat.isGrid(encounter)) {
+				long start = SceneService.number(GridCombat.binding(encounter), "started_seconds",
+						GameTime.currentSeconds(tx, campaignId)).longValue();
+				result.put("elapsed_seconds", GameTime.currentSeconds(tx, campaignId) - start);
+			}
 			if (converted > 0) {
 				result.put("round_effects_converted_to_minutes", converted);
 			}
 			result.put("defeated", defeated);
 			result.put("xp_pool", xpPool);
+			result.put("xp_award_basis", overcome ? "ENCOUNTER_OVERCOME" : "DEFEATED_HOSTILES");
 			result.put("xp_policy", se.hirt.mcp.rpg.progression.PartyXp.policy(campaign));
 			result.put("xp_awarded", awards);
 			se.hirt.mcp.rpg.progression.LevelUpService.companionAdvancement(tx, rules, roller,
@@ -2381,6 +3452,20 @@ public final class EncounterService {
 		});
 	}
 
+	public Map<String, Object> annotate(
+		String operationId, String campaignRef, String encounterRef, Map<String, String> narrations) {
+		if (narrations == null)
+			throw RpgException.invalidArgument("Supply selected highlight slots and narration.");
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		return db.mutate(Database.Mutation.of("annotate_encounter", campaignId, operationId, "GM",
+				Map.of("campaign", campaignRef, "encounter", encounterRef, "narrations", narrations)), tx -> {
+					Row campaign = Harness.requireMutation(tx, campaignRef, "annotate_encounter");
+					var response = EncounterDigest.annotate(tx, encounter(tx, campaignId, encounterRef), narrations);
+					response.put("meta", Harness.meta(campaign, List.of()));
+					return response;
+				});
+	}
+
 	public Map<String, Object> recoverAmmunition(
 		String operationId, String campaignRef, String encounterRef, String characterRef,
 		List<Map<String, Object>> selection) {
@@ -2412,6 +3497,7 @@ public final class EncounterService {
 		cols.put("summary", summary);
 		cols.put("payload_json", payload == null ? null : Json.write(payload));
 		cols.put("journal_id", tx.journalId());
-		tx.insert("encounter_log", cols);
+		long logId = tx.insert("encounter_log", cols);
+		EncounterDigest.recorded(tx, encounterId, logId, actorId, kind);
 	}
 }

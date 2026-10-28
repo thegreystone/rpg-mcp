@@ -150,6 +150,9 @@ public final class SessionService {
 			}
 			Row current = tx.get("campaign", campaignId);
 			Map<String, Object> context = context(tx, current, contextBudget == null ? DEFAULT_BUDGET : contextBudget);
+			var worldMaps = new LinkedHashMap<>(se.hirt.mcp.rpg.maps.WorldMapPreparation.resume(tx, campaignId));
+			worldMaps.put("current_board", se.hirt.mcp.rpg.maps.GridCombat.currentBoard(tx, campaignId));
+			context.put("world_maps", worldMaps);
 			context.put("session", Ref.of(Ref.SESSION, sessionId));
 			context.put("session_resumed", resumed);
 			var warnings = new java.util.ArrayList<String>();
@@ -381,7 +384,7 @@ public final class SessionService {
 	public Map<String, Object> context(Tx tx, Row campaign, int budget) {
 		long campaignId = campaign.id();
 		int chars = Math.max(6_000, budget * CHARS_PER_TOKEN);
-		int eventLimit = Math.max(3, Math.min(20, budget / 1000));
+		int eventLimit = Math.max(3, Math.min(8, budget / 1000));
 		var ctx = new LinkedHashMap<String, Object>();
 
 		var c = new LinkedHashMap<String, Object>();
@@ -407,14 +410,36 @@ public final class SessionService {
 		ctx.put("campaign", c);
 		ctx.put("harness_state", campaign.str("harness_state"));
 		ctx.put("game_time", GameTime.toMap(tx, campaignId, GameTime.currentSeq(tx, campaignId)));
-		ctx.put("location",
-				campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
-
 		Optional<Row> pc = tx
 				.queryOne("SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
 						+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId);
+		Map<String, Object> journey = se.hirt.mcp.rpg.world.TravelJourneyService.stateInTx(tx, campaignId);
+		boolean travelling = Boolean.TRUE.equals(journey.get("active"));
+		boolean partyTravelling = followsJourney(journey, pc);
+		Map<String, Object> journeyPosition = travelling ? journeyLocation(tx, journey) : Map.of();
+		ctx.put("location", partyTravelling ? journeyPosition
+				: campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
+		if (travelling)
+			ctx.put("journey", journey);
+		var spatial = new LinkedHashMap<>(se.hirt.mcp.rpg.maps.WorldMapPreparation.currentContext(tx, campaignId));
+		spatial.put("current_board", se.hirt.mcp.rpg.maps.GridCombat.currentBoard(tx, campaignId));
+		Map<String, Object> placementHint = se.hirt.mcp.rpg.maps.GridCombat.placementHint(tx, campaignId);
+		if (!placementHint.isEmpty()) {
+			spatial.put("placement_hint", placementHint);
+			if (spatial.get("party_placements") instanceof Collection<?> placements && placements.isEmpty())
+				spatial.put("maps", placementHint.get("coverage"));
+		}
+		if (travelling && !partyTravelling)
+			spatial.put("status",
+					se.hirt.mcp.rpg.maps.SceneService.map(spatial.get("current_board")).get("map_ref") != null
+							? "LOCAL_MAP_AVAILABLE"
+							: placementHint.isEmpty() ? "SEMANTIC_LOCATION" : "LOCAL_MAP_AVAILABLE");
+		ctx.put("spatial", spatial);
+
 		Long here = campaign.isNull("current_location_id") ? null : campaign.lng("current_location_id");
 		ctx.put("player_character", pc.map(r -> compactSheet(characters.sheet(tx, r, "PLAY"))).orElse(null));
+		pc.ifPresent(r -> applyJourneyPosition(se.hirt.mcp.rpg.maps.SceneService.map(ctx.get("player_character")), r,
+				journey, journeyPosition, partyTravelling));
 		ctx.put("relationships",
 				pc.map(r -> se.hirt.mcp.rpg.party.PartyService.compact(tx, campaignId, r.id(), 12, false))
 						.orElse(List.of()));
@@ -426,11 +451,16 @@ public final class SessionService {
 				campaignId)) {
 			var member = characters.sheet(tx, m, "SUMMARY");
 			member.put("membership", m.str("state"));
-			member.put("with_party", withParty(m, here));
+			member.put("with_party", se.hirt.mcp.rpg.world.WorldService.partyCoLocated(tx, campaignId, m, here));
+			if (!m.isNull("location_id"))
+				tx.find("location", m.lng("location_id")).ifPresent(l -> member.put("location_name", l.str("name")));
+			applyJourneyPosition(member, m, journey, journeyPosition, partyTravelling);
 			member.put("player_controlled", pc.isPresent() && pc.get().id() == m.id());
+			member.put("tactical_control", se.hirt.mcp.rpg.party.TacticalControl.assignment(tx, campaignId, m.id()));
 			party.add(member);
 		}
 		ctx.put("party", party);
+		ctx.put("tactical_control", se.hirt.mcp.rpg.party.TacticalControl.summary(tx, campaignId));
 		ctx.put("former_members", formerMembers(tx, campaignId));
 
 		var beats = new ArrayList<Map<String, Object>>();
@@ -490,6 +520,8 @@ public final class SessionService {
 				"SELECT * FROM encounter WHERE campaign_id = ? AND status IN ('RUNNING','WAITING_CHOICE') ORDER BY id DESC LIMIT 1",
 				campaignId).ifPresent(e -> ctx.put("encounter", encounters.state(tx, e, 5)));
 		ctx.put("recent_events", LedgerService.recent(tx, campaignId, eventLimit));
+		ctx.put("recent_events_hint",
+				"Up to eight recent events, with at most two encounter digests sharing a 3000-byte compact UTF-8 JSON budget. Older fights retain summaries and full_gm_record pointers; use query_timeline for more history.");
 		ctx.put("chronicle", ChronicleService.view(tx, campaignId, chars / 3));
 		ctx.put("pending_transaction", tx
 				.queryOne("SELECT * FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'", campaignId)
@@ -506,6 +538,46 @@ public final class SessionService {
 		return ctx;
 	}
 
+	private static Map<String, Object> journeyLocation(Tx tx, Map<String, Object> journey) {
+		var position = new LinkedHashMap<String, Object>();
+		Map<String, Object> destination = location(tx, Ref.id(journey.get("destination").toString(), Ref.LOCATION));
+		position.put("kind", "JOURNEY");
+		position.put("name", "Travelling toward " + destination.get("name"));
+		position.put("materialization", "DERIVED");
+		position.put("journey", journey.get("journey"));
+		position.put("status", journey.get("status"));
+		if (journey.get("from") instanceof String from)
+			position.put("origin", location(tx, Ref.id(from, Ref.LOCATION)));
+		position.put("destination", destination);
+		for (String key : List.of("progress_seconds", "remaining_seconds", "total_seconds", "anchor"))
+			position.put(key, journey.get(key));
+		return position;
+	}
+
+	private static boolean followsJourney(Map<String, Object> journey, Optional<Row> pc) {
+		return Boolean.TRUE.equals(journey.get("active"))
+				&& (pc.isEmpty() || journey.get("movers") instanceof Collection<?> movers
+						&& movers.contains(Ref.of(Ref.CHARACTER, pc.get().id())));
+	}
+
+	private static void applyJourneyPosition(
+		Map<String, Object> sheet, Row character, Map<String, Object> journey, Map<String, Object> position,
+		boolean partyTravelling) {
+		if (!Boolean.TRUE.equals(journey.get("active")) || !(journey.get("movers") instanceof Collection<?> movers))
+			return;
+		if (!movers.contains(Ref.of(Ref.CHARACTER, character.id()))) {
+			if (partyTravelling)
+				sheet.put("with_party", false);
+			return;
+		}
+		if (sheet.get("location") != null)
+			sheet.put("departure_location", sheet.get("location"));
+		sheet.put("location", null);
+		sheet.put("location_context", position);
+		sheet.put("location_name", position.get("name"));
+		sheet.put("with_party", partyTravelling);
+	}
+
 	/** Older campaigns may already carry usable guidance under summary or description. */
 	private static String gmBrief(Row beat) {
 		Map<String, Object> payload = beat.map("payload_json");
@@ -515,11 +587,6 @@ public final class SessionService {
 			}
 		}
 		return null;
-	}
-
-	/** True when the character stands where the party stands (or has no location yet). */
-	static boolean withParty(Row c, Long partyLocationId) {
-		return partyLocationId == null || c.isNull("location_id") || partyLocationId.equals(c.lng("location_id"));
 	}
 
 	/**
@@ -577,6 +644,7 @@ public final class SessionService {
 					.queryOne("SELECT c.* FROM player_control_assignment p JOIN character c ON c.id = p.character_id "
 							+ "WHERE p.campaign_id = ? AND p.active = 1", campaignId);
 			result.put("player_character", pc.map(r -> Ref.of(Ref.CHARACTER, r.id())).orElse(null));
+			result.put("tactical_control", se.hirt.mcp.rpg.party.TacticalControl.summary(tx, campaignId));
 			if ("SETUP".equals(campaign.str("status"))) {
 				var drafts = new ArrayList<Map<String, Object>>();
 				for (Row c : tx.query(
@@ -592,8 +660,13 @@ public final class SessionService {
 			}
 			result.put("members", partyMembers(tx, campaignId, d));
 			result.put("former_members", formerMembers(tx, campaignId));
+			Map<String, Object> journey = se.hirt.mcp.rpg.world.TravelJourneyService.stateInTx(tx, campaignId);
+			boolean travelling = Boolean.TRUE.equals(journey.get("active"));
 			result.put("location",
-					campaign.isNull("current_location_id") ? null : location(tx, campaign.lng("current_location_id")));
+					followsJourney(journey, pc) ? journeyLocation(tx, journey) : campaign.isNull("current_location_id")
+							? null : location(tx, campaign.lng("current_location_id")));
+			if (travelling)
+				result.put("journey", journey);
 			tx.queryOne("SELECT seq FROM game_clock WHERE campaign_id = ?", campaignId)
 					.ifPresent(r -> result.put("game_time", GameTime.toMap(tx, campaignId, r.lng("seq"))));
 			tx.queryOne(
@@ -616,6 +689,10 @@ public final class SessionService {
 				campaignId);
 		Long here = tx.queryOne("SELECT current_location_id AS id FROM campaign WHERE id = ?", campaignId)
 				.filter(r -> !r.isNull("id")).map(Row::id).orElse(null);
+		Map<String, Object> journey = se.hirt.mcp.rpg.world.TravelJourneyService.stateInTx(tx, campaignId);
+		Map<String, Object> journeyPosition = Boolean.TRUE.equals(journey.get("active")) ? journeyLocation(tx, journey)
+				: Map.of();
+		boolean partyTravelling = followsJourney(journey, pc);
 		var members = new ArrayList<Map<String, Object>>();
 		for (Row m : tx.query(
 				"SELECT m.state AS membership_state, m.joined_time, m.notes, c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
@@ -624,11 +701,13 @@ public final class SessionService {
 			var sheet = characters.sheet(tx, m, detail);
 			sheet.put("membership", m.str("membership_state"));
 			sheet.put("joined", m.str("joined_time"));
-			sheet.put("with_party", withParty(m, here));
+			sheet.put("with_party", se.hirt.mcp.rpg.world.WorldService.partyCoLocated(tx, campaignId, m, here));
 			if (!m.isNull("location_id")) {
 				tx.find("location", m.lng("location_id")).ifPresent(l -> sheet.put("location_name", l.str("name")));
 			}
+			applyJourneyPosition(sheet, m, journey, journeyPosition, partyTravelling);
 			sheet.put("player_controlled", pc.isPresent() && pc.get().id() == m.id());
+			sheet.put("tactical_control", se.hirt.mcp.rpg.party.TacticalControl.assignment(tx, campaignId, m.id()));
 			List<String> gaps = se.hirt.mcp.rpg.character.CharacterService.sheetGaps(tx, m);
 			if (!gaps.isEmpty()) {
 				sheet.put("sheet_gaps", gaps);
@@ -764,28 +843,28 @@ public final class SessionService {
 			if (minutes == null || minutes <= 0 || minutes > 365 * GameTime.MINUTES_PER_DAY) {
 				throw RpgException.invalidArgument("minutes must be a positive number of minutes (at most one year).");
 			}
-			Row clock = GameTime.clock(tx, campaignId);
-			long from = clock.lng("seq");
-			long to = from + minutes;
-			tx.update("game_clock", clock.id(), Map.of("seq", to, "instant", GameTime.render(to)));
-			int expired = se.hirt.mcp.rpg.rules.Effects.expireByTime(tx, campaignId, to);
-			var consequences = new java.util.ArrayList<Object>();
-			if (expired > 0) {
-				consequences.add(expired + " timed effect(s) expired");
-			}
-			consequences.addAll(se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, from, to));
+			long from = GameTime.currentSeq(tx, campaignId);
+			Map<String, Object> fromTime = GameTime.toMap(tx, campaignId, from);
+			var progress = se.hirt.mcp.rpg.world.WorldTimeline.advanceSeconds(tx, campaignId, minutes * 60L, reason,
+					true);
+			long to = GameTime.currentSeq(tx, campaignId);
+			int expired = progress.expiredEffects();
+			var consequences = new java.util.ArrayList<Object>(progress.consequences());
 			String due = ChronicleService.dueWarning(tx, campaignId);
 			if (due != null) {
 				consequences.add(due);
 			}
 			var result = new LinkedHashMap<String, Object>();
-			result.put("from", GameTime.toMap(tx, campaignId, from));
+			result.put("from", fromTime);
 			result.put("to", GameTime.toMap(tx, campaignId, to));
-			result.put("elapsed_minutes", minutes);
+			result.put("elapsed_minutes", progress.elapsedSeconds() / 60);
+			result.put("elapsed_seconds", progress.elapsedSeconds());
+			result.put("interrupted", progress.interrupted());
+			result.put("interruptions", progress.interruptions());
 			result.put("consequences", consequences);
 			result.put("expired_effects", expired);
 			result.put("director_trigger", directorTrigger(from, to));
-			result.put("meta", Harness.meta(campaign, null));
+			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return result;
 		});
 	}

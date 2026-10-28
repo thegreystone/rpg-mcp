@@ -29,6 +29,8 @@
 package se.hirt.mcp.rpg.ledger;
 
 import se.hirt.mcp.rpg.harness.Harness;
+import se.hirt.mcp.rpg.encounter.EncounterDigest;
+import se.hirt.mcp.rpg.maps.SceneService;
 import se.hirt.mcp.rpg.persistence.Database;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
@@ -46,6 +48,9 @@ import java.util.*;
 public final class LedgerService {
 
 	public static final Set<String> IMPORTANCE = Set.of("MINOR", "NOTABLE", "MAJOR", "CRITICAL");
+	public static final int ENCOUNTER_DIGEST_MAX_BYTES = 2000;
+	public static final int RECENT_ENCOUNTER_DIGEST_LIMIT = 2;
+	public static final int RECENT_ENCOUNTER_DIGEST_MAX_BYTES = 3000;
 	public static final Set<String> VISIBILITY = Set.of("PLAYER_KNOWN", "PARTY_KNOWN", "CHARACTER_KNOWN",
 			"FACTION_KNOWN", "GM_ONLY", "DIRECTOR_ONLY");
 	public static final Set<String> PROVENANCE = Set.of("PLAYER", "GM", "DIRECTOR", "MECHANICAL_CONSEQUENCE",
@@ -299,7 +304,27 @@ public final class LedgerService {
 	public static List<Map<String, Object>> recent(Tx tx, long campaignId, int limit) {
 		List<Row> rows = tx.query("SELECT * FROM event WHERE campaign_id = ? AND importance <> 'MINOR' "
 				+ "AND visibility <> 'DIRECTOR_ONLY' ORDER BY id DESC LIMIT ?", campaignId, limit);
-		return rows.stream().map(r -> eventSummary(tx, r, false)).toList();
+		var result = new ArrayList<Map<String, Object>>();
+		int digests = 0, digestBytes = 0;
+		for (Row row : rows) {
+			Map<String, Object> summary = eventSummary(tx, row, false);
+			Map<String, Object> digest = SceneService.map(summary.get("encounter_digest"));
+			if (!digest.isEmpty()) {
+				int bytes = serializedBytes(digest);
+				if (++digests <= RECENT_ENCOUNTER_DIGEST_LIMIT
+						&& digestBytes + bytes <= RECENT_ENCOUNTER_DIGEST_MAX_BYTES) {
+					digestBytes += bytes;
+				} else {
+					summary.remove("encounter_digest");
+					summary.remove("encounter_digest_bytes");
+					summary.remove("encounter_digest_max_bytes");
+					summary.put("encounter", digest.get("encounter"));
+					summary.put("encounter_digest_omitted", true);
+				}
+			}
+			result.add(summary);
+		}
+		return result;
 	}
 
 	public static Map<String, Object> eventSummary(Tx tx, Row r, boolean includeDetail) {
@@ -317,10 +342,77 @@ public final class LedgerService {
 		if (!r.isNull("location_id")) {
 			m.put("location", Ref.of(Ref.LOCATION, r.lng("location_id")));
 		}
-		if (includeDetail && !r.isNull("episodic_detail")) {
-			m.put("detail", r.str("episodic_detail"));
+		if ((includeDetail || "MAP_ILLUMINATION_CHANGED".equals(r.str("type"))) && !r.isNull("episodic_detail")) {
+			String detail = r.str("episodic_detail");
+			int end = includeDetail ? detail.length() : Math.min(400, detail.length());
+			if (end < detail.length() && end > 0 && Character.isHighSurrogate(detail.charAt(end - 1)))
+				end--;
+			m.put("detail", detail.substring(0, end));
+			if (end < detail.length())
+				m.put("detail_truncated", true);
+		}
+		if ("ENCOUNTER_RESOLVED".equals(r.str("type"))) {
+			Map<String, Object> payload = r.map("payload_json");
+			Map<String, Object> digest = SceneService.map(payload.get("digest"));
+			if (!digest.isEmpty()) {
+				Map<String, Object> compact = EncounterDigest.compactPublic(digest);
+				Map<String, Object> delivered = includeDetail ? compact : boundedRecallDigest(compact);
+				m.put("encounter_digest", delivered);
+				if (!includeDetail) {
+					m.put("encounter_digest_bytes", serializedBytes(delivered));
+					m.put("encounter_digest_max_bytes", ENCOUNTER_DIGEST_MAX_BYTES);
+				}
+				if (includeDetail)
+					m.put("detail", EncounterDigest.story(compact));
+				Object encounter = compact.getOrDefault("encounter", payload.get("encounter"));
+				if (encounter instanceof String ref && ref.startsWith(Ref.ENCOUNTER + ":"))
+					m.put("full_gm_record",
+							Map.of("tool", "get_encounter_state", "arguments", Map.of("campaign",
+									Ref.of(Ref.CAMPAIGN, r.lng("campaign_id")), "encounter", ref, "audience", "GM"),
+									"field", "record"));
+			}
 		}
 		return m;
+	}
+
+	/**
+	 * Keep repeated context/timeline recall bounded; the saved record and chronicle retain detail.
+	 */
+	public static Map<String, Object> boundedRecallDigest(Map<String, Object> compact) {
+		if (serializedBytes(compact) <= ENCOUNTER_DIGEST_MAX_BYTES)
+			return compact;
+		var brief = new LinkedHashMap<>(compact);
+		brief.put("truncated", true);
+		for (String key : List.of("resources", "map_changes", "spells", "critical_hits", "drops_to_zero",
+				"healing_and_stabilization", "concentration_ended", "captures", "flights", "knockouts", "deaths",
+				"narrative", "summary")) {
+			if (serializedBytes(brief) <= ENCOUNTER_DIGEST_MAX_BYTES)
+				break;
+			Object value = brief.remove(key);
+			if (value instanceof Collection<?> entries)
+				brief.put(key + "_count", entries.size());
+		}
+		// Keep as many selected moments as fit instead of discarding the whole fight at once.
+		for (String key : List.of("highlights", "final_roster")) {
+			if (!(brief.get(key) instanceof List<?> original))
+				continue;
+			var remaining = new ArrayList<>(original);
+			while (!remaining.isEmpty() && serializedBytes(brief) > ENCOUNTER_DIGEST_MAX_BYTES) {
+				remaining.removeLast();
+				brief.put(key, remaining);
+				brief.put(key + "_count", original.size());
+			}
+		}
+		for (String key : List.of("xp", "loot", "baseline_note")) {
+			if (serializedBytes(brief) <= ENCOUNTER_DIGEST_MAX_BYTES)
+				break;
+			brief.remove(key);
+		}
+		return brief;
+	}
+
+	public static int serializedBytes(Map<String, Object> digest) {
+		return Json.utf8(Json.write(digest)).length;
 	}
 
 	/**

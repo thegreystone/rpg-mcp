@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
@@ -125,6 +126,11 @@ class SrdSpellRulesTest {
 
 	/** Starts an encounter with scripted initiative: the player character first, then each foe. */
 	private static String encounter(Engine engine, String campaign, String pc, List<String> foes) {
+		return encounter(engine, campaign, pc, foes, null);
+	}
+
+	private static String encounter(
+		Engine engine, String campaign, String pc, List<String> foes, Map<String, Object> zones) {
 		ScriptedRollService dice = (ScriptedRollService) engine.roller();
 		dice.queue(20);
 		// One d20 per group of identical creatures on the foes' side (SRD 5.2.1 "Initiative"); no tie-break die.
@@ -138,7 +144,7 @@ class SrdSpellRulesTest {
 			}
 		}
 		Map<String, Object> started = engine.encounters().start(op(), campaign, map("party", List.of(pc), "foes", foes),
-				null, null, null, null, null);
+				null, zones, null, null, null);
 		assertEquals(pc, m(started.get("turn")).get("character"));
 		assertTrue(dice.exhausted());
 		return (String) started.get("encounter");
@@ -508,7 +514,7 @@ class SrdSpellRulesTest {
 			assertEquals(4, slotsLeft(engine, campaign, pc, 1), "four Shields to cast");
 			String grubb = creature(engine, campaign, "Bandit", "Grubb");
 			String hesk = creature(engine, campaign, "Bandit", "Hesk");
-			String enc = encounter(engine, campaign, pc, List.of(grubb, hesk));
+			String enc = encounter(engine, campaign, pc, List.of(grubb, hesk), meleeZones(pc, grubb, hesk));
 			Map<String, Object> scimitar = map("kind", "ATTACK", "target", pc, "attack", "Scimitar");
 
 			// Round 1 (c): Grubb's scimitar +3 hits AC 12 on a 10; Shield turns it into a miss and stays up.
@@ -552,6 +558,7 @@ class SrdSpellRulesTest {
 			endTurn(engine, campaign, enc, hesk);
 
 			// Round 3 (b): a natural 20 still offers Shield; it hits anyway but the +5 is up for the round.
+			perform(engine, campaign, enc, pc, map("kind", "MOVE", "x_ft", 25, "y_ft", 25), false);
 			endTurn(engine, campaign, enc, pc);
 			dice.queue(20);
 			Map<String, Object> critical = perform(engine, campaign, enc, grubb, scimitar, true);

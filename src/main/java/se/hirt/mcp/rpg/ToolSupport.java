@@ -29,6 +29,8 @@
 package se.hirt.mcp.rpg;
 
 import io.quarkiverse.mcp.server.ToolResponse;
+import io.quarkiverse.mcp.server.ImageContent;
+import io.quarkiverse.mcp.server.TextContent;
 import org.jboss.logging.Logger;
 import se.hirt.mcp.rpg.protocol.Json;
 import se.hirt.mcp.rpg.protocol.RpgException;
@@ -73,5 +75,19 @@ final class ToolSupport {
 			out.put("meta", meta);
 		}
 		return Json.write(out);
+	}
+
+	static ToolResponse image(String tool, Supplier<Map<String, Object>> body, Supplier<byte[]> png) {
+		try {
+			String text = envelope(body.get());
+			return ToolResponse.success(java.util.List.of(new TextContent(text),
+					new ImageContent(java.util.Base64.getEncoder().encodeToString(png.get()), "image/png")));
+		} catch (RpgException e) {
+			return ToolResponse.error(Json.write(e.toErrorMap()));
+		} catch (RuntimeException e) {
+			LOG.errorf(e, "%s failed unexpectedly", tool);
+			return ToolResponse.error(
+					Json.write(RpgException.internal("Unable to render map: " + e.getMessage(), e).toErrorMap()));
+		}
 	}
 }
