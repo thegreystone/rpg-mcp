@@ -192,16 +192,26 @@ The packages follow Mnemic's layout and both `ai-plugins` catalogs point at them
   universal bundle (so Linux x86_64 is covered, unlike Mnemic), plus the `rpg` skill and the icon. No
   `version` field: Claude Code versions a `git-subdir` plugin by commit. Claude Desktop rejects URL-backed
   bundles, so Desktop keeps the per-platform `.mcpb`.
-- [`plugin-codex/`](../plugin-codex/): the Codex plugin. A portable manifest, `mcp.json`, the `rpg` and
-  `setup` skills, and [`scripts/rpg-mcp.mjs`](../plugin-codex/scripts/rpg-mcp.mjs), a dependency-free Node.js
+- [`plugin-codex/`](../plugin-codex/): the Codex plugin. A `.codex-plugin/plugin.json` compatibility manifest,
+  `.mcp.json`, the `rpg` and `setup` skills, and
+  [`scripts/rpg-mcp.mjs`](../plugin-codex/scripts/rpg-mcp.mjs), a dependency-free Node.js
   18+ launcher that downloads the pinned standalone binary for the host platform into a cache outside the
   plugin, verifies GitHub's size and SHA-256 digest, and starts it with `RPG_DATA_DIR` set. Optional
   `--configure --data-dir` and `--binary` settings live outside the plugin too.
 
+Keep the Codex package in compatibility format: Codex 0.166.0-alpha.5.1 limits the combined tool-schema
+size of portable Agent Plugins and silently hides part of RPG MCP's tools. A root `plugin.json` would
+take precedence and restore that limit. The compatibility manifest explicitly registers the skills and
+MCP configuration. See [`plugin-codex/README.md`](../plugin-codex/README.md) for the layout and migration
+from a standalone MCP workaround. The `ai-plugins` catalog already selects `plugin-codex/`; its source
+entry does not change.
+
 **Updating the pins** after a release has been published *and* `Sign-Release.ps1` has re-packed the universal
 bundle: change the version in the bundle URL in `plugin/.claude-plugin/plugin.json`, and `RELEASE_VERSION`
-in `plugin-codex/scripts/rpg-mcp.mjs` together with `version` in `plugin-codex/plugin.json`. Run
-`claude plugin validate ./plugin` and `node --test plugin-codex/tests/launcher.test.mjs`, push, and users pick
+in `plugin-codex/scripts/rpg-mcp.mjs`. Increment `version` in `plugin-codex/.codex-plugin/plugin.json` for
+each Codex package change; packaging-only releases can keep the existing native release pin (plugin
+0.2.1 uses native 0.2.0). Run `claude plugin validate ./plugin` and
+`node --test plugin-codex/tests`, push, and users pick
 the change up with `claude plugin update rpg-mcp@hirt-ai-plugins` or a Codex marketplace refresh. Both skills
 only point the model at `get_instructions`; the guide itself stays in the server, so a protocol change rarely
 touches them. Keep `plugin/assets/icon.png` and `plugin-codex/assets/icon.png` in step with
