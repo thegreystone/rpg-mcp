@@ -62,7 +62,7 @@ public final class SetupDraft {
 			"allow_reroll", "starting_wealth", "hp_progression", "xp_policy", "companion_level_up");
 	public static final Set<String> ADVENTURE_KEYS = Set.of("premise", "background_truth", "opening_location",
 			"immediate_goal", "start_time", "gm_notes", "region", "tone_notes", "seeds", "story_beats", "factions",
-			"world_events", "locations", "quests");
+			"world_events", "locations", "quests", "world_map");
 	private static final Map<String, Object> OPTIONAL_DEFAULTS = Map.of("experience.fantasy_style",
 			Described.recommended(FantasyStyle.class), "experience.relationship_focus", "CENTRAL",
 			"experience.excluded_themes", List.of(), "rules.ability_generation",

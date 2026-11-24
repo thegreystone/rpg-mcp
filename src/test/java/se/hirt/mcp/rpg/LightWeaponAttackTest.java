@@ -179,6 +179,8 @@ class LightWeaponAttackTest {
 			attack(fixture, fixture.longsword, false, false);
 			assertRejectedWithoutChanges(fixture, map("kind", "ATTACK", "weapon", fixture.handaxe, "target",
 					fixture.target, "light_extra_attack", true));
+			endTurn(fixture, fixture.actor);
+			endTurn(fixture, fixture.target);
 			fixture.dice.queue(19, 2);
 			attack(fixture, fixture.dagger, false, false);
 			for (String invalid : List.of(fixture.dagger, fixture.longsword, "unarmed")) {
@@ -391,9 +393,12 @@ class LightWeaponAttackTest {
 			assertNotEquals(firstSword, secondSword);
 			fixture.dice.queue(20, 1);
 			Map<String, Object> started = fixture.engine.encounters().start(op(), fixture.campaign,
-					map("party", List.of(scout), "foes", List.of(fixture.target)), null, null, null, null, null);
+					map("party", List.of(scout), "foes", List.of(fixture.target)), null,
+					TestCampaigns.meleeZones(scout, fixture.target), null, null, null);
 			String encounter = (String) started.get("encounter");
 			assertEquals(scout, m(started.get("turn")).get("character"));
+			TestCampaigns.gridPositions(fixture.engine, fixture.campaign,
+					Map.of(scout, List.of(0, 0), fixture.target, List.of(5, 0)));
 			fixture.dice.queue(19, 2);
 			Map<String, Object> first = fixture.engine.encounters().perform(op(), fixture.campaign, encounter, scout,
 					map("kind", "ATTACK", "attack", firstSword, "target", fixture.target), true);
@@ -526,7 +531,8 @@ class LightWeaponAttackTest {
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
 			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
-					map("party", List.of(actor), "foes", List.of(target)), null, null, null, null, null);
+					map("party", List.of(actor), "foes", List.of(target)), null,
+					TestCampaigns.meleeZones(actor, target), null, null, null);
 			assertEquals(actor, m(started.get("turn")).get("character"));
 			assertTrue(dice.exhausted());
 			return new Fixture(engine, dice, campaign, actor, target, (String) started.get("encounter"), dagger,

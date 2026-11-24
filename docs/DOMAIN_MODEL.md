@@ -3,6 +3,11 @@
 **Purpose:** The entities, aggregates, state machines, invariants and transaction boundaries behind `DESIGN.md` and
 `MCP_PROTOCOL.md`. Physical schema is `DATABASE.md`; mechanics are `RULES_ENGINE.md`.
 
+The implemented map baseline adds staged blueprints, persistent tactical/region geometry, independent
+passages, live placement/observation overlays and active-region schedules. The [DM workflow](MAP_USAGE.md)
+describes the callable operations and current boundaries; larger target specifications retain optional
+editor/provider/globe extensions separately from this baseline.
+
 > **The AI improvises the fiction; the engine owns the truth.** This document defines what the truth is made of.
 
 ---
@@ -189,6 +194,8 @@ life_state:  ALIVE | DYING | DEAD
 
 - `PlayerControlAssignment` links a player seat to one active character (one seat in the MVP).
   `transfer_player_control` changes the assignment; neither character's identity changes (**I-10**).
+- Companion tactical preferences assign decision responsibility for movement, actions and reactions
+  without changing `PlayerControlAssignment`, character identity or narrative agency (§6.1).
 - Death sets `life_state = DEAD` and ends party activity through membership state; the row, its relationships and its
   history remain (**I-11**).
 - Resurrection restores `life_state` on the same row; there is never a new identity (**I-12**).
@@ -231,6 +238,36 @@ GUEST  ──> ended                     (temporary ally)
   and guests standing where the party stands and leaves the rest where they are; separated members never move. Views
   report `former_members` as one entry per character (latest ended episode, no open one) and the episode history on the
   character.
+
+### 6.1 Companion tactical preferences
+
+Effective tactical control is `PLAYER` for the primary character and `DM` for other current party
+members unless explicitly changed. Broad orders and one-off directions are interpreted by the DM;
+they do not create a saved detailed-control preference. Companions keep their personalities,
+dialogue, loyalties and independent narrative agency under either tactical controller.
+
+`set_tactical_control` sets `DM` or `PLAYER` for selected companions, or an all-companion policy
+covering current and later recruits when the selection is omitted. Preferences have scope
+`ENCOUNTER` with a specific running encounter or `UNTIL_RELEASED`. The default selects the running
+encounter, otherwise persistent scope. An active
+encounter preference governs that encounter; its end expires the preference and restores the
+persistent preference or DM default. Releasing control uses `DM` for the selected scope.
+An explicit persistent change also takes effect in the running encounter, clearing conflicting
+selected-character encounter overrides. Effective priority is encounter-character,
+encounter-all, persistent-character, persistent-all, then DM default; the primary character always
+remains player-controlled.
+
+Preferences are canonical campaign state: journaled, idempotently updated, restored by checkpoints
+and recovered after reload. Party, bootstrap and encounter views expose `tactical_control`
+summaries and member assignments; `player_controlled` still denotes the primary identity. Each
+actor's initiative, movement/action budget, reactions and own perception remain independent.
+Normal `npc_reactions: AUTO` asks for reactions belonging to player-controlled actors and keeps
+normal NPC handling for DM-controlled actors; `ASK` retains its explicit all-NPC choice behavior.
+A pending choice must be resolved before changing its control context.
+
+The DM executes routine companion movement and turns with normal actor tools, pausing at the
+player's own turn, selected companion decisions or meaningful shared choices. These preferences
+do not implement autonomous engine AI, a path follower or group movement batching.
 
 ---
 
@@ -281,8 +318,14 @@ ref or inline modifier, start (game time + journal ID), duration/expiry, concent
 UNKNOWN), initiative order, round, turn, environment, objectives, spatial model, revision, retry checkpoint ref (under
 ENCOUNTER_RETRY).
 
-**Participant:** character ref, side, initiative, position (zone; x,y with the tactical grid capability), status
+**Participant:** character ref, side, initiative, position (currently zone-based; target design uses a
+saved local tactical scene and canonical physical placement for every combat), status
 (ACTIVE, DEFEATED, FLED, REMOVED).
+
+The planned [encounter policy](DESIGN.md#15-encounters) uses graph travel with local tactical maps,
+including locations along route legs. Image display is optional; combat geometry is required. Scene
+preparation and deliberate legacy conversion must preserve existing actor state and established
+positions; normal view queries do not generate or convert encounters.
 
 ```text
 CREATED ──> RUNNING ──> ENDED
@@ -337,6 +380,22 @@ description, materialization (`SEMANTIC, MATERIALIZED`), generation seed, featur
 
 Dungeons are subtrees of ROOM/AREA nodes joined by connections; one model serves world, settlement and dungeon maps.
 
+**Map preparation:** campaign-scoped draft payload, accepted commitments, source revisions/hashes,
+local-key to canonical-reference mapping and publication readiness. A blueprint can establish sixteen
+rooms on two floors with an altar/secret entry/reward before coordinates exist. Playable publication
+adds geometry without replacing those identities or duplicating inventory/actors.
+
+**Saved spatial layers:** indexed scene identity/frame plus a layout document; separate character
+placements, physical object anchors and party/actor observations. New combat references a saved scene.
+Regional features retain paths/polygons and graph bindings; atlas sheets have fixed dimensions and
+signed coordinates. Style/image data does not redefine geographic or tactical positions. Local accepted
+geometry resolves to one-inch precision; character footprint origins use the 5 ft placement lattice.
+
+**Living state:** canonical inventory, object/passage condition, actor positions and learned observations
+outlive encounters. Player projections contain permitted knowledge; enemy awareness uses its own evidence.
+An accepted unrealized site blocks entry before time is spent. Exact/scoped annotations add world detail
+or reports without regenerating established geography.
+
 - **I-39** Materialization is one-way and stable: generated detail persists and later reads agree.
 - **I-40** `move_party` requires a known traversable path or an explicit authorized route, updates every moved
   character's location, advances the clock and commits atomically.
@@ -347,6 +406,12 @@ Dungeons are subtrees of ROOM/AREA nodes joined by connections; one model serves
 ## 13. Time
 
 **GameClock** (one per campaign): calendar ref, current instant, monotonic `sequence`.
+
+The existing minute sequence is retained with a `second_offset` for precise actions and six-second
+rounds. Saved action progress and journey state distinguish elapsed work from a completed benefit.
+Patrols use finite actor rosters. Regional timers accrue time only while any party member is present;
+leaving with the final member pauses remaining durations, and returning resumes without off-region
+catch-up. The global calendar continues independently.
 
 - **I-42** The clock never moves backward and `sequence` strictly increases with every advancement. Checkpoint
   restoration is the sole exception.
@@ -501,5 +566,6 @@ transaction, increment each touched revision and append one journal entry.
 ## 20. Open Items for Downstream Documents
 
 1. Numeric vs. qualitative relationship dimensions — `RULES_ENGINE.md` §7.
-2. Tactical-grid schema (zones vs. x,y, movement costs, ranges) — deferred; the participant position accepts either.
+2. Mandatory tactical-grid scene/position schema, movement/range/sight policies and safe legacy-zone
+   conversion — detailed implementation pending; zones are not the target mode for new combat.
 3. Seed-data JSON schemas per remaining content kind — `RULES_ENGINE.md` §7.

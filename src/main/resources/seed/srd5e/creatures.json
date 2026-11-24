@@ -19488,7 +19488,13 @@
      {
       "name": "Spellcasting",
       "kind": "OTHER",
-      "text": "The priest casts one of the following spells, using Wisdom as the spellcasting ability: At Will: Light, Thaumaturgy"
+      "text": "The priest casts one of the following spells, using Wisdom as the spellcasting ability: At Will: Light, Thaumaturgy",
+      "spellcasting": {
+       "ability": "WIS",
+       "spells": ["Light", "Thaumaturgy"],
+       "at_will": true,
+       "action_cost": "ACTION"
+      }
      }
     ],
     "bonus_actions": [
@@ -19496,7 +19502,15 @@
       "name": "Divine Aid",
       "uses": "1/Day",
       "kind": "OTHER",
-      "text": "The priest casts Bless, Healing Word, or Sanctuary, using the same spellcasting ability as Spellcasting."
+      "text": "The priest casts Bless, Healing Word, or Sanctuary, using the same spellcasting ability as Spellcasting.",
+      "spellcasting": {
+       "ability": "WIS",
+       "spells": ["Bless", "Healing Word", "Sanctuary"],
+       "resource_ref": "creature:priest-acolyte:divine-aid",
+       "uses": 1,
+       "recharge": "LONG_REST",
+       "action_cost": "BONUS_ACTION"
+      }
      }
     ]
    }

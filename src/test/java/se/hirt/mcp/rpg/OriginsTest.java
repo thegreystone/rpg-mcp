@@ -38,6 +38,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 
 /**
@@ -257,7 +258,8 @@ class OriginsTest {
 			// Savage Attacker (Soldier's feat): the first weapon hit each turn rolls its dice twice, higher total kept.
 			dice.queue(20, 1);
 			String enc = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "foes", List.of(orc)), null, null, null, null, null).get("encounter");
+					map("party", List.of(pc), "foes", List.of(orc)), null, meleeZones(pc, orc), null, null, null)
+					.get("encounter");
 			dice.queue(15, 1, 1, 6, 6);
 			Map<String, Object> swing = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "ATTACK", "target", orc, "weapon", "Greatsword"), false);

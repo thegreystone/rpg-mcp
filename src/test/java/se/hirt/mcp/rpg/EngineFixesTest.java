@@ -333,15 +333,18 @@ class EngineFixesTest {
 			String enc = (String) engine.encounters().start(op(), campaign,
 					map("party", List.of(pc, ally), "raiders", List.of(enemy)), null, null, null, null, null, null)
 					.get("encounter");
+			TestCampaigns.gridPositions(engine, campaign,
+					Map.of(pc, List.of(25, 25), ally, List.of(25, 20), enemy, List.of(30, 25)));
 			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "END_TURN"), true);
 			engine.encounters().perform(op(), campaign, enc, ally, map("kind", "END_TURN"), true);
-			// The enemy leaves the zone: the PC is asked first, then the ally's automatic scimitar kills it.
-			dice.queue(19, 6);
+			// Pause before leaving reach, then an external consequence drops the mover before the pending choice.
 			Map<String, Object> move = engine.encounters().perform(op(), campaign, enc, enemy,
 					map("kind", "MOVE", "zone", "far"), true);
 			List<Map<String, Object>> pending = list(move.get("pending_choices"));
 			assertEquals(1, pending.size());
 			assertEquals(pc, pending.get(0).get("chooser"));
+			engine.runtime().applyRuntimeChange(op(), campaign, enemy, map("kind", "DAMAGE", "amount", 1, "damage_type",
+					"bludgeoning", "reason", "a fall during the pending reaction"));
 			assertEquals("DEAD", engine.characters().characterSheet(campaign, enemy, "PLAY").get("life_state"));
 			Map<String, Object> resolved = engine.encounters().resolveChoice(op(), campaign,
 					(String) pending.get(0).get("transaction"), map("option", "TAKE"));

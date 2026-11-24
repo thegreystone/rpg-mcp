@@ -33,7 +33,6 @@ import se.hirt.mcp.rpg.content.ContentService;
 import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
-import se.hirt.mcp.rpg.economy.Scheduler;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.persistence.Row;
@@ -41,7 +40,6 @@ import se.hirt.mcp.rpg.persistence.Tx;
 import se.hirt.mcp.rpg.protocol.Json;
 import se.hirt.mcp.rpg.protocol.Ref;
 import se.hirt.mcp.rpg.protocol.RpgException;
-import se.hirt.mcp.rpg.rules.Effects;
 import se.hirt.mcp.rpg.session.GameTime;
 
 import java.math.BigInteger;
@@ -137,7 +135,13 @@ public final class AmmunitionRecovery {
 		if (quota == 0) {
 			throw RpgException.notAllowed("There is no recoverable tracked ammunition from this battle.");
 		}
-		List<Map<String, Object>> chosen = selection == null
+		String actionKey = "ammunition:" + live.id() + ":" + shooter.id();
+		Row pending = tx.queryOne(
+				"SELECT * FROM action_progress WHERE campaign_id=? AND action_key=? AND status IN ('OPEN','PAUSED') ORDER BY id DESC LIMIT 1",
+				campaign.id(), actionKey).orElse(null);
+		List<Map<String, Object>> saved = pending == null ? null
+				: se.hirt.mcp.rpg.maps.SceneService.maps(pending.map("parameters_json").get("selection"));
+		List<Map<String, Object>> chosen = selection == null && saved != null ? saved : selection == null
 				? automaticSelection(tx, rules, roller, campaign.id(), candidates, quota) : selection;
 		var byGroup = new LinkedHashMap<Long, Candidate>();
 		candidates.forEach(c -> byGroup.put(c.group, c));
@@ -181,6 +185,22 @@ public final class AmmunitionRecovery {
 			throw RpgException.invalidArgument(
 					"Select exactly " + quota + " pieces of ammunition, half the " + used + " used (rounded down).");
 		}
+		long from = GameTime.currentSeq(tx, campaign.id());
+		String method = pending == null ? selection == null ? "RANDOM" : "EXPLICIT"
+				: String.valueOf(pending.map("parameters_json").get("method"));
+		var action = se.hirt.mcp.rpg.world.WorldTimeline.runAction(tx, campaign.id(), actionKey, "RECOVER_AMMUNITION",
+				60, Map.of("selection", normalized, "method", method));
+		long to = GameTime.currentSeq(tx, campaign.id());
+		if (!action.completed()) {
+			var interrupted = new LinkedHashMap<String, Object>(action.progress().toMap());
+			interrupted.put("action", action.reference());
+			interrupted.put("remaining_seconds", action.requiredSeconds() - action.completedSeconds());
+			interrupted.put("recovered", List.of());
+			interrupted.put("encounter", Ref.of(Ref.ENCOUNTER, live.id()));
+			interrupted.put("character", Ref.of(Ref.CHARACTER, shooter.id()));
+			interrupted.put("meta", Harness.meta(tx.get("campaign", campaign.id()), null));
+			return interrupted;
+		}
 
 		var recovered = new ArrayList<Map<String, Object>>();
 		for (var quantity : quantities.entrySet()) {
@@ -189,12 +209,8 @@ public final class AmmunitionRecovery {
 			recovered.add(Map.of("entry", Ref.of(Ref.INVENTORY, entry), "item", item.display(), "name", item.name(),
 					"quantity", quantity.getValue()));
 		}
-		Row clock = GameTime.clock(tx, campaign.id());
-		long from = clock.lng("seq");
-		long to = from + 1;
-		tx.update("game_clock", clock.id(), Map.of("seq", to, "instant", GameTime.render(to)));
-		int expired = Effects.expireByTime(tx, campaign.id(), to);
-		var consequences = Scheduler.onClockAdvance(tx, campaign.id(), from, to);
+		int expired = action.progress().expiredEffects();
+		var consequences = action.progress().consequences();
 		Row fresh = tx.get("character", shooter.id());
 		long revision = fresh.lng("revision") + 1;
 		tx.update("character", fresh.id(), Map.of("revision", revision));
@@ -205,11 +221,14 @@ public final class AmmunitionRecovery {
 		result.put("character", Ref.of(Ref.CHARACTER, shooter.id()));
 		result.put("used", used);
 		result.put("recoverable", quota);
-		result.put("method", selection == null ? "RANDOM" : "EXPLICIT");
+		result.put("method", method);
 		result.put("selection", normalized);
 		result.put("recovered", recovered);
 		result.put("lost", lost);
-		result.put("elapsed_minutes", 1);
+		result.put("elapsed_minutes", (int) (action.progress().elapsedSeconds() / 60));
+		result.put("elapsed_seconds", action.progress().elapsedSeconds());
+		result.put("completed", true);
+		result.put("interrupted", false);
 		result.put("from", GameTime.toMap(tx, campaign.id(), from));
 		result.put("to", GameTime.toMap(tx, campaign.id(), to));
 		result.put("expired_effects", expired);

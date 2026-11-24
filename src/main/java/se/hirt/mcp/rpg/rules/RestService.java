@@ -93,8 +93,32 @@ public final class RestService {
 			if (!k.equals("SHORT") && !k.equals("LONG")) {
 				throw RpgException.invalidArgument("kind must be SHORT or LONG.");
 			}
+			String actionKey = "rest:" + Json.hash(args);
+			Row savedAction = tx
+					.queryOne("SELECT * FROM action_progress WHERE campaign_id=? AND action_key=? "
+							+ "AND status IN ('OPEN','PAUSED') ORDER BY id DESC LIMIT 1", campaignId, actionKey)
+					.orElse(null);
+			Map<String, Object> parameters = savedAction == null ? new LinkedHashMap<>(args)
+					: savedAction.map("parameters_json");
+			Map<?, ?> savedRoster = parameters.get("rest_roster") instanceof Map<?, ?> roster ? roster : null;
+			if (savedAction != null && (savedRoster == null || !Objects.equals(savedRoster.get("version"), 1)
+					|| !(savedRoster.get("eligible") instanceof List<?>)
+					|| !(savedRoster.get("resters") instanceof List<?>)
+					|| !(savedRoster.get("skipped") instanceof List<?>))) {
+				tx.update("action_progress", savedAction.id(),
+						Map.of("status", "CANCELLED", "revision", savedAction.lng("revision") + 1));
+				return restFields("kind", k, "completed", false, "interrupted", false, "restart_required", true,
+						"cancelled_action", "action:" + savedAction.id(), "elapsed_minutes", 0L, "elapsed_seconds", 0L,
+						"characters", List.of(), "game_time",
+						GameTime.toMap(tx, campaignId, GameTime.currentSeq(tx, campaignId)), "note",
+						"This older paused rest did not record who was eligible when it began. Its unverified progress was cancelled; no time passed and no rest benefits were granted. Repeat the same rest request to start a new full rest with the current eligible roster.",
+						"meta", Harness.meta(tx.get("campaign", campaignId), null));
+			}
 			var resters = new ArrayList<Row>();
-			if (characterRefs == null || characterRefs.isEmpty()) {
+			if (savedRoster != null) {
+				for (Object ref : (List<?>) savedRoster.get("resters"))
+					resters.add(CharacterService.character(tx, campaignId, String.valueOf(ref)));
+			} else if (characterRefs == null || characterRefs.isEmpty()) {
 				for (Row m : tx.query(
 						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
 								+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
@@ -109,10 +133,21 @@ public final class RestService {
 			long minutes = k.equals("SHORT") ? 60 : 8 * 60;
 			Row clock = GameTime.clock(tx, campaignId);
 			long now = clock.lng("seq");
-			long newSeq = now + minutes;
 			boolean named = characterRefs != null && !characterRefs.isEmpty();
 			var results = new ArrayList<Map<String, Object>>();
+			if (savedRoster != null)
+				for (Object entry : (List<?>) savedRoster.get("skipped")) {
+					if (!(entry instanceof Map<?, ?> previous))
+						throw RpgException.invalidArgument("Saved rest roster is invalid; start a new rest.");
+					var skipped = new LinkedHashMap<String, Object>();
+					previous.forEach((key, value) -> skipped.put(String.valueOf(key), value));
+					results.add(skipped);
+				}
+			var eligible = new ArrayList<Row>();
 			for (Row c : resters) {
+				if (savedRoster != null
+						&& !((List<?>) savedRoster.get("eligible")).contains(Ref.of(Ref.CHARACTER, c.id())))
+					continue;
 				if (!"ACTIVE".equals(c.str("lifecycle")) || "DEAD".equals(c.str("life_state"))) {
 					continue;
 				}
@@ -130,36 +165,90 @@ public final class RestService {
 					results.add(skipped);
 					continue;
 				}
-				results.add(k.equals("SHORT") ? shortRest(tx, campaignId, c, hitDice)
-						: longRest(tx, campaignId, c, newSeq));
+				eligible.add(c);
 			}
-			tx.update("game_clock", clock.id(), Map.of("seq", newSeq, "instant", GameTime.render(newSeq)));
-			int expired = Effects.expireByTime(tx, campaignId, newSeq);
+			if (eligible.isEmpty()) {
+				var refused = new LinkedHashMap<String, Object>();
+				refused.put("kind", k);
+				refused.put("completed", false);
+				refused.put("interrupted", false);
+				refused.put("elapsed_minutes", 0L);
+				refused.put("elapsed_seconds", 0L);
+				refused.put("characters", results);
+				refused.put("game_time", GameTime.toMap(tx, campaignId, now));
+				refused.put("note",
+						"Nobody can begin this rest, so no time passed and no rest benefits were granted. "
+								+ String.join(" ",
+										results.stream().map(result -> String.valueOf(result.get("skipped"))).distinct()
+												.toList())
+								+ " Use advance_time or a timed WAIT if the party chooses to wait.");
+				refused.put("meta", Harness.meta(campaign, null));
+				return refused;
+			}
+			if (savedRoster == null)
+				parameters.put("rest_roster",
+						restFields("version", 1, "resters",
+								resters.stream().map(c -> Ref.of(Ref.CHARACTER, c.id())).toList(), "eligible",
+								eligible.stream().map(c -> Ref.of(Ref.CHARACTER, c.id())).toList(), "skipped",
+								results.stream().map(LinkedHashMap::new).toList()));
+			var action = se.hirt.mcp.rpg.world.WorldTimeline.runAction(tx, campaignId, actionKey, "REST_" + k,
+					minutes * 60, parameters);
+			long newSeq = GameTime.currentSeq(tx, campaignId);
+			if (action.completed()) {
+				for (Row c : eligible) {
+					Row current = tx.get("character", c.id());
+					String noLongerEligible = refusal(current, k, newSeq);
+					if (!"ACTIVE".equals(current.str("lifecycle")) || "DEAD".equals(current.str("life_state"))
+							|| noLongerEligible != null)
+						results.add(restFields("character", Ref.of(Ref.CHARACTER, c.id()), "name", c.str("name"),
+								"skipped", noLongerEligible == null ? "No longer active and alive at rest completion."
+										: noLongerEligible));
+					else
+						results.add(k.equals("SHORT") ? shortRest(tx, campaignId, current, hitDice)
+								: longRest(tx, campaignId, current, newSeq));
+				}
+			}
+			// A skipped Stable creature can recover naturally while the others rest; report its current HP.
+			for (Map<String, Object> entry : results)
+				if (entry.containsKey("skipped") && entry.get("character") instanceof String reference)
+					entry.put("hp", RuntimeService.hpView(tx, tx.get("character", Ref.id(reference, Ref.CHARACTER))));
 			LedgerService.append(tx, campaignId,
-					new LedgerService.EventSpec("REST",
-							(k.equals("SHORT") ? "The party took a short rest." : "The party took a long rest."),
+					new LedgerService.EventSpec(action.completed() ? "REST" : "REST_PROGRESS", action.completed()
+							? (k.equals("SHORT") ? "The party took a short rest." : "The party took a long rest.")
+							: "The party's rest was interrupted before completion.",
 							resters.stream().map(Row::id).toList(), "MINOR", "PARTY_KNOWN", "GM", null,
 							campaign.lng("current_location_id"), null, Map.of("kind", k)));
 			var result = new LinkedHashMap<String, Object>();
 			result.put("kind", k);
-			result.put("completed", true);
-			result.put("interrupted", false);
-			result.put("elapsed_minutes", minutes);
+			result.put("completed", action.completed());
+			result.put("interrupted", action.progress().interrupted());
+			result.put("elapsed_minutes", action.progress().elapsedSeconds() / 60);
+			result.put("elapsed_seconds", action.progress().elapsedSeconds());
+			result.put("action", action.reference());
+			result.put("remaining_seconds", Math.max(0, action.requiredSeconds() - action.completedSeconds()));
+			result.put("interruptions", action.progress().interruptions());
 			result.put("characters", results);
 			result.put("game_time", GameTime.toMap(tx, campaignId, newSeq));
-			result.put("expired_effects", expired);
-			var consequences = new ArrayList<Object>(
-					se.hirt.mcp.rpg.economy.Scheduler.onClockAdvance(tx, campaignId, clock.lng("seq"), newSeq));
+			result.put("expired_effects", action.progress().expiredEffects());
+			var consequences = new ArrayList<Object>(action.progress().consequences());
 			String due = se.hirt.mcp.rpg.session.ChronicleService.dueWarning(tx, campaignId);
 			if (due != null) {
 				consequences.add(due);
 			}
 			result.put("consequences", consequences);
-			result.put("note",
-					"Interruptions (REST_INTERRUPT) are not modelled yet: if the fiction interrupts a rest, do not call perform_rest for it.");
-			result.put("meta", Harness.meta(campaign, null));
+			if (!action.completed())
+				result.put("note",
+						"The rest has saved progress and granted no completion benefits; resolve the interruption before resuming.");
+			result.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return result;
 		});
+	}
+
+	private static Map<String, Object> restFields(Object ... fields) {
+		var result = new LinkedHashMap<String, Object>();
+		for (int i = 0; i < fields.length; i += 2)
+			result.put(String.valueOf(fields[i]), fields[i + 1]);
+		return result;
 	}
 
 	/**
@@ -170,8 +259,12 @@ public final class RestService {
 	static String refusal(Row c, String kind, long nowSeq) {
 		String rest = kind.equals("SHORT") ? "Short Rest" : "Long Rest";
 		if (c.intOr("current_hp", 0) < 1) {
+			String care = "DYING".equals(c.str("life_state"))
+					&& !Boolean.TRUE.equals(c.map("death_saves_json").get("stable"))
+							? " They are Dying and unstable: advancing time continues Death Saving Throws and risks death. Resolve healing or successful first aid, then STABILIZE, before leaving them unattended."
+							: " Stabilize first if needed, then use advance_time or a timed WAIT for natural recovery, or use healing.";
 			return c.str("name") + " has 0 Hit Points and cannot start a " + rest + " (SRD 5.2.1: \"To start a " + rest
-					+ ", you must have at least 1 Hit Point.\").";
+					+ ", you must have at least 1 Hit Point.\")." + care;
 		}
 		Long last = kind.equals("LONG") ? c.lng("last_long_rest_seq") : null;
 		if (last != null && nowSeq - last < LONG_REST_GAP_MINUTES) {
@@ -211,11 +304,13 @@ public final class RestService {
 				c.id());
 		int spend = hitDice == null ? 0
 				: hitDice.get(Ref.of(Ref.CHARACTER, c.id())) instanceof Number n ? n.intValue() : 0;
+		if (spend > 0 && cls.isEmpty()) {
+			m.put("hit_dice_skipped", c.str("name")
+					+ " has no class Hit Point Dice pool; the requested spending was skipped. Other Short Rest benefits still apply.");
+			m.put("hit_dice_requested", spend);
+			spend = 0;
+		}
 		if (spend > 0) {
-			if (cls.isEmpty()) {
-				throw RpgException
-						.notAllowed(c.str("name") + " has no Hit Point Dice (creatures advance by stat block).");
-			}
 			int level = cls.get().intOr("level", 1);
 			Row pool = hitDicePool(tx, c, level);
 			if (pool.intOr("current", 0) < spend) {
@@ -453,13 +548,17 @@ public final class RestService {
 										: Math.max(1, c.intOr("current_hp", 0)));
 								cols.put("current_hp", Math.min(Math.max(1, RuntimeService.effectiveMaxHp(tx, c)), hp));
 								cols.put("death_saves_json", null);
-								// Every effect ends, and a temporary change to the maximum with it; the fiat HP
-								// above is then clamped to the maximum that remains.
-								se.hirt.mcp.rpg.rules.Effects.removeAll(tx, c.id());
+								// Preserve Prone and independently authored conditions. The override retains
+								// its legacy reset of non-condition effects, temporary HP maxima and Exhaustion.
+								after.put("effects_ended", RuntimeService.resetEffectsForLifeOverride(tx, c, hp));
 								Exhaustion.reduce(tx, c.id(), 6);
 								Row plain = tx.get("character", c.id());
 								cols.put("current_hp", Math.min(Math.max(1, plain.intOr("max_hp", 1)), hp));
-								// A revived former member rejoins nothing automatically; use update_party_membership.
+								after.put("condition_note",
+										"Prone and independent conditions remain; revival from Dying or Dead leaves the creature Prone. Recovery-linked Unconscious ends when Hit Points are restored. This fiat still resets other effects and Exhaustion.");
+								if ("DEAD".equals(c.str("life_state")))
+									after.put("restored_memberships",
+											RuntimeService.restoreMembershipAfterRevival(tx, campaignId, c.id()));
 							} else if (state.equals("DEAD")) {
 								cols.put("current_hp", 0);
 								RuntimeService.endMemberships(tx, campaignId, c.id(), "DEAD");
@@ -530,6 +629,9 @@ public final class RestService {
 							before.put("location_id", c.lng("location_id"));
 							after.put("location_id", l.id());
 							cols.put("location_id", l.id());
+							if (se.hirt.mcp.rpg.maps.GridCombat.clearPlacementForLocationOverride(tx, campaignId, c,
+									l.id(), Boolean.TRUE.equals(e.get("clear_map_position"))))
+								after.put("cleared_stale_map_position", true);
 							if (tx.count(
 									"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id = ? AND character_id = ? AND active = 1",
 									campaignId, c.id()) > 0) {

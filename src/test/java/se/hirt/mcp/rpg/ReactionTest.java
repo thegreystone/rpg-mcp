@@ -68,23 +68,25 @@ class ReactionTest {
 			engine.inventory().grantLoot(op(), campaign, pc, List.of(map("item", "Club", "quantity", 1)), null,
 					"GM_GRANT", "a stout branch");
 			dice.queue(20, 1);
-			String enc = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "raiders", List.of(bandit)), null, null, null, null, null)
+			String enc = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc), "raiders", List.of(bandit)), null,
+							TestCampaigns.meleeZones(pc, bandit), null, null, null)
 					.get("encounter");
 
 			// The PC leaves the bandit's zone: the NPC bandit takes its opportunity attack automatically (natural 1 → miss).
 			dice.queue(1);
 			Map<String, Object> move = engine.encounters().perform(op(), campaign, enc, pc,
-					map("kind", "MOVE", "zone", "far"), false);
+					map("kind", "MOVE", "x_ft", 35, "y_ft", 25), false);
 			List<Map<String, Object>> oas = list(move.get("opportunity_attacks"));
 			assertEquals(1, oas.size());
 			assertEquals(Boolean.FALSE, oas.get(0).get("hit"));
 			assertEquals("OPPORTUNITY_ATTACK", oas.get(0).get("reaction"));
 			assertEquals(bandit, oas.get(0).get("reactor"));
-			assertEquals("OPPORTUNITY_ATTACK", list(m(move.get("state")).get("recent_log")).get(0).get("kind"));
+			assertTrue(list(m(move.get("state")).get("recent_log")).stream()
+					.anyMatch(entry -> "OPPORTUNITY_ATTACK".equals(entry.get("kind"))));
 			// Its reaction is spent for the round: moving back provokes nothing.
 			Map<String, Object> back = engine.encounters().perform(op(), campaign, enc, pc,
-					map("kind", "MOVE", "zone", "near"), true);
+					map("kind", "MOVE", "x_ft", 25, "y_ft", 25), true);
 			assertTrue(list(back.get("opportunity_attacks")).isEmpty(), "reaction already used");
 			assertEquals(Boolean.TRUE, back.get("turn_advanced"));
 
@@ -137,7 +139,7 @@ class ReactionTest {
 			assertEquals(11 - Math.max(0, 1 + strMod), banditHp, "unarmed strike damage applied");
 
 			// The PC joins the bandit in "far" and ends the turn; the bandit Disengages and walks away: no choice is offered.
-			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "zone", "far"), true);
+			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "x_ft", 40, "y_ft", 25), true);
 			engine.encounters().perform(op(), campaign, enc, bandit, map("kind", "DISENGAGE"), false);
 			Map<String, Object> away = engine.encounters().perform(op(), campaign, enc, bandit,
 					map("kind", "MOVE", "zone", "near"), true);
@@ -149,7 +151,7 @@ class ReactionTest {
 			// would drop it to 0 leaves it at 1 HP, alive and Unconscious until the end of a Short Rest, no death saves.
 			engine.runtime().applyRuntimeChange(op(), campaign, bandit,
 					map("kind", "DAMAGE", "amount", banditHp - 1, "damage_type", "bludgeoning", "reason", "test"));
-			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "zone", "near"), false);
+			engine.encounters().perform(op(), campaign, enc, pc, map("kind", "MOVE", "x_ft", 30, "y_ft", 25), false);
 			dice.queue(19, 4);
 			Map<String, Object> ko = engine.encounters().perform(op(), campaign, enc, pc,
 					map("kind", "ATTACK", "target", bandit, "weapon", "Club", "nonlethal", true), false);
@@ -203,8 +205,9 @@ class ReactionTest {
 			// Initiative: the wizard rolls 1; the two Bandits are identical creatures and share one roll of 20
 			// (SRD 5.2.1 "Initiative"), acting in roster order before the wizard.
 			dice.queue(1, 20);
-			String enc = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(pc), "raiders", List.of(bandit, second)), null, null, null, null, null)
+			String enc = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(pc), "raiders", List.of(bandit, second)), null,
+							TestCampaigns.meleeZones(pc, bandit, second), null, null, null)
 					.get("encounter");
 			// Bandit scimitar +3: 10 + 3 = 13 vs AC 12 hits, and Shield (+5) would turn it into a miss → the wizard is asked.
 			dice.queue(10);

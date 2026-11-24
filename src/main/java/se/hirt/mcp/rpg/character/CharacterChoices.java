@@ -197,7 +197,7 @@ public final class CharacterChoices {
 			}
 			if (Origins.traitWith(species, "feat_grant").isPresent() && Origins.featRows(tx, c).stream()
 					.noneMatch(f -> Origins.SOURCE_SPECIES.equals(Origins.sourceOf(f)))) {
-				out.add(originFeatDecision(species));
+				out.add(originFeatDecision(tx, c, species));
 			}
 		});
 		for (Row f : Origins.featRows(tx, c)) {
@@ -328,6 +328,17 @@ public final class CharacterChoices {
 		return out;
 	}
 
+	/** Character-specific offers exclude feats that cannot legally be taken again. */
+	public List<Option> feats(Tx tx, Row character, String category) {
+		if (character == null)
+			return feats(category);
+		Set<String> held = new HashSet<>();
+		for (Row trait : Origins.featRows(tx, character))
+			Origins.featDefinition(rules, trait).ifPresent(feat -> held.add(feat.id()));
+		return feats(category).stream().filter(option -> !held.contains(option.value())
+				|| rules.require(option.value(), "FEAT").payload().get("repeatable") != null).toList();
+	}
+
 	@SuppressWarnings("unchecked")
 	public Decision backgroundAsiDecision(RulesData.Definition bg) {
 		List<Object> abilities = (List<Object>) bg.payload().get("ability_scores");
@@ -371,12 +382,16 @@ public final class CharacterChoices {
 	}
 
 	public Decision originFeatDecision(RulesData.Definition species) {
+		return originFeatDecision(null, null, species);
+	}
+
+	public Decision originFeatDecision(Tx tx, Row character, RulesData.Definition species) {
 		Map<String, Object> grant = Origins.traitWith(species, "feat_grant")
 				.map(t -> Origins.castMap(t.get("feat_grant"))).orElseThrow();
 		String category = String.valueOf(grant.getOrDefault("category", "ORIGIN"));
 		String recommended = grant.get("recommended") == null ? null : String.valueOf(grant.get("recommended"));
 		var options = new ArrayList<Option>();
-		for (Option o : feats(category)) {
+		for (Option o : feats(tx, character, category)) {
 			options.add(o.recommended(o.value().equals(recommended)));
 		}
 		return Decision

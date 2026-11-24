@@ -48,7 +48,10 @@ public final class Tables {
 			"character_class", "character_trait", "player_control_assignment", "event", "event_actor", "event_causal",
 			"party_membership", "relationship", "relationship_event", "inventory_entry", "active_effect",
 			"resource_state", "encounter", "encounter_participant", "encounter_log", "quest", "faction", "story_beat",
-			"world_event", "pending_transaction", "roll", "account", "cash_flow", "cash_flow_run", "chronicle");
+			"world_event", "pending_transaction", "roll", "account", "cash_flow", "cash_flow_run", "chronicle",
+			"map_atlas", "map_preparation", "map_scene", "map_actor", "map_object", "map_observation", "map_feature",
+			"map_asset", "timeline_event", "action_progress", "patrol_plan", "travel_risk", "travel_journey",
+			"travel_exposure", "travel_check", "tactical_control");
 
 	public static final Set<String> REWINDABLE_SET = Set.copyOf(REWINDABLE);
 

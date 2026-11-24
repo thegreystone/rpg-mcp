@@ -81,6 +81,32 @@ class AmmunitionRecoveryTest {
 	}
 
 	@Test
+	void interruptedRecoverySavesItsDrawAndGrantsNothingUntilTheSearchFinishes() throws Exception {
+		try (Fixture fixture = fixture(
+				List.of(map("item", "Arrow", "quantity", 3), map("item", "+1 Arrow", "quantity", 1)))) {
+			shots(fixture, "Arrow", false, 3);
+			shots(fixture, "+1 Arrow", false, 1);
+			end(fixture);
+			new se.hirt.mcp.rpg.world.WorldTimeline(fixture.engine.db()).schedule(op(), fixture.campaign,
+					map("after_seconds", 30, "kind", "FOOTSTEPS", "payload",
+							map("description", "Footsteps interrupt the search.")));
+			fixture.dice.queue(4);
+			Map<String, Object> interrupted = recover(fixture, null);
+			assertEquals(true, interrupted.get("interrupted"));
+			assertEquals(30L, interrupted.get("elapsed_seconds"));
+			assertEquals(0, quantity(fixture, "Arrow"));
+			assertEquals(0, quantity(fixture, "+1 Arrow"));
+			fixture.dice.queue(6);
+			Map<String, Object> completed = recover(fixture, null);
+			assertEquals(true, completed.get("completed"));
+			assertEquals(30L, completed.get("elapsed_seconds"));
+			assertEquals(1, quantity(fixture, "Arrow"));
+			assertEquals(1, quantity(fixture, "+1 Arrow"));
+			assertEquals(6, fixture.dice.roll("1d6").total(), "resuming cannot reroll the saved recovery selection");
+		}
+	}
+
+	@Test
 	void explorationCanContinueBeforeThePlayerChoosesTheOneMinuteSearch() throws Exception {
 		try (Fixture fixture = fixture("Arrow", 3)) {
 			shots(fixture, "Arrow", false, 3);

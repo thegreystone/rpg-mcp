@@ -59,10 +59,13 @@ import java.util.*;
 public final class CharacterService {
 
 	public static final List<String> ALIGNMENTS = Described.names(Alignment.class);
-	private static final Set<String> DRAFT_FIELDS = Set.of("name", "description", "appearance", "personality",
-			"backstory", "goals", "alignment", "age", "presentation", "species", "class", "ability_scores",
-			"background", "background_ability_scores", "skills", "species_skill", "species_choice", "origin_feat",
-			"feat_choices", "background_tool", "starting_equipment", "background_equipment", "cantrips", "spells");
+	// JSON object order has no meaning. Establish grant owners before their answers, then validate
+	// flexible choices against the final fixed grants; class equipment is applied after the loop.
+	private static final List<String> DRAFT_FIELD_ORDER = List.of("name", "description", "appearance", "personality",
+			"backstory", "goals", "alignment", "age", "presentation", "species", "class", "background",
+			"ability_scores", "background_ability_scores", "background_tool", "background_equipment", "species_choice",
+			"species_skill", "origin_feat", "feat_choices", "skills", "cantrips", "spells", "starting_equipment");
+	private static final Set<String> DRAFT_FIELDS = Set.copyOf(DRAFT_FIELD_ORDER);
 
 	private final Database db;
 	private final RulesData rules;
@@ -168,7 +171,7 @@ public final class CharacterService {
 				result.put("backgrounds", choices.backgrounds(tx, campaign.id()).stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("FEAT")) {
-				result.put("feats", choices.feats(null).stream().map(Option::toMap).toList());
+				result.put("feats", choices.feats(tx, c, null).stream().map(Option::toMap).toList());
 			}
 			if (s.equals("ALL") || s.equals("CLASS")) {
 				result.put("classes", rules.ofKind("CLASS").stream().map(d -> {
@@ -355,13 +358,16 @@ public final class CharacterService {
 		var cols = new LinkedHashMap<String, Object>();
 		Map<String, Object> creation = c.map("creation_json");
 		boolean creationDirty = false;
-		for (var e : changes.entrySet()) {
-			String key = e.getKey();
-			Object value = e.getValue();
+		for (String key : changes.keySet()) {
 			if (!DRAFT_FIELDS.contains(key)) {
 				throw RpgException
 						.invalidArgument("Unknown character field '" + key + "'. Known: " + DRAFT_FIELDS + ".");
 			}
+		}
+		for (String key : DRAFT_FIELD_ORDER) {
+			if (!changes.containsKey(key))
+				continue;
+			Object value = changes.get(key);
 			// Equipment answers apply to the final class, regardless of the input field order.
 			if ("starting_equipment".equals(key)) {
 				continue;
@@ -919,6 +925,9 @@ public final class CharacterService {
 			hp.put("max", null);
 		}
 		m.put("hp", hp);
+		Map<String, Object> deathSaves = RuntimeService.deathSaveView(c, !detail.equals("SUMMARY"));
+		if (!deathSaves.isEmpty())
+			m.put("death_saves", deathSaves);
 		Biography.appendBrief(tx, c, m);
 		m.put("location", Ref.ofNullable(Ref.LOCATION, c.lng("location_id")));
 		if (detail.equals("SUMMARY")) {
@@ -957,9 +966,6 @@ public final class CharacterService {
 		m.put("xp", c.lng("xp"));
 		m.put("level_up_eligible", level > 0 && rules.levelForXp(c.lng("xp")) > level);
 		m.put("conditions", RuntimeService.conditions(tx, c.id()));
-		if (!c.isNull("death_saves_json")) {
-			m.put("death_saves", c.map("death_saves_json"));
-		}
 		m.put("encounter", Ref.ofNullable(Ref.ENCOUNTER, c.lng("encounter_id")));
 		m.put("effects", se.hirt.mcp.rpg.rules.Effects.view(tx, c.id()));
 		Map<String, Object> spellcasting = se.hirt.mcp.rpg.magic.SpellService.sheet(tx, rules, c);
@@ -974,6 +980,7 @@ public final class CharacterService {
 				creature.put("xp_value", d.payload().get("xp_value"));
 				creature.put("armor_class", d.payload().get("ac"));
 				creature.put("actions", d.payload().get("actions"));
+				creature.put("bonus_actions", d.payload().get("bonus_actions"));
 				creature.put("multiattack", d.payload().get("multiattack"));
 				creature.put("traits", d.payload().get("traits"));
 				creature.put("defenses",
@@ -1008,7 +1015,12 @@ public final class CharacterService {
 							? Map.of("value", RuntimeService.armorClass(tx, rules, c), "basis", "stat block")
 							: InventoryService.armorClass(tx, rules, c));
 			m.put("carrying", InventoryService.carrying(tx, rules, c));
-			m.put("inventory", InventoryService.entries(tx, rules, c.id()));
+			var carried = InventoryService.entries(tx, rules, c.id());
+			m.put("inventory", carried);
+			if (carried.stream().anyMatch(entry -> "ARMOR".equals(entry.get("type"))) && carried.stream().noneMatch(
+					entry -> "ARMOR".equals(entry.get("type")) && Boolean.TRUE.equals(entry.get("equipped"))))
+				m.put("equipment_readiness",
+						"Carried armor is unequipped. Review inventory and use equip_item to choose the armor to wear before combat.");
 			List<Map<String, Object>> magicItems = InventoryService.magicItems(tx, rules, c.id());
 			if (!magicItems.isEmpty()) {
 				m.put("magic_items", magicItems);

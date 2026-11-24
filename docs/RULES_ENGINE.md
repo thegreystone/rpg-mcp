@@ -5,6 +5,12 @@
 **Source of rules:** SRD 5.2.1 (CC-BY-4.0). The SRD text is authoritative; this document records the boundary, the
 encoded formulas and citations, not the rules themselves.
 
+The implemented grid baseline uses shared spatial rules for saved scenes, footprints, movement,
+perception, cover and supported spell areas. All new combat has a grid; images are optional. The
+[DM map workflow](MAP_USAGE.md) documents operations and explicit boundaries, including adjudicated
+vertical cases and optional presentation features. Local scene geometry is resolved to inches before
+validation; display overlays remain 5 ft or 10 ft on the same physical coordinates.
+
 ---
 
 ## 1. Verification Protocol
@@ -432,9 +438,12 @@ default unless the entry says so:
    it selects the lowest dice in each arriving roll rather than comparing future rolls.
 
    **Sneak Attack**: on a hit with a Finesse or Ranged weapon, when the roll had Advantage, or when an ally is beside
-   the target and the roll did not have Disadvantage. Once per turn, tracked on the participant. With zones instead
-   of a grid, "an ally within 5 feet" is adjudicated as "a living, non-incapacitated ally shares the target's zone".
+   the target and the roll did not have Disadvantage. Once per turn, tracked on the participant. In the current
+   legacy zone implementation, "an ally within 5 feet" is adjudicated as "a living, non-incapacitated ally shares the target's zone".
    The result reports `qualified_by`.
+   The planned [mandatory-grid combat model](DESIGN.md#15-encounters) replaces zone proximity with the
+   shared physical distance/reach/visibility policy for every combat. Map markers alone must not
+   advertise that support before the mechanical checks use the same geometry.
 10. **House rules may be retuned after commit.** `apply_gm_override` kind `SET_CAMPAIGN_RULE {rule, value}` rewrites
     one of `hp_progression`, `xp_policy`, `companion_level_up`, `progression` or `gm_override_policy` on a committed
     campaign, audited. Everything else in the setup draft is fixed at commit.
@@ -527,21 +536,22 @@ and `feats.json` carry the data with per-trait `enforcement` markers.
 
 ## 9. Travel Encounters
 
-The SRD 5.2.1 has no random-encounter tables, so the engine's are its own and are suggestions only: `move_party` may
-add one `TRAVEL_ENCOUNTER_SUGGESTED` entry to its `consequences`; nothing else happens until the GM acts on it.
+Travel uses persisted journeys, exposure and encounter decisions. A configured risk policy can apply to a
+region, location or connection, with story/faction context and DM-authored or random encounter placement.
+Checks account for elapsed travel, including partial legs; continuing a journey does not reroll a resolved
+decision. These probabilities and tables are engine policy, since SRD 5.2.1 supplies no random-encounter tables.
 
-- **Chance.** One roll per four hours of travel, through the roller: a 1 on a d6 on wild ground, a 1 on a d12 where
-  the only wild tags on the route are roads, rivers, coasts or fords, no roll when nothing on the route is tagged wild
-  or road (streets, districts, quays, buildings, untagged nodes). Journeys under four hours never roll.
-- **Ground.** The tags (`tags_json`) and kinds of every location on the route and the destination, plus connection
-  kinds, pick a terrain table in this order: dungeon/cave/crypt, ruin/barrow, marsh/fen/swamp, mountain,
-  hills/chalk/downs, forest/wood, coast/sea/salt, river/estuary/ford, road; anything else is wilderness.
-- **Creature.** Each table lists SRD stat-block slugs; only those installed in the campaign's rulesets are candidates,
-  one is drawn with a die of the pool's size, and the wilderness table is the fallback.
-- **Size.** The party's Moderate XP budget (SRD 5.2.1 Gameplay Toolbox, "XP Budget per Character", summed over the
-  travellers by level) divided by the creature's XP value, clamped to 1..8.
-- **Hooks.** Up to two open Director `PRESSURE` seeds are quoted so the GM can fold the encounter into the campaign's
-  standing worries.
+An interruption stops the journey at its actual route position and elapsed time. The GM can inspect and
+resolve it, continue the saved journey or stage a fight. Combat always uses a local grid. Where canonical
+road geometry exists, the encounter scene uses the winding road and nearby terrain at that position, and
+the party's final local position is retained when travel resumes. Risk, opponent selection and encounter
+severity remain separate authoring decisions; a hostile result does not silently force combat.
+
+Finite authored patrols refer to existing characters rather than spawning replacements on each visit.
+Regional patrol and respawn timers advance while any party member remains in the region. When the last
+member leaves, remaining durations are saved; returning resumes those durations without off-screen
+catch-up. The campaign calendar continues independently. See [map workflows](MAP_USAGE.md) and the
+[travel-risk design](MAP_FORMAT.md#story-aware-travel-risk-and-hostile-encounters) for tool usage and policy.
 
 ## 10. Magic Items and Treasure
 

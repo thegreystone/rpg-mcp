@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
@@ -108,14 +109,18 @@ class ClassFeatureTest {
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
 			String[] setup = withRogue(engine);
 			String campaign = setup[0], rogue = setup[1];
+			engine.inventory().grantLoot(op(), campaign, rogue, List.of(map("item", "Dagger")), null, "GM_GRANT",
+					"A different Light Finesse weapon for the Bonus Action attack.");
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
 			int ogreHp = ((Number) m(engine.characters().characterSheet(campaign, ogre, "PLAY").get("hp"))
 					.get("current")).intValue();
 			// The rogue acts first (20 to the ogre's 1).
 			dice.queue(20, 1);
-			String encounter = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(rogue), "foes", List.of(ogre)), null,
+							meleeZones(rogue, ogre), null, null, null)
+					.get("encounter");
 			assertTrue(dice.exhausted());
 
 			// A shortsword is a Finesse weapon, and advantage qualifies the attack: 2d20kh1 keeps the 19 (a hit
@@ -138,14 +143,19 @@ class ClassFeatureTest {
 			assertEquals(ogreHp - (4 + dexMod + 8), first.get("hp_after"));
 			assertTrue(dice.exhausted(), "two attack dice, one weapon die and two Sneak Attack dice were consumed");
 
-			// Second attack in the same turn: a hit, but the feature is spent, so only the weapon die is rolled.
+			// A legitimate Light-property Bonus Action uses a different Finesse weapon on this same turn.
+			// Advantage would qualify again, but Sneak Attack is spent; only the dagger die is rolled.
 			dice.queue(4, 19, 2);
-			Map<String, Object> second = engine.encounters().perform(op(), campaign, encounter, rogue, map("kind",
-					"ATTACK", "attack", "Shortsword", "weapon", "Shortsword", "target", ogre, "advantage", "ADVANTAGE"),
-					false);
+			Map<String, Object> second = engine.encounters()
+					.perform(
+							op(), campaign, encounter, rogue, map("kind", "ATTACK", "attack", "Dagger", "weapon",
+									"Dagger", "target", ogre, "advantage", "ADVANTAGE", "light_extra_attack", true),
+							false);
 			assertEquals(Boolean.TRUE, second.get("hit"), second.toString());
 			assertNull(second.get("sneak_attack"), "once per turn");
-			assertEquals(2 + dexMod, second.get("damage"));
+			assertEquals(2, second.get("damage"),
+					"the Light bonus attack also omits the positive ability damage modifier");
+			assertEquals("BONUS_ACTION", second.get("action_cost"));
 			assertTrue(dice.exhausted(), "no Sneak Attack dice on the second hit");
 		}
 	}
@@ -162,8 +172,10 @@ class ClassFeatureTest {
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
 			dice.queue(20, 1);
-			String encounter = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(rogue), "foes", List.of(ogre)), null,
+							meleeZones(rogue, ogre), null, null, null)
+					.get("encounter");
 			assertTrue(dice.exhausted());
 			// The mace hits with Advantage (19 kept), so the missing Sneak Attack is the weapon's doing, not a miss.
 			dice.queue(4, 19, 3);
@@ -234,20 +246,26 @@ class ClassFeatureTest {
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", null, null, null, null, null, false).get("character");
 			dice.queue(20, 1);
-			String encounter = (String) engine.encounters().start(op(), campaign,
-					map("party", List.of(rogue), "foes", List.of(ogre)), null, null, null, null, null).get("encounter");
+			String encounter = (String) engine.encounters()
+					.start(op(), campaign, map("party", List.of(rogue), "foes", List.of(ogre)), null,
+							meleeZones(rogue, ogre), null, null, null)
+					.get("encounter");
 			// The Scout's Longbow was never carried: by name it is still the stat block's attack, and says so.
 			Map<String, Object> bow = engine.encounters().perform(op(), campaign, encounter, rogue,
 					map("kind", "ATTACK", "attack", "Longbow", "target", ogre), false);
 			assertEquals("Longbow", bow.get("attack"));
 			assertTrue(((List<String>) bow.get("warnings")).stream().anyMatch(w -> w.contains("stat-block action")),
 					"" + bow.get("warnings"));
+			engine.encounters().perform(op(), campaign, encounter, rogue, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
 			// The shortsword she carries is her own weapon, not the stat block's.
 			Map<String, Object> sword = engine.encounters().perform(op(), campaign, encounter, rogue,
 					map("kind", "ATTACK", "attack", "Shortsword", "target", ogre), false);
 			assertEquals("Shortsword", sword.get("attack"));
 			assertTrue(sword.get("warnings") == null
 					|| ((List<String>) sword.get("warnings")).stream().noneMatch(w -> w.contains("stat-block")));
+			engine.encounters().perform(op(), campaign, encounter, rogue, map("kind", "END_TURN"), true);
+			engine.encounters().perform(op(), campaign, encounter, ogre, map("kind", "END_TURN"), true);
 			// Something neither carried nor printed is still refused.
 			assertThrows(RpgException.class, () -> engine.encounters().perform(op(), campaign, encounter, rogue,
 					map("kind", "ATTACK", "attack", "Greatsword", "target", ogre), false));
@@ -279,6 +297,7 @@ class ClassFeatureTest {
 			assertEquals(Boolean.TRUE, alone.get("hit"));
 			assertNull(alone.get("sneak_attack"), "the ally is not within 5 feet of the target: " + alone);
 			engine.encounters().end(op(), campaign, apart, "OTHER", "reset");
+			TestCampaigns.gridPositions(engine, campaign, Map.of(pc, List.of(40, 25)));
 
 			// Now the PC shares the ogre's zone: the rogue's blade finds the opening.
 			dice.queue(20, 5, 1);

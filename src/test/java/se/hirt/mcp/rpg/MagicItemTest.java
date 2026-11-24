@@ -244,8 +244,8 @@ class MagicItemTest {
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
 			engine.inventory().grantLoot(op(), campaign, pc, List.of(map("item", "Longsword")), null, "QUEST", null);
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(pc), "b", List.of(bandit)), null, null, null, null, null)
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("a", List.of(pc), "b", List.of(bandit)), null, meleeZones(pc, bandit), null, null, null)
 					.get("encounter");
 			if (!pc.equals(
 					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
@@ -609,8 +609,8 @@ class MagicItemTest {
 
 			String ogre = (String) engine.runtime()
 					.materialize(op(), campaign, "Ogre", "Brawn", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(pc), "b", List.of(ogre)), null, null, null, null, null)
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("a", List.of(pc), "b", List.of(ogre)), null, meleeZones(pc, ogre), null, null, null)
 					.get("encounter");
 			if (!pc.equals(
 					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {
@@ -931,8 +931,8 @@ class MagicItemTest {
 
 			String bandit = (String) engine.runtime()
 					.materialize(op(), campaign, "Bandit", "Grubb", null, null, null, null, false).get("character");
-			String encounter = (String) engine.encounters()
-					.start(op(), campaign, map("a", List.of(pc), "b", List.of(bandit)), null, null, null, null, null)
+			String encounter = (String) engine.encounters().start(op(), campaign,
+					map("a", List.of(pc), "b", List.of(bandit)), null, meleeZones(pc, bandit), null, null, null)
 					.get("encounter");
 			if (!pc.equals(
 					m(engine.encounters().encounterState(campaign, encounter, 3).get("turn")).get("character"))) {

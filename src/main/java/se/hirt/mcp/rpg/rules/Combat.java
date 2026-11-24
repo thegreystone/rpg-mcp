@@ -32,6 +32,7 @@ import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.dice.DiceExpression;
 import se.hirt.mcp.rpg.dice.Roll;
 import se.hirt.mcp.rpg.dice.RollService;
+import se.hirt.mcp.rpg.maps.GridCombat;
 import se.hirt.mcp.rpg.persistence.Row;
 import se.hirt.mcp.rpg.persistence.Tx;
 import se.hirt.mcp.rpg.protocol.RpgException;
@@ -294,15 +295,21 @@ public final class Combat {
 		}
 		Row me = tx.queryOne("SELECT * FROM encounter_participant WHERE encounter_id = ? AND character_id = ?",
 				encounterId, attacker.id()).orElse(null);
-		if (me == null || me.str("position_zone") == null) {
+		if (me == null) {
 			return Optional.empty();
 		}
 		Row encounter = tx.get("encounter", encounterId);
 		Map<String, Object> sides = encounter.isNull("sides_json") ? Map.of() : encounter.map("sides_json");
 		Map<String, Object> stances = sides.get("stances") instanceof Map<?, ?> s ? (Map<String, Object>) s : Map.of();
 		for (Row p : tx.query(
-				"SELECT * FROM encounter_participant WHERE encounter_id = ? AND position_zone = ? AND status = 'ACTIVE' AND character_id <> ? ORDER BY id",
-				encounterId, me.str("position_zone"), attacker.id())) {
+				"SELECT * FROM encounter_participant WHERE encounter_id = ? AND status = 'ACTIVE' AND character_id <> ? ORDER BY id",
+				encounterId, attacker.id())) {
+			if (GridCombat.isGrid(encounter)
+					? GridCombat.distance(tx, encounter, attacker.id(), p.lng("character_id")) > 60
+							|| !GridCombat.canSee(tx, encounter, p.lng("character_id"), attacker.id())
+					: me.str("position_zone") == null || !me.str("position_zone").equals(p.str("position_zone"))) {
+				continue;
+			}
 			if (!hostile(stances, me.str("side"), p.str("side"))) {
 				continue;
 			}
@@ -344,6 +351,10 @@ public final class Combat {
 		Tx tx, Long encounterId, long attackerId, long targetId, boolean closeOutsideEncounter) {
 		if (encounterId == null) {
 			return closeOutsideEncounter;
+		}
+		Row encounter = tx.get("encounter", encounterId);
+		if (GridCombat.isGrid(encounter)) {
+			return GridCombat.distance(tx, encounter, attackerId, targetId) <= 60;
 		}
 		return tx.count(
 				"SELECT COUNT(*) FROM encounter_participant a JOIN encounter_participant t ON t.encounter_id = a.encounter_id WHERE a.encounter_id = ? AND a.character_id = ? AND t.character_id = ? AND a.position_zone IS NOT NULL AND a.position_zone = t.position_zone",
@@ -423,9 +434,13 @@ public final class Combat {
 		if (extra != null) {
 			parts.add(new DamagePart(extra.get("dice"), 0, extra.get("type")));
 		}
+		var range = new LinkedHashMap<String, Object>();
+		if (payload.get("range") instanceof Map<?, ?> supplied) {
+			supplied.forEach((key, value) -> range.put(String.valueOf(key), value));
+		}
+		range.put("reach", props.contains("reach") ? 10 : 5);
 		return new AttackProfile(name, rangedCategory, abilityMod + proficiencyBonus + magic, parts, ammo,
-				ammo ? String.valueOf(payload.get("ammunition")) : null,
-				payload.get("range") instanceof Map<?, ?> r ? (Map<String, Object>) r : null, "weapon", finesse);
+				ammo ? String.valueOf(payload.get("ammunition")) : null, range, "weapon", finesse);
 	}
 
 	/**
@@ -441,14 +456,29 @@ public final class Combat {
 	/** A creature stat-block action of kind MELEE_ATTACK / RANGED_ATTACK. */
 	@SuppressWarnings("unchecked")
 	public static AttackProfile creatureAction(Map<String, Object> action) {
+		return creatureAction(action, false);
+	}
+
+	/**
+	 * Explicitly select an authored ranged/thrown alternative without changing the default melee
+	 * intent.
+	 */
+	@SuppressWarnings("unchecked")
+	public static AttackProfile creatureAction(Map<String, Object> action, boolean rangedRequested) {
 		var parts = new ArrayList<DamagePart>();
 		for (Map<String, Object> d : (List<Map<String, Object>>) action.getOrDefault("damage", List.of())) {
 			parts.add(new DamagePart(String.valueOf(d.get("dice")), 0, String.valueOf(d.get("type"))));
 		}
-		boolean ranged = "RANGED_ATTACK".equals(action.get("kind"));
+		boolean ranged = "RANGED_ATTACK".equals(action.get("kind")) || rangedRequested;
+		var range = new LinkedHashMap<String, Object>();
+		if (action.get("range") instanceof Map<?, ?> supplied) {
+			supplied.forEach((key, value) -> range.put(String.valueOf(key), value));
+		}
+		if (rangedRequested && !(range.get("normal") instanceof Number))
+			throw RpgException.invalidArgument("This creature action has no authored ranged or thrown alternative.");
+		range.put("reach", action.getOrDefault("reach", 5));
 		return new AttackProfile(String.valueOf(action.get("name")), ranged,
-				((Number) action.getOrDefault("attack_bonus", 0)).intValue(), parts, false, null,
-				action.get("range") instanceof Map<?, ?> r ? (Map<String, Object>) r : null, "creature",
+				((Number) action.getOrDefault("attack_bonus", 0)).intValue(), parts, false, null, range, "creature",
 				action.get("finesse") instanceof Boolean fin && fin);
 	}
 

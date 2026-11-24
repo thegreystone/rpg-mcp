@@ -687,28 +687,105 @@ Moves the party, or named `characters`, to a world location, settlement node or 
 
 **Who travels.** Without `characters`, active members and guests whose location is the party's (or who have none yet).
 A member or guest standing elsewhere does not teleport; the result lists them in `left_behind` with where they are.
-Separated members never move. With `characters`, exactly those travel, and the campaign's current location follows the
-player character. Every party view reports each member's `location` and `with_party`.
+Separated members do not join a default departure. Explicit travellers must have an open party
+membership (ACTIVE, GUEST or SEPARATED), or active player control; unrelated NPCs cannot start a party
+journey. With `characters`, a new trip uses exactly that nonempty selection, starting at their shared
+actual room/contact or canonical location. Unknown or
+mixed origins refuse before movement or time. A companion elsewhere may travel to the player;
+already-at-destination is checked against the selected travellers. Campaign focus follows the player
+character. Every party view reports each member's `location` and `with_party`.
 
 The destination must be reachable via known connections or an authorized route. Travel advances atomically until
-arrival or the first consequence needing input. On arrival it commits elapsed time, locations, automatic consequences and
-the movement event. On interruption it commits only elapsed time and movement to the intermediate location, creates a
-`TRAVEL_INTERRUPT` pending transaction and returns the interruption context; it MUST NOT assume the rest of the journey.
-Moving into an unmaterialized node MAY require `materialize_location` first; the error says so.
+arrival or the first consequence needing input. On arrival it commits elapsed time, locations, automatic
+consequences and the movement event. On interruption it saves the journey's route, elapsed progress,
+roster, risk checks and actual route anchor. It MUST NOT assume the rest of the journey. Inspect
+`get_travel_state`, resolve the opportunity and use `continue_journey`, or `move_party` to the saved
+destination. An explicit saved-trip selection may only narrow existing movers; omissions are left at
+the actual contact/anchor. Dead/departed movers reconcile with named reasons. Living incapacitated
+movers require recovery or explicit omission. A different destination refuses with the saved
+destination and continuation/narrowing instructions; it cannot silently turn the trip around.
 
-**Travel encounters.** `consequences` carries, besides expired timed effects, at most one `TRAVEL_ENCOUNTER_SUGGESTED`
-entry (`RULES_ENGINE.md` §9): per four hours of travel one roll through the roller, a 1 on a d6 on wild ground, a 1 on
-a d12 on roads, rivers and coasts, never inside settlements or buildings. A hit names a creature from the terrain table
-for the tags crossed, a count sized from the SRD 5.2.1 Moderate XP budget for the party's levels, the hour it falls in,
-and up to two open pressures visible to the GM as hooks. Nothing is written and no encounter starts; the GM plays it with
-`materialize_character` and `start_encounter`, folds it into a pressure, or ignores it. `director_trigger.reasons`
-carries `TRAVEL_ENCOUNTER_SUGGESTED` when present.
+A later trip from a saved roadside contact reuses the appropriate portion of its existing connection,
+with actual remaining travel time and the same connection risk scope. It creates no synthetic edge.
+Room targets must have a legal entry or an open authored path from it; reaching the enclosing place
+does not bypass a locked interior door. Overland/site arrival includes the traversed authored interior
+legs and their time. A blocked route identifies the passage key, state and lock status, with the next
+operation; an unlocked CLOSED door must be opened explicitly with `update_map_object`.
+Accepted unrealized dungeon commitments require coherent
+playable geometry before entry; the refusal supplies the preparation and next authoring step.
+
+**Travel encounters.** `define_travel_risk` supplies context-sensitive frequency, opposition, severity
+and authored/random placement for a connection, location or default scope. `consequences` and the saved
+`opportunity` identify an actual route contact and its story context. The DM chooses discovery,
+avoidance, negotiation or combat, using `resolve_travel_opportunity` when resolved. Combat uses the
+contact's local grid. Short continuations/reloads preserve exposure and resolved checks rather than
+rerolling them. See [story-aware travel encounters](MAP_FORMAT.md#story-aware-travel-risk-and-hostile-encounters).
+
+For a connection scope, `authored_at_fraction` denotes a fixed point along that connection, measured
+from its regional feature's `from_location_ref`, falling back to the canonical first endpoint. Partial,
+reverse and multi-leg routes convert that point into their own elapsed time; trips starting at or past
+the point do not meet it again. Location/default scopes retain whole-journey fraction semantics.
+Companion-only journeys leave the controlled player's place, board and regional marker unchanged.
+Encounter context uses the selected party participants; mixing home participants and saved journey
+movers refuses before starting combat. Omitted `materialize_character.location` follows the controlled
+player; give an explicit location for an off-screen encounter. New interrupted encounter opportunities
+save `contact_location` on the opportunity and travel-state view for this purpose. Reads return that
+saved reference without creating a location or migrating older journeys.
+
+Arrival into a published room without figurines supplies a read-only `placement_hint` in the move reply
+and bootstrap's spatial context. `status:UNPLACED`, `placement_required:true`, `coverage_status` and
+`coverage:[{map_ref,kind,level}]` identify available coverage without revealing other rooms. A unique
+match also supplies top-level `map_ref`/`level`; multiple matches are `AMBIGUOUS`. No placement or
+board selection happens automatically. `current_board` continues to describe the actual controlled
+figurine; bootstrap reports `NO_CURRENT_BOARD` if it has none.
 
 ### 12.6 `update_party_membership`
 
 One typed change: `JOIN`, `LEAVE`, `DISMISS`, `SEPARATE`, `REJOIN`, `GUEST_ADD`, `GUEST_REMOVE`. Validated against
 current membership state, recorded with its cause in the ledger, returns the updated party. Player control is separate
 (`transfer_player_control`).
+
+#### 12.6.1 `set_tactical_control`
+
+Sets the saved decision controller for current companions' movement, actions and reactions. The DM
+MUST play companions by default. A broad order or a one-off instruction MUST NOT silently opt the
+player into detailed control. The primary player character remains player-controlled; this tool
+does not alter the primary `PlayerControlAssignment` or companions' narrative agency.
+
+```yaml
+operation_id: control-mira-this-fight
+campaign: campaign:1
+controller: PLAYER              # DM | PLAYER
+characters: [character:3]        # omitted: all current and later companions in this scope
+scope: ENCOUNTER                # ENCOUNTER | UNTIL_RELEASED
+encounter: encounter:2          # omitted: the running encounter
+reason: "The player requested detailed control of Mira for this fight."
+```
+
+`scope` defaults to `ENCOUNTER` when an encounter is running, otherwise `UNTIL_RELEASED`.
+Encounter scope requires a running encounter and expires on its completion. Persistent scope
+remains until changed; `controller: DM` returns the selected characters to DM decisions for the
+chosen scope. An encounter-only change restores any earlier persistent preference when it expires.
+An explicit `UNTIL_RELEASED` change takes effect immediately, clearing conflicting selected-actor
+encounter overrides so the persistent choice also governs the running fight.
+Saved preferences MUST survive reload and checkpoint restoration. Party, bootstrap
+and encounter context expose effective controllers so clients can recover the arrangement without
+the conversation transcript. Changes are atomic, idempotent and journaled with the other campaign
+state; they do not spend fictional time, actions or movement.
+
+`get_party` and bootstrap expose a `tactical_control` summary with the default, current policies and
+effective member assignments. Each party member's `tactical_control` assignment includes its
+`controller`, `scope` and source; the existing `player_controlled` field still identifies only the
+primary player character. Encounter participant context exposes the corresponding effective
+assignment for turn and reaction routing.
+
+"Mira, cover the stairs" is an ordinary DM-interpreted order. "I control Mira this fight" selects
+`PLAYER`/`ENCOUNTER`; "DM, take over" selects `DM`. Detailed control includes reaction choices under
+normal `npc_reactions: AUTO`. The explicit `ASK` policy can still request all NPC reactions. Each
+actor retains their own initiative, movement/resources, legal actions and perception regardless of
+controller. The client SHOULD resolve routine DM-controlled companion turns without asking the
+player for every tile, pausing for player-controlled choices or meaningful shared decisions.
+This is a control contract for the AI DM, not an engine-side companion AI or group movement tool.
 
 ### 12.7 `update_character`
 
@@ -753,6 +830,77 @@ Identity is unaffected: renaming changes only the display name. The operation re
 `apply_gm_override`.
 
 ---
+
+### 12.8 Persistent map authoring and views
+
+The map workflow uses canonical campaign locations, independent connections, inventory and characters.
+The [DM map workflow](MAP_USAGE.md) contains complete preparation and play examples. Authoring context
+is GM-only; player projections remove undiscovered geometry, private feature metadata, hidden actors
+and off-screen changes before delivery.
+
+| Operation | Main arguments and result |
+| --- | --- |
+| `begin_map_preparation` | Mutating: `operation_id`, `campaign`, `kind: DUNGEON|SCENE|REGION`, structured `proposal`. Returns preparation reference/revision, readiness and repair targets. |
+| `revise_map_preparation` | Mutating: preparation ref, optional expected revision, `changes`. Rooms/connections/rewards/actors/objects/features patch by local `key`. `generate_layout:true` requests a basic helper; accepted facts remain binding. |
+| `validate_map_preparation` | Read-only: campaign/preparation. Returns all required gaps without creating live state. |
+| `publish_map_preparation` | Mutating: preparation/expected revision. Accepts BLUEPRINT commitments or publishes validated SCENE/REGION content atomically; returns canonical reference mapping. |
+| `get_map_context` | Read-only: `reference`, `audience: PLAYER|GM`, optional level and `detail: SUMMARY|FULL`. Defaults to bounded summary, including up to 100 GM room keys/names/levels/location refs/effective illumination. FULL adds filtered geometry. Preparation/atlas/address authoring context requires GM. |
+| `find_maps` | Read-only GM index by query: text, location ref, atlas ref, address or atlas position. Missing sheets remain ungenerated. |
+| `render_map` | Read-only: map, audience, level, options and `include_image`. Returns PNG content when requested plus text, physical transform, dimensions and the same filtered `markers` manifest. PLAYER text uses names/directions; GM text includes technical coordinates/references. `options.technical_text` overrides text presentation. |
+| `import_map_asset` | Mutating: server-readable PNG `source_path`, physical `repeat_ft`. Copies/normalizes immutable campaign artwork; returns `asset:N`, content hash and dimensions. The asset reference pins physical repeat scale. |
+| `export_map_bundle`, `import_map_bundle` | Export a private GM snapshot/artwork to `.rpgmap.zip`; import a bounded archive into a reviewed draft with explicit source-reference mappings. Import does not publish actors or loot. |
+| `update_map_annotations` | Mutating: map/expected revision and annotation. WORLD_POI adds exact atlas geometry; NOTE/REPORT preserves scoped knowledge, sources and uncertainty. |
+
+A dungeon blueprint may fix a room count, levels, selected roles, secret passages, rewards and patrol
+plans without fixing every tile. Integer `levels` declares floor IDs from zero; an explicit list can
+declare negative levels. Playable publication requires the geometry/content demanded by readiness.
+Accepted-but-unrealized site entry returns the preparation reference before travel time is spent.
+
+Positions and dimensions use feet; actor coordinates are footprint southwest origins on a 5 ft lattice.
+The 5 ft/10 ft display overlay and PNG dimensions do not redefine those positions. Region geometry is
+stored in atlas feet independently of styles and derived images. Sheet addresses `atlas:N[x,y]` use
+east-positive X, north-positive Y and a fixed origin; queries do not expand the world. Existing-campaign
+bootstrap stages missing regional preparation with sourced graph constraints, without fictional time.
+
+### 12.9 Tactical actions and living schedules
+
+| Operation | Contract |
+| --- | --- |
+| `place_map_actors` | Mutating exploration deployment using existing character refs, footprint origin, level and size. Synchronizes only explicitly placed actors; unrelated figurines/party focus remain unchanged. Actual encounter deployment synchronizes its selected participants to their physical rooms. It does not bypass combat turns. |
+| `preview_spatial_action` | Read-only path inspection using permitted knowledge, with no movement/resource/time costs. |
+| `move_map_actor` | Mutating exploration movement; combat movement uses `perform_encounter_action`. |
+| `use_map_transition` | Mutating exploration stairs/ladders/portals from within reach. Combat uses MOVE with `{portal:key}`. |
+| `observe_map` | Mutating observation; saves shared party sight and last-observed explored memory. |
+| `get_actor_perception` | Read-only GM decision context from this actor's perception and retained evidence. |
+| `emit_map_sound` | Mutating authored cue with range/level; approximate hearing evidence does not grant exact unseen positions. |
+| `update_map_object` | Mutating resolved consequence or audited correction with a reason. Trap knowledge supports boolean `concealed` and `known_hazard`; checks alone never reveal/disarm a trap. Inventory and action rules retain authority. |
+| `correct_map_geometry` | Mutating correction: `map`, required `expected_revision`, `patch` and `reason`. Structural changes require exploration; map/room illumination-only adjudication also works in combat. Uses `get_map_context.map_revision`; validates current figurines and placed objects and preserves stable identities/live state. Actual lighting changes append a GM_ONLY `MAP_ILLUMINATION_CHANGED` event with reason and before/after state. |
+| `convert_encounter_to_grid` | Mutating explicit legacy conversion preserving initiative, resources and pending choices. New combat already requires grids. |
+| `define_patrol`, `update_patrol`, `get_patrol_state` | Finite actor rosters, timed waypoints, persisted phase and explained changes. Regional timing pauses when the last party member leaves. |
+| `schedule_world_event`, `perform_timed_action` | Saved scheduled events and partial SEARCH/WAIT/WORK actions, with interruption before completion benefits. |
+| `define_travel_risk` | Mutating story-aware frequency, opposition eligibility, severity and authored/random placement policy. |
+| `get_travel_state`, `continue_journey`, `resolve_travel_opportunity` | Inspect/resume retained travel and resolve contacts at their actual position/time; preserve risk exposure and resolved outcomes. |
+
+All new canonical records participate in journaled mutation, idempotency and checkpoint restoration.
+Declared TRAP objects are concealed in PLAYER current/remembered views and renders until explicitly
+revealed (`concealed:false`) or authored as an apparent hazard (`known_hazard:true`). Explicit secret,
+concealed and GM-only visibility still take precedence; clear those applicable restrictions when
+adjudicating discovery. Old automatically leaked trap observations are filtered rather than treated
+as valid discovery. GM context retains the authored challenges. An authored secret entrance owns
+its discovery check, without imposing a second automatic room DC; independently authored room checks
+and ambiguous unmarked legacy guidance remain authoritative.
+
+Interior departure appends the actual room-to-entry path before overland travel, symmetric with
+arrival. A saved contact remains a stable place through tactical movement and opportunity resolution;
+actual graph advancement clears that retained pointer before creating a later contact. A lone dead
+traveller without a figure is left at the contact on cancellation, with `left_at` and no invented
+map/position. Exact departure-place/anchor encounter hints retain their legacy route-context meaning;
+unrelated explicit places cannot relocate saved travellers. Tactical movement can legitimately adjust
+projected route progress, including by one second; no-motion reads/combat do not cause that change.
+
+Rendering/querying does not advance timers, reveal secrets or reroll. Regional timers use active elapsed
+time while any party member remains in that region; return resumes the saved remaining duration with
+no off-region catch-up. The global calendar continues normally.
 
 ## 13. Rules and Character Runtime
 
@@ -1140,9 +1288,14 @@ month- or season-bound rule. Every `game_time` from clock-moving operations then
 ### 15.1 `start_encounter`
 
 Creates the encounter, validates participants and sides, snapshots starting state, rolls initiative and returns the
-first actionable turn. Positioning is zone-level by default (near/far, cover, marked features). With the optional
-`tactical_grid` capability an encounter MAY carry x,y positions used for movement and range validation; the grid schema
-is deferred.
+first actionable turn. The implemented
+[mandatory-grid combat contract](DESIGN.md#15-encounters) requires a saved tactical scene and validated
+participant positions before every new combat starts, including incidental outdoor encounters. Travel
+remains graph-based; scene preparation/reuse occurs at the actual location or journey anchor. Grid
+mechanics apply in text-only clients as well; optional capabilities concern image display/interaction.
+The current profile uses a five-foot occupancy lattice with five- or ten-foot visual overlays.
+Legacy zone positions are not treated as physical coordinates; see [MAP_USAGE.md](MAP_USAGE.md)
+for scene preparation and conversion. Capability reporting describes this implemented profile.
 
 Initiative is a Dexterity check (SRD 5.2.1 "Initiative"). A group of identical creatures on the same side (the same
 stat block) gets one roll applied to each member; their `initiative_rolls` entries carry `shared_roll`. Each entry
@@ -1158,6 +1311,14 @@ and to the players (characters). Call `perform_encounter_action` in the agreed o
 Round, turn, participants, sides, visible conditions, positions where a spatial model is active, available actions or
 constraints, and revision. Secret opponent information is omitted or marked by visibility.
 
+The GM view retains every participant and the actual current turn, including unseen or alerted opponents.
+Player projections and map renders remain perception-filtered. A hidden actor still uses its own senses to
+select targets; GM knowledge does not grant perception to that actor.
+
+Effective tactical controllers identify whose decisions the client should request (§12.6.1).
+Player-controlled companions retain their own turns; taking control does not merge their movement
+or action budgets with the primary character's. Hidden opponent information remains filtered.
+
 For an ended encounter, `ammunition_recovery` appears when an optional search is available (§15.6). Read the explicit
 encounter reference to revisit an offer; omitting `encounter` still selects a running encounter.
 
@@ -1165,6 +1326,14 @@ encounter reference to revisit an offer; omitting `encounter` still selects a ru
 
 Resolves one action atomically. Kinds: `ATTACK`, `CAST`, `MOVE`, `DASH`, `STAND`, `DISENGAGE`, `DODGE`, `HELP`,
 `HIDE`, `READY`, `USE_ITEM`, `INTERACT`, `OTHER_RULES_ACTION`, `END_TURN`.
+
+The current implementation refuses `HIDE` with `CAPABILITY_UNAVAILABLE` before rolls or Action
+expenditure; shared concealment/discovery and termination are pending. Resolve Stealth and explicit
+GM adjudication separately. It does not report a mechanically hidden creature.
+
+Attacking a downed same-side member requires `confirm_hostile_ally:true` after explicitly declared
+hostile intent. An ordinary attack returns care guidance without expenditure or damage. A melee
+opportunity-attack TAKE choice accepts `nonlethal:true` and stops a knocked-out mover's continuation.
 
 `STAND` is a Prone creature righting itself (SRD 5.2.1 "Prone"): movement, not an action, so the turn stays open. It
 costs half the creature's Speed (rounded down), reported as `movement_cost` beside `speed` for the GM to hold against
@@ -1206,12 +1375,18 @@ While the turn stays open (`end_turn: false`) and nothing is pending, the result
 `bonus_action` and `reaction` as `AVAILABLE` or `SPENT`, `movement` as `AVAILABLE`, `HALF_SPENT` (after `STAND`) or
 `USED` (after `MOVE` or `DASH`; zones carry no distance), and `attacks_remaining` for a Multiattack. The Action is
 recorded by `ATTACK`, `CAST` (unless the spell took the Bonus Action), `DODGE`, `DASH`, `DISENGAGE`, `HELP`, `HIDE`,
-`USE_ITEM` (unless a potion) and `OTHER_RULES_ACTION`; a second Action in a turn is reported, never refused. While the
+`USE_ITEM` (unless a potion) and `OTHER_RULES_ACTION`; a second unrelated Action is refused before rolls or resources
+are spent. Remaining attacks from a supported Multiattack or Extra Attack, and the Light Bonus Action, remain legal.
+Additional Actions from Action Surge or Haste require explicit supported adjudication. While the
 Action is unspent, `next_step` says so. These are facts for the GM, not prompts for the player: the GM asks about a
 leftover only when the declaration was incomplete, it matters in the scene and the player may not know the rule;
 otherwise the turn ends quietly. Encounter state reports `action_available` beside `bonus_action_available` for the
 current participant.
 Nick mastery remains GM-adjudicated.
+
+Omitting `end_turn` on a Bonus Action `CAST` keeps the turn open. Movement likewise keeps the turn open by default.
+An action may include optional `narration` (up to 300 characters) to retain a concise description beside its
+mechanical log entry. This prose does not change outcomes, resources, loot or visibility.
 
 Opportunity Attacks select a melee stat-block action or a carried melee weapon, falling back to an Unarmed Strike.
 An explicit `weapon` choice must also be melee; a ranged attack cannot be used for this reaction.
@@ -1221,6 +1396,10 @@ encoded effect is consumed and left to the GM. An item of type `POTION` spends t
 "Potions": drinking requires a Bonus Action), the same one the Light extra attack and bonus-action spells use: the
 result reports `action_cost: "BONUS_ACTION"`, and it is refused with `OPERATION_NOT_ALLOWED` once the Bonus Action
 is spent.
+
+`apply_runtime_change` with `kind: USE_ITEM` is restricted to exploration. In combat, use this
+encounter action so turn ownership and the Action/Bonus Action allowance are enforced before rolling
+or consuming inventory.
 
 Attack results carry `advantage` (`ADVANTAGE`, `DISADVANTAGE` or `NONE`) and `advantage_reasons` from one condition
 table shared by weapon and spell attacks (`RULES_ENGINE.md` §3): the attacker's Blinded, Restrained, Prone, Poisoned,
@@ -1250,6 +1429,12 @@ described in §13.9.
 
 Completes a server-created pending choice by transaction reference and one of the legal options returned.
 
+Normal `npc_reactions: AUTO` requests decisions for the primary player character and companions
+assigned detailed player control. DM-controlled NPCs retain normal automatic reaction handling.
+`ASK` can request every NPC reaction; the client resolves DM-controlled actors' choices itself and
+asks the player for player-controlled actors. An existing pending choice must be resolved before
+changing tactical control, so its owner and the paused action cannot change underneath it.
+
 ### 15.5 `end_encounter`
 
 Validates the outcome, commits completion, distributes mechanically defined rewards, updates quests and events as
@@ -1257,7 +1442,33 @@ configured, returns level-up eligibility and Director-trigger recommendations. C
 reactions or choices remain. A major encounter (an XP pool of 200 or more, or a player character's death) also returns
 `treasure` (§14.4).
 
-The clock advances six seconds per round, rounded up to whole minutes. Effects with a duration in rounds do not end
+Omitting `encounter` resolves the active encounter. Optional `narrative` stores the GM's longer account. Completion
+stores a persistent record containing the roster, resource changes, observed scene changes and at most eight
+engine-selected highlights. The MCP reply returns a bounded `party_digest` and a `full_gm_record` read pointer.
+The GM record retains hidden facts; the existing resolved ledger event receives a
+party-safe digest. Unknown private facts and unsafe supplied prose are excluded from that player chronicle.
+The record survives a fresh server process and can be read with `get_encounter_state` using the ended encounter ref.
+
+Timeline event replies expose a compact `encounter_digest` and a `full_gm_record` retrieval pointer.
+The party digest omits initial rosters, HP and nested mechanics; the GM record retains them.
+Bootstrap/timeline recall and the end reply cap their digest at 2,000 bytes of compact UTF-8 JSON,
+with measured byte count and maximum fields beside it. Abbreviated digests carry `truncated:true`;
+highlights are trimmed individually. Saved detail and chronicle material retain their full content.
+Historical reads use end-time rosters and knowledge independently of the actors' current board or state.
+They expose no live turn/actions and explicitly mark unrecorded historical positions unavailable.
+New grid completions persist final `map_ref`, `map_name`, `level`, `move_origin_ft`/`position_ft`
+and `footprint_ft` in the GM final roster. Historical PLAYER coordinates come from a separately
+saved end-time observation set plus completion-time entitlement to the party's own positions, even
+if the entire party is unconscious. Known-but-unseen nonparty actors gain no new coordinates;
+later membership/control changes cannot reveal them. Bootstrap keeps
+up to eight recent events and two digests under a shared 3,000-byte compact UTF-8 JSON cap;
+older fights retain summaries and full-record pointers, without trimming timeline/stored history.
+End replies also cap `highlights_needing_narration` at 2,000 compact UTF-8 JSON bytes, exposing brief
+prompts and exact annotation slots without full mechanics. Measured/maximum byte fields describe this
+separate budget; `full_gm_record` retrieves the complete stored highlights and mechanics.
+`episodic_detail` is readable prose, regenerated on annotation without another resolved event.
+
+The clock advances six seconds per round and retains second precision. Effects with a duration in rounds do not end
 with the fight: the rounds each has left after the final round become game minutes, `ceil(remaining × 6 s / 60)` from
 the post-fight clock, stored as `{kind: MINUTES, expires_seq, converted_from_rounds: n, label}`; effects already due
 end at once, and the result reports `round_effects_converted_to_minutes`. Start-of-turn durations (`until:
@@ -1313,6 +1524,14 @@ that shooter's search is recorded, so retries cannot reroll the recovery. Checkp
 and search eligibility together. Older shots without recovery metadata are ignored rather than reconstructed from
 item names. The GM MUST NOT grant recovered ammunition
 by hand or perform the search automatically.
+
+### 15.7 `annotate_encounter`
+
+After completion, annotate the ended encounter by explicit ref. Supply `narrations`
+mapping the saved highlight slots (`log:<id>`) to concise narration. Only that encounter's selected slots are
+accepted. This updates the saved GM record and the existing party-safe ledger digest; it does not repeat the
+fight, award XP or grant loot. Reusing the operation ID replays the same result. Checkpoint restore rewinds the
+annotations together with the encounter and ledger event.
 
 ---
 
@@ -1521,6 +1740,9 @@ that survives it. Later history ceases to be canonical without being presented a
 Transfers control to an eligible existing character without changing identity; validates life state, policy and
 eligibility.
 
+This changes the player's primary character. Use `set_tactical_control` (§12.6.1) to take or
+release companion tactics without changing that assignment.
+
 ### 19.5 `complete_campaign`
 
 Sets `COMPLETED`, `FAILED` or `ABANDONED` with a reason and final summary. Reopening is administrative and outside the
@@ -1620,6 +1842,7 @@ Narrative and world
   get_diegetic_information
   move_party
   update_party_membership
+  set_tactical_control
   update_character
 
 Rules and runtime
@@ -1644,6 +1867,7 @@ Encounter
   resolve_pending_choice
   end_encounter
   recover_ammunition
+  annotate_encounter
 
 Progression
   begin_level_up
@@ -1783,7 +2007,7 @@ continue play convincingly.
 8. Context-ranking and summarization algorithms.
 9. Whether full-text memory search ships in the first milestone.
 10. Deployment authorization for GM overrides.
-11. Tactical-grid representation (zones vs. x,y grid, movement costs, ranges).
+11. Mandatory tactical-grid scene/position schema, shared movement/range/sight rules and legacy conversion.
 
 These may refine payload schemas without weakening the invariants defined here.
 

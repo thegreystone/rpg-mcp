@@ -127,7 +127,10 @@ class RangedOpportunityAttackTest {
 				assertEquals(1, attack.get("damage"));
 				assertEquals("RUNNING", m(resolved.get("state")).get("status"));
 				assertEquals(1, ((Number) participant(engine, fight, fight.enemy()).get("reaction_used")).intValue());
-				assertEquals("far", participant(engine, fight, fight.pc()).get("position_zone"));
+				Map<String, Object> finalActor = list(m(resolved.get("state")).get("participants")).stream()
+						.filter(p -> fight.pc().equals(p.get("character"))).findFirst().orElseThrow();
+				assertEquals(List.of(45.0, 25.0), finalActor.get("position_ft"),
+						"the saved path resumes after the reaction");
 				assertTrue(((ScriptedRollService) engine.roller()).exhausted());
 			}
 		}
@@ -223,6 +226,12 @@ class RangedOpportunityAttackTest {
 			List<String> expected = List.of("Arc Bolt", "Arc Bolt", "Claw", "Claw", "Unarmed Strike");
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
 			for (int i = 0; i < actions.size(); i++) {
+				if (i > 0) {
+					engine.encounters().perform(op(), fight.campaign(), fight.encounter(), fight.enemy(),
+							map("kind", "END_TURN"), true);
+					engine.encounters().perform(op(), fight.campaign(), fight.encounter(), fight.pc(),
+							map("kind", "END_TURN"), true);
+				}
 				dice.queue(1);
 				Map<String, Object> attack = engine.encounters().perform(op(), fight.campaign(), fight.encounter(),
 						fight.enemy(), actions.get(i), false);
@@ -292,8 +301,12 @@ class RangedOpportunityAttackTest {
 		for (int i = 0; i < enemies.size(); i++) {
 			dice.queue(1);
 		}
+		var combatants = new ArrayList<String>();
+		combatants.add("character:1");
+		combatants.addAll(enemies);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
-				map("party", List.of("character:1"), "foes", enemies), null, null, null, null, null,
+				map("party", List.of("character:1"), "foes", enemies), null,
+				TestCampaigns.meleeZones(combatants.toArray(String[]::new)), null, null, null,
 				map("npc_reactions", policy));
 		assertEquals("character:1", m(started.get("turn")).get("character"));
 		assertTrue(dice.exhausted());

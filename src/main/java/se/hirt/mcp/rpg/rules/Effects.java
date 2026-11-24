@@ -260,8 +260,8 @@ public final class Effects {
 	}
 
 	/**
-	 * Ends every effect on a character (death, a revival by fiat), reversing maximum-HP changes on
-	 * the way.
+	 * Ends every effect on a character (death or an explicit full reset), reversing maximum-HP
+	 * changes on the way.
 	 */
 	public static int removeAll(Tx tx, long characterId) {
 		Exhaustion.normalize(tx, characterId);
@@ -345,6 +345,11 @@ public final class Effects {
 			return List.of();
 		}
 		String condition = conditionRef.substring("srd5e:condition/".length()).toUpperCase();
+		if ("UNCONSCIOUS".equals(condition)) {
+			Row character = tx.get("character", characterId);
+			se.hirt.mcp.rpg.character.RuntimeService.ensureProneFromUnconscious(tx, character.lng("campaign_id"),
+					characterId);
+		}
 		return Combat.INCAPACITATING_CONDITIONS.contains(condition) ? breakConcentration(tx, characterId) : List.of();
 	}
 
@@ -394,7 +399,8 @@ public final class Effects {
 				m.putIfAbsent("label", label);
 				return "START_OF_TURN".equals(until) ? startOfTurn(tx, campaignId, c, m) : m;
 			}
-			if (m.get("expires_seq") instanceof Number || m.get("expires_round") instanceof Number) {
+			if (m.get("expires_seq") instanceof Number || m.get("expires_seconds") instanceof Number
+					|| m.get("expires_round") instanceof Number) {
 				if (m.get("expires_round") instanceof Number && encounterId != null) {
 					m.putIfAbsent("encounter", encounterId);
 				}
@@ -472,6 +478,8 @@ public final class Effects {
 		d.put("kind", "MINUTES");
 		d.put("label", label);
 		d.put("expires_seq", GameTime.currentSeq(tx, campaignId) + minutes);
+		d.put("expires_seconds",
+				Math.addExact(GameTime.currentSeconds(tx, campaignId), Math.multiplyExact(minutes, 60)));
 		return d;
 	}
 
@@ -485,7 +493,7 @@ public final class Effects {
 
 	/**
 	 * Duration in encounter rounds (expires when that round begins); outside encounters, the same
-	 * time on the clock (6 seconds per round, at least a minute).
+	 * time on the clock (6 seconds per round).
 	 */
 	public static Map<String, Object> rounds(
 		Tx tx, long campaignId, Long encounterId, long currentRound, long rounds, String label) {
@@ -498,17 +506,24 @@ public final class Effects {
 		} else {
 			d.put("kind", "MINUTES");
 			d.put("expires_seq", GameTime.currentSeq(tx, campaignId) + minutesForRounds(rounds));
+			d.put("expires_seconds", Math.addExact(GameTime.currentSeconds(tx, campaignId),
+					Math.multiplyExact(rounds, SECONDS_PER_ROUND)));
 		}
 		return d;
 	}
 
 	/** Removes effects whose game-time expiry has passed; returns the number removed. */
 	public static int expireByTime(Tx tx, long campaignId, long nowSeq) {
+		Row clock = GameTime.clock(tx, campaignId);
+		long nowSeconds = Math.addExact(Math.multiplyExact(nowSeq, 60),
+				clock.lng("seq") == nowSeq ? clock.intOr("second_offset", 0) : 0);
 		int removed = 0;
 		for (Row e : tx.query("SELECT * FROM active_effect WHERE campaign_id = ? AND duration_json IS NOT NULL",
 				campaignId)) {
 			Map<String, Object> d = e.map("duration_json");
-			if (d.get("expires_seq") instanceof Number n && n.longValue() <= nowSeq) {
+			boolean due = !e.isNull("end_seconds") ? e.lng("end_seconds") <= nowSeconds
+					: d.get("expires_seq") instanceof Number n && n.longValue() <= nowSeq;
+			if (due) {
 				end(tx, e);
 				removed++;
 			}
@@ -554,9 +569,9 @@ public final class Effects {
 	 * At the end of an encounter the rounds an effect has left become game time: "A round
 	 * represents about 6 seconds in the game world" (SRD 5.2.1 "Combat"), and nothing in the SRD
 	 * ends a 10-round condition because the fight ended. The remaining rounds, counted from the
-	 * encounter's final round, are rounded up to whole minutes on the clock ({@code nowSeq}: the
-	 * clock after the encounter's own time has elapsed). Effects already due are ended. Returns the
-	 * number converted.
+	 * encounter's final round, retain their exact six-second duration on the clock ({@code nowSeq}:
+	 * the clock after the encounter's own time has elapsed). Effects already due are ended. Returns
+	 * the number converted.
 	 */
 	public static int convertRoundsAtEncounterEnd(Tx tx, long encounterId, long finalRound, long nowSeq) {
 		int converted = 0;
@@ -569,6 +584,8 @@ public final class Effects {
 			}
 			d.put("kind", "MINUTES");
 			d.put("expires_seq", nowSeq + minutesForRounds(remaining));
+			d.put("expires_seconds", Math.addExact(GameTime.currentSeconds(tx, e.lng("campaign_id")),
+					Math.multiplyExact(remaining, SECONDS_PER_ROUND)));
 			d.put("converted_from_rounds", remaining);
 			d.remove("expires_round");
 			d.remove("encounter");

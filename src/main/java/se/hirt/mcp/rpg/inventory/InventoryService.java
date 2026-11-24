@@ -72,7 +72,8 @@ public final class InventoryService {
 
 	public static List<Map<String, Object>> entries(Tx tx, RulesData rules, long characterId) {
 		var out = new ArrayList<Map<String, Object>>();
-		for (Row e : tx.query("SELECT * FROM inventory_entry WHERE character_id = ? ORDER BY equipped DESC, id",
+		for (Row e : tx.query(
+				"WITH RECURSIVE owned(id) AS (SELECT id FROM inventory_entry WHERE character_id=? UNION ALL SELECT e.id FROM inventory_entry e JOIN owned o ON e.container_entry_id=o.id) SELECT e.* FROM inventory_entry e JOIN owned o ON e.id=o.id ORDER BY equipped DESC,e.id",
 				characterId)) {
 			out.add(entrySummary(tx, rules, e));
 		}
@@ -144,7 +145,9 @@ public final class InventoryService {
 
 	public static Map<String, Object> carrying(Tx tx, RulesData rules, Row character) {
 		double items = 0;
-		for (Row e : tx.query("SELECT * FROM inventory_entry WHERE character_id = ?", character.id())) {
+		for (Row e : tx.query(
+				"WITH RECURSIVE owned(id) AS (SELECT id FROM inventory_entry WHERE character_id=? UNION ALL SELECT e.id FROM inventory_entry e JOIN owned o ON e.container_entry_id=o.id) SELECT e.* FROM inventory_entry e JOIN owned o ON e.id=o.id",
+				character.id())) {
 			items += ContentService.itemForEntry(tx, rules, e).unitWeightLb() * e.lng("quantity");
 		}
 		double coins = Money.coinWeightLb(character.lng("money_cp") == null ? 0 : character.lng("money_cp"));
@@ -344,6 +347,7 @@ public final class InventoryService {
 			Ref target = Ref.parse(toRef);
 			Long toCharacter = null;
 			Long toLocation = null;
+			Long toContainer = null;
 			if (target.type().equals(Ref.CHARACTER)) {
 				Row c = activeCharacter(tx, campaignId, toRef);
 				toCharacter = c.id();
@@ -353,9 +357,26 @@ public final class InventoryService {
 					throw RpgException.invalidArgument(toRef + " belongs to another campaign.");
 				}
 				toLocation = l.id();
+			} else if (target.type().equals(Ref.INVENTORY)) {
+				Row container = entry(tx, campaignId, toRef);
+				if (!"CONTAINER".equals(ContentService.itemForEntry(tx, rules, container).type()))
+					throw RpgException.invalidArgument("The destination item is not a container.");
+				if (container.id() == entry.id())
+					throw RpgException.invalidArgument("A container cannot contain itself.");
+				Row root = container;
+				for (int depth = 0; !root.isNull("container_entry_id"); depth++) {
+					if (depth >= 64 || root.lng("container_entry_id") == entry.id())
+						throw RpgException.invalidArgument("Container nesting would create a cycle.");
+					root = tx.get("inventory_entry", root.lng("container_entry_id"));
+				}
+				requireContainerAccess(tx, container);
+				toContainer = container.id();
 			} else {
-				throw RpgException.invalidArgument("to must be a character:N or location:N reference.");
+				throw RpgException
+						.invalidArgument("to must be a character:N, location:N or inventory:N container reference.");
 			}
+			if (!entry.isNull("container_entry_id"))
+				requireContainerAccess(tx, tx.get("inventory_entry", entry.lng("container_entry_id")));
 			long have = entry.lng("quantity");
 			long qty = quantity == null ? have : quantity;
 			if (qty <= 0 || qty > have) {
@@ -365,10 +386,50 @@ public final class InventoryService {
 				throw RpgException.invalidArgument("The item is already owned by " + toRef + ".");
 			}
 			Item item = ContentService.itemForEntry(tx, rules, entry);
-			String from = entry.isNull("character_id") ? Ref.of(Ref.LOCATION, entry.lng("location_id"))
-					: Ref.of(Ref.CHARACTER, entry.lng("character_id"));
-			removeQuantity(tx, entry, qty);
-			long newEntry = addItem(tx, campaignId, toCharacter, toLocation, item, qty);
+			String from = !entry.isNull("container_entry_id") ? Ref.of(Ref.INVENTORY, entry.lng("container_entry_id"))
+					: entry.isNull("character_id") ? Ref.of(Ref.LOCATION, entry.lng("location_id"))
+							: Ref.of(Ref.CHARACTER, entry.lng("character_id"));
+			long newEntry;
+			boolean hasContents = tx.count("SELECT COUNT(*) FROM inventory_entry WHERE container_entry_id=?",
+					entry.id()) > 0;
+			if (hasContents && qty != have)
+				throw RpgException.invalidArgument("Move a filled container as a whole.");
+			boolean anchored = tx.count("SELECT COUNT(*) FROM map_object WHERE entity_ref=?", entryRef) > 0;
+			if (qty == have && (hasContents || anchored || toContainer != null || !entry.isNull("charges_json"))) {
+				var cols = new LinkedHashMap<String, Object>();
+				cols.put("character_id", toCharacter);
+				cols.put("location_id", toLocation);
+				cols.put("container_entry_id", toContainer);
+				cols.put("equipped", 0);
+				cols.put("slot", null);
+				tx.update("inventory_entry", entry.id(), cols);
+				newEntry = entry.id();
+			} else if (toContainer != null) {
+				var cols = entry.asMap();
+				cols.remove("id");
+				cols.put("character_id", null);
+				cols.put("location_id", null);
+				cols.put("container_entry_id", toContainer);
+				cols.put("quantity", qty);
+				cols.put("equipped", 0);
+				cols.put("slot", null);
+				removeQuantity(tx, entry, qty);
+				newEntry = tx.insert("inventory_entry", cols);
+			} else {
+				removeQuantity(tx, entry, qty);
+				newEntry = addItem(tx, campaignId, toCharacter, toLocation, item, qty);
+			}
+			if (toContainer != null && toContainer.equals(entry.lng("container_entry_id")))
+				throw RpgException.invalidArgument("The item is already in that container.");
+			if (toCharacter != null)
+				requireSpatialAccess(tx, campaignId, entry, toCharacter);
+			if (toContainer != null) {
+				Row owner = tx.get("inventory_entry", toContainer);
+				while (!owner.isNull("container_entry_id"))
+					owner = tx.get("inventory_entry", owner.lng("container_entry_id"));
+				if (!owner.isNull("character_id"))
+					requireSpatialAccess(tx, campaignId, entry, owner.lng("character_id"));
+			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("item", item.display());
 			result.put("name", item.name());
@@ -383,6 +444,78 @@ public final class InventoryService {
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	private static void requireContainerAccess(Tx tx, Row container) {
+		var seen = new HashSet<Long>();
+		Row cursor = container;
+		while (true) {
+			if (!seen.add(cursor.id()))
+				throw RpgException.invalidArgument("Container cycle.");
+			for (Row anchor : tx.query("SELECT * FROM map_object WHERE entity_ref=?", "inventory:" + cursor.id())) {
+				var state = anchor.map("properties_json");
+				if (Boolean.TRUE.equals(state.get("locked")) || "LOCKED".equals(state.get("state")))
+					throw RpgException.invalidArgument("The container is locked.");
+				if (Boolean.TRUE.equals(state.get("sealed")))
+					throw RpgException.invalidArgument("The container is sealed.");
+			}
+			if (cursor.isNull("container_entry_id"))
+				break;
+			cursor = tx.get("inventory_entry", cursor.lng("container_entry_id"));
+		}
+	}
+
+	private static void requireSpatialAccess(Tx tx, long cid, Row source, long characterId) {
+		Row root = source;
+		var seen = new HashSet<Long>();
+		while (!root.isNull("container_entry_id")) {
+			if (!seen.add(root.id()))
+				throw RpgException.invalidArgument("Container cycle.");
+			root = tx.get("inventory_entry", root.lng("container_entry_id"));
+		}
+		if (root.lng("character_id") != null && root.lng("character_id") == characterId)
+			return;
+		if (!root.isNull("character_id")) {
+			var giver = tx.queryOne("SELECT * FROM map_actor WHERE campaign_id=? AND character_id=?", cid,
+					root.lng("character_id"));
+			var recipient = tx.queryOne("SELECT * FROM map_actor WHERE campaign_id=? AND character_id=?", cid,
+					characterId);
+			if (giver.isPresent() || recipient.isPresent()) {
+				if (giver.isEmpty() || recipient.isEmpty()
+						|| !Objects.equals(giver.get().lng("scene_id"), recipient.get().lng("scene_id"))
+						|| giver.get().intOr("level", 0) != recipient.get().intOr("level", 0)
+						|| !se.hirt.mcp.rpg.spatial.SpatialRules.canReach(
+								se.hirt.mcp.rpg.maps.SceneService.footprint(giver.get()),
+								se.hirt.mcp.rpg.maps.SceneService.footprint(recipient.get()), 60))
+					throw RpgException.invalidArgument("The characters must be within reach to exchange an item.");
+			}
+			return;
+		}
+		for (Row anchor : tx.query(
+				"SELECT * FROM map_object WHERE campaign_id=? AND entity_ref=? AND scene_id IS NOT NULL", cid,
+				"inventory:" + root.id())) {
+			var actor = tx.queryOne("SELECT * FROM map_actor WHERE campaign_id=? AND character_id=?", cid, characterId)
+					.orElseThrow(() -> RpgException
+							.invalidArgument("Place the character on this map before interacting with the object."));
+			if (actor.lng("scene_id").longValue() != anchor.lng("scene_id").longValue())
+				throw RpgException.invalidArgument("The object is on another map.");
+			var p = anchor.map("placement_json");
+			int level = se.hirt.mcp.rpg.maps.SceneService.number(p, "level", 0).intValue();
+			if (actor.intOr("level", 0) != level)
+				throw RpgException.invalidArgument("The object is on another level.");
+			var point = se.hirt.mcp.rpg.maps.SceneService.point(
+					se.hirt.mcp.rpg.maps.SceneService.number(p, "x_ft", 0).doubleValue(),
+					se.hirt.mcp.rpg.maps.SceneService.number(p, "y_ft", 0).doubleValue());
+			var target = new se.hirt.mcp.rpg.spatial.Geometry.Footprint(point, 1, 1);
+			var geometry = se.hirt.mcp.rpg.maps.SceneService.geometry(
+					se.hirt.mcp.rpg.maps.SceneService.document(tx, tx.get("map_scene", anchor.lng("scene_id"))), level);
+			if (!se.hirt.mcp.rpg.spatial.SpatialRules.canReach(se.hirt.mcp.rpg.maps.SceneService.footprint(actor),
+					target, 60)
+					|| !se.hirt.mcp.rpg.spatial.SpatialRules.lineOfSight(geometry,
+							se.hirt.mcp.rpg.maps.SceneService.center(actor), point.translate(30, 30)))
+				throw RpgException
+						.invalidArgument("Move within reach and sight of the object before transferring its contents.");
+		}
 	}
 
 	// ── give_money ─────────────────────────────────────────────────────

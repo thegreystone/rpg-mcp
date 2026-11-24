@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Answers "which operations are legal now" (DOMAIN_MODEL.md §16, I-61). Reads are always legal
@@ -55,7 +56,14 @@ public final class Harness {
 			"get_character_sheet", "query_memories", "query_timeline", "get_continuation_options",
 			"get_content_definitions", "search_rules", "get_encounter_state", "get_party", "get_relationship",
 			"get_level_up_choices", "validate_level_up", "get_context", "get_diegetic_information",
-			"get_director_context", "get_accounts", "list_cash_flows", "find", "get_chronicle_material");
+			"get_director_context", "get_accounts", "list_cash_flows", "find", "get_chronicle_material",
+			"get_map_context", "find_maps", "validate_map_preparation", "render_map", "preview_spatial_action",
+			"get_actor_perception", "get_patrol_state", "get_travel_state", "export_map_bundle");
+
+	private static final List<String> MAP_AUTHORING = List.of("begin_map_preparation", "revise_map_preparation",
+			"publish_map_preparation", "import_map_asset", "define_patrol", "define_travel_risk",
+			"schedule_world_event", "update_map_annotations", "update_patrol", "import_map_bundle",
+			"correct_map_geometry");
 
 	private Harness() {
 	}
@@ -109,6 +117,25 @@ public final class Harness {
 			}
 		}
 		}
+		if (state.isSetup() || state == HarnessState.READY_TO_PLAY || state == HarnessState.SESSION_SUSPEND
+				|| state == HarnessState.EXPLORATION) {
+			ops.addAll(MAP_AUTHORING);
+		}
+		if (state.isSetup() || state == HarnessState.READY_TO_PLAY || state == HarnessState.SESSION_SUSPEND
+				|| state == HarnessState.EXPLORATION || state == HarnessState.ENCOUNTER)
+			ops.add("set_tactical_control");
+		if (state == HarnessState.EXPLORATION) {
+			ops.addAll(List.of("place_map_actors", "move_map_actor", "update_map_object", "observe_map",
+					"emit_map_sound", "perform_timed_action", "resolve_travel_opportunity", "continue_journey",
+					"use_map_transition"));
+		}
+		if (state == HarnessState.ENCOUNTER)
+			ops.addAll(List.of("update_map_object", "observe_map", "emit_map_sound", "schedule_world_event",
+					"convert_encounter_to_grid", "add_encounter_participants", "correct_map_geometry"));
+		if (Set.of(HarnessState.EXPLORATION, HarnessState.ENCOUNTER, HarnessState.CHECKPOINT_DECISION,
+				HarnessState.PLAYER_CHARACTER_TRANSFER, HarnessState.READY_TO_PLAY, HarnessState.SESSION_SUSPEND)
+				.contains(state))
+			ops.add("annotate_encounter");
 		return ops;
 	}
 

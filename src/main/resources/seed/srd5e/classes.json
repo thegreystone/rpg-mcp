@@ -8,6 +8,9 @@
       "name": "Barbarian",
       "payload": {
         "summary": "A primal warrior who rages for strength and toughness; d12 hit die, the most hit points of any class.",
+        "features": [
+          {"name": "Extra Attack", "level": 5, "enforcement": "ENGINE", "summary": "Make two attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 2}}
+        ],
         "hit_die": 12,
         "armor_training": [
           "LIGHT",
@@ -425,6 +428,11 @@
       "name": "Fighter",
       "payload": {
         "summary": "A master of weapons and armour: the most attacks, the widest gear, straightforward and durable.",
+        "features": [
+          {"name": "Extra Attack", "level": 5, "enforcement": "ENGINE", "summary": "Make two attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 2}},
+          {"name": "Two Extra Attacks", "level": 11, "enforcement": "ENGINE", "summary": "Make three attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 3}},
+          {"name": "Three Extra Attacks", "level": 20, "enforcement": "ENGINE", "summary": "Make four attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 4}}
+        ],
         "hit_die": 10,
         "armor_training": [
           "LIGHT",
@@ -537,6 +545,9 @@
       "name": "Monk",
       "payload": {
         "summary": "A disciplined martial artist: unarmed strikes, extraordinary speed and mobility, no armour needed.",
+        "features": [
+          {"name": "Extra Attack", "level": 5, "enforcement": "ENGINE", "summary": "Make two attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 2}}
+        ],
         "hit_die": 8,
         "armor_training": [],
         "weapon_proficiencies": [
@@ -603,6 +614,9 @@
       "name": "Paladin",
       "payload": {
         "summary": "A holy warrior bound by an oath: smites, a healing touch, auras and heavy armour.",
+        "features": [
+          {"name": "Extra Attack", "level": 5, "enforcement": "ENGINE", "summary": "Make two attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 2}}
+        ],
         "hit_die": 10,
         "armor_training": [
           "LIGHT",
@@ -731,6 +745,9 @@
       "name": "Ranger",
       "payload": {
         "summary": "A wilderness hunter and tracker: bow or blades, nature magic, at home in hostile terrain.",
+        "features": [
+          {"name": "Extra Attack", "level": 5, "enforcement": "ENGINE", "summary": "Make two attacks as part of one Attack action on your turn.", "mechanic": {"kind": "EXTRA_ATTACK", "attacks": 2}}
+        ],
         "hit_die": 10,
         "armor_training": [
           "LIGHT",

@@ -45,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
@@ -152,7 +153,7 @@ class EncounterRulesTest {
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
 			dice.queue(20, 1);
 			Map<String, Object> started = engine.encounters().start(op(), campaign,
-					map("a", List.of(scout), "b", List.of(bandit)), null, null, null, null, null);
+					map("a", List.of(scout), "b", List.of(bandit)), null, meleeZones(scout, bandit), null, null, null);
 			String encounter = (String) started.get("encounter");
 			assertEquals(scout, m(started.get("turn")).get("character"), "the Scout won initiative");
 			assertTrue(dice.exhausted());

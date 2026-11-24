@@ -63,6 +63,8 @@ public final class RuntimeService {
 			"GRAPPLED", "INCAPACITATED", "INVISIBLE", "PARALYZED", "PETRIFIED", "POISONED", "PRONE", "RESTRAINED",
 			"STUNNED", "UNCONSCIOUS");
 	public static final String UNCONSCIOUS_REF = "srd5e:condition/unconscious";
+	public static final String UNCONSCIOUS_PRONE_SOURCE = "Fell Prone while Unconscious; remains Prone until standing up";
+	public static final String REVIVAL_PRONE_SOURCE = "Revived from Dead; remains Prone until standing up";
 	public static final Set<String> XP_SOURCES = Set.of("QUEST", "MILESTONE", "ROLEPLAY", "EXPLORATION",
 			"CLEVER_SOLUTION", "DISCRETIONARY");
 
@@ -107,6 +109,9 @@ public final class RuntimeService {
 				}
 				locationId = loc.id();
 			}
+			if (locationRef == null || locationRef.isBlank())
+				locationId = se.hirt.mcp.rpg.world.TravelJourneyService.controlledEffectiveLocation(tx, campaignId,
+						locationId);
 			@SuppressWarnings("unchecked")
 			Map<String, Object> hp = (Map<String, Object>) p.get("hp");
 			int maxHp;
@@ -203,7 +208,7 @@ public final class RuntimeService {
 			}
 			if (change == null || change.get("kind") == null) {
 				throw RpgException.invalidArgument(
-						"change.kind is required: HEAL, USE_ITEM, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, USE_RESOURCE, RESTORE_RESOURCE, REDUCE_MAX_HP, RESTORE_MAX_HP, CREATE_SPELL_SLOT, CONVERT_SPELL_SLOT.");
+						"change.kind is required: HEAL, USE_ITEM, DAMAGE, SET_TEMP_HP, ADD_CONDITION, REMOVE_CONDITION, STABILIZE, STAND, USE_RESOURCE, RESTORE_RESOURCE, REDUCE_MAX_HP, RESTORE_MAX_HP, CREATE_SPELL_SLOT, CONVERT_SPELL_SLOT.");
 			}
 			String kind = String.valueOf(change.get("kind")).toUpperCase();
 			String reason = change.get("reason") == null ? null : change.get("reason").toString();
@@ -217,6 +222,9 @@ public final class RuntimeService {
 			}
 			case "USE_ITEM" -> {
 				// A potion drunk outside combat: the same consumable core the encounter USE_ITEM action uses.
+				if ("ENCOUNTER".equals(campaign.str("harness_state")))
+					throw RpgException.notAllowed(
+							"In combat, use perform_encounter_action with kind USE_ITEM on this character's turn; it spends the appropriate Action or Bonus Action.");
 				String text = change.get("item") == null ? null : change.get("item").toString();
 				if (text == null || text.isBlank()) {
 					throw RpgException.invalidArgument(
@@ -350,15 +358,52 @@ public final class RuntimeService {
 				result.put("condition", condition);
 				result.put("removed", removed);
 			}
+			case "STAND" -> {
+				if ("ENCOUNTER".equals(campaign.str("harness_state")))
+					throw RpgException.notAllowed(
+							"In combat, use perform_encounter_action with kind STAND on this character's turn; standing spends half their movement budget.");
+				if (!"ALIVE".equals(c.str("life_state")))
+					throw RpgException.notAllowed(c.str("name") + " cannot stand while " + c.str("life_state") + ".");
+				List<Row> prone = tx.query("SELECT * FROM active_effect WHERE character_id=? AND condition_ref=?",
+						c.id(), conditionRef("PRONE"));
+				if (prone.isEmpty())
+					throw RpgException.notAllowed(c.str("name") + " is not Prone.");
+				int speed = Exhaustion.speed(tx, rules, c);
+				if (speed <= 0 || Combat.hasAny(Combat.conditionsOf(tx, c), Combat.SPEED_ZERO_CONDITIONS))
+					throw RpgException.notAllowed(c.str("name") + " has Speed 0 and cannot stand up.");
+				int cost = speed / 2;
+				long seconds = Math.max(1, (long) Math.ceil(cost * 6.0 / speed));
+				var action = se.hirt.mcp.rpg.world.WorldTimeline.runAction(tx, campaignId,
+						"stand:" + c.id() + ":" + prone.getFirst().id(), "STAND", seconds,
+						Map.of("character", characterRef));
+				if (action.completed()) {
+					for (Row effect : prone)
+						if (tx.find("active_effect", effect.id()).isPresent())
+							se.hirt.mcp.rpg.rules.Effects.end(tx, effect);
+					tx.update("character", c.id(), Map.of("revision", tx.get("character", c.id()).lng("revision") + 1));
+				}
+				result.put("stood_up", action.completed());
+				result.put("completed", action.completed());
+				result.put("movement_cost_ft", cost);
+				result.put("elapsed_seconds", action.progress().elapsedSeconds());
+				result.put("interruptions", action.progress().interruptions());
+				result.put("action", action.reference());
+				result.put("game_time", GameTime.toMap(tx, campaignId, GameTime.currentSeq(tx, campaignId)));
+				result.put("note", action.completed()
+						? "Standing ended Prone and spent half Speed as movement; exploration time advanced through the shared world clock."
+						: "Standing was interrupted before completion. Prone remains; resolve the interruption and repeat STAND to resume.");
+			}
 			case "STABILIZE" -> {
 				if (!"DYING".equals(c.str("life_state"))) {
 					throw RpgException.notAllowed(c.str("name") + " is not dying.");
 				}
 				Map<String, Object> saves = Combat.freshDeathSaves();
 				saves.put("stable", true);
+				saves = se.hirt.mcp.rpg.rules.StableRecovery.schedule(tx, roller, c, saves);
 				tx.update("character", c.id(),
 						Map.of("death_saves_json", Json.write(saves), "revision", c.lng("revision") + 1));
 				result.put("stable", true);
+				result.put("death_saves", saves);
 				result.put("note",
 						"Stable at 0 HP and Unconscious with both death-save counts reset; regains 1 HP after 1d4 hours unless healed, and damage makes it start Death Saving Throws again (SRD 5.2.1).");
 			}
@@ -677,11 +722,59 @@ public final class RuntimeService {
 				ended = true;
 			}
 		}
-		if (ended && tx.count("SELECT COUNT(*) FROM active_effect WHERE character_id = ? AND condition_ref = ?", c.id(),
-				conditionRef("PRONE")) == 0) {
-			addCondition(tx, c.lng("campaign_id"), c.id(), "PRONE", null,
-					"Unconscious ended: the creature remains Prone until it stands up", "MECHANICAL_CONSEQUENCE");
+		if (ended)
+			ensureProneFromUnconscious(tx, c.lng("campaign_id"), c.id());
+		return ended;
+	}
+
+	/** Unconscious includes Prone, and waking does not end it or replace an independent source. */
+	public static void ensureProneFromUnconscious(Tx tx, long campaignId, long characterId) {
+		ensureProne(tx, campaignId, characterId, UNCONSCIOUS_PRONE_SOURCE);
+	}
+
+	private static void ensureProne(Tx tx, long campaignId, long characterId, String source) {
+		var prone = tx.query("SELECT * FROM active_effect WHERE character_id=? AND condition_ref=?", characterId,
+				conditionRef("PRONE"));
+		if (prone.isEmpty())
+			addCondition(tx, campaignId, characterId, "PRONE", null, source, "MECHANICAL_CONSEQUENCE");
+		else
+			for (Row effect : prone)
+				if ("Unconscious ended: the creature remains Prone until it stands up"
+						.equals(effect.str("source_description")))
+					tx.update("active_effect", effect.id(), Map.of("source_description", source));
+	}
+
+	/**
+	 * A life-state fiat retains the legacy reset of non-condition effects and Exhaustion, but does
+	 * not stand the creature up or cure independent conditions. Only Unconscious caused by the
+	 * zero-HP/knock-out recovery being overridden ends; unrelated magical sleep remains in force.
+	 */
+	public static int resetEffectsForLifeOverride(Tx tx, Row character, int restoredHp) {
+		Exhaustion.normalize(tx, character.id());
+		boolean recovering = !"ALIVE".equals(character.str("life_state"))
+				|| restoredHp > character.intOr("current_hp", 0);
+		boolean woke = false;
+		int ended = 0;
+		for (Row effect : tx.query("SELECT * FROM active_effect WHERE character_id=?", character.id())) {
+			String condition = effect.str("condition_ref");
+			if (condition != null && condition.startsWith("srd5e:condition/")) {
+				if (!UNCONSCIOUS_REF.equals(condition))
+					continue;
+				Object until = effect.isNull("duration_json") ? null : effect.map("duration_json").get("until");
+				boolean recoveryLinked = "HP_ABOVE_ZERO".equals(until) || "SHORT_REST".equals(until)
+						|| "dropped to 0 HP".equals(effect.str("source_description"))
+								&& "MECHANICAL_CONSEQUENCE".equals(effect.str("provenance"));
+				if (!recovering || !recoveryLinked)
+					continue;
+				woke = true;
+			}
+			se.hirt.mcp.rpg.rules.Effects.end(tx, effect);
+			ended++;
 		}
+		if ("DEAD".equals(character.str("life_state")))
+			ensureProne(tx, character.lng("campaign_id"), character.id(), REVIVAL_PRONE_SOURCE);
+		else if (woke || "DYING".equals(character.str("life_state")))
+			ensureProneFromUnconscious(tx, character.lng("campaign_id"), character.id());
 		return ended;
 	}
 
@@ -797,9 +890,12 @@ public final class RuntimeService {
 			// Damage at 0 HP: one death-save failure, two on a critical hit; massive damage kills (SRD 5.2.1).
 			Map<String, Object> saves = c.isNull("death_saves_json") ? Combat.freshDeathSaves()
 					: c.map("death_saves_json");
+			boolean wasStable = Boolean.TRUE.equals(saves.get("stable"));
 			int failures = ((Number) saves.getOrDefault("failures", 0)).intValue() + (critical ? 2 : 1);
 			saves.put("failures", Math.min(3, failures));
 			saves.put("stable", false);
+			if (wasStable || !saves.containsKey("next_save_seconds"))
+				saves = se.hirt.mcp.rpg.rules.DyingProgression.scheduleNext(tx, campaignId, saves);
 			if (failures >= 3 || dr.massiveDamage()) {
 				life = "DEAD";
 			}
@@ -808,7 +904,8 @@ public final class RuntimeService {
 		} else if (dr.droppedToZero()) {
 			if (partyMember && !dr.massiveDamage()) {
 				life = "DYING";
-				cols.put("death_saves_json", Json.write(Combat.freshDeathSaves()));
+				cols.put("death_saves_json", Json.write(
+						se.hirt.mcp.rpg.rules.DyingProgression.scheduleNext(tx, campaignId, Combat.freshDeathSaves())));
 				addCondition(tx, campaignId, c.id(), "UNCONSCIOUS", Map.of("until", "HP_ABOVE_ZERO"), "dropped to 0 HP",
 						"MECHANICAL_CONSEQUENCE");
 			} else {
@@ -835,10 +932,47 @@ public final class RuntimeService {
 			markDefeatedInRunningEncounter(tx, c.id());
 		}
 		out.put("life_state", life);
+		if ("DEAD".equals(life) && dr.massiveDamage()) {
+			out.put("massive_damage", true);
+			out.put("death_cause", "MASSIVE_DAMAGE");
+		}
+		if ("DYING".equals(life))
+			out.put("care", careGuidance(tx.get("character", c.id())));
 		if (dr.droppedToZero() && "DYING".equals(life)) {
 			out.put("dropped_to_zero", true);
 		}
 		return out;
+	}
+
+	/** Current death-save status, including compact contexts; reading never creates a deadline. */
+	public static Map<String, Object> deathSaveView(Row character, boolean detailed) {
+		if (!"DYING".equals(character.str("life_state")) || character.intOr("current_hp", -1) != 0)
+			return Map.of();
+		Map<String, Object> saved = character.map("death_saves_json");
+		var view = new LinkedHashMap<String, Object>();
+		if (detailed)
+			view.putAll(saved);
+		view.put("successes", saved.get("successes") instanceof Number n ? n.intValue() : 0);
+		view.put("failures", saved.get("failures") instanceof Number n ? n.intValue() : 0);
+		boolean stable = Boolean.TRUE.equals(saved.get("stable"));
+		view.put("stable", stable);
+		for (String field : stable ? List.of("recovery_due_seconds", "recovery_started_seconds", "recovery_hours")
+				: List.of("next_save_seconds"))
+			if (saved.containsKey(field))
+				view.put(field, saved.get(field));
+		return view;
+	}
+
+	/** Actionable care context for a creature at zero HP; Dying does not end party membership. */
+	public static Map<String, Object> careGuidance(Row character) {
+		if (!"DYING".equals(character.str("life_state")))
+			return Map.of();
+		boolean stable = Boolean.TRUE.equals(character.map("death_saves_json").get("stable"));
+		return Map.of("stable", stable, "guidance", stable
+				? "Stable at 0 Hit Points and Unconscious. Healing restores consciousness; otherwise the saved recovery timer applies."
+				: "At 0 Hit Points and Dying: Death Saving Throws continue. Use applicable healing or, after successful first aid is resolved, apply_runtime_change with kind STABILIZE and this target character.",
+				"healing_targets",
+				"CAST or USE_ITEM with the dying character as target. Dying does not end an existing party membership.");
 	}
 
 	/**
@@ -876,12 +1010,56 @@ public final class RuntimeService {
 
 	public static void endMemberships(Tx tx, long campaignId, long characterId, String state) {
 		long seq = GameTime.currentSeq(tx, campaignId);
-		for (Row m : tx.query(
+		List<Row> memberships = tx.query(
 				"SELECT * FROM party_membership WHERE campaign_id = ? AND character_id = ? AND state IN ('ACTIVE','SEPARATED','GUEST')",
-				campaignId, characterId)) {
+				campaignId, characterId);
+		if ("DEAD".equals(state) && !memberships.isEmpty()) {
+			Row character = tx.get("character", characterId);
+			var agenda = new LinkedHashMap<>(character.map("agenda_json"));
+			agenda.put("party_membership_before_death",
+					memberships.stream().map(m -> Map.of("membership_id", m.id(), "state", m.str("state"))).toList());
+			tx.update("character", characterId, Map.of("agenda_json", Json.write(agenda)));
+		}
+		for (Row m : memberships) {
 			tx.update("party_membership", m.id(),
 					Map.of("state", state, "left_time", GameTime.render(seq), "left_seq", seq));
 		}
+	}
+
+	/** Undo only a death-ended membership, preserving guests and separated companions. */
+	public static List<Map<String, Object>> restoreMembershipAfterRevival(Tx tx, long campaignId, long characterId) {
+		Row character = tx.get("character", characterId);
+		var agenda = new LinkedHashMap<>(character.map("agenda_json"));
+		Object saved = agenda.remove("party_membership_before_death");
+		var restored = new ArrayList<Map<String, Object>>();
+		Row latest = tx.queryOne(
+				"SELECT * FROM party_membership WHERE campaign_id=? AND character_id=? ORDER BY id DESC LIMIT 1",
+				campaignId, characterId).orElse(null);
+		if (latest != null && "DEAD".equals(latest.str("state"))) {
+			String prior = null;
+			if (saved instanceof List<?> entries)
+				for (Object value : entries)
+					if (value instanceof Map<?, ?> entry && entry.get("membership_id") instanceof Number id
+							&& id.longValue() == latest.id()
+							&& Set.of("ACTIVE", "SEPARATED", "GUEST").contains(String.valueOf(entry.get("state"))))
+						prior = String.valueOf(entry.get("state"));
+			// Legacy dead primary PCs must remain the party's primary character; other legacy memberships require REJOIN.
+			if (prior == null && tx.count(
+					"SELECT COUNT(*) FROM player_control_assignment WHERE campaign_id=? AND character_id=? AND active=1",
+					campaignId, characterId) > 0)
+				prior = "ACTIVE";
+			if (prior != null) {
+				var changes = new LinkedHashMap<String, Object>();
+				changes.put("state", prior);
+				changes.put("left_time", null);
+				changes.put("left_seq", null);
+				tx.update("party_membership", latest.id(), changes);
+				restored.add(Map.of("membership_id", latest.id(), "state", prior));
+			}
+		}
+		if (saved != null)
+			tx.update("character", characterId, Map.of("agenda_json", Json.write(agenda)));
+		return restored;
 	}
 
 	// ── award_xp ───────────────────────────────────────────────────────

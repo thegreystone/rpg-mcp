@@ -54,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static se.hirt.mcp.rpg.TestCampaigns.committedCampaign;
 import static se.hirt.mcp.rpg.TestCampaigns.engine;
 import static se.hirt.mcp.rpg.TestCampaigns.map;
+import static se.hirt.mcp.rpg.TestCampaigns.meleeZones;
 import static se.hirt.mcp.rpg.TestCampaigns.op;
 import static se.hirt.mcp.rpg.TestCampaigns.tempDb;
 
@@ -372,7 +373,7 @@ class DamageResistanceTest {
 		// The rogue rolls 20 and the ghost 1; no tie-break die follows a d20 (SRD 5.2.1 "Initiative").
 		((ScriptedRollService) engine.roller()).queue(20, 1);
 		Map<String, Object> started = engine.encounters().start(op(), campaign,
-				map("party", List.of(rogue), "foes", List.of(ghost)), null, null, null, null, null);
+				map("party", List.of(rogue), "foes", List.of(ghost)), null, meleeZones(rogue, ghost), null, null, null);
 		assertEquals(rogue, m(started.get("turn")).get("character"));
 		return (String) started.get("encounter");
 	}

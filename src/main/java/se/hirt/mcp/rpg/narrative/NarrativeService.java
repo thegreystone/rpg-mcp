@@ -1169,7 +1169,8 @@ public final class NarrativeService {
 		if (!c.isNull("location_id")) {
 			tx.find("location", c.lng("location_id"))
 					.ifPresent(l -> m.put("location", Ref.of(Ref.LOCATION, l.id()) + " (" + l.str("name") + ")"));
-			m.put("with_party", partyLocation == null || partyLocation.equals(c.lng("location_id")));
+			m.put("with_party",
+					se.hirt.mcp.rpg.world.WorldService.partyCoLocated(tx, c.lng("campaign_id"), c, partyLocation));
 		}
 		if (explicit) {
 			Map<String, Object> intimacy = Biography.publicIntimacy(tx, c);

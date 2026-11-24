@@ -53,6 +53,12 @@ public final class Database implements AutoCloseable {
 	private final Path file;
 	private final Connection conn;
 	private final ReentrantLock lock = new ReentrantLock();
+	private se.hirt.mcp.rpg.dice.RollService rollService;
+
+	/** Share the engine's dice source with mechanics reached through the central clock. */
+	public void configureRollService(se.hirt.mcp.rpg.dice.RollService rollService) {
+		this.rollService = java.util.Objects.requireNonNull(rollService);
+	}
 
 	public Database(Path file) {
 		this.file = file;
@@ -89,11 +95,16 @@ public final class Database implements AutoCloseable {
 		}
 	}
 
+	/** Probe a completed operation before external asset decoding; repeats need no source file. */
+	public Optional<Map<String, Object>> replay(Mutation mutation) {
+		return read(tx -> checkIdempotency(tx, mutation));
+	}
+
 	/** A read-only unit of work. */
 	public <T> T read(Function<Tx, T> work) {
 		lock.lock();
 		try {
-			Tx tx = new Tx(conn, false, -1, null);
+			Tx tx = new Tx(conn, false, -1, null, rollService);
 			try {
 				return work.apply(tx);
 			} finally {
@@ -115,7 +126,7 @@ public final class Database implements AutoCloseable {
 		lock.lock();
 		try {
 			try {
-				Tx probe = new Tx(conn, false, -1, mutation.campaignId());
+				Tx probe = new Tx(conn, false, -1, mutation.campaignId(), rollService);
 				Optional<Map<String, Object>> replay = checkIdempotency(probe, mutation);
 				if (replay.isPresent()) {
 					conn.rollback();
@@ -123,7 +134,7 @@ public final class Database implements AutoCloseable {
 				}
 				String argsHash = mutation.args() == null ? null : Json.hash(mutation.args());
 				long journalId = reserveJournalEntry(probe, mutation, argsHash);
-				Tx tx = new Tx(conn, true, journalId, mutation.campaignId());
+				Tx tx = new Tx(conn, true, journalId, mutation.campaignId(), rollService);
 				Map<String, Object> result = work.apply(tx);
 				finishJournalEntry(tx, mutation, result);
 				conn.commit();
@@ -180,7 +191,7 @@ public final class Database implements AutoCloseable {
 		cols.put("provenance", m.provenance() == null ? "GM" : m.provenance());
 		cols.put("recorded_at", Instant.now().toString());
 		cols.put("undo_json", "[]");
-		Tx writer = new Tx(conn, true, -1, m.campaignId());
+		Tx writer = new Tx(conn, true, -1, m.campaignId(), rollService);
 		return writer.rawInsert("journal_entry", cols);
 	}
 

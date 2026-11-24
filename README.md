@@ -170,8 +170,9 @@ to the data directory itself, so nothing else is needed.
 
 ### Where your campaigns live
 
-All state is a single SQLite file, `rpg.db`, under `~/.rpg-mcp` (`%USERPROFILE%\.rpg-mcp` on Windows).
-Set `RPG_DATA_DIR` or `-Drpg.data-dir=...` to move it. Back up that directory and your campaigns are
+Canonical game state is in `rpg.db` under `~/.rpg-mcp` (`%USERPROFILE%\.rpg-mcp` on Windows);
+imported map artwork is retained alongside it in campaign asset directories.
+Set `RPG_DATA_DIR` or `-Drpg.data-dir=...` to move the data directory. Back up that directory and your campaigns are
 safe. Rules content (SRD 5.2.1) is embedded in the binary and imported on first run — nothing else to
 install, no network access, no account.
 
@@ -226,6 +227,9 @@ purchases, fights and level-ups.
   audited GM override, and you are told when one happens.
 - **Checkpoints** can be made before dangerous scenes and restored later; everything after the checkpoint
   is rolled back in one transaction.
+- **Maps remember the place.** Travel follows saved roads and geography; fights use local grids with party
+  markers and incremental reveal. Ask to inspect a move, show a player map or add a note. Text-only clients
+  use the same positions and rules. See the [DM map workflow](docs/MAP_USAGE.md) for authoring and custom textures.
 - **End the session** by saying so. Your AI saves a summary for the next session's recap.
 
 ### Coming back, weeks later
@@ -253,19 +257,35 @@ If several campaigns are available, it asks which one you want. Chat transcripts
   Load the guide once per conversation; later state checks stay compact. A fresh install should report
   `CAMPAIGN_SELECTION` and no campaigns. If `get_instructions` is missing, upgrade to version 0.1.8
   or later and reconnect the client.
-- **No log output** — logs go to `rpg-mcp-server.log` in the data directory (`~/.rpg-mcp` by default),
-  never to stdout/stderr, so they cannot corrupt the STDIO transport. Check that file first.
+- **No log output** — normal logs go to `logs/rpg-mcp-server-<runtime-id>.log` under the selected data
+  directory (`~/.rpg-mcp` by default). Each server instance has its own rotating log, so concurrent
+  Windows instances do not contend over one file. `QUARKUS_LOG_FILE_PATH` explicitly overrides the
+  path. Stdout remains reserved for MCP; startup/file-handler failures may still be reported on stderr.
+  Default-log maintenance retains up to 32 prior inactive runtime groups within 32 MiB, including backups;
+  the current runtime and active sessions are preserved. Explicit log paths are user-managed. Unmarked legacy logs on Unix
+  are left alone because their active owner cannot be established safely.
 - **The AI improvises mechanics instead of calling tools** — ask it to call `get_instructions` and follow
   the guide, using the RPG tools for rolls and canonical state. Every new conversation should load those
   instructions before starting or continuing a campaign.
 - **The AI batches setup questions** — tell it to follow the guide and ask one decision per turn, listing
   every option. `get_setup_state` returns the ordered `decisions` list it should be walking.
-- **Starting over** — `~/.rpg-mcp/rpg.db` holds everything. Move it aside for a clean slate (and keep it
-  if you might want the campaign back).
+- **Starting over** — move the data directory (`~/.rpg-mcp` by default) aside for a clean slate.
+  Keep its database and campaign assets together if you might want the campaign back.
 
 ## Documentation
 
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — planned improvements and their acceptance criteria.
+- [`docs/MAP_IMPLEMENTATION_PLAN.md`](docs/MAP_IMPLEMENTATION_PLAN.md) — implemented map capabilities, service boundaries,
+  deferred limits and final verification gates.
+- [`docs/MAP_USAGE.md`](docs/MAP_USAGE.md) — dungeon blueprints, grid play, PNG/text views, custom textures,
+  regional authoring, atlas references, living notes, patrols and interrupted journeys.
+- [`docs/MAP_PLAYTEST_REPORT.md`](docs/MAP_PLAYTEST_REPORT.md) — map validation evidence and platform-specific results.
+- [`docs/DUNGEON_MAPS.md`](docs/DUNGEON_MAPS.md) — dungeon design targets, incremental reveal, default materials
+  and custom materials, tool-rendered images, custom geometry, multi-room encounters and party markers.
+- [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md) — shared map design and broader outdoor cartography targets,
+  including city/regional profiles, travel distances, roadside stops, terrain and artwork alignment.
+- [`docs/WORLD_MAP_GENERATION.md`](docs/WORLD_MAP_GENERATION.md) — LLM authoring guidance for
+  creative, believable regions, varied starting locations, coasts, oceans, islands and atlas expansion.
 - [`docs/DEVGUIDE.md`](docs/DEVGUIDE.md) — the implemented tool surface, the persistence architecture,
   building from source and cutting a release.
 - [`docs/`](docs/) — the design documents: [`PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md),
