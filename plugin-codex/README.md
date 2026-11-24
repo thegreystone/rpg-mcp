@@ -1,6 +1,6 @@
 # RPG MCP for Codex
 
-This portable plugin supplies the RPG MCP server, a setup workflow, the `rpg` skill and an icon. It starts a
+This Codex plugin supplies the RPG MCP server, a setup workflow, the `rpg` skill and an icon. It starts a
 local native executable through a dependency-free Node.js launcher; Node.js 18 or newer must be available
 to the Codex process. No npm package or JVM is required.
 
@@ -53,20 +53,37 @@ The launcher supports Linux x86_64 and ARM64, macOS Apple silicon, and Windows x
 native host architecture, including Apple silicon under Rosetta. Unsupported platforms produce an explicit
 error; use `--binary` or `RPG_MCP_BINARY` for a compatible executable you built yourself.
 
+## Codex package format
+
+The package uses Codex's [compatibility format](https://developers.openai.com/plugins/build/plugins):
+`.codex-plugin/plugin.json` explicitly registers `./skills/` and `./.mcp.json`. Codex
+0.166.0-alpha.5.1 applies a shared tool-schema budget to portable Agent Plugins, which hides part of the
+RPG tool set. Compatibility plugins do not use that budget. Keep the root `plugin.json` absent: Codex
+prefers it over the compatibility manifest. Keep the MCP configuration in `.mcp.json`, not `mcp.json`.
+The local-executor flag and display metadata belong at the manifest root; the setup entry point remains
+in `extensions.com.openai.onboardingSkill`.
+
+If you previously added a standalone MCP registration to work around missing tools, remove that
+registration and any override that disables the plugin's `rpg-mcp` server after updating the plugin.
+Start a new chat with one active registration.
+
 ## Maintaining the release pin
 
-After publishing and signing a native release, update `RELEASE_VERSION` in `scripts/rpg-mcp.mjs` and
-`version` in `plugin.json` together. Verify that the release has every supported native asset. The
-launcher installs exactly that version, rather than following `latest`. The Claude plugin's MCP Bundle URL
+After publishing and signing a native release, update `RELEASE_VERSION` in `scripts/rpg-mcp.mjs`.
+Verify that the release has every supported native asset. The launcher installs exactly that version,
+rather than following `latest`. Increment `version` in `.codex-plugin/plugin.json` whenever the Codex
+package changes. A packaging-only release can advance the plugin version without changing the native
+release pin: plugin 0.2.1 still uses native release 0.2.0. The Claude plugin's MCP Bundle URL
 in [`plugin/.claude-plugin/plugin.json`](../plugin/.claude-plugin/plugin.json) is a separate pin and must
 also be updated for a release intended for both clients.
 
 The `rpg` skill is a short entry point; the Game Master guide itself comes from the server through
 `get_instructions`, so the skill rarely needs to change when the protocol does.
 
-To check the launcher without downloading a release or touching a campaign, run its Node test suite:
+To check the package and launcher without downloading a release or touching a campaign, run the Node
+test suites from the repository root:
 
 ```text
 node --check plugin-codex/scripts/rpg-mcp.mjs
-node --test plugin-codex/tests/launcher.test.mjs
+node --test plugin-codex/tests
 ```
