@@ -195,7 +195,8 @@ class EncounterRecordTest {
 			var slots = SceneService.maps(ended.get("highlights_needing_narration"));
 			assertTrue(slots.size() >= 3 && slots.size() <= 8);
 			assertTrue(slots.stream().allMatch(slot -> "".equals(slot.get("narration"))));
-			assertEquals("grant_loot", SceneService.map(record.get("loot")).get("tool"));
+			assertEquals("inventory", SceneService.map(record.get("loot")).get("tool"));
+			assertEquals("GRANT_LOOT", SceneService.map(record.get("loot")).get("action"));
 		}
 	}
 

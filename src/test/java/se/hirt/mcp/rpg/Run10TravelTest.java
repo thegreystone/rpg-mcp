@@ -162,7 +162,7 @@ class Run10TravelTest {
 					assertTrue(refusal.getMessage().contains("CLOSED and locked"));
 				if ("CLOSED".equals(state.get("state")))
 					assertEquals(!Boolean.TRUE.equals(state.get("locked")),
-							refusal.getMessage().contains("update_map_object"));
+							refusal.getMessage().contains("map_play:UPDATE_OBJECT"));
 				assertEquals(rooms.vault(), location(e, "character:1"));
 				assertEquals(clock, clock(e, campaign));
 				assertEquals(before, e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)));

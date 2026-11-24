@@ -160,7 +160,7 @@ public final class MapAuthoringService {
 					.withDetail("readiness",
 							map("stage", prep.str("stage"), "ready_for_entry", false, "room_count",
 									payload.get("room_count"), "levels", payload.get("levels")))
-					.withDetail("next_operation", "revise_map_preparation")
+					.withDetail("next_operation", "map_preparation:REVISE")
 					.withDetail("suggested_changes", Map.of("generate_layout", true));
 		}
 	}
@@ -447,7 +447,7 @@ public final class MapAuthoringService {
 			List<Map<String, Object>> lights = maps(p.get("lights"));
 			if (objects.isEmpty() && decor.isEmpty())
 				optional.add(
-						"Visual dressing pass recommended: no furnishings, props or decor are placed yet. Add recognizable props (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, pillar_round, brazier, rug, tree, boulder) via revise_map_preparation and optionally preview with render_map before publishing.");
+						"Visual dressing pass recommended: no furnishings, props or decor are placed yet. Add recognizable props (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, pillar_round, brazier, rug, tree, boulder) via map_preparation:REVISE and optionally preview with render_map before publishing.");
 			if (!rooms.isEmpty() && rooms.stream()
 					.allMatch(room -> "STONE".equalsIgnoreCase(text(room.getOrDefault("material", "STONE")))))
 				optional.add(
@@ -463,7 +463,7 @@ public final class MapAuthoringService {
 				prep.map("reference_map_json"), "ready", issues.isEmpty(), "violations",
 				issues.stream().map(Violation::toMap).toList(), "required_gaps",
 				issues.stream().map(Violation::message).toList(), "optional_gaps", optional, "next_operation",
-				issues.isEmpty() ? "publish_map_preparation" : "revise_map_preparation", "audience", "GM", "meta",
+				issues.isEmpty() ? "map_preparation:PUBLISH" : "map_preparation:REVISE", "audience", "GM", "meta",
 				Harness.meta(campaign, null));
 		if (Set.of("DRAFT", "ACCEPTED").contains(prep.str("status"))) {
 			result.put("authoring_guidance",

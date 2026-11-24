@@ -10,7 +10,6 @@ import se.hirt.mcp.rpg.protocol.Ref;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
@@ -39,8 +38,8 @@ class Run8RecallTest {
 			RpgTools tools = new RpgTools();
 			tools.engine = e;
 			String ending = op();
-			var delivered = result(tools.endEncounter(ending, campaign, "OTHER", Optional.of(encounter),
-					Optional.of("The test fight ends."), Optional.empty()));
+			var delivered = result(tools.encounter("END", campaign, ending,
+					Map.of("outcome", "OTHER", "encounter", encounter, "summary", "The test fight ends.")));
 			var prompts = SceneService.maps(delivered.get("highlights_needing_narration"));
 			assertEquals(8, prompts.size());
 			int bytes = Json.utf8(Json.write(prompts)).length;
@@ -57,7 +56,7 @@ class Run8RecallTest {
 			assertTrue(highlights.stream().allMatch(row -> !SceneService.map(row.get("mechanics")).isEmpty()));
 			assertTrue(highlights.stream().anyMatch(row -> row.get("summary").toString().length() > 120));
 			assertTrue(Json.utf8(Json.write(highlights)).length > bytes * 2);
-			assertEquals("get_encounter_state", SceneService.map(delivered.get("full_gm_record")).get("tool"));
+			assertEquals("encounter", SceneService.map(delivered.get("full_gm_record")).get("tool"));
 			assertEquals("record", SceneService.map(delivered.get("full_gm_record")).get("field"));
 			String saved = Json.hash(full);
 			assertEquals(saved, Json.hash(SceneService.map(
@@ -76,8 +75,8 @@ class Run8RecallTest {
 			assertEquals(1L, e.db().read(
 					tx -> tx.count("SELECT COUNT(*) FROM event WHERE campaign_id=? AND type='ENCOUNTER_RESOLVED'", cid))
 					.longValue());
-			var replay = result(tools.endEncounter(ending, campaign, "OTHER", Optional.of(encounter),
-					Optional.of("The test fight ends."), Optional.empty()));
+			var replay = result(tools.encounter("END", campaign, ending,
+					Map.of("outcome", "OTHER", "encounter", encounter, "summary", "The test fight ends.")));
 			assertEquals(true, replay.get("replayed"));
 			assertEquals(prompts, replay.get("highlights_needing_narration"));
 			e.checkpoints().restore(op(), campaign, checkpoint, "Undo only the later annotations.");

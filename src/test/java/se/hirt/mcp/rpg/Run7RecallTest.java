@@ -54,7 +54,7 @@ class Run7RecallTest {
 			assertFalse(abbreviated.isEmpty());
 			for (var row : abbreviated) {
 				assertTrue(row.get("encounter").toString().startsWith("encounter:"));
-				assertEquals("get_encounter_state", SceneService.map(row.get("full_gm_record")).get("tool"));
+				assertEquals("encounter", SceneService.map(row.get("full_gm_record")).get("tool"));
 				assertTrue(row.get("summary").toString().contains("Encounter"));
 			}
 			assertTrue(Json.write(recent).length() < Json.write(timeline).length() / 2);

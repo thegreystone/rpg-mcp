@@ -82,7 +82,7 @@ class LevelUpTest {
 			RpgException gated = assertThrows(RpgException.class, () -> engine.checks().resolveCheck(op(), campaign, pc,
 					"ABILITY_CHECK", "STR", null, 10, null, null));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, gated.code());
-			assertTrue(((List<?>) gated.details().get("allowed_operations")).contains("commit_level_up"));
+			assertTrue(((List<?>) gated.details().get("allowed_operations")).contains("level_up:COMMIT"));
 
 			// A sorcerer reaching level 2 owes two Metamagic options (SRD 5.2.1); until they are chosen the
 			// transaction does not validate. Hit points themselves are preset by the campaign policy.

@@ -98,7 +98,7 @@ class SessionGapsTest {
 			Map<String, Object> boot = engine.sessions().bootstrap(op(), campaign, null);
 			Map<String, Object> meta = m(boot.get("meta"));
 			assertEquals("ENCOUNTER", meta.get("harness_state"), "bootstrap keeps the running fight");
-			assertTrue(list(meta.get("allowed_operations")).contains("perform_encounter_action"));
+			assertTrue(list(meta.get("allowed_operations")).contains("encounter:ACTION"));
 			assertEquals("RUNNING", engine.encounters().encounterState(campaign, encounter, 3).get("status"));
 		}
 	}
@@ -115,7 +115,7 @@ class SessionGapsTest {
 			Map<String, Object> boot = engine.sessions().bootstrap(op(), campaign, null);
 			Map<String, Object> meta = m(boot.get("meta"));
 			assertEquals("LEVEL_UP", meta.get("harness_state"), "bootstrap keeps the open level-up");
-			assertTrue(list(meta.get("allowed_operations")).contains("commit_level_up"));
+			assertTrue(list(meta.get("allowed_operations")).contains("level_up:COMMIT"));
 			assertEquals(transaction, m(engine.campaigns().open(campaign).get("pending_transaction")).get("ref"));
 		}
 	}
@@ -133,7 +133,7 @@ class SessionGapsTest {
 					"Persuasion", 10, null, "offering terms");
 			assertNotNull(m(parley.get("roll")).get("roll_ref"));
 			assertEquals("ENCOUNTER", m(parley.get("meta")).get("harness_state"), "the fight is still on");
-			assertTrue(((List<?>) m(parley.get("meta")).get("allowed_operations")).contains("resolve_check"));
+			assertTrue(((List<?>) m(parley.get("meta")).get("allowed_operations")).contains("roll_check:CHECK"));
 		}
 	}
 

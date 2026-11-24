@@ -30,7 +30,6 @@ package se.hirt.mcp.rpg;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import io.quarkiverse.mcp.server.TextContent;
 import io.quarkiverse.mcp.server.ToolResponse;
@@ -175,11 +174,11 @@ class DiceValidationTest {
 			long journalBefore = engine.db()
 					.read(tx -> tx.count("SELECT COUNT(*) FROM journal_entry WHERE campaign_id = ?", campaignId));
 			ScriptedRollService dice = (ScriptedRollService) engine.roller();
-			DiceTools tools = new DiceTools();
+			RpgTools tools = new RpgTools();
 			tools.engine = engine;
 			dice.queue(2, 6, 4);
 			for (String invalid : List.of("1d6+", "2d6kh0", "2d6dl2", "999999999999999999999d6", "2147483647+1d6")) {
-				ToolResponse rejected = tools.rollDice(op(), campaign, invalid, Optional.empty(), Optional.empty());
+				ToolResponse rejected = tools.rollCheck("DICE", campaign, op(), Map.of("expression", invalid));
 				assertTrue(rejected.isError(), invalid);
 				Map<String, Object> response = Json.readMap(((TextContent) rejected.firstContent()).text());
 				assertEquals(ErrorCode.INVALID_ARGUMENT.name(), ((Map<?, ?>) response.get("error")).get("code"),

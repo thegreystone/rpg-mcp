@@ -1,3 +1,31 @@
+/*
+ * Copyright (C) 2026 Marcus Hirt
+ *
+ * This software is free:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESSED OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package se.hirt.mcp.rpg;
 
 import io.quarkiverse.mcp.server.Tool;
@@ -13,292 +41,196 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import java.nio.file.Path;
 import java.util.*;
 
-/** Map authoring, physical queries and optional image delivery over the same campaign state. */
+/** Consolidated map authoring, spatial play and PNG/text map rendering tools. */
 public class MapTools {
 	@Inject
 	Engine engine;
-
-	@Tool(name = "add_encounter_participants", description = "MUTATING. Join existing physically present actors to an existing encounter side. Server rolls initiative once and preserves the current turn, budgets, HP and exploration. Arrivals ahead of the current initiative wait until next round. Resolve pending choices first; this never spawns or relocates a guard.")
-	ToolResponse addParticipants(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Existing encounter reference, for example encounter:3.")
-		String encounter,
-		@ToolArg(description = "Existing side names mapped to character references, for example {ENEMY:[character:9]}. Actors must already be physically present.")
-		Map<String, List<String>> sides) {
-		return ToolSupport.run("add_encounter_participants",
-				() -> engine.encounters().addParticipants(operation_id, campaign, encounter, sides));
-	}
 
 	private se.hirt.mcp.rpg.maps.MapBundleService bundles() {
 		return new se.hirt.mcp.rpg.maps.MapBundleService(engine.db(), engine.maps(), engine.mapAssets(),
 				engine.db().file().toAbsolutePath().getParent());
 	}
 
-	@Tool(name = "export_map_bundle", description = "Read-only canonical state. Export a GM map authoring snapshot and required artwork to a managed .rpgmap.zip. Includes private content; use PLAYER rendering for a player handout. Campaign checkpoints remain authoritative for restoring play.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse exportBundle(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-	String map) {
-		return ToolSupport.run("export_map_bundle", () -> bundles().exportMap(campaign, map));
-	}
-
-	@Tool(name = "import_map_bundle", description = "MUTATING. Import a bounded .rpgmap.zip into a reviewed draft and immutable campaign assets. source_ref_mappings resolves references explicitly. Importing does not publish occupants or grant loot.")
-	ToolResponse importBundle(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign,
-		@ToolArg(description = "Absolute server-readable source file path. The server copies the source into managed campaign storage.")
-		String source_path,
-		@ToolArg(description = "Source references mapped to existing destination campaign references. Unresolved external references require review.")
-		Optional<Map<String, String>> source_ref_mappings) {
-		return ToolSupport.run("import_map_bundle", () -> bundles().importBundle(operation_id, campaign,
-				Path.of(source_path), source_ref_mappings.orElse(Map.of())));
-	}
-
-	@Tool(name = "use_map_transition", description = "MUTATING exploration movement through a saved staircase, ladder or portal. Requires being within reach and a traversable passage. During combat use MOVE {portal:key} to preserve reactions and movement budgets.")
-	ToolResponse transition(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Character reference, for example character:4. This is the actor whose figurine or perception is used.")
-		String character,
-		@ToolArg(description = "Stable transition key from the saved map, for example cellar-stairs. Read GM map context to find transition keys.")
-		String portal) {
-		return ToolSupport.run("use_map_transition",
-				() -> compact(engine.scenes().transit(operation_id, campaign, map, character, portal)));
-	}
-
-	@Tool(name = "update_map_annotations", description = "MUTATING. Add an exact WORLD_POI at point_ft coordinates or a sourced NOTE/REPORT with appropriate PARTY/GM/character scope. Reports may remain approximate; a rumor does not invent a precise castle position. Re-render the same saved map after adding features.")
-	ToolResponse annotate(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Revision returned by the previous read. Omit to use the latest revision; a supplied stale revision is rejected.")
-		Optional<Long> expected_revision,
-		@ToolArg(description = "WORLD_POI: {key,kind:WORLD_POI,name,point_ft:[x,y],location_ref} or create_location:{name,kind}. NOTE/REPORT: {key,kind,text,observer:PARTY|GM|character:N,source}; reports may be approximate.")
-		Map<String, Object> annotation) {
-		return ToolSupport.run("update_map_annotations",
-				() -> engine.maps().annotate(operation_id, campaign, map, expected_revision.orElse(null), annotation));
-	}
-
-	@Tool(name = "convert_encounter_to_grid", description = "MUTATING. Explicitly convert a legacy running zone encounter to validated saved grid positions. Preserves initiative, HP, resources and pending choices; options supplies established placements/assumptions. New encounters already use grids.")
-	ToolResponse convert(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Existing encounter reference, for example encounter:3.")
-		String encounter,
-		@ToolArg(description = "Optional documented operation settings. Read the tool description for accepted settings; omitted settings use defaults.")
-		Optional<Map<String, Object>> options) {
-		return ToolSupport.run("convert_encounter_to_grid",
-				() -> engine.encounters().convertToGrid(operation_id, campaign, encounter, options.orElse(Map.of())));
-	}
-
-	@Tool(name = "begin_map_preparation", description = "MUTATING. Save a DUNGEON blueprint, SCENE or REGION proposal. Rooms/connections/rewards/objects/decor/lights/features use stable local keys. Dungeons need no geometry until realization. Dungeon illumination defaults DARK; author illumination BRIGHT or DIM when the setting is lit. Locks, secrets and declared TRAP objects receive saved GM challenge guidance with difficulty 15 unless authored otherwise; override challenges per feature to suit the site. Take a final graphics and mood pass (room materials, catalog props on objects/decor, mood lights, optional GM draft render_map) before publishing. Returns gaps and the next operation. Draft contents are not live loot or occupants.")
-	ToolResponse begin(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign,
-		@ToolArg(description = "Preparation kind: DUNGEON, SCENE or REGION. Set proposal.stage to BLUEPRINT when accepting semantic dungeon commitments before geometry.")
-		String kind,
-		@ToolArg(description = "Map proposal with name and stable keyed rooms/connections/objects/decor/lights/rewards, or regional features. SCENE geometry uses bounds_ft:[x,y,width,height] and room rect_ft or polygon_ft in feet. Objects and non-blocking decor accept prop names from rpg://maps/catalog (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, barrel, pillar_round, brazier, rug, tree, boulder), rotation_deg and tint. Lights accept {key, position_ft:[x,y], level, preset|color, radius_ft, intensity}. Per-feature challenges may contain pick_lock, discover, disarm or force_open check specifications using resolve_check fields: difficulty (whole DC 1-40), kind, ability, optional skill/tool. TRAP objects are concealed by default; known_hazard:true or concealed:false marks an apparent/revealed hazard. These are GM guidance; checks do not automatically reveal, unlock or disarm anything.")
-		Map<String, Object> proposal) {
-		return ToolSupport.run("begin_map_preparation",
-				() -> engine.maps().begin(operation_id, campaign, kind, proposal));
-	}
-
-	@Tool(name = "revise_map_preparation", description = "MUTATING. Revise a saved preparation in bounded keyed batches, including rooms, objects, non-blocking decor and mood lights for a final graphics pass. generate_layout:true requests an optional layout helper. Accepted facts and canonical references survive realization.")
-	ToolResponse revise(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign,
-		@ToolArg(description = "Saved preparation reference, for example preparation:5, returned by begin_map_preparation.")
-		String preparation,
-		@ToolArg(description = "Revision returned by the previous read. Omit to use the latest revision; a supplied stale revision is rejected.")
-		Optional<Long> expected_revision,
-		@ToolArg(description = "Keyed changes to the current document or state. Preserve stable keys and canonical references; see the tool description for supported fields.")
-		Map<String, Object> changes) {
-		return ToolSupport.run("revise_map_preparation", () -> engine.maps().revise(operation_id, campaign, preparation,
-				expected_revision.orElse(null), changes));
-	}
-
-	@Tool(name = "validate_map_preparation", description = "Read-only. Validate commitments, geometry, references and publication readiness without creating live content.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse validate(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign,
-		@ToolArg(description = "Saved preparation reference, for example preparation:5, returned by begin_map_preparation.")
-		String preparation) {
-		return ToolSupport.run("validate_map_preparation", () -> engine.maps().validate(campaign, preparation));
-	}
-
-	@Tool(name = "correct_map_geometry", description = "MUTATING audited correction or visual dressing pass on an existing tactical map. Structural geometry and decor/lights/material changes require being outside combat. During combat only illumination or rooms:[{key,illumination}] is accepted, recording a DM-adjudicated lighting event without spending an Action or automatically resolving a torch/cantrip. Set illumination BRIGHT|DIM|DARK for the map, or keyed room overrides. Room illumination takes precedence over map ambient light; this does not simulate carried lights or light propagation. Preserves stable rooms/passages, actor positions, loot and object state. Rejects invalid current footprints or transitions. Supply the current map revision and an explanation; use ordinary gameplay tools for damage, locks and doors.")
-	ToolResponse correctGeometry(
-		@ToolArg(description = "Unique idempotency key. Reuse only to retry this identical correction.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Published tactical map reference, for example map:2.")
-		String map, @ToolArg(description = "Current revision from GM map context. Stale corrections are rejected.")
-		long expected_revision,
-		@ToolArg(description = "Bounded patch: illumination BRIGHT|DIM|DARK, rooms:[{key,illumination|material|rect_ft|polygon_ft|holes_ft}], door segments by key, portal endpoints by key, bounds_ft, walls, terrain, non-blocking decor or mood lights. Semantic keys, levels, references and live object state cannot be changed.")
-		Map<String, Object> patch,
-		@ToolArg(description = "Why the geometry was mistaken, what visual dressing was added, or what resolved event changes the ambient illumination. For example: the braziers have been lit.")
-		String reason) {
-		return ToolSupport.run("correct_map_geometry",
-				() -> engine.maps().correctGeometry(operation_id, campaign, map, expected_revision, patch, reason));
-	}
-
-	@Tool(name = "publish_map_preparation", description = "MUTATING. After the DM reviews/tunes the draft, atomically accept a semantic blueprint or publish validated playable geometry. Structural readiness does not certify encounter or treasure balance; revise bosses, defenses and keyed rewards before publishing. Resolves local keys once; retries never duplicate loot, rooms or passages. A separate preparation at an already published site returns a duplicate-realization warning; use correct_map_geometry to change existing illumination without creating another copy.")
-	ToolResponse publish(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign,
-		@ToolArg(description = "Saved preparation reference, for example preparation:5, returned by begin_map_preparation.")
-		String preparation,
-		@ToolArg(description = "Revision returned by the previous read. Omit to use the latest revision; a supplied stale revision is rejected.")
-		Optional<Long> expected_revision) {
-		return ToolSupport.run("publish_map_preparation",
-				() -> engine.maps().publish(operation_id, campaign, preparation, expected_revision.orElse(null)));
-	}
-
-	@Tool(name = "get_map_context", description = "Read-only bounded map/preparation/atlas context. audience PLAYER filters unseen geometry, occupants and private metadata. GM returns authoring facts. Level defaults to zero.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse context(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign,
-		@ToolArg(description = "Saved map:N, preparation:N, atlas:N or signed sheet address atlas:N[x,y]. Preparations and atlas authoring context require audience GM.")
-		String reference,
-		@ToolArg(description = "PLAYER (default) returns only permitted party knowledge. GM returns private authoring context; never forward GM output as a player handout.")
-		Optional<String> audience,
-		@ToolArg(description = "Numeric map level. Defaults to 0; use saved room and transition levels, including negative levels where authored.")
-		Optional<Integer> level,
-		@ToolArg(description = "SUMMARY (default) returns bounded context; FULL includes detailed permitted geometry for the selected level")
-		Optional<String> detail) {
-		return ToolSupport.run("get_map_context", () -> {
-			if (reference.startsWith("map:")) {
-				var context = engine.scenes().context(campaign, reference, audience.orElse("PLAYER"), level.orElse(0));
-				return "FULL".equalsIgnoreCase(detail.orElse("SUMMARY")) ? context : compact(context);
+	@Tool(name = "map_preparation", description = "Staged DUNGEON/SCENE/REGION map authoring, texture assets and portable bundles (GM private; see get_instructions topic MAPS and rpg://maps/catalog). Actions: "
+			+ "BEGIN (mut) {kind: DUNGEON|SCENE|REGION, proposal}; "
+			+ "REVISE (mut) {preparation, changes, expected_revision?}; " + "VALIDATE (read) {preparation}; "
+			+ "PUBLISH (mut) {preparation, expected_revision?}; " + "IMPORT_ASSET (mut) {source_path, repeat_ft?}; "
+			+ "EXPORT_BUNDLE (read) {map}; "
+			+ "IMPORT_BUNDLE (mut) {source_path, source_ref_mappings?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse mapPreparation(
+		@ToolArg(description = "BEGIN | REVISE | VALIDATE | PUBLISH | IMPORT_ASSET | EXPORT_BUNDLE | IMPORT_BUNDLE")
+		String action, @ToolArg(description = "campaign:N")
+		String campaign, @ToolArg(description = "Idempotency key (required for mutating actions)", required = false)
+		String operation_id, @ToolArg(description = "Action parameters (see description)", required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("map_preparation", () -> {
+			String act = ToolArgs.action("map_preparation", action, List.of("BEGIN", "REVISE", "VALIDATE", "PUBLISH",
+					"IMPORT_ASSET", "EXPORT_BUNDLE", "IMPORT_BUNDLE"));
+			String c = ToolArgs.reqCampaign("map_preparation", act, campaign);
+			return switch (act) {
+			case "BEGIN" -> {
+				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "kind, proposal", "kind", "proposal");
+				yield engine.maps().begin(op, c, a.reqStr("kind"), a.reqMap("proposal"));
 			}
-			if (!"GM".equalsIgnoreCase(audience.orElse("PLAYER")))
-				throw RpgException.invalidArgument("Preparations and atlas authoring context require audience GM.");
-			return engine.maps().get(campaign, reference);
+			case "REVISE" -> {
+				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params,
+						"preparation, changes, expected_revision?", "preparation", "changes", "expected_revision");
+				yield engine.maps().revise(op, c, a.reqStr("preparation"), a.optLong("expected_revision"),
+						a.reqMap("changes"));
+			}
+			case "VALIDATE" -> {
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "preparation", "preparation");
+				yield engine.maps().validate(c, a.reqStr("preparation"));
+			}
+			case "PUBLISH" -> {
+				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "preparation, expected_revision?",
+						"preparation", "expected_revision");
+				yield engine.maps().publish(op, c, a.reqStr("preparation"), a.optLong("expected_revision"));
+			}
+			case "IMPORT_ASSET" -> {
+				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "source_path, repeat_ft?",
+						"source_path", "repeat_ft");
+				yield importAsset(op, c, a.reqStr("source_path"), a.optDouble("repeat_ft", 5.0));
+			}
+			case "EXPORT_BUNDLE" -> {
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "map", "map");
+				yield bundles().exportMap(c, a.reqStr("map"));
+			}
+			case "IMPORT_BUNDLE" -> {
+				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "source_path, source_ref_mappings?",
+						"source_path", "source_ref_mappings");
+				Map<String, String> mappings = a.optStringMap("source_ref_mappings");
+				yield bundles().importBundle(op, c, Path.of(a.reqStr("source_path")),
+						mappings == null ? Map.of() : mappings);
+			}
+			default -> throw new IllegalStateException(act);
+			};
 		});
 	}
 
-	@Tool(name = "find_maps", description = "Read-only. Find saved maps and preparations by location, name, kind, atlas or sheet address; does not generate missing coverage. current_board/current_party_board and placed_characters identify actual use; other_published_realizations warns about separate boards of one site.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse find(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign,
-		@ToolArg(description = "Optional filters: text, location_ref, kind, atlas_ref, address, or atlas_ref plus position_ft:[x,y]. Omitting filters lists saved maps and pending preparations.")
-		Optional<Map<String, Object>> query) {
-		return ToolSupport.run("find_maps", () -> engine.maps().find(campaign, query.orElse(Map.of())));
+	@Tool(name = "map_play", description = "Tactical/world map queries, figurine placement, exploration movement, sight/sound, objects, annotations and geometry/lighting patches (see get_instructions topic MAPS). Actions: "
+			+ "CONTEXT (read) {reference, audience?: PLAYER|GM, level?, detail?: SUMMARY|FULL}; "
+			+ "FIND (read) {query?}; " + "PLACE_ACTORS (mut) {map, placements}; "
+			+ "MOVE_ACTOR (mut) {map, character, x_ft, y_ft}; " + "OBSERVE (mut) {map}; "
+			+ "PREVIEW_ACTION (read) {map, character, x_ft, y_ft, audience?: PLAYER|GM}; "
+			+ "USE_TRANSITION (mut) {map, character, portal}; " + "UPDATE_OBJECT (mut) {map, key, changes, reason}; "
+			+ "CORRECT_GEOMETRY (mut) {map, expected_revision, patch, reason}; "
+			+ "PERCEPTION (read, GM) {map, character}; "
+			+ "EMIT_SOUND (mut) {map, range_ft, description, x_ft?, y_ft?, level?, actor?}; "
+			+ "ANNOTATE (mut) {map, annotation, expected_revision?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse mapPlay(
+		@ToolArg(description = "CONTEXT | FIND | PLACE_ACTORS | MOVE_ACTOR | OBSERVE | PREVIEW_ACTION | USE_TRANSITION | UPDATE_OBJECT | CORRECT_GEOMETRY | PERCEPTION | EMIT_SOUND | ANNOTATE")
+		String action, @ToolArg(description = "campaign:N")
+		String campaign, @ToolArg(description = "Idempotency key (required for mutating actions)", required = false)
+		String operation_id, @ToolArg(description = "Action parameters (see description)", required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("map_play", () -> {
+			String act = ToolArgs.action("map_play", action,
+					List.of("CONTEXT", "FIND", "PLACE_ACTORS", "MOVE_ACTOR", "OBSERVE", "PREVIEW_ACTION",
+							"USE_TRANSITION", "UPDATE_OBJECT", "CORRECT_GEOMETRY", "PERCEPTION", "EMIT_SOUND",
+							"ANNOTATE"));
+			String c = ToolArgs.reqCampaign("map_play", act, campaign);
+			return switch (act) {
+			case "CONTEXT" -> {
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "reference, audience?, level?, detail?",
+						"reference", "audience", "level", "detail");
+				String reference = a.reqStr("reference");
+				String audience = a.optStr("audience", "PLAYER");
+				if (reference.startsWith("map:")) {
+					var context = engine.scenes().context(c, reference, audience, a.optInt("level", 0));
+					yield "FULL".equalsIgnoreCase(a.optStr("detail", "SUMMARY")) ? context : compact(context);
+				}
+				if (!"GM".equalsIgnoreCase(audience))
+					throw RpgException.invalidArgument("Preparations and atlas authoring context require audience GM.");
+				yield engine.maps().get(c, reference);
+			}
+			case "FIND" -> {
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "query?", "query");
+				yield engine.maps().find(c, a.optMapOrEmpty("query"));
+			}
+			case "PLACE_ACTORS" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, placements", "map", "placements");
+				yield compact(engine.scenes().place(op, c, a.reqStr("map"), a.reqMapList("placements")));
+			}
+			case "MOVE_ACTOR" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, character, x_ft, y_ft", "map",
+						"character", "x_ft", "y_ft");
+				yield engine.scenes().move(op, c, a.reqStr("map"), a.reqStr("character"), a.reqDouble("x_ft"),
+						a.reqDouble("y_ft"));
+			}
+			case "OBSERVE" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map", "map");
+				yield compact(engine.scenes().observe(op, c, a.reqStr("map")));
+			}
+			case "PREVIEW_ACTION" -> {
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, character, x_ft, y_ft, audience?",
+						"map", "character", "x_ft", "y_ft", "audience");
+				yield engine.scenes().preview(c, a.reqStr("map"), a.reqStr("character"), a.reqDouble("x_ft"),
+						a.reqDouble("y_ft"), a.optStr("audience", "PLAYER"));
+			}
+			case "USE_TRANSITION" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, character, portal", "map", "character",
+						"portal");
+				yield compact(
+						engine.scenes().transit(op, c, a.reqStr("map"), a.reqStr("character"), a.reqStr("portal")));
+			}
+			case "UPDATE_OBJECT" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, key, changes, reason", "map", "key",
+						"changes", "reason");
+				yield engine.scenes().changeObject(op, c, a.reqStr("map"), a.reqStr("key"), a.reqMap("changes"),
+						a.reqStr("reason"));
+			}
+			case "CORRECT_GEOMETRY" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, expected_revision, patch, reason",
+						"map", "expected_revision", "patch", "reason");
+				yield engine.maps().correctGeometry(op, c, a.reqStr("map"), a.reqLong("expected_revision"),
+						a.reqMap("patch"), a.reqStr("reason"));
+			}
+			case "PERCEPTION" -> {
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, character", "map", "character");
+				yield engine.scenes().perception(c, a.reqStr("map"), a.reqStr("character"));
+			}
+			case "EMIT_SOUND" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params,
+						"map, range_ft, description, x_ft?, y_ft?, level?, actor?", "map", "range_ft", "description",
+						"x_ft", "y_ft", "level", "actor");
+				yield engine.scenes().sound(op, c, a.reqStr("map"), a.optDouble("x_ft"), a.optDouble("y_ft"),
+						a.optInt("level"), a.reqDouble("range_ft"), a.reqStr("description"), a.optStr("actor"));
+			}
+			case "ANNOTATE" -> {
+				String op = ToolArgs.reqOp("map_play", act, operation_id);
+				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "map, annotation, expected_revision?", "map",
+						"annotation", "expected_revision");
+				yield engine.maps().annotate(op, c, a.reqStr("map"), a.optLong("expected_revision"),
+						a.reqMap("annotation"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "place_map_actors", description = "MUTATING during exploration. Place character figurines on valid unoccupied 5ft lattice cells, or explicitly move them onto another compatible same-location board without starting combat. Cross-board changes preserve an established authored room; traverse its doors with movement. placements contain character,x_ft,y_ft,level,footprint_ft. Existing positions on the same board require move_map_actor. Preserve established positions when starting combat. Returns bounded context; get_map_context detail FULL supplies permitted geometry.")
-	ToolResponse place(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Initial placements: [{character:character:N,x_ft,y_ft,level,footprint_ft}]. x_ft/y_ft are southwest footprint origins on the 5 ft lattice. Established actors must move instead.")
-		List<Map<String, Object>> placements) {
-		return ToolSupport.run("place_map_actors",
-				() -> compact(engine.scenes().place(operation_id, campaign, map, placements)));
-	}
-
-	@Tool(name = "observe_map", description = "MUTATING. Save what the party currently sees. Shared reveal is the union of party sight; old explored cells retain last-observed state.")
-	ToolResponse observe(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map) {
-		return ToolSupport.run("observe_map", () -> compact(engine.scenes().observe(operation_id, campaign, map)));
-	}
-
-	@Tool(name = "update_map_object", description = "MUTATING. Record a resolved gameplay effect or audited correction on a stable object/passage key. changes: state,locked,sealed,hit_points,blocks_movement,blocks_sight,material,label,secret,concealed,known_hazard. Reveal a discovered trap with concealed:false after adjudicating its check; a check alone grants no knowledge. A reason describing the adjudication is required; roll/check mechanics first when applicable. Broken furniture and opened doors immediately affect movement and sight.")
-	ToolResponse object(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Canonical key from GM map context, for example object:treasure-chest or office-door. A unique bare object or reward key is also accepted; exact canonical keys take priority. The reply identifies canonical_key.")
-		String key,
-		@ToolArg(description = "Keyed changes to the current document or state. Preserve stable keys and canonical references; see the tool description for supported fields.")
-		Map<String, Object> changes,
-		@ToolArg(description = "Explanation of the adjudicated effect or correction, including the resolved check when applicable.")
-		String reason) {
-		return ToolSupport.run("update_map_object",
-				() -> engine.scenes().changeObject(operation_id, campaign, map, key, changes, reason));
-	}
-
-	@Tool(name = "get_actor_perception", description = "Read-only GM decision context from this actor's own sight and retained evidence. Hearing gives an approximate direction; last-seen positions never track unseen movement.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse perception(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-	String map,
-		@ToolArg(description = "Character reference, for example character:4. This is the actor whose figurine or perception is used.")
-		String character) {
-		return ToolSupport.run("get_actor_perception", () -> engine.scenes().perception(campaign, map, character));
-	}
-
-	@Tool(name = "emit_map_sound", description = "MUTATING. Resolve an authored sound cue from an actor's saved marker or explicit x_ft/y_ft. Records approximate hearing evidence for listeners in range on the same level, reduced by occlusion. A cue prompts investigation; it does not expose an unseen target's exact position.")
-	ToolResponse sound(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Explicit sound-source east coordinate in feet. Omit with actor; otherwise supply both coordinates.")
-		Optional<Double> x_ft,
-		@ToolArg(description = "Explicit sound-source north coordinate in feet. Omit with actor; otherwise supply both coordinates.")
-		Optional<Double> y_ft,
-		@ToolArg(description = "Sound level. Defaults to actor's saved level, or 0 for explicit coordinates.")
-		Optional<Integer> level,
-		@ToolArg(description = "Maximum sound range in feet before occlusion. Listeners must be on the same level.")
-		double range_ft,
-		@ToolArg(description = "Audible cue as perceived by listeners, without revealing an unseen source identity or exact position.")
-		String description,
-		@ToolArg(description = "Optional placed character reference used as the sound source instead of x_ft/y_ft.")
-		Optional<String> actor) {
-		return ToolSupport.run("emit_map_sound", () -> engine.scenes().sound(operation_id, campaign, map,
-				x_ft.orElse(null), y_ft.orElse(null), level.orElse(null), range_ft, description, actor.orElse(null)));
-	}
-
-	@Tool(name = "move_map_actor", description = "MUTATING exploration movement on an existing scene. Uses collision, occupancy and terrain paths. x_ft/y_ft target the southwest footprint origin on the 5ft lattice, not the marker center. During combat use perform_encounter_action so budgets/reactions apply.")
-	ToolResponse move(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-		String map,
-		@ToolArg(description = "Character reference, for example character:4. This is the actor whose figurine or perception is used.")
-		String character, @ToolArg(description = "Destination footprint southwest x in feet; multiple of 5")
-		double x_ft, @ToolArg(description = "Destination footprint southwest y in feet; multiple of 5")
-		double y_ft) {
-		return ToolSupport.run("move_map_actor",
-				() -> engine.scenes().move(operation_id, campaign, map, character, x_ft, y_ft));
-	}
-
-	@Tool(name = "preview_spatial_action", description = "Read-only movement preview. PLAYER uses only known geometry; unknown cells are not a free probe for secret blockers. Does not spend movement or time.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse preview(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-	String map,
-		@ToolArg(description = "Character reference, for example character:4. This is the actor whose figurine or perception is used.")
-		String character,
-		@ToolArg(description = "East coordinate in feet in this map. Movement destinations use southwest footprint origins on the 5 ft lattice.")
-		double x_ft,
-		@ToolArg(description = "North coordinate in feet in this map. Movement destinations use southwest footprint origins on the 5 ft lattice.")
-		double y_ft,
-		@ToolArg(description = "PLAYER (default) returns only permitted party knowledge. GM returns private authoring context; never forward GM output as a player handout.")
-		Optional<String> audience) {
-		return ToolSupport.run("preview_spatial_action",
-				() -> engine.scenes().preview(campaign, map, character, x_ft, y_ft, audience.orElse("PLAYER")));
-	}
-
-	@Tool(name = "render_map", description = "Read-only. Render saved geometry (map:N) or a GM draft preview (preparation:N, requires audience GM) as PNG plus text and structured marker movement targets. audience defaults PLAYER for maps; PLAYER text uses names/directions, GM text includes references/coordinates. options grid_ft 5|10, max_pixels <=2048, style DEFAULT|PARCHMENT|HIGH_CONTRAST, technical_text optional override. include_image:false supports text-only clients. Rendering never generates maps, advances time or reveals hidden state.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse render(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign,
-		@ToolArg(description = "Saved map reference (map:2) or draft preparation reference (preparation:5, requires audience GM for pre-publication visual inspection).")
-		String map,
-		@ToolArg(description = "PLAYER (default for maps) returns only permitted party knowledge. GM returns private authoring context or draft preview; never forward GM output as a player handout.")
-		Optional<String> audience,
-		@ToolArg(description = "Numeric map level. Defaults to 0; use saved room and transition levels, including negative levels where authored.")
-		Optional<Integer> level,
-		@ToolArg(description = "Optional documented operation settings. Read the tool description for accepted settings; omitted settings use defaults.")
+	@Tool(name = "render_map", description = "READ-ONLY. Render map:N (PLAYER or GM) or draft preview preparation:N (requires audience GM) as PNG plus text and marker targets. "
+			+ "options: grid_ft 5|10, max_pixels <=2048, style DEFAULT|PARCHMENT|HIGH_CONTRAST, technical_text, material_overrides. include_image:false returns text only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	ToolResponse render(@ToolArg(description = "campaign:N")
+	String campaign, @ToolArg(description = "map:N or preparation:N (draft preview requires audience GM)")
+	String map, @ToolArg(description = "PLAYER (default) or GM")
+	Optional<String> audience, @ToolArg(description = "Map level (default 0)")
+	Optional<Integer> level,
+		@ToolArg(description = "Render options (grid_ft, max_pixels, style, technical_text, material_overrides)")
 		Optional<Map<String, Object>> options,
-		@ToolArg(description = "true (default) returns PNG plus text. false returns text and permitted structured context without loading textures or allocating a raster.")
+		@ToolArg(description = "true (default) for PNG + text; false for text only")
 		Optional<Boolean> include_image) {
 		String selectedAudience = audience.orElse("PLAYER");
 		int selectedLevel = level.orElse(0);
@@ -323,8 +255,32 @@ public class MapTools {
 					markers(SceneService.map(context.get("view")), options.orElse(Map.of())), "meta",
 					context.get("meta"));
 		};
-		return include_image.orElse(true) ? ToolSupport.image("render_map", body, () -> image[0])
-				: ToolSupport.run("render_map", body);
+		return ToolSupport.image("render_map", body, () -> image[0]);
+	}
+
+	private Map<String, Object> importAsset(String operationId, String campaign, String sourcePath, double repeatFt) {
+		long cid = Ref.id(campaign, Ref.CAMPAIGN);
+		var mutation = Database.Mutation.of("import_map_asset", cid, operationId, "GM",
+				Map.of("source_path", sourcePath, "repeat_ft", repeatFt));
+		var replay = engine.db().replay(mutation);
+		if (replay.isPresent())
+			return replay.get();
+		engine.db().read(tx -> {
+			Harness.requireMutation(tx, campaign, "import_map_asset");
+			return null;
+		});
+		var a = engine.mapAssets().importPng(cid, Path.of(sourcePath), repeatFt);
+		return engine.db().mutate(mutation, tx -> {
+			var c = Harness.requireMutation(tx, campaign, "import_map_asset");
+			var existing = tx.queryOne("SELECT * FROM map_asset WHERE campaign_id=? AND content_hash=? AND repeat_ft=?",
+					cid, a.id(), a.repeatFeet());
+			long id = existing.isPresent() ? existing.get().id()
+					: tx.insert("map_asset", Map.of("campaign_id", cid, "content_hash", a.id(), "mime_type",
+							"image/png", "width", a.width(), "height", a.height(), "repeat_ft", a.repeatFeet()));
+			var metadata = new LinkedHashMap<>(a.metadata());
+			metadata.put("ref", Ref.of(Ref.ASSET, id));
+			return Map.of("asset", metadata, "meta", Harness.meta(c, List.of()));
+		});
 	}
 
 	private Map<String, Object> renderContext(String campaign, String ref, String audience, int level) {
@@ -426,42 +382,6 @@ public class MapTools {
 						((Number) asset.get("repeat_ft")).doubleValue()));
 			}
 			return out;
-		});
-	}
-
-	@Tool(name = "import_map_asset", description = "MUTATING. Import a server-readable PNG texture to immutable campaign storage. source_path is copied; repeat_ft is physical repeat width. The renderer chooses pixel dimensions. Use the returned content_hash as material override.")
-	ToolResponse asset(
-		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
-		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
-		String campaign,
-		@ToolArg(description = "Absolute server-readable source file path. The server copies the source into managed campaign storage.")
-		String source_path,
-		@ToolArg(description = "Physical texture repeat width in feet, default 5. The renderer chooses pixel dimensions; use the returned asset reference for an unambiguous repeat scale.")
-		Optional<Double> repeat_ft) {
-		return ToolSupport.run("import_map_asset", () -> {
-			long cid = Ref.id(campaign, Ref.CAMPAIGN);
-			var mutation = Database.Mutation.of("import_map_asset", cid, operation_id, "GM",
-					Map.of("source_path", source_path, "repeat_ft", repeat_ft.orElse(5.0)));
-			var replay = engine.db().replay(mutation);
-			if (replay.isPresent())
-				return replay.get();
-			engine.db().read(tx -> {
-				Harness.requireMutation(tx, campaign, "import_map_asset");
-				return null;
-			});
-			var a = engine.mapAssets().importPng(cid, Path.of(source_path), repeat_ft.orElse(5.0));
-			return engine.db().mutate(mutation, tx -> {
-				var c = Harness.requireMutation(tx, campaign, "import_map_asset");
-				var existing = tx.queryOne(
-						"SELECT * FROM map_asset WHERE campaign_id=? AND content_hash=? AND repeat_ft=?", cid, a.id(),
-						a.repeatFeet());
-				long id = existing.isPresent() ? existing.get().id()
-						: tx.insert("map_asset", Map.of("campaign_id", cid, "content_hash", a.id(), "mime_type",
-								"image/png", "width", a.width(), "height", a.height(), "repeat_ft", a.repeatFeet()));
-				var metadata = new LinkedHashMap<>(a.metadata());
-				metadata.put("ref", Ref.of(Ref.ASSET, id));
-				return Map.of("asset", metadata, "meta", Harness.meta(c, List.of()));
-			});
 		});
 	}
 }

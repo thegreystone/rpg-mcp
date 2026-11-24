@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
@@ -52,7 +51,8 @@ class DraftChangeOrderingTest {
 				RpgTools tools = new RpgTools();
 				tools.engine = e;
 				String operation = op();
-				var response = tools.updateCharacterDraft(operation, campaign, character, Optional.empty(), changes);
+				var response = tools.characterDraft("UPDATE", campaign, operation,
+						Map.of("character", character, "changes", changes));
 				assertFalse(response.isError(), response.firstContent().asText().text());
 				Map<String, Object> validated = e.characters().validateDraft(campaign, character);
 				assertEquals(true, validated.get("valid"), validated.toString());
@@ -62,7 +62,8 @@ class DraftChangeOrderingTest {
 				else
 					assertEquals(expected, signature);
 				// A replay and a fresh application cannot duplicate grants or compound the background increase.
-				var replay = tools.updateCharacterDraft(operation, campaign, character, Optional.empty(), changes);
+				var replay = tools.characterDraft("UPDATE", campaign, operation,
+						Map.of("character", character, "changes", changes));
 				assertFalse(replay.isError());
 				assertEquals(true,
 						cast(Json.readMap(replay.firstContent().asText().text()).get("result")).get("replayed"));

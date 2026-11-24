@@ -1330,7 +1330,7 @@ public final class GridCombat {
 		hint.put("coverage_status", coverage.size() == 1 ? "AVAILABLE" : "AMBIGUOUS");
 		hint.put("coverage", coverage);
 		hint.put("placement_required", true);
-		hint.put("next_operation", "get_map_context");
+		hint.put("next_operation", "map_play:CONTEXT");
 		if (coverage.size() == 1) {
 			hint.put("map_ref", coverage.getFirst().get("map_ref"));
 			hint.put("level", coverage.getFirst().get("level"));

@@ -857,9 +857,9 @@ public final class EncounterService {
 	}
 
 	private static Map<String, Object> gmHandoff(Row encounter) {
-		return Map.of("tool", "get_encounter_state", "arguments",
-				Map.of("campaign", Ref.of(Ref.CAMPAIGN, encounter.lng("campaign_id")), "encounter",
-						Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM"),
+		return Map.of("tool", "encounter", "arguments",
+				Map.of("action", "STATE", "campaign", Ref.of(Ref.CAMPAIGN, encounter.lng("campaign_id")), "params",
+						Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM")),
 				"read_only", true, "purpose",
 				"DM decision context for the full encounter; do not narrate unseen identities or positions to the player.");
 	}
@@ -2997,9 +2997,9 @@ public final class EncounterService {
 					result.put("next_step",
 							pc.str("name") + " has died. " + (tx.count(
 									"SELECT COUNT(*) FROM pending_transaction WHERE campaign_id=? AND status='OPEN'",
-									campaignId) > 0 ? "Resolve the remaining pending choices, then call end_encounter. "
-											: "Call end_encounter. ")
-									+ "Then use get_continuation_options for the campaign's continuation choices.");
+									campaignId) > 0 ? "Resolve the remaining pending choices, then call encounter:END. "
+											: "Call encounter:END. ")
+									+ "Then use checkpoints:OPTIONS for the campaign's continuation choices.");
 				});
 	}
 
@@ -3329,7 +3329,7 @@ public final class EncounterService {
 				if ("IRONMAN".equals(policy)) {
 					if (survivors) {
 						next = HarnessState.PLAYER_CHARACTER_TRANSFER;
-						continuation.put("options", List.of("transfer_player_control", "complete_campaign"));
+						continuation.put("options", List.of("character:TRANSFER_CONTROL", "session:COMPLETE"));
 					} else {
 						next = HarnessState.CAMPAIGN_FAILED;
 						campaignStatus = "FAILED";
@@ -3343,8 +3343,8 @@ public final class EncounterService {
 				} else {
 					next = HarnessState.CHECKPOINT_DECISION;
 					continuation.put("options",
-							survivors ? List.of("restore_checkpoint", "transfer_player_control", "complete_campaign")
-									: List.of("restore_checkpoint", "complete_campaign"));
+							survivors ? List.of("checkpoints:RESTORE", "character:TRANSFER_CONTROL", "session:COMPLETE")
+									: List.of("checkpoints:RESTORE", "session:COMPLETE"));
 				}
 				continuation.put("player_character_status", "DEAD");
 				continuation.put("continuation_policy", policy);
@@ -3397,9 +3397,11 @@ public final class EncounterService {
 			result.put("highlights_needing_narration_detail",
 					"Brief prompts; full mechanics remain in record.highlights.");
 			result.put("full_gm_record",
-					Map.of("tool", "get_encounter_state", "arguments", Map.of("campaign", campaignRef, "encounter",
-							Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM"), "field", "record"));
-			result.put("annotation_tool", "annotate_encounter");
+					Map.of("tool", "encounter", "arguments",
+							Map.of("action", "STATE", "campaign", campaignRef, "params",
+									Map.of("encounter", Ref.of(Ref.ENCOUNTER, encounter.id()), "audience", "GM")),
+							"field", "record"));
+			result.put("annotation_tool", "encounter:ANNOTATE");
 			result.put("resolved_event", Ref.of(Ref.EVENT, resolvedEventId));
 			result.put("elapsed_minutes", minutes);
 			if (legacyTime != null) {

@@ -270,7 +270,7 @@ class Run9TravelTest {
 					assertEquals(door, refusal.details().get("connection_ref"));
 					assertEquals(state, refusal.details().get("state"));
 					assertEquals(state.equals("LOCKED"), refusal.details().get("locked"));
-					assertEquals(state.equals("CLOSED"), refusal.getMessage().contains("update_map_object"));
+					assertEquals(state.equals("CLOSED"), refusal.getMessage().contains("map_play:UPDATE_OBJECT"));
 					assertEquals(before, e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)));
 				}
 			}

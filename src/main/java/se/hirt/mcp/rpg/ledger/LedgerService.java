@@ -367,8 +367,9 @@ public final class LedgerService {
 				Object encounter = compact.getOrDefault("encounter", payload.get("encounter"));
 				if (encounter instanceof String ref && ref.startsWith(Ref.ENCOUNTER + ":"))
 					m.put("full_gm_record",
-							Map.of("tool", "get_encounter_state", "arguments", Map.of("campaign",
-									Ref.of(Ref.CAMPAIGN, r.lng("campaign_id")), "encounter", ref, "audience", "GM"),
+							Map.of("tool", "encounter", "arguments",
+									Map.of("action", "STATE", "campaign", Ref.of(Ref.CAMPAIGN, r.lng("campaign_id")),
+											"params", Map.of("encounter", ref, "audience", "GM")),
 									"field", "record"));
 			}
 		}

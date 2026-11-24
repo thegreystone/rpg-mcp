@@ -57,10 +57,13 @@ class Run4DigestTest {
 			assertFalse(timeline.containsKey("detail"));
 			assertEquals(digest, SceneService.map(timeline.get("encounter_digest")));
 			Map<String, Object> pointer = SceneService.map(timeline.get("full_gm_record"));
-			assertEquals("get_encounter_state", pointer.get("tool"));
+			assertEquals("encounter", pointer.get("tool"));
 			assertEquals("record", pointer.get("field"));
-			assertEquals(encounter, SceneService.map(pointer.get("arguments")).get("encounter"));
-			assertEquals("GM", SceneService.map(pointer.get("arguments")).get("audience"));
+			assertEquals("STATE", SceneService.map(pointer.get("arguments")).get("action"));
+			assertEquals(encounter,
+					SceneService.map(SceneService.map(pointer.get("arguments")).get("params")).get("encounter"));
+			assertEquals("GM",
+					SceneService.map(SceneService.map(pointer.get("arguments")).get("params")).get("audience"));
 			String story = resolvedChronicle(e, campaign).get("detail").toString();
 			assertTrue(story.startsWith("Encounter other;"), story);
 			assertTrue(story.contains("Both lower their weapons."));

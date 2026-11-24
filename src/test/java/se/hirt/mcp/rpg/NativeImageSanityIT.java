@@ -79,49 +79,44 @@ class NativeImageSanityIT {
 			send(stdin, "{\"method\":\"tools/list\",\"params\":{},\"jsonrpc\":\"2.0\",\"id\":1}");
 			String tools = readResponse(stdout, 15_000);
 			assertNotNull(tools, "No tools/list response");
-			assertTrue(tools.contains("get_server_state"), tools);
-			assertTrue(tools.contains("commit_campaign_setup"), tools);
-			assertTrue(tools.contains("render_map"), tools);
-			assertTrue(tools.contains("define_patrol"), tools);
-			assertTrue(tools.contains("set_tactical_control"), tools);
-			assertTrue(!cast(Json.readMap(tools).get("result")).containsKey("nextCursor"),
+			assertTrue(tools.contains("\"session\""), tools);
+			assertTrue(tools.contains("\"campaign_setup\""), tools);
+			assertTrue(tools.contains("\"render_map\""), tools);
+			assertTrue(tools.contains("\"patrols\""), tools);
+			assertTrue(tools.contains("\"character\""), tools);
+			Map<String, Object> toolsResult = cast(Json.readMap(tools).get("result"));
+			assertTrue(!toolsResult.containsKey("nextCursor"),
 					"Desktop hosts must discover the complete tool surface on the first page");
-			var describedTools = new java.util.HashSet<String>();
-			for (Class<?> group : List.of(MapTools.class, LivingWorldTools.class))
-				for (var method : group.getDeclaredMethods()) {
-					var annotation = method.getAnnotation(io.quarkiverse.mcp.server.Tool.class);
-					if (annotation != null)
-						describedTools.add(annotation.name());
-				}
-			for (Object definition : (List<?>) cast(Json.readMap(tools).get("result")).get("tools")) {
+			List<?> toolDefs = (List<?>) toolsResult.get("tools");
+			assertTrue(toolDefs.size() == 22, "Expected 22 consolidated tools, got " + toolDefs.size());
+			for (Object definition : toolDefs) {
 				var tool = cast(definition);
-				if (describedTools.contains(tool.get("name")))
-					for (var parameter : cast(cast(tool.get("inputSchema")).get("properties")).entrySet())
-						assertTrue(
-								!String.valueOf(cast(parameter.getValue()).getOrDefault("description", "")).isBlank(),
-								tool.get("name") + ": " + parameter.getKey() + " needs usable parameter documentation");
+				for (var parameter : cast(cast(tool.get("inputSchema")).get("properties")).entrySet())
+					assertTrue(!String.valueOf(cast(parameter.getValue()).getOrDefault("description", "")).isBlank(),
+							tool.get("name") + ": " + parameter.getKey() + " needs usable parameter documentation");
 			}
 
 			send(stdin,
-					"{\"method\":\"tools/call\",\"params\":{\"name\":\"get_server_state\",\"arguments\":{}},\"jsonrpc\":\"2.0\",\"id\":2}");
+					"{\"method\":\"tools/call\",\"params\":{\"name\":\"session\",\"arguments\":{\"action\":\"STATE\"}},\"jsonrpc\":\"2.0\",\"id\":2}");
 			String state = readResponse(stdout, 20_000);
-			assertNotNull(state, "No get_server_state response");
+			assertNotNull(state, "No session:STATE response");
 			assertTrue(state.contains("CAMPAIGN_SELECTION"), state);
 			assertTrue(state.contains("srd5e:5.2.1"), state);
 
 			// Exercise the actual MCP image/text contract and renderer in the native executable.
-			Map<String, Object> created = call(stdin, stdout, 3, "create_campaign",
-					Map.of("operation_id", "native-map-campaign", "title", "Native map playtest"));
+			Map<String, Object> created = call(stdin, stdout, 3, "session", Map.of("action", "CREATE", "operation_id",
+					"native-map-campaign", "params", Map.of("title", "Native map playtest")));
 			String campaign = (String) created.get("campaign");
-			Map<String, Object> control = call(stdin, stdout, 32, "set_tactical_control",
-					Map.of("operation_id", "native-companion-control", "campaign", campaign, "controller", "PLAYER",
-							"scope", "UNTIL_RELEASED"));
+			Map<String, Object> control = call(stdin, stdout, 32, "character",
+					Map.of("action", "TACTICAL_CONTROL", "operation_id", "native-companion-control", "campaign",
+							campaign, "params", Map.of("controller", "PLAYER", "scope", "UNTIL_RELEASED")));
 			assertTrue("UNTIL_RELEASED".equals(control.get("scope")), control.toString());
 			Path texture = dataDir.resolve("native-floor.png");
 			Files.write(texture, se.hirt.mcp.rpg.maps.PngCodec.encode(new se.hirt.mcp.rpg.maps.PngCodec.Raster(2, 2,
 					new int[] {0xff999988, 0xff777766, 0xff777766, 0xff999988})));
-			Map<String, Object> imported = call(stdin, stdout, 30, "import_map_asset", Map.of("operation_id",
-					"native-map-texture", "campaign", campaign, "source_path", texture.toString(), "repeat_ft", 5));
+			Map<String, Object> imported = call(stdin, stdout, 30, "map_preparation",
+					Map.of("action", "IMPORT_ASSET", "operation_id", "native-map-texture", "campaign", campaign,
+							"params", Map.of("source_path", texture.toString(), "repeat_ft", 5)));
 			String asset = (String) cast(imported.get("asset")).get("ref");
 			Files.delete(texture);
 			Map<String, Object> proposal = Map.of("name", "Native two-room fixture", "room_count", 2, "geometry",
@@ -137,24 +132,27 @@ class NativeImageSanityIT {
 									"to_ft", List.of(20, 20))),
 					"actors",
 					List.of(Map.of("key", "lookout", "room", "hall", "creature_ref", "Bandit", "x_ft", 5, "y_ft", 5)));
-			Map<String, Object> draft = call(stdin, stdout, 4, "begin_map_preparation", Map.of("operation_id",
-					"native-map-draft", "campaign", campaign, "kind", "SCENE", "proposal", proposal));
-			Map<String, Object> published = call(stdin, stdout, 5, "publish_map_preparation", Map.of("operation_id",
-					"native-map-publish", "campaign", campaign, "preparation", draft.get("preparation")));
+			Map<String, Object> draft = call(stdin, stdout, 4, "map_preparation",
+					Map.of("action", "BEGIN", "operation_id", "native-map-draft", "campaign", campaign, "params",
+							Map.of("kind", "SCENE", "proposal", proposal)));
+			Map<String, Object> published = call(stdin, stdout, 5, "map_preparation",
+					Map.of("action", "PUBLISH", "operation_id", "native-map-publish", "campaign", campaign, "params",
+							Map.of("preparation", draft.get("preparation"))));
 			String map = (String) published.get("map_ref");
-			Map<String, Object> geometryContext = call(stdin, stdout, 33, "get_map_context",
-					Map.of("campaign", campaign, "reference", map, "audience", "GM"));
-			Map<String, Object> corrected = call(stdin, stdout, 34, "correct_map_geometry",
-					Map.of("operation_id", "native-door-correction", "campaign", campaign, "map", map,
-							"expected_revision", geometryContext.get("map_revision"), "patch",
+			Map<String, Object> geometryContext = call(stdin, stdout, 33, "map_play", Map.of("action", "CONTEXT",
+					"campaign", campaign, "params", Map.of("reference", map, "audience", "GM")));
+			Map<String, Object> corrected = call(stdin, stdout, 34, "map_play", Map.of("action", "CORRECT_GEOMETRY",
+					"operation_id", "native-door-correction", "campaign", campaign, "params",
+					Map.of("map", map, "expected_revision", geometryContext.get("map_revision"), "patch",
 							Map.of("doors",
 									List.of(Map.of("key", "door", "from_ft", List.of(20, 0), "to_ft", List.of(20, 5)))),
-							"reason", "Correct the office doorway to the southern grid cell without republishing."));
+							"reason", "Correct the office doorway to the southern grid cell without republishing.")));
 			assertTrue(Boolean.TRUE.equals(corrected.get("corrected")), corrected.toString());
 			assertTrue(map.equals(corrected.get("map")), corrected.toString());
 			String lookout = (String) cast(published.get("references")).get("actor:lookout");
-			Map<String, Object> preview = call(stdin, stdout, 31, "preview_spatial_action", Map.of("campaign", campaign,
-					"map", map, "character", lookout, "x_ft", 10, "y_ft", 5, "audience", "GM"));
+			Map<String, Object> preview = call(stdin, stdout, 31, "map_play",
+					Map.of("action", "PREVIEW_ACTION", "campaign", campaign, "params",
+							Map.of("map", map, "character", lookout, "x_ft", 10, "y_ft", 5, "audience", "GM")));
 			assertTrue("FOUND".equals(preview.get("status")), preview.toString());
 			assertTrue(((Number) preview.get("cost_ft")).doubleValue() == 5, preview.toString());
 			Map<String, Object> arguments = Map.of("campaign", campaign, "map", map, "audience", "GM", "options",
@@ -194,7 +192,8 @@ class NativeImageSanityIT {
 			send(stdin, "{\"method\":\"notifications/initialized\",\"jsonrpc\":\"2.0\"}");
 			Map<String, Object> reloaded = call(stdin, stdout, 8, "render_map", textOnly);
 			assertTrue(text.get("text").equals(reloaded.get("text")), reloaded.toString());
-			Map<String, Object> party = call(stdin, stdout, 9, "get_party", Map.of("campaign", campaign));
+			Map<String, Object> party = call(stdin, stdout, 9, "character",
+					Map.of("action", "PARTY", "campaign", campaign));
 			assertTrue(Json.write(party.get("tactical_control")).contains("UNTIL_RELEASED"), party.toString());
 		} finally {
 			process.destroyForcibly();

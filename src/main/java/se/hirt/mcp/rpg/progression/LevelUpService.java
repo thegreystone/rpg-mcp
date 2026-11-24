@@ -98,8 +98,8 @@ public final class LevelUpService {
 			"origin_feat", "background", "background_tool", "feat_choices");
 
 	public static final List<Integer> DEFAULT_ASI_LEVELS = List.of(4, 8, 12, 16, 19);
-	private static final List<String> LEGAL_OPS = List.of("get_level_up_choices", "update_level_up",
-			"validate_level_up", "commit_level_up", "abandon_transaction");
+	private static final List<String> LEGAL_OPS = List.of("level_up:CHOICES", "level_up:UPDATE", "level_up:VALIDATE",
+			"level_up:COMMIT", "level_up:ABANDON");
 
 	private final Database db;
 	private final RulesData rules;

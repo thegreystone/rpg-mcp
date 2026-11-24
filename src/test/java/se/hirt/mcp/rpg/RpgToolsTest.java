@@ -37,7 +37,6 @@ import se.hirt.mcp.rpg.protocol.Json;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -62,15 +61,15 @@ class RpgToolsTest {
 
 	@Test
 	void serverStateEnvelope() {
-		ToolResponse response = tools.getServerState(Optional.empty(), Optional.empty(), Optional.empty());
+		ToolResponse response = tools.session("STATE", null, null, null);
 		assertFalse(response.isError());
 		Map<String, Object> body = json(response);
 		@SuppressWarnings("unchecked")
 		Map<String, Object> result = (Map<String, Object>) body.get("result");
-		assertEquals("0.1.0", result.get("protocol_version"));
+		assertEquals("0.2.0", result.get("protocol_version"));
 		assertNotNull(result.get("harness_state"));
 		assertNotNull(result.get("campaigns"));
-		assertTrue(((List<?>) result.get("allowed_operations")).contains("create_campaign"));
+		assertTrue(((List<?>) result.get("allowed_operations")).contains("session:CREATE"));
 		assertTrue(((List<?>) result.get("allowed_operations")).contains("get_instructions"));
 		assertFalse(result.containsKey("guide"));
 		assertTrue(((String) result.get("instruction_hint")).contains("get_instructions"));
@@ -82,71 +81,99 @@ class RpgToolsTest {
 		try (Engine isolated = TestCampaigns.engine(TestCampaigns.tempDb("control-tools"))) {
 			RpgTools controlTools = new RpgTools();
 			controlTools.engine = isolated;
-			String campaign = (String) ((Map<String, Object>) json(controlTools.createCampaign(TestCampaigns.op(),
-					Optional.of("Tactical control tool test"), Optional.empty())).get("result")).get("campaign");
+			String campaign = (String) ((Map<String, Object>) json(controlTools.session("CREATE", null,
+					TestCampaigns.op(), Map.of("title", "Tactical control tool test"))).get("result")).get("campaign");
 			String op = TestCampaigns.op();
-			ToolResponse changed = controlTools.setTacticalControl(op, campaign, "PLAYER", Optional.empty(),
-					Optional.of("UNTIL_RELEASED"), Optional.empty(), Optional.of("The player wants party tactics."));
+			Map<String, Object> ctrlParams = Map.of("controller", "PLAYER", "scope", "UNTIL_RELEASED", "reason",
+					"The player wants party tactics.");
+			ToolResponse changed = controlTools.character("TACTICAL_CONTROL", campaign, op, ctrlParams);
 			assertFalse(changed.isError(), () -> json(changed).toString());
-			Map<String, Object> replay = (Map<String, Object>) json(controlTools.setTacticalControl(op, campaign,
-					"PLAYER", Optional.empty(), Optional.of("UNTIL_RELEASED"), Optional.empty(),
-					Optional.of("The player wants party tactics."))).get("result");
+			Map<String, Object> replay = (Map<String, Object>) json(
+					controlTools.character("TACTICAL_CONTROL", campaign, op, ctrlParams)).get("result");
 			assertEquals(Boolean.TRUE, replay.remove("replayed"));
 			assertEquals(json(changed).get("result"), replay);
-			Map<String, Object> party = (Map<String, Object>) json(controlTools.getParty(campaign, Optional.empty()))
-					.get("result");
+			Map<String, Object> party = (Map<String, Object>) json(
+					controlTools.character("PARTY", campaign, null, null)).get("result");
 			Map<String, Object> control = (Map<String, Object>) party.get("tactical_control");
 			assertEquals("DM", control.get("default_companion_controller"));
 			assertTrue(Json.write(control.get("policies")).contains("PLAYER"));
-			ToolResponse invalid = controlTools.setTacticalControl(TestCampaigns.op(), campaign, "PLAYER",
-					Optional.empty(), Optional.of("ENCOUNTER"), Optional.empty(), Optional.empty());
+			ToolResponse invalid = controlTools.character("TACTICAL_CONTROL", campaign, TestCampaigns.op(),
+					Map.of("controller", "PLAYER", "scope", "ENCOUNTER"));
 			assertTrue(invalid.isError(), "Encounter-scoped control requires a running encounter.");
-			assertTrue(text(resources.capabilities()).contains("set_tactical_control"));
+			assertTrue(text(resources.capabilities()).contains("character"));
 		}
 	}
 
 	@Test
 	void instructionsAreAvailableWithoutReadingAResource() {
-		ToolResponse response = tools.getInstructions();
+		ToolResponse response = tools.getInstructions(null);
 		assertFalse(response.isError());
 		@SuppressWarnings("unchecked")
 		Map<String, Object> result = (Map<String, Object>) json(response).get("result");
 		String guide = (String) result.get("guide");
 		assertNotNull(guide);
+		assertEquals("CORE", result.get("topic"));
 		assertTrue(guide.contains("engine owns the truth"));
 		assertEquals(text(resources.guide()), guide);
+
+		ToolResponse mapsTopic = tools.getInstructions("MAPS");
+		assertFalse(mapsTopic.isError());
+		String mapsGuide = (String) ((Map<?, ?>) json(mapsTopic).get("result")).get("guide");
+		assertTrue(mapsGuide.contains("Final graphics & mood pass"));
+
+		ToolResponse allTopics = tools.getInstructions("ALL");
+		assertFalse(allTopics.isError());
+		assertEquals(text(resources.fullGuide()), ((Map<?, ?>) json(allTopics).get("result")).get("guide"));
+
+		ToolResponse badTopic = tools.getInstructions("NONEXISTENT");
+		assertTrue(badTopic.isError());
+		assertEquals("INVALID_ARGUMENT", ((Map<?, ?>) json(badTopic).get("error")).get("code"));
 	}
 
 	@Test
 	void structuredErrors() {
-		ToolResponse response = tools.openCampaign("campaign:999999");
+		ToolResponse response = tools.session("OPEN", "campaign:999999", null, null);
 		assertTrue(response.isError());
 		@SuppressWarnings("unchecked")
 		Map<String, Object> error = (Map<String, Object>) json(response).get("error");
 		assertEquals("NOT_FOUND", error.get("code"));
 
-		ToolResponse malformed = tools.openCampaign("bogus");
+		ToolResponse malformed = tools.session("OPEN", "bogus", null, null);
 		assertTrue(malformed.isError());
 		@SuppressWarnings("unchecked")
 		Map<String, Object> error2 = (Map<String, Object>) json(malformed).get("error");
 		assertEquals("INVALID_ARGUMENT", error2.get("code"));
+
+		ToolResponse badAction = tools.session("NO_SUCH_ACTION", null, null, null);
+		assertTrue(badAction.isError());
+		@SuppressWarnings("unchecked")
+		Map<String, Object> error3 = (Map<String, Object>) json(badAction).get("error");
+		assertEquals("INVALID_ARGUMENT", error3.get("code"));
+		assertTrue(error3.get("message").toString().contains("STATE"));
+
+		ToolResponse badParam = tools.session("STATE", null, null, Map.of("typo_key", 1));
+		assertTrue(badParam.isError());
+		@SuppressWarnings("unchecked")
+		Map<String, Object> error4 = (Map<String, Object>) json(badParam).get("error");
+		assertEquals("INVALID_ARGUMENT", error4.get("code"));
+		assertTrue(error4.get("message").toString().contains("typo_key"));
 	}
 
 	@Test
 	void createAndSetupThroughTools() {
-		ToolResponse created = tools.createCampaign("tools-create-1", Optional.of("Tool Test"), Optional.empty());
+		ToolResponse created = tools.session("CREATE", null, "tools-create-1", Map.of("title", "Tool Test"));
 		assertFalse(created.isError(), () -> json(created).toString());
 		@SuppressWarnings("unchecked")
 		Map<String, Object> result = (Map<String, Object>) json(created).get("result");
 		String campaign = (String) result.get("campaign");
-		ToolResponse updated = tools.updateCampaignSetup("tools-update-1", campaign, Optional.empty(),
-				Map.of("player_age", 40, "content_profile", "PEGI_16"));
+		ToolResponse updated = tools.campaignSetup("UPDATE", campaign, "tools-update-1",
+				Map.of("changes", Map.of("player_age", 40, "content_profile", "PEGI_16")));
 		assertFalse(updated.isError(), () -> json(updated).toString());
 		@SuppressWarnings("unchecked")
 		Map<String, Object> meta = (Map<String, Object>) json(updated).get("meta");
 		assertEquals("SETUP_EXPERIENCE", meta.get("harness_state"));
 
-		ToolResponse denied = tools.bootstrapSession("tools-boot-1", campaign, Optional.empty());
+		ToolResponse denied = tools.session("BOOTSTRAP", campaign, "tools-boot-1", null);
 		assertTrue(denied.isError());
 		assertTrue(((TextContent) denied.firstContent()).text().contains("OPERATION_NOT_ALLOWED"));
 	}
@@ -155,21 +182,21 @@ class RpgToolsTest {
 	void wantsCanBeFoundAndClosedByReferenceThroughTools() {
 		String campaign = TestCampaigns.committedCampaign(engine);
 		engine.sessions().bootstrap(TestCampaigns.op(), campaign, null);
-		ToolResponse created = tools.updateCharacter(TestCampaigns.op(), campaign, "character:1", Optional.empty(),
-				Map.of("biography", Map.of("wants", List.of(Map.of("note", "Visit the observatory")))));
+		ToolResponse created = tools.character("UPDATE", campaign, TestCampaigns.op(),
+				Map.of("character", "character:1", "changes",
+						Map.of("biography", Map.of("wants", List.of(Map.of("note", "Visit the observatory"))))));
 		assertFalse(created.isError(), () -> json(created).toString());
-		ToolResponse found = tools.find(campaign, Optional.of("WANT"), "observatory", Optional.empty());
+		ToolResponse found = tools.chronicle("FIND", campaign, null, Map.of("kind", "WANT", "query", "observatory"));
 		assertFalse(found.isError(), () -> json(found).toString());
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> hits = (List<Map<String, Object>>) ((Map<?, ?>) json(found).get("result"))
 				.get("hits");
 		String ref = (String) hits.getFirst().get("ref");
 		assertTrue(ref.startsWith("want:"));
-		ToolResponse closed = tools.updateCharacter(TestCampaigns.op(), campaign, "character:1", Optional.empty(),
-				Map.of("biography", Map.of("wants", List.of(Map.of("ref", ref, "status", "DONE")))));
+		ToolResponse closed = tools.character("UPDATE", campaign, TestCampaigns.op(), Map.of("character", "character:1",
+				"changes", Map.of("biography", Map.of("wants", List.of(Map.of("ref", ref, "status", "DONE"))))));
 		assertFalse(closed.isError(), () -> json(closed).toString());
-		ToolResponse context = tools.getContext(campaign, "WANT", Optional.of(ref), Optional.empty(), Optional.empty(),
-				Optional.empty());
+		ToolResponse context = tools.narrative("CONTEXT", campaign, null, Map.of("scope", "WANT", "ref", ref));
 		assertFalse(context.isError(), () -> json(context).toString());
 		Map<?, ?> want = (Map<?, ?>) ((Map<?, ?>) json(context).get("result")).get("want");
 		assertEquals(ref, want.get("ref"));
@@ -179,17 +206,20 @@ class RpgToolsTest {
 	}
 
 	@Test
-	void resourcesAreServed() {
+	void resourcesAreServedAndCompactSurfaceIsBounded() {
 		assertTrue(text(resources.guide()).contains("engine owns the truth"));
+		assertTrue(text(resources.fullGuide()).contains("Final graphics & mood pass"));
 		assertTrue(text(resources.rulesets()).contains("CC-BY-4.0"));
 		assertTrue(text(resources.mapCatalog()).contains("\"table_round\""));
 		assertTrue(text(resources.capabilities()).contains("\"checkpoints\":true"));
-		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
-				.contains("get_instructions"));
-		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
-				.contains("update_character"));
-		assertEquals(Boolean.TRUE,
-				((Map<?, ?>) Json.readMap(text(resources.capabilities())).get("capabilities")).get("want_references"));
+		Map<String, Object> caps = Json.readMap(text(resources.capabilities()));
+		List<?> implemented = (List<?>) caps.get("implemented_tools");
+		assertEquals(22, implemented.size(), "Compact consolidated surface should stay small for multi-MCP hosts");
+		assertTrue(implemented.contains("get_instructions"));
+		assertTrue(implemented.contains("character"));
+		assertTrue(implemented.contains("render_map"));
+		assertEquals(Boolean.TRUE, ((Map<?, ?>) caps.get("capabilities")).get("want_references"));
+		assertEquals(Boolean.TRUE, ((Map<?, ?>) caps.get("capabilities")).get("compact_tool_surface"));
 	}
 
 	private static String text(io.quarkiverse.mcp.server.ResourceResponse response) {

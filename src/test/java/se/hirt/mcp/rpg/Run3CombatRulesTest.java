@@ -12,7 +12,6 @@ import se.hirt.mcp.rpg.world.WorldTimeline;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
@@ -164,8 +163,8 @@ class Run3CombatRulesTest {
 				if (tool) {
 					RpgTools tools = new RpgTools();
 					tools.engine = e;
-					var response = tools.performEncounterAction(op(), campaign, priest, action, Optional.of(encounter),
-							Optional.empty());
+					var response = tools.encounter("ACTION", campaign, op(),
+							Map.of("actor", priest, "action", action, "encounter", encounter));
 					assertFalse(response.isError(), response.firstContent().asText().text());
 					result = cast(Json.readMap(response.firstContent().asText().text()).get("result"));
 				} else

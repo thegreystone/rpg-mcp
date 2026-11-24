@@ -164,7 +164,7 @@ public final class EncounterDigest {
 		}
 		record.put("xp", Map.of("pool", xpPool, "awards", awards, "total",
 				awards.stream().mapToLong(a -> ((Number) a.get("xp_gained")).longValue()).sum()));
-		record.put("loot", Map.of("tool", "grant_loot", "source", "ENCOUNTER", "source_ref",
+		record.put("loot", Map.of("tool", "inventory", "action", "GRANT_LOOT", "source", "ENCOUNTER", "source_ref",
 				Ref.of(Ref.ENCOUNTER, encounter.id()), "automatic", false));
 		List<Row> logs = tx.query("SELECT * FROM encounter_log WHERE encounter_id=? ORDER BY id", encounter.id());
 		var facts = new LinkedHashMap<String, List<Map<String, Object>>>();

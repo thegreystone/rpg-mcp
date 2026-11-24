@@ -62,12 +62,29 @@ diagnostics.
 
 Tools perform parameterized queries, deterministic resolution or canonical mutations. They are the primary interface.
 
+In protocol `0.2.0`, the MCP surface consolidates the engine's 112 semantic operations into **22 domain tools** so the
+server stays compact inside multi-MCP hosts (including clients with a 128-tool global ceiling):
+
+- **Standalone tools (3):** `get_instructions` (optional `topic`: `CORE`, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`,
+  `DIRECTOR`, `ECONOMY`, `ALL`), `render_map` (PNG + text delivery), and `apply_gm_override` (explicit
+  `destructiveHint = true` audit boundary).
+- **Consolidated domain tools (19):** `session`, `campaign_setup`, `character_draft`, `level_up`, `character`,
+  `roll_check`, `encounter`, `spellcasting`, `rest_time`, `inventory`, `economy`, `world_travel`, `patrols`,
+  `narrative`, `chronicle`, `checkpoints`, `rules`, `map_preparation`, `map_play`.
+
+Each consolidated tool takes `(action, campaign, operation_id?, params?)`. `meta.allowed_operations`, error
+details, `decisions`, and follow-up hints advertise operations as `tool:ACTION` (e.g. `campaign_setup:UPDATE`,
+`encounter:ACTION`, `map_play:CONTEXT`). The underlying semantic operations, idempotency keys, validation rules and
+SQLite persistence remain identical to the operation specifications below.
+
 ### 3.2 Resources
 
 Read-only, cacheable protocol guidance and metadata. Required:
 
 ```text
 rpg://protocol/guide
+rpg://protocol/guide/full
+rpg://maps/catalog
 rpg://protocol/capabilities
 rpg://rulesets
 ```

@@ -310,7 +310,7 @@ public final class MapPropCatalog {
 				"workflow",
 				List.of("1. Establish room shapes, doors, lighting level (BRIGHT/DIM/DARK), tactical cover/objects, challenges and loot.",
 						"2. Final graphics pass: pick fitting room materials (WOOD, STONE, ROUGH_STONE, DAMP_STONE, COBBLESTONE, DECORATIVE_TILE, CARPET, EARTH, GRASS), assign recognizable prop names to furnishings, add non-blocking decor (rugs, chairs, rubble, bushes, floor wear) and mood lights (hearth, brazier, torch_sconce, campfire, lantern or explicit lights).",
-						"3. Optionally call render_map on this preparation:N with audience GM to inspect the visual layout before calling publish_map_preparation."),
+						"3. Optionally call render_map on this preparation:N with audience GM to inspect the visual layout before calling map_preparation:PUBLISH."),
 				"common_props",
 				Map.of("interior",
 						List.of("table_rect (supports seating:'chairs'|'benches', seats:N, clutter:true)",

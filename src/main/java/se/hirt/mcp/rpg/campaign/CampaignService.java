@@ -55,7 +55,7 @@ import java.util.*;
  */
 public final class CampaignService {
 
-	public static final String PROTOCOL_VERSION = "0.1.0";
+	public static final String PROTOCOL_VERSION = "0.2.0";
 
 	private final Database db;
 	private final RulesData rules;

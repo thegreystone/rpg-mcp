@@ -906,9 +906,9 @@ public final class WorldService {
 							: "")
 					+ ".";
 			if ("CLOSED".equals(state.get("state")) && !Boolean.TRUE.equals(details.get("locked"))) {
-				guidance += " Open this unlocked door with update_map_object {key: '" + key
+				guidance += " Open this unlocked door with map_play:UPDATE_OBJECT {key: '" + key
 						+ "', changes: {state: 'OPEN'}} before moving through it.";
-				details.put("next_tool", "update_map_object");
+				details.put("next_tool", "map_play:UPDATE_OBJECT");
 				details.put("changes", Map.of("state", "OPEN"));
 			} else
 				guidance += " Resolve that authored passage's lock, concealment or obstruction before moving through it.";
