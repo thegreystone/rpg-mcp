@@ -348,9 +348,15 @@ public final class MapBundleService {
 			features.add(feature);
 		}
 		proposal.put("features", features);
+		for (String visualLayer : List.of("decor", "lights")) {
+			List<Map<String, Object>> items = SceneService.maps(document.get(visualLayer));
+			if (!items.isEmpty())
+				proposal.put(visualLayer, items.stream().map(MapBundleService::copy).toList());
+		}
 		// Historic IDs stay in the review snapshot; they cannot become live world references by accident.
 		for (String field : List.of("location_ref", "atlas_ref", "address", "journey_ref", "route_anchor", "actors",
-				"objects", "doors", "portals", "rooms", "features", "annotations", "visibility", "world_origin_ft"))
+				"objects", "decor", "lights", "doors", "portals", "rooms", "features", "annotations", "visibility",
+				"world_origin_ft"))
 			SceneService.map(proposal.get("geometry")).remove(field);
 		return proposal;
 	}

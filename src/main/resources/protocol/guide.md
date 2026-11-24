@@ -242,6 +242,19 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
   its discovery check; add an independent room-level check only when it represents another task.
   Dungeons default to DARK. Explicitly author BRIGHT or DIM illumination for a lit setting;
   descriptions of torches or windows alone do not create mechanical light sources.
+  **Final graphics & mood pass:** before calling `publish_map_preparation` on a tactical SCENE or DUNGEON,
+  make a dedicated dressing pass so the map feels alive and matches the scene's mood rather than bare boxes.
+  Choose fitting room `material` values (`WOOD`, `DARK_WOOD`, `STONE`, `ROUGH_STONE`, `DAMP_STONE`,
+  `COBBLESTONE`, `DECORATIVE_TILE`, `CARPET`, `EARTH`, `MUD`, `SAND`, `GRASS`, `FOREST`, `WATER`, `ICE`,
+  `SNOW`). Assign recognizable `prop` names from `rpg://maps/catalog` to tactical `objects` (blocking/cover
+  furniture like `bar_counter`, `table_rect` with `seating:'benches'|'chairs'` or `seats:N`, `table_round`
+  with `seats:N`, `hearth`, `pillar_round`, `pillar_square`, `chest`, `altar`, `boulder`, `wagon`, `tent`)
+  and add non-blocking visual `decor` (`rug`, `carpet_runner`, `chair`, `stool`, `bookshelf`, `barrel`,
+  `crate`, `brazier`, `torch_sconce`, `lantern`, `tree`, `pine_tree`, `bush`, `rubble`, `puddle`, `cracks`,
+  `scorch_mark`, `bloodstain`, `banner`, `campfire`) plus mood `lights` (`{key, position_ft, level,
+  preset|color, radius_ft, intensity}`). Call `render_map` on `preparation:N` with `audience: GM` to preview
+  and refine the draft before publishing; outside combat, `correct_map_geometry` can also patch `decor`,
+  `lights` and room `material` on an existing or incidental board.
   Resolve item definitions before playable publication; use existing actor refs or installed creature definitions.
   Accepted commitments and later damage/looting survive later detail and fresh conversations. Drafts are not live
   loot or opponents. If entry returns an unrealized preparation reference, finish it before continuing travel.

@@ -29,7 +29,7 @@ public final class MapAuthoringService {
 	private static final Set<String> KINDS = Set.of("DUNGEON", "SCENE", "REGION");
 	private static final Set<String> STAGES = Set.of("BLUEPRINT", "SCENE", "REGION");
 	private static final Set<String> KEYED_LISTS = Set.of("rooms", "connections", "rewards", "objects", "actors",
-			"features");
+			"features", "decor", "lights");
 	private static final Pattern ADDRESS = Pattern.compile("^atlas:([1-9][0-9]*)\\[(-?[0-9]+),\\s*(-?[0-9]+)]$");
 	private static final int MAX_PARTS = 2048;
 	private final Database db;
@@ -439,6 +439,24 @@ public final class MapAuthoringService {
 		if ("DUNGEON".equals(p.get("kind")) && !p.containsKey("illumination")
 				&& !geometry(p).containsKey("illumination"))
 			optional.add("Unlit dungeon space defaults to DARK; author illumination and light sources where present.");
+		boolean tacticalScene = Set.of("SCENE", "DUNGEON").contains(prep.str("kind")) && "SCENE".equals(stage(p));
+		if (tacticalScene) {
+			List<Map<String, Object>> rooms = maps(p.get("rooms"));
+			List<Map<String, Object>> objects = maps(p.get("objects"));
+			List<Map<String, Object>> decor = maps(p.get("decor"));
+			List<Map<String, Object>> lights = maps(p.get("lights"));
+			if (objects.isEmpty() && decor.isEmpty())
+				optional.add(
+						"Visual dressing pass recommended: no furnishings, props or decor are placed yet. Add recognizable props (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, pillar_round, brazier, rug, tree, boulder) via revise_map_preparation and optionally preview with render_map before publishing.");
+			if (!rooms.isEmpty() && rooms.stream()
+					.allMatch(room -> "STONE".equalsIgnoreCase(text(room.getOrDefault("material", "STONE")))))
+				optional.add(
+						"All rooms currently use default STONE floors; consider varied room materials (WOOD, DARK_WOOD, ROUGH_STONE, DAMP_STONE, COBBLESTONE, DECORATIVE_TILE, CARPET, EARTH, GRASS) to fit the mood.");
+			if (lights.isEmpty() && objects.stream().noneMatch(MapPropCatalog::isLightEmitting)
+					&& decor.stream().noneMatch(MapPropCatalog::isLightEmitting))
+				optional.add(
+						"No mood light sources or lit fixtures are authored; adding lights or light-emitting props (hearth, brazier, torch_sconce, campfire, lantern) adds warmth and depth.");
+		}
 		Map<String, Object> result = map("preparation", "preparation:" + prep.id(), "kind", prep.str("kind"), "stage",
 				prep.str("stage"), "status", prep.str("status"), "name", prep.str("name"), "revision",
 				prep.lng("revision"), "proposal", p, "commitments", prep.map("commitments_json"), "references",
@@ -447,9 +465,12 @@ public final class MapAuthoringService {
 				issues.stream().map(Violation::message).toList(), "optional_gaps", optional, "next_operation",
 				issues.isEmpty() ? "publish_map_preparation" : "revise_map_preparation", "audience", "GM", "meta",
 				Harness.meta(campaign, null));
-		if (Set.of("DRAFT", "ACCEPTED").contains(prep.str("status")))
+		if (Set.of("DRAFT", "ACCEPTED").contains(prep.str("status"))) {
 			result.put("authoring_guidance",
-					"Ready means structurally valid, not reviewed or automatically published. Review room challenges, boss/opposition, finite patrols, keys or alternatives, and treasure before explicit publication. Missing challenge difficulties use editable DC 15 guidance; authored values win. Accepted blueprint commitments are pinned. Checks and trap consequences remain DM-adjudicated; these declarations do not trigger or disarm traps.");
+					"Ready means structurally valid, not reviewed or automatically published. Review room challenges, boss/opposition, finite patrols, keys or alternatives, and treasure before explicit publication. Before publishing a tactical SCENE/DUNGEON, take a final graphics and mood pass: assign fitting room materials, place catalog props (objects/decor) and mood lights, and optionally call render_map on this preparation:N with audience GM to inspect the result. Missing challenge difficulties use editable DC 15 guidance; authored values win. Accepted blueprint commitments are pinned. Checks and trap consequences remain DM-adjudicated; these declarations do not trigger or disarm traps.");
+			if (Set.of("SCENE", "DUNGEON").contains(prep.str("kind")))
+				result.put("dressing_brief", MapPropCatalog.tacticalBrief());
+		}
 		if (!prep.isNull("published_map_id"))
 			result.put("map_ref", "map:" + prep.lng("published_map_id"));
 		if (Set.of("SCENE", "DUNGEON").contains(prep.str("kind"))) {
@@ -681,6 +702,38 @@ public final class MapAuthoringService {
 					if (xy == null || !containsPoint(bounds, xy))
 						errors.add(new Violation(path + ".position_ft", "PLACEMENT_REQUIRED",
 								"Supply a valid position or a room with realized geometry."));
+				}
+			}
+		}
+		for (String collection : List.of("decor", "lights")) {
+			List<Map<String, Object>> parts = maps(p.get(collection));
+			unique(parts, collection, errors);
+			for (Map<String, Object> part : parts) {
+				String path = collection + "[" + part.get("key") + "]";
+				if (part.get("level") != null && !levels.contains(integer(part.get("level"))))
+					errors.add(new Violation(path + ".level", "UNKNOWN_LEVEL",
+							"Level is absent from the declared floor IDs."));
+				if (part.get("room") != null && !keys.contains(text(part.get("room")))
+						&& !text(part.get("room")).startsWith("location:"))
+					errors.add(new Violation(path + ".room", "UNKNOWN_ROOM",
+							"Place this in a declared room or existing location."));
+				if (!blueprint && bounds != null) {
+					List<Double> xy = position(p, part);
+					if (xy == null || !containsPoint(bounds, xy))
+						errors.add(new Violation(path + ".position_ft", "PLACEMENT_REQUIRED",
+								"Supply a valid position inside map bounds or reference a realized room."));
+				}
+				if ("lights".equals(collection) && part.containsKey("radius_ft")) {
+					double r = number(part.get("radius_ft"));
+					if (r <= 0 || r > 120)
+						errors.add(new Violation(path + ".radius_ft", "RANGE",
+								"Light radius_ft must be positive and at most 120 feet."));
+				}
+				if ("lights".equals(collection) && part.containsKey("intensity")) {
+					double intensity = number(part.get("intensity"));
+					if (intensity <= 0 || intensity > 2.0)
+						errors.add(new Violation(path + ".intensity", "RANGE",
+								"Light intensity must be positive and at most 2.0."));
 				}
 			}
 		}
@@ -1577,6 +1630,23 @@ public final class MapAuthoringService {
 				"anchor"))
 			if (p.containsKey(field))
 				result.put(field, p.get(field));
+		for (String visualLayer : List.of("decor", "lights")) {
+			if (!p.containsKey(visualLayer))
+				continue;
+			List<Map<String, Object>> resolved = new ArrayList<>();
+			for (Map<String, Object> item : maps(p.get(visualLayer))) {
+				Map<String, Object> entry = copy(item);
+				entry.putIfAbsent("level", roomLevel(p, entry));
+				if (entry.get("position_ft") == null && entry.get("rect_ft") == null
+						&& !(entry.containsKey("x_ft") && entry.containsKey("y_ft"))) {
+					List<Double> xy = position(p, entry);
+					if (xy != null)
+						entry.put("position_ft", xy);
+				}
+				resolved.add(entry);
+			}
+			result.put(visualLayer, resolved);
+		}
 		if ("DUNGEON".equals(p.get("kind")))
 			result.putIfAbsent("illumination", "DARK");
 		if (stage(p).equals("REGION"))
@@ -1649,6 +1719,80 @@ public final class MapAuthoringService {
 		return !connectionGeometry(p, edge).isEmpty();
 	}
 
+	/** Read-only GM render view of a draft preparation before publication. */
+	public Map<String, Object> previewDocument(String campaignRef, String preparationRef, int level) {
+		long campaignId = Ref.id(campaignRef, Ref.CAMPAIGN);
+		return db.read(tx -> {
+			Row campaign = Harness.campaign(tx, campaignRef);
+			Row prep = preparation(tx, campaignId, preparationRef);
+			Map<String, Object> p = prep.map("payload_json");
+			if ("BLUEPRINT".equals(stage(p)))
+				throw RpgException.invalidArgument(
+						"Blueprint preparations have no geometry yet. Supply room shapes and bounds_ft via revise_map_preparation before previewing.");
+			Map<String, Object> refs = prep.map("reference_map_json");
+			Map<String, Object> view = document(p, refs);
+			if (rectangle(view.get("bounds_ft")) == null)
+				throw RpgException
+						.invalidArgument("Supply geometry.bounds_ft before preview-rendering this draft preparation.");
+			boolean region = "REGION".equals(stage(p)) || "REGION".equals(prep.str("kind"));
+			if (!region) {
+				var objects = new ArrayList<Map<String, Object>>();
+				for (String collection : List.of("objects", "rewards"))
+					for (Map<String, Object> part : maps(p.get(collection))) {
+						Map<String, Object> item = copy(part);
+						item.putIfAbsent("level", roomLevel(p, part));
+						if (item.get("position_ft") == null && item.get("rect_ft") == null
+								&& !(item.containsKey("x_ft") && item.containsKey("y_ft"))) {
+							List<Double> xy = position(p, part);
+							if (xy != null)
+								item.put("position_ft", xy);
+						}
+						objects.add(item);
+					}
+				view.put("objects", objects);
+				var actors = new ArrayList<Map<String, Object>>();
+				for (Map<String, Object> actor : maps(p.get("actors"))) {
+					List<Double> xy = position(p, actor);
+					if (xy == null)
+						continue;
+					Map<String, Object> marker = new LinkedHashMap<>();
+					double fp = number(actor.getOrDefault("footprint_ft", 5));
+					marker.put("name", actor.getOrDefault("name", actor.getOrDefault("key", "Actor")));
+					if (actor.get("character_ref") != null)
+						marker.put("character_ref", actor.get("character_ref"));
+					marker.put("x_ft", xy.get(0));
+					marker.put("y_ft", xy.get(1));
+					marker.put("position_ft", List.of(xy.get(0) + fp / 2.0, xy.get(1) + fp / 2.0));
+					marker.put("width_ft", fp);
+					marker.put("height_ft", fp);
+					marker.put("footprint_ft", fp);
+					marker.put("level", actor.getOrDefault("level", roomLevel(p, actor)));
+					marker.put("side", actor.getOrDefault("side", "HOSTILE"));
+					actors.add(marker);
+				}
+				view.put("actors", actors);
+				try {
+					view.put("walls",
+							SceneService.geometry(view, level).walls().stream()
+									.map(w -> Map.<String, Object> of("from_ft", SceneService.feet(w.a()), "to_ft",
+											SceneService.feet(w.b())))
+									.toList());
+				} catch (IllegalArgumentException ignored) {
+					// Render any partial draft walls cleanly even if geometry is still in progress.
+				}
+				view.put("rooms", maps(view.get("rooms")).stream()
+						.filter(r -> integer(r.getOrDefault("level", 0)) == level).toList());
+			}
+			view.put("name", prep.str("name"));
+			view.put("kind", prep.str("kind"));
+			view.put("level", level);
+			view.put("audience", "GM");
+			view.put("draft_preview", true);
+			return map("map", preparationRef, "preparation", preparationRef, "revision", prep.lng("revision"), "level",
+					level, "view", view, "meta", Harness.meta(campaign, List.of()));
+		});
+	}
+
 	/**
 	 * Audited physical correction in place: never republishes semantic entities or resets live
 	 * state.
@@ -1659,11 +1803,11 @@ public final class MapAuthoringService {
 		if (expectedRevision == null || reason == null || reason.isBlank() || reason.length() > 4000)
 			throw RpgException.invalidArgument(
 					"A current map revision and a nonempty correction reason of at most 4000 characters are required.");
-		if (patch == null || patch.isEmpty()
-				|| !Set.of("bounds_ft", "walls", "terrain", "rooms", "doors", "portals", "illumination")
-						.containsAll(patch.keySet()))
+		if (patch == null || patch.isEmpty() || !Set
+				.of("bounds_ft", "walls", "terrain", "rooms", "doors", "portals", "illumination", "decor", "lights")
+				.containsAll(patch.keySet()))
 			throw RpgException.invalidArgument(
-					"Correct only bounds_ft, walls, terrain, keyed room/door/portal geometry, or map/room illumination.");
+					"Correct only bounds_ft, walls, terrain, decor, lights, keyed room/door/portal geometry/material, or map/room illumination.");
 		long cid = Ref.id(campaignRef, Ref.CAMPAIGN);
 		return db.mutate(
 				Database.Mutation.of("correct_map_geometry", cid, operationId, "GM",
@@ -1685,7 +1829,7 @@ public final class MapAuthoringService {
 							List<Map<String, Object>> parts = new ArrayList<>(maps(candidate.get(field)));
 							Set<String> seen = new HashSet<>();
 							Set<String> allowed = field.equals("rooms")
-									? Set.of("key", "rect_ft", "polygon_ft", "holes_ft", "illumination")
+									? Set.of("key", "rect_ft", "polygon_ft", "holes_ft", "illumination", "material")
 									: field.equals("doors") ? Set.of("key", "from_ft", "to_ft")
 											: Set.of("key", "from_position_ft", "to_position_ft", "movement_ft");
 							for (Map<String, Object> correction : corrections) {
@@ -1802,6 +1946,9 @@ public final class MapAuthoringService {
 		if (field.equals("rooms")) {
 			if (correction.containsKey("illumination"))
 				validateIllumination(correction.get("illumination"));
+			if (correction.containsKey("material")
+					&& (!(correction.get("material") instanceof String s) || s.isBlank() || s.length() > 120))
+				throw RpgException.invalidArgument("Room material must be a nonempty material or asset reference.");
 			validateShapeArrays(correction, field);
 			return;
 		}
@@ -1866,6 +2013,31 @@ public final class MapAuthoringService {
 	}
 
 	private static void validateCorrectionLayers(String field, Object value, List<Integer> levels) {
+		if (field.equals("decor") || field.equals("lights")) {
+			Set<String> seen = new HashSet<>();
+			for (Map<String, Object> part : correctionArray(value, field, true)) {
+				String key = text(part.get("key"));
+				if (key.isBlank() || key.length() > 120 || !seen.add(key))
+					throw RpgException.invalidArgument(field + " entries require unique nonempty keys.");
+				if (!levels.contains(integer(part.getOrDefault("level", 0))))
+					throw RpgException.invalidArgument("Each " + field + " entry must use an existing declared level.");
+				if (point(part.get("position_ft")) == null && rectangle(part.get("rect_ft")) == null
+						&& !(part.get("x_ft") instanceof Number && part.get("y_ft") instanceof Number))
+					throw RpgException.invalidArgument(
+							"Each " + field + " entry requires position_ft, rect_ft, or x_ft/y_ft coordinates.");
+				if (field.equals("lights") && part.containsKey("radius_ft")) {
+					double r = number(part.get("radius_ft"));
+					if (r <= 0 || r > 120)
+						throw RpgException.invalidArgument("Light radius_ft must be positive and at most 120 feet.");
+				}
+				if (field.equals("lights") && part.containsKey("intensity")) {
+					double intensity = number(part.get("intensity"));
+					if (intensity <= 0 || intensity > 2.0)
+						throw RpgException.invalidArgument("Light intensity must be positive and at most 2.0.");
+				}
+			}
+			return;
+		}
 		Set<String> allowed = field.equals("walls") ? Set.of("key", "level", "from_ft", "to_ft")
 				: Set.of("key", "level", "rect_ft", "polygon_ft", "holes_ft", "movement_multiplier");
 		for (Map<String, Object> part : correctionArray(value, field, true)) {
@@ -2176,8 +2348,8 @@ public final class MapAuthoringService {
 	private static void quantizeLocal(Map<String, Object> proposal) {
 		if ("REGION".equals(proposal.get("kind")) || "REGION".equals(stage(proposal)))
 			return;
-		for (String field : List.of("geometry", "rooms", "connections", "objects", "actors", "walls", "terrain",
-				"bounds_ft"))
+		for (String field : List.of("geometry", "rooms", "connections", "objects", "decor", "lights", "actors", "walls",
+				"terrain", "bounds_ft"))
 			if (proposal.containsKey(field))
 				proposal.put(field, quantized(proposal.get(field), field.endsWith("_ft")));
 		proposal.put("geometry_precision", Map.of("unit", "INCH", "quantum_ft", 1.0 / 12, "profile_version", 1));

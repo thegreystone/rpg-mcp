@@ -95,20 +95,20 @@ public class MapTools {
 				() -> engine.encounters().convertToGrid(operation_id, campaign, encounter, options.orElse(Map.of())));
 	}
 
-	@Tool(name = "begin_map_preparation", description = "MUTATING. Save a DUNGEON blueprint, SCENE or REGION proposal. Rooms/connections/rewards/features use stable local keys. Dungeons need no geometry until realization. Dungeon illumination defaults DARK; author illumination BRIGHT or DIM when the setting is lit. Locks, secrets and declared TRAP objects receive saved GM challenge guidance with difficulty 15 unless authored otherwise; override challenges per feature to suit the site. Returns gaps and the next operation. Draft contents are not live loot or occupants.")
+	@Tool(name = "begin_map_preparation", description = "MUTATING. Save a DUNGEON blueprint, SCENE or REGION proposal. Rooms/connections/rewards/objects/decor/lights/features use stable local keys. Dungeons need no geometry until realization. Dungeon illumination defaults DARK; author illumination BRIGHT or DIM when the setting is lit. Locks, secrets and declared TRAP objects receive saved GM challenge guidance with difficulty 15 unless authored otherwise; override challenges per feature to suit the site. Take a final graphics and mood pass (room materials, catalog props on objects/decor, mood lights, optional GM draft render_map) before publishing. Returns gaps and the next operation. Draft contents are not live loot or occupants.")
 	ToolResponse begin(
 		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
 		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
 		String campaign,
 		@ToolArg(description = "Preparation kind: DUNGEON, SCENE or REGION. Set proposal.stage to BLUEPRINT when accepting semantic dungeon commitments before geometry.")
 		String kind,
-		@ToolArg(description = "Map proposal with name and stable keyed rooms/connections/objects/rewards, or regional features. SCENE geometry uses bounds_ft:[x,y,width,height] and room rect_ft or polygon_ft in feet. Per-feature challenges may contain pick_lock, discover, disarm or force_open check specifications using resolve_check fields: difficulty (whole DC 1-40), kind, ability, optional skill/tool. TRAP objects are concealed by default; known_hazard:true or concealed:false marks an apparent/revealed hazard. These are GM guidance; checks do not automatically reveal, unlock or disarm anything.")
+		@ToolArg(description = "Map proposal with name and stable keyed rooms/connections/objects/decor/lights/rewards, or regional features. SCENE geometry uses bounds_ft:[x,y,width,height] and room rect_ft or polygon_ft in feet. Objects and non-blocking decor accept prop names from rpg://maps/catalog (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, barrel, pillar_round, brazier, rug, tree, boulder), rotation_deg and tint. Lights accept {key, position_ft:[x,y], level, preset|color, radius_ft, intensity}. Per-feature challenges may contain pick_lock, discover, disarm or force_open check specifications using resolve_check fields: difficulty (whole DC 1-40), kind, ability, optional skill/tool. TRAP objects are concealed by default; known_hazard:true or concealed:false marks an apparent/revealed hazard. These are GM guidance; checks do not automatically reveal, unlock or disarm anything.")
 		Map<String, Object> proposal) {
 		return ToolSupport.run("begin_map_preparation",
 				() -> engine.maps().begin(operation_id, campaign, kind, proposal));
 	}
 
-	@Tool(name = "revise_map_preparation", description = "MUTATING. Revise a saved preparation in bounded keyed batches. generate_layout:true requests an optional layout helper. Accepted facts and canonical references survive realization.")
+	@Tool(name = "revise_map_preparation", description = "MUTATING. Revise a saved preparation in bounded keyed batches, including rooms, objects, non-blocking decor and mood lights for a final graphics pass. generate_layout:true requests an optional layout helper. Accepted facts and canonical references survive realization.")
 	ToolResponse revise(
 		@ToolArg(description = "Unique idempotency key for this mutation. Reuse only when retrying the same request.")
 		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
@@ -131,16 +131,16 @@ public class MapTools {
 		return ToolSupport.run("validate_map_preparation", () -> engine.maps().validate(campaign, preparation));
 	}
 
-	@Tool(name = "correct_map_geometry", description = "MUTATING audited correction of an existing tactical map. Structural geometry changes require being outside combat. During combat only illumination or rooms:[{key,illumination}] is accepted, recording a DM-adjudicated lighting event without spending an Action or automatically resolving a torch/cantrip. Set illumination BRIGHT|DIM|DARK for the map, or keyed room overrides. Room illumination takes precedence over map ambient light; this does not simulate carried lights or light propagation. Preserves stable rooms/passages, actor positions, loot and object state. Rejects invalid current footprints or transitions. Supply the current map revision and an explanation; use ordinary gameplay tools for damage, locks and doors.")
+	@Tool(name = "correct_map_geometry", description = "MUTATING audited correction or visual dressing pass on an existing tactical map. Structural geometry and decor/lights/material changes require being outside combat. During combat only illumination or rooms:[{key,illumination}] is accepted, recording a DM-adjudicated lighting event without spending an Action or automatically resolving a torch/cantrip. Set illumination BRIGHT|DIM|DARK for the map, or keyed room overrides. Room illumination takes precedence over map ambient light; this does not simulate carried lights or light propagation. Preserves stable rooms/passages, actor positions, loot and object state. Rejects invalid current footprints or transitions. Supply the current map revision and an explanation; use ordinary gameplay tools for damage, locks and doors.")
 	ToolResponse correctGeometry(
 		@ToolArg(description = "Unique idempotency key. Reuse only to retry this identical correction.")
 		String operation_id, @ToolArg(description = "Campaign reference, for example campaign:1.")
 		String campaign, @ToolArg(description = "Published tactical map reference, for example map:2.")
 		String map, @ToolArg(description = "Current revision from GM map context. Stale corrections are rejected.")
 		long expected_revision,
-		@ToolArg(description = "Bounded patch: illumination BRIGHT|DIM|DARK, rooms:[{key,illumination}] or room geometry by key, door segments by key, portal endpoints by key, bounds_ft, walls or terrain. Semantic keys, levels, references and live object state cannot be changed.")
+		@ToolArg(description = "Bounded patch: illumination BRIGHT|DIM|DARK, rooms:[{key,illumination|material|rect_ft|polygon_ft|holes_ft}], door segments by key, portal endpoints by key, bounds_ft, walls, terrain, non-blocking decor or mood lights. Semantic keys, levels, references and live object state cannot be changed.")
 		Map<String, Object> patch,
-		@ToolArg(description = "Why the geometry was mistaken, or what resolved event changes the ambient illumination. For example: the braziers have been lit.")
+		@ToolArg(description = "Why the geometry was mistaken, what visual dressing was added, or what resolved event changes the ambient illumination. For example: the braziers have been lit.")
 		String reason) {
 		return ToolSupport.run("correct_map_geometry",
 				() -> engine.maps().correctGeometry(operation_id, campaign, map, expected_revision, patch, reason));
@@ -287,11 +287,12 @@ public class MapTools {
 				() -> engine.scenes().preview(campaign, map, character, x_ft, y_ft, audience.orElse("PLAYER")));
 	}
 
-	@Tool(name = "render_map", description = "Read-only. Render saved geometry and permitted knowledge as PNG plus text and structured marker movement targets. audience defaults PLAYER; PLAYER text uses names/directions, GM text includes references/coordinates. options grid_ft 5|10, max_pixels <=2048, style DEFAULT|PARCHMENT|HIGH_CONTRAST, technical_text optional override. include_image:false supports text-only clients. Rendering never generates maps, advances time or reveals hidden state.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	@Tool(name = "render_map", description = "Read-only. Render saved geometry (map:N) or a GM draft preview (preparation:N, requires audience GM) as PNG plus text and structured marker movement targets. audience defaults PLAYER for maps; PLAYER text uses names/directions, GM text includes references/coordinates. options grid_ft 5|10, max_pixels <=2048, style DEFAULT|PARCHMENT|HIGH_CONTRAST, technical_text optional override. include_image:false supports text-only clients. Rendering never generates maps, advances time or reveals hidden state.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
 	ToolResponse render(@ToolArg(description = "Campaign reference, for example campaign:1.")
-	String campaign, @ToolArg(description = "Saved map reference, for example map:2. Use find_maps to locate it.")
-	String map,
-		@ToolArg(description = "PLAYER (default) returns only permitted party knowledge. GM returns private authoring context; never forward GM output as a player handout.")
+	String campaign,
+		@ToolArg(description = "Saved map reference (map:2) or draft preparation reference (preparation:5, requires audience GM for pre-publication visual inspection).")
+		String map,
+		@ToolArg(description = "PLAYER (default for maps) returns only permitted party knowledge. GM returns private authoring context or draft preview; never forward GM output as a player handout.")
 		Optional<String> audience,
 		@ToolArg(description = "Numeric map level. Defaults to 0; use saved room and transition levels, including negative levels where authored.")
 		Optional<Integer> level,
@@ -299,21 +300,22 @@ public class MapTools {
 		Optional<Map<String, Object>> options,
 		@ToolArg(description = "true (default) returns PNG plus text. false returns text and permitted structured context without loading textures or allocating a raster.")
 		Optional<Boolean> include_image) {
+		String selectedAudience = audience.orElse("PLAYER");
+		int selectedLevel = level.orElse(0);
 		if (!include_image.orElse(true))
 			return ToolSupport.run("render_map", () -> {
-				var context = engine.scenes().context(campaign, map, audience.orElse("PLAYER"), level.orElse(0));
+				var context = renderContext(campaign, map, selectedAudience, selectedLevel);
 				var result = new LinkedHashMap<>(compact(context));
 				result.put("text", engine.mapRenderer().describe(SceneService.map(context.get("view")),
-						renderOptions(audience.orElse("PLAYER"), options.orElse(Map.of()))));
+						renderOptions(selectedAudience, options.orElse(Map.of()))));
 				result.put("markers", markers(SceneService.map(context.get("view")), options.orElse(Map.of())));
 				return result;
 			});
 		final byte[][] image = {null};
 		java.util.function.Supplier<Map<String, Object>> body = () -> {
-			Map<String, Object> context = engine.scenes().context(campaign, map, audience.orElse("PLAYER"),
-					level.orElse(0));
+			Map<String, Object> context = renderContext(campaign, map, selectedAudience, selectedLevel);
 			var rendered = engine.mapRenderer().render(SceneService.map(context.get("view")),
-					renderOptions(audience.orElse("PLAYER"), options.orElse(Map.of())),
+					renderOptions(selectedAudience, options.orElse(Map.of())),
 					textures(campaign, SceneService.map(context.get("view")), options.orElse(Map.of())));
 			image[0] = rendered.png();
 			return Map.of("map", map, "mime_type", "image/png", "width", rendered.width(), "height", rendered.height(),
@@ -323,6 +325,15 @@ public class MapTools {
 		};
 		return include_image.orElse(true) ? ToolSupport.image("render_map", body, () -> image[0])
 				: ToolSupport.run("render_map", body);
+	}
+
+	private Map<String, Object> renderContext(String campaign, String ref, String audience, int level) {
+		if (ref != null && ref.startsWith("preparation:")) {
+			if (!"GM".equalsIgnoreCase(audience))
+				throw RpgException.invalidArgument("Previewing a draft preparation requires audience GM.");
+			return engine.maps().previewDocument(campaign, ref, level);
+		}
+		return engine.scenes().context(campaign, ref, audience, level);
 	}
 
 	private static Map<String, Object> renderOptions(String audience, Map<String, Object> options) {
@@ -350,14 +361,15 @@ public class MapTools {
 	private static Map<String, Object> compact(Map<String, Object> context) {
 		var result = new LinkedHashMap<>(context);
 		var view = new LinkedHashMap<>(SceneService.map(context.get("view")));
-		for (String layer : List.of("rooms", "walls", "doors", "objects", "features", "annotations", "actors")) {
+		for (String layer : List.of("rooms", "walls", "doors", "objects", "decor", "lights", "features", "annotations",
+				"actors")) {
 			Object value = view.get(layer);
 			if (value instanceof List<?> list) {
 				view.put(layer + "_count", list.size());
 				if (layer.equals("rooms") && "GM".equals(view.get("audience"))) {
 					view.put("rooms", SceneService.maps(value).stream().limit(100).map(room -> {
 						var summary = new LinkedHashMap<String, Object>();
-						for (String key : List.of("key", "name", "location_ref", "level", "illumination"))
+						for (String key : List.of("key", "name", "location_ref", "level", "illumination", "material"))
 							if (room.containsKey(key))
 								summary.put(key, room.get(key));
 						summary.put("effective_illumination",
@@ -366,7 +378,8 @@ public class MapTools {
 					}).toList());
 					if (list.size() > 100)
 						view.put("rooms_truncated", true);
-				} else if (layer.equals("rooms") || layer.equals("walls"))
+				} else if (layer.equals("rooms") || layer.equals("walls") || layer.equals("decor")
+						|| layer.equals("lights"))
 					view.remove(layer);
 				else
 					view.put(layer, list.stream().limit(100).toList());
@@ -386,7 +399,7 @@ public class MapTools {
 		String campaign, Map<String, Object> view, Map<String, Object> options) {
 		long cid = Ref.id(campaign, Ref.CAMPAIGN);
 		var requested = new LinkedHashMap<String, String>();
-		for (String layer : List.of("rooms", "objects", "features"))
+		for (String layer : List.of("rooms", "objects", "decor", "features"))
 			for (var item : SceneService.maps(view.get(layer))) {
 				String material = SceneService.string(item, "material", null);
 				if (material != null)

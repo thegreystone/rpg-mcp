@@ -22,7 +22,7 @@ import java.util.Set;
 public final class MapRenderer {
 
 	public static final int MAX_OUTPUT_DIMENSION = 2048;
-	public static final String VERSION = "raster-6";
+	public static final String VERSION = "raster-7";
 	private static final int MAX_FEATURES = 65_536;
 	private static final int MAX_VERTICES = 8192;
 	private static final Map<Character, String> GLYPHS = glyphs();
@@ -60,9 +60,9 @@ public final class MapRenderer {
 		}
 		Object level = renderLevel(scene, opts);
 		List<Map<String, Object>> rooms = entries(scene.get("rooms"));
-		var canvas = new Canvas(bounds, maximum, style, textures == null ? Map.of() : textures);
 		boolean regional = Set.of("REGION", "SETTLEMENT")
 				.contains(String.valueOf(scene.get("kind")).toUpperCase(Locale.ROOT));
+		var canvas = new Canvas(bounds, maximum, style, regional, textures == null ? Map.of() : textures);
 		canvas.legendAtTop = regional;
 		canvas.avoidLabelOverlaps = true;
 		boolean showGrid = Boolean.TRUE.equals(opts.get("show_grid"))
@@ -87,6 +87,13 @@ public final class MapRenderer {
 				canvas.area(room, String.valueOf(room.getOrDefault("material", "STONE")));
 			}
 		}
+		for (Map<String, Object> terrainArea : entries(scene.get("terrain"))) {
+			if (onLevel(terrainArea, level)
+					&& (terrainArea.get("material") != null || terrainArea.get("kind") != null)) {
+				String mat = String.valueOf(terrainArea.getOrDefault("material", terrainArea.get("kind")));
+				canvas.area(terrainArea, mat);
+			}
+		}
 		for (Map<String, Object> feature : entries(scene.get("features"))) {
 			if (onLevel(feature, level)) {
 				String kind = String.valueOf(feature.getOrDefault("kind", "GRASS"));
@@ -97,7 +104,7 @@ public final class MapRenderer {
 			for (Map<String, Object> feature : entries(scene.get("features")))
 				if (onLevel(feature, level))
 					canvas.terrainSymbols(feature);
-		// Paint every road casing before any road core. Observed paths are clipped into cells;
+		// Paint every road casing/shoulder before any road core. Observed paths are clipped into cells;
 		// interleaved casing/core strokes would draw false end caps across each neighboring piece.
 		for (String layer : List.of("features", "roads"))
 			for (Map<String, Object> path : entries(scene.get(layer))) {
@@ -125,31 +132,83 @@ public final class MapRenderer {
 		if (showGrid && grid * canvas.scale >= 3) {
 			canvas.grid(grid);
 		}
-		for (Map<String, Object> wall : entries(scene.get("walls"))) {
-			if (onLevel(wall, level) && !"DESTROYED".equalsIgnoreCase(String.valueOf(wall.get("state")))) {
-				canvas.segment(wall, canvas.contrast ? 0xff050505 : 0xff302f2b, number(wall.get("width_ft"), .45));
+		List<Map<String, Object>> levelWalls = entries(scene.get("walls")).stream()
+				.filter(w -> onLevel(w, level) && !"DESTROYED".equalsIgnoreCase(String.valueOf(w.get("state"))))
+				.toList();
+		if (!regional && !canvas.contrast) {
+			for (Map<String, Object> wall : levelWalls) {
+				double[] a = numbers(wall.get("from_ft"), 2), b = numbers(wall.get("to_ft"), 2);
+				if (a != null && b != null) {
+					MapPropRenderer.drawWallShadow(canvas.pixels, canvas.width, canvas.height, bounds, canvas.scale,
+							a[0], a[1], b[0], b[1], number(wall.get("width_ft"), .5));
+				}
 			}
 		}
-		for (Map<String, Object> door : entries(scene.get("doors"))) {
-			if (!onLevel(door, level) || Boolean.TRUE.equals(door.get("hidden"))) {
-				continue;
+		// Flat floor details & rugs render under walls and elevated furnishings
+		for (Map<String, Object> decor : entries(scene.get("decor"))) {
+			if (onLevel(decor, level) && !Boolean.TRUE.equals(decor.get("hidden"))) {
+				canvas.placed(decor, true, true);
 			}
-			String state = String.valueOf(door.getOrDefault("state", "CLOSED")).toUpperCase(Locale.ROOT);
-			int color = state.equals("OPEN") || state.equals("DESTROYED") ? 0xffaac28a : 0xff895b37;
-			canvas.segment(door, color, .8);
+		}
+		for (Map<String, Object> placed : entries(scene.get("objects"))) {
+			if (onLevel(placed, level) && !Boolean.TRUE.equals(placed.get("hidden"))) {
+				canvas.placed(placed, false, true);
+			}
+		}
+		for (Map<String, Object> wall : levelWalls) {
+			if (regional) {
+				canvas.segment(wall, canvas.contrast ? 0xff050505 : 0xff302f2b, number(wall.get("width_ft"), .45));
+			} else {
+				double[] a = numbers(wall.get("from_ft"), 2), b = numbers(wall.get("to_ft"), 2);
+				if (a != null && b != null) {
+					MapPropRenderer.drawWall(canvas.pixels, canvas.width, canvas.height, bounds, canvas.scale, style,
+							canvas.contrast, a[0], a[1], b[0], b[1], number(wall.get("width_ft"), .5));
+				}
+			}
+		}
+		List<Map<String, Object>> levelDoors = entries(scene.get("doors")).stream()
+				.filter(d -> onLevel(d, level) && !Boolean.TRUE.equals(d.get("hidden"))).toList();
+		for (Map<String, Object> door : levelDoors) {
+			double[] a = numbers(door.get("from_ft"), 2), b = numbers(door.get("to_ft"), 2);
+			if (!regional && a != null && b != null) {
+				MapPropRenderer.drawDoor(canvas.pixels, canvas.width, canvas.height, bounds, canvas.scale, style,
+						canvas.contrast, door, a[0], a[1], b[0], b[1]);
+			} else {
+				String state = String.valueOf(door.getOrDefault("state", "CLOSED")).toUpperCase(Locale.ROOT);
+				int color = state.equals("OPEN") || state.equals("DESTROYED") ? 0xffaac28a : 0xff895b37;
+				canvas.segment(door, color, .8);
+			}
 			double[] center = position(door);
 			if (center != null)
 				canvas.symbol(center, passageGlyph(door));
 		}
 		for (Map<String, Object> portal : entries(scene.get("portals"))) {
 			double[] point = portalPosition(portal, level);
-			if (point != null && !Boolean.TRUE.equals(portal.get("hidden")) && fog.known(point[0], point[1]))
+			if (point != null && !Boolean.TRUE.equals(portal.get("hidden")) && fog.known(point[0], point[1])) {
+				if (!regional) {
+					MapPropRenderer.drawPortal(canvas.pixels, canvas.width, canvas.height, bounds, canvas.scale,
+							canvas.contrast, portal, point[0], point[1]);
+				}
 				canvas.symbol(point, portalGlyph(portal));
+			}
+		}
+		// Elevated props & furnishings render with drop shadows above floors and rugs
+		for (Map<String, Object> decor : entries(scene.get("decor"))) {
+			if (onLevel(decor, level) && !Boolean.TRUE.equals(decor.get("hidden"))) {
+				canvas.placed(decor, true, false);
+			}
 		}
 		for (Map<String, Object> placed : entries(scene.get("objects"))) {
 			if (onLevel(placed, level) && !Boolean.TRUE.equals(placed.get("hidden"))) {
-				canvas.placed(placed);
+				canvas.placed(placed, false, false);
 			}
+		}
+		if (!regional && !canvas.contrast) {
+			List<Map<String, Object>> levelRooms = rooms.stream().filter(r -> onLevel(r, level)).toList();
+			List<MapPropRenderer.Light> lights = collectLights(scene, level, fog);
+			List<MapPropRenderer.WallSegment> blockers = collectLightBlockers(levelWalls, levelDoors);
+			MapPropRenderer.applyLighting(canvas.pixels, canvas.width, canvas.height, bounds, canvas.scale, scene,
+					levelRooms, lights, blockers, fog.enabled, fog::known);
 		}
 		boolean labels = !Boolean.FALSE.equals(opts.get("show_labels"));
 		for (Map<String, Object> feature : entries(scene.get("features")))
@@ -559,12 +618,84 @@ public final class MapRenderer {
 		return result;
 	}
 
+	private static List<MapPropRenderer.Light> collectLights(Map<String, Object> scene, Object level, Fog fog) {
+		var lights = new ArrayList<MapPropRenderer.Light>();
+		for (Map<String, Object> entry : entries(scene.get("lights"))) {
+			if (!onLevel(entry, level) || Boolean.TRUE.equals(entry.get("hidden"))) {
+				continue;
+			}
+			double[] pos = objectPosition(entry);
+			if (pos == null || (fog.enabled && !fog.known(pos[0], pos[1]))) {
+				continue;
+			}
+			MapPropCatalog.LightPreset preset = MapPropCatalog
+					.lightPreset(entry.get("preset") == null ? null : entry.get("preset").toString());
+			double radius = number(entry.get("radius_ft"), preset.defaultRadiusFt());
+			Integer color = MapPropCatalog.parseColor(entry.get("color"));
+			double intensity = number(entry.get("intensity"), preset.intensity());
+			if (radius > 0 && intensity > 0) {
+				lights.add(new MapPropRenderer.Light(pos[0], pos[1], Math.min(120, radius),
+						color != null ? color : preset.color(), Math.min(2.0, intensity)));
+			}
+		}
+		for (String layer : List.of("objects", "decor")) {
+			for (Map<String, Object> item : entries(scene.get(layer))) {
+				if (!onLevel(item, level) || Boolean.TRUE.equals(item.get("hidden"))
+						|| !MapPropCatalog.isLightEmitting(item)) {
+					continue;
+				}
+				double[] pos = objectPosition(item);
+				if (pos == null || (fog.enabled && !fog.known(pos[0], pos[1]))) {
+					continue;
+				}
+				MapPropCatalog.PropSpec spec = MapPropCatalog.resolve(item);
+				MapPropCatalog.LightPreset preset = item.get("light_preset") != null
+						? MapPropCatalog.lightPreset(item.get("light_preset").toString()) : null;
+				double defaultRadius = preset != null ? preset.defaultRadiusFt()
+						: spec != null ? spec.lightRadiusFt() : 14.0;
+				int defaultColor = preset != null ? preset.color()
+						: spec != null && spec.lightColor() != 0 ? spec.lightColor() : 0xffffa648;
+				double radius = number(item.get("light_radius_ft"), defaultRadius);
+				Integer color = MapPropCatalog.parseColor(item.get("light_color"));
+				double intensity = number(item.get("light_intensity"), preset != null ? preset.intensity() : 0.75);
+				if (radius > 0 && intensity > 0) {
+					lights.add(new MapPropRenderer.Light(pos[0], pos[1], Math.min(120, radius),
+							color != null ? color : defaultColor, Math.min(2.0, intensity)));
+				}
+			}
+		}
+		return lights;
+	}
+
+	private static List<MapPropRenderer.WallSegment> collectLightBlockers(
+		List<Map<String, Object>> walls, List<Map<String, Object>> doors) {
+		var blockers = new ArrayList<MapPropRenderer.WallSegment>();
+		for (Map<String, Object> wall : walls) {
+			double[] a = numbers(wall.get("from_ft"), 2), b = numbers(wall.get("to_ft"), 2);
+			if (a != null && b != null) {
+				blockers.add(new MapPropRenderer.WallSegment(a[0], a[1], b[0], b[1]));
+			}
+		}
+		for (Map<String, Object> door : doors) {
+			String state = String.valueOf(door.getOrDefault("state", "CLOSED")).toUpperCase(Locale.ROOT);
+			if (Set.of("OPEN", "DESTROYED", "BREACHED").contains(state)) {
+				continue;
+			}
+			double[] a = numbers(door.get("from_ft"), 2), b = numbers(door.get("to_ft"), 2);
+			if (a != null && b != null) {
+				blockers.add(new MapPropRenderer.WallSegment(a[0], a[1], b[0], b[1]));
+			}
+		}
+		return blockers;
+	}
+
 	private static final class Canvas {
 		final int width, height;
 		final int[] pixels;
 		final double[] bounds;
 		final double scale;
 		final String style;
+		final boolean regional;
 		final boolean contrast;
 		final Map<String, AssetService.Texture> textures;
 		final List<int[]> labelBounds = new ArrayList<>();
@@ -573,13 +704,15 @@ public final class MapRenderer {
 		boolean legendAtTop;
 		long work;
 
-		Canvas(double[] bounds, int maximum, String style, Map<String, AssetService.Texture> textures) {
+		Canvas(double[] bounds, int maximum, String style, boolean regional,
+				Map<String, AssetService.Texture> textures) {
 			this.bounds = bounds;
 			this.scale = (maximum - 1d) / Math.max(bounds[2], bounds[3]);
 			this.width = Math.min(maximum, Math.max(1, (int) Math.ceil(bounds[2] * scale) + 1));
 			this.height = Math.min(maximum, Math.max(1, (int) Math.ceil(bounds[3] * scale) + 1));
 			this.pixels = new int[width * height];
 			this.style = style;
+			this.regional = regional;
 			this.contrast = style.equals("HIGH_CONTRAST");
 			this.textures = textures;
 		}
@@ -706,6 +839,9 @@ public final class MapRenderer {
 			if (contrast) {
 				return name.equals("VOID") || name.equals("PIT") ? 0xff202020 : 0xffeeeeea;
 			}
+			if (!regional) {
+				return MapPropRenderer.tacticalMaterial(name, style, x, y);
+			}
 			if (style.equals("PARCHMENT")) {
 				base = blend(base, 0x69d9c49a);
 			}
@@ -718,7 +854,7 @@ public final class MapRenderer {
 		}
 
 		void grid(double spacing) {
-			int color = contrast ? 0xff888888 : 0x42606b66;
+			int color = contrast ? 0xff888888 : 0x38282b26;
 			double firstX = Math.ceil(bounds[0] / spacing) * spacing;
 			double firstY = Math.ceil(bounds[1] / spacing) * spacing;
 			for (double x = firstX; x <= bounds[0] + bounds[2]; x += spacing) {
@@ -739,12 +875,45 @@ public final class MapRenderer {
 		void path(Map<String, Object> path, int color, boolean casing) {
 			List<double[]> vertices = points(path.getOrDefault("path_ft", path.get("points_ft")));
 			double widthPixels = Math.max(3, Math.min(128, number(path.get("width_ft"), 2) * scale));
+			String kind = String.valueOf(path.getOrDefault("kind", "ROAD")).toUpperCase(Locale.ROOT);
+			if (!regional && !contrast && !ridge(kind)) {
+				boolean river = kind.contains("RIVER");
+				double halfW = widthPixels * 0.5 + (casing ? Math.max(2.0, 0.75 * scale) : 0.0);
+				for (int i = 1; i < vertices.size(); i++) {
+					double[] a = vertices.get(i - 1), b = vertices.get(i);
+					tacticalPathCapsule(px(a[0]), py(a[1]), px(b[0]), py(b[1]), halfW, casing, river);
+				}
+				return;
+			}
 			for (int i = 1; i < vertices.size(); i++) {
 				double[] a = vertices.get(i - 1), b = vertices.get(i);
 				if (casing)
 					line(px(a[0]), py(a[1]), px(b[0]), py(b[1]), 0xffe9dbc0, widthPixels + 2);
 				else
 					line(px(a[0]), py(a[1]), px(b[0]), py(b[1]), color, widthPixels);
+			}
+		}
+
+		/**
+		 * Opaque world-space road/river stroke so clipped observed segments produce identical
+		 * pixels.
+		 */
+		void tacticalPathCapsule(
+			double x1, double y1, double x2, double y2, double radius, boolean shoulder, boolean river) {
+			int minX = Math.max(0, (int) Math.floor(Math.min(x1, x2) - radius));
+			int maxX = Math.min(width - 1, (int) Math.ceil(Math.max(x1, x2) + radius));
+			int minY = Math.max(0, (int) Math.floor(Math.min(y1, y2) - radius));
+			int maxY = Math.min(height - 1, (int) Math.ceil(Math.max(y1, y2) + radius));
+			for (int y = minY; y <= maxY; y++) {
+				double worldY = wy(y);
+				for (int x = minX; x <= maxX; x++) {
+					if (MapPropRenderer.distToSegment(x, y, x1, y1, x2, y2) <= radius) {
+						double worldX = wx(x);
+						pixels[y * width + x] = river ? MapPropRenderer.tacticalMaterial("WATER", style, worldX, worldY)
+								: shoulder ? MapPropRenderer.tacticalRoadShoulder(style, worldX, worldY)
+										: MapPropRenderer.tacticalRoadCore(style, worldX, worldY);
+					}
+				}
 			}
 		}
 
@@ -850,39 +1019,58 @@ public final class MapRenderer {
 				}
 		}
 
-		void placed(Map<String, Object> item) {
-			if (item.get("observed_rects_ft") instanceof List<?> parts) {
+		void placed(Map<String, Object> item, boolean isDecor, boolean flatPass) {
+			double rotDeg = number(item.get("rotation_deg"), 0);
+			if (item.get("observed_rects_ft") instanceof List<?> parts && !parts.isEmpty()) {
+				var clipRects = new ArrayList<double[]>();
+				double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
+				double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
 				for (Object part : parts) {
-					var cell = new LinkedHashMap<>(item);
-					cell.remove("observed_rects_ft");
-					cell.remove("x_ft");
-					cell.remove("y_ft");
-					cell.remove("position_ft");
-					cell.put("rect_ft", part);
-					placed(cell);
+					double[] r = numbers(part, 4);
+					if (r == null || r[2] <= 0 || r[3] <= 0)
+						continue;
+					clipRects.add(r);
+					minX = Math.min(minX, r[0]);
+					minY = Math.min(minY, r[1]);
+					maxX = Math.max(maxX, r[0] + r[2]);
+					maxY = Math.max(maxY, r[1] + r[3]);
+				}
+				if (clipRects.isEmpty())
+					return;
+				double cx = (minX + maxX) * 0.5, cy = (minY + maxY) * 0.5;
+				double w = maxX - minX, h = maxY - minY;
+				MapPropRenderer.drawPlaced(pixels, width, height, bounds, scale, style, contrast, textures, item, cx,
+						cy, w, h, rotDeg, clipRects, flatPass);
+				if (!flatPass && "LOCKED".equalsIgnoreCase(String.valueOf(item.get("state")))) {
+					symbol(new double[] {cx, cy}, "L");
 				}
 				return;
 			}
-			double[] pos = objectPosition(item);
+			MapPropCatalog.PropSpec spec = MapPropCatalog.resolve(item);
+			double[] rect = numbers(item.get("rect_ft"), 4);
+			double defaultW = (isDecor || rect == null && item.get("position_ft") != null) && spec != null
+					? spec.defaultWidthFt() : 5.0;
+			double defaultH = (isDecor || rect == null && item.get("position_ft") != null) && spec != null
+					? spec.defaultHeightFt() : 5.0;
+			double w = rect != null ? rect[2] : number(item.get("width_ft"), defaultW);
+			double h = rect != null ? rect[3] : number(item.get("height_ft"), defaultH);
+			double[] pos = numbers(item.get("position_ft"), 2);
+			if (pos == null && rect != null) {
+				pos = new double[] {rect[0] + rect[2] / 2, rect[1] + rect[3] / 2};
+			}
+			if (pos == null && item.containsKey("x_ft") && item.containsKey("y_ft")) {
+				pos = new double[] {number(item.get("x_ft"), 0) + w / 2, number(item.get("y_ft"), 0) + h / 2};
+			}
+			if (pos == null) {
+				pos = position(item);
+			}
 			if (pos == null) {
 				return;
 			}
-			double[] rect = numbers(item.get("rect_ft"), 4);
-			double w = rect == null ? number(item.get("width_ft"), 5) : rect[2];
-			double h = rect == null ? number(item.get("height_ft"), 5) : rect[3];
-			int left = (int) Math.round(px(pos[0] - w / 2)), right = (int) Math.round(px(pos[0] + w / 2));
-			int top = (int) Math.round(py(pos[1] + h / 2)), bottom = (int) Math.round(py(pos[1] - h / 2));
-			boolean destroyed = "DESTROYED".equalsIgnoreCase(String.valueOf(item.get("state")));
-			rect(left, top, right, bottom, destroyed ? 0xff8e8170 : 0xff946b42);
-			line(left, top, right, top, 0xff382f26, 1);
-			line(left, bottom, right, bottom, 0xff382f26, 1);
-			line(left, top, left, bottom, 0xff382f26, 1);
-			line(right, top, right, bottom, 0xff382f26, 1);
-			if (destroyed) {
-				line(left, top, right, bottom, 0xff382f26, 2);
-				line(right, top, left, bottom, 0xff382f26, 2);
-			} else if ("LOCKED".equalsIgnoreCase(String.valueOf(item.get("state")))) {
-				label(pos[0], pos[1], "L", 0xff111111);
+			MapPropRenderer.drawPlaced(pixels, width, height, bounds, scale, style, contrast, textures, item, pos[0],
+					pos[1], w, h, rotDeg, null, flatPass);
+			if (!flatPass && "LOCKED".equalsIgnoreCase(String.valueOf(item.get("state")))) {
+				symbol(pos, "L");
 			}
 		}
 
@@ -901,9 +1089,11 @@ public final class MapRenderer {
 		}
 
 		void symbol(double[] point, String glyph) {
-			int x = (int) Math.round(px(point[0])), y = (int) Math.round(py(point[1]));
-			rect(x - 4, y - 5, x + 4, y + 5, 0xfff3e8ce);
-			text(x - 2, y - 3, glyph, 0xff101010, 1);
+			int x = Math.clamp((int) Math.round(px(point[0])), 5, Math.max(5, width - 6));
+			int y = Math.clamp((int) Math.round(py(point[1])), 6, Math.max(6, height - 7));
+			rect(x - 5, y - 6, x + 5, y + 6, 0xd8332c22);
+			rect(x - 4, y - 5, x + 4, y + 5, 0xf2f4ebd4);
+			text(x - 2, y - 3, glyph, 0xff181612, 1);
 		}
 
 		void reserveLegend(List<String> legend) {
@@ -918,7 +1108,10 @@ public final class MapRenderer {
 				return;
 			int top = legendAtTop ? 3 : Math.max(0, height - 3 - legend.size() * 10),
 					right = Math.min(width - 1, legend.stream().mapToInt(String::length).max().orElse(0) * 6 + 9);
-			rect(0, top, right, Math.min(height - 1, top + legend.size() * 10), 0xeef3e8ce);
+			int bottom = Math.min(height - 1, top + legend.size() * 10);
+			rect(0, top, right, bottom, 0xeef3e8ce);
+			line(0, top, right, top, 0xaa4a4033, 1);
+			line(right, top, right, bottom, 0xaa4a4033, 1);
 			for (int i = 0; i < legend.size(); i++)
 				text(4, top + 2 + i * 10, legend.get(i), 0xff101010, 1);
 		}
@@ -926,32 +1119,67 @@ public final class MapRenderer {
 		void actor(Map<String, Object> actor, int index, boolean labels) {
 			double[] pos = position(actor);
 			double w = number(actor.get("width_ft"), 5), h = number(actor.get("height_ft"), w);
-			int cx = (int) Math.round(px(pos[0])), cy = (int) Math.round(py(pos[1]));
-			int rx = Math.max(4, (int) Math.round(w * scale / 2)), ry = Math.max(4, (int) Math.round(h * scale / 2));
+			double cx = px(pos[0]), cy = py(pos[1]);
+			double rx = Math.max(4.0, w * scale * 0.43), ry = Math.max(4.0, h * scale * 0.43);
 			String side = String.valueOf(actor.getOrDefault("side", "PARTY")).toUpperCase(Locale.ROOT);
 			boolean party = side.equals("PARTY") || side.equals("ALLY")
 					|| Boolean.TRUE.equals(actor.get("party_member"));
-			boolean dead = "DEAD".equals(actor.get("life_state"));
+			String life = String.valueOf(actor.getOrDefault("life_state", "ALIVE")).toUpperCase(Locale.ROOT);
+			boolean dead = "DEAD".equals(life);
+			boolean dying = "DYING".equals(life);
 			int color = dead ? 0xff66645e
 					: party ? 0xff2876a8 : Set.of("HOSTILE", "ENEMY").contains(side) ? 0xffb6473a : 0xff7e8790;
-			for (int y = Math.max(0, cy - ry); y <= Math.min(height - 1, cy + ry); y++) {
-				for (int x = Math.max(0, cx - rx); x <= Math.min(width - 1, cx + rx); x++) {
-					double d = (double) (x - cx) * (x - cx) / ((double) rx * rx)
-							+ (double) (y - cy) * (y - cy) / ((double) ry * ry);
-					if (d <= 1) {
-						pixels[y * width + x] = d > .75 ? 0xfff9f7ed : color;
+			int rimColor = dying ? 0xffe8962e : 0xfff9f7ed;
+			int outerEdge = 0xff202429;
+			if (!contrast) {
+				double shadowOff = Math.max(1.5, Math.min(5.0, rx * 0.14));
+				MapPropRenderer.fillCircleAA(pixels, width, height, cx + shadowOff, cy + shadowOff,
+						Math.max(rx, ry) * 1.02, 0x520c0e12);
+			}
+			int minX = Math.max(0, (int) Math.floor(cx - rx - 2)),
+					maxX = Math.min(width - 1, (int) Math.ceil(cx + rx + 2));
+			int minY = Math.max(0, (int) Math.floor(cy - ry - 2)),
+					maxY = Math.min(height - 1, (int) Math.ceil(cy + ry + 2));
+			double invRx = 1.0 / rx, invRy = 1.0 / ry;
+			double pxStep = Math.max(invRx, invRy);
+			for (int y = minY; y <= maxY; y++) {
+				for (int x = minX; x <= maxX; x++) {
+					double nx = (x - cx) * invRx, ny = (y - cy) * invRy;
+					double r = Math.hypot(nx, ny);
+					if (r > 1.0 + pxStep) {
+						continue;
 					}
+					double cov = MapPropRenderer.clamp01((1.0 - r) / pxStep + 0.5);
+					int paint;
+					if (r > 0.90) {
+						paint = outerEdge;
+					} else if (r > 0.76) {
+						paint = rimColor;
+					} else if (r > 0.68 && !contrast) {
+						paint = MapPropRenderer.shade(color, (nx + ny) < 0 ? 18 : -22);
+					} else {
+						paint = color;
+					}
+					int a = (int) Math.round(cov * 255);
+					pixels[y * width + x] = blend(pixels[y * width + x], (a << 24) | (paint & 0xffffff));
 				}
 			}
+			int icx = (int) Math.round(cx), icy = (int) Math.round(cy);
+			int irx = (int) Math.round(rx), iry = (int) Math.round(ry);
 			if (dead) {
-				line(cx - rx / 2, cy - ry / 2, cx + rx / 2, cy + ry / 2, 0xff202020, 2);
-				line(cx - rx / 2, cy + ry / 2, cx + rx / 2, cy - ry / 2, 0xff202020, 2);
+				line(icx - irx / 2, icy - iry / 2, icx + irx / 2, icy + iry / 2, 0xff202020, 2);
+				line(icx - irx / 2, icy + iry / 2, icx + irx / 2, icy - iry / 2, 0xff202020, 2);
 			}
 			if (labels) {
 				String label = String.valueOf(actor.getOrDefault("label", Integer.toString(index)));
-				int size = Math.max(1, Math.min(3, Math.min(rx, ry) / 7));
-				text(cx - Math.min(label.length(), 4) * 3 * size, cy - 3 * size,
-						label.substring(0, Math.min(label.length(), 4)), 0xffffffff, size);
+				int size = Math.max(1, Math.min(3, Math.min(irx, iry) / 7));
+				String shown = label.substring(0, Math.min(label.length(), 4));
+				int tx = icx - shown.length() * 3 * size;
+				int ty = icy - 3 * size;
+				if (!contrast) {
+					text(tx + 1, ty + 1, shown, 0x88101418, size);
+				}
+				text(tx, ty, shown, 0xffffffff, size);
 			}
 		}
 

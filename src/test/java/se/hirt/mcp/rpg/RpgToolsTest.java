@@ -182,6 +182,7 @@ class RpgToolsTest {
 	void resourcesAreServed() {
 		assertTrue(text(resources.guide()).contains("engine owns the truth"));
 		assertTrue(text(resources.rulesets()).contains("CC-BY-4.0"));
+		assertTrue(text(resources.mapCatalog()).contains("\"table_round\""));
 		assertTrue(text(resources.capabilities()).contains("\"checkpoints\":true"));
 		assertTrue(((List<?>) Json.readMap(text(resources.capabilities())).get("implemented_tools"))
 				.contains("get_instructions"));

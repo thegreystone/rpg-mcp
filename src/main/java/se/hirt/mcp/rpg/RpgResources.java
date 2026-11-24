@@ -149,6 +149,12 @@ public class RpgResources {
 				Json.write(Map.of("rulesets", engine.rules().rulesets()))));
 	}
 
+	@Resource(uri = "rpg://maps/catalog", name = "map-catalog", mimeType = "application/json", description = "Built-in tactical map materials, general prop/furniture catalog, light presets and graphics-pass options.")
+	ResourceResponse mapCatalog() {
+		return new ResourceResponse(TextResourceContents.create("rpg://maps/catalog",
+				Json.write(se.hirt.mcp.rpg.maps.MapPropCatalog.catalog())));
+	}
+
 	static String classpath(String path) {
 		try (InputStream in = RpgResources.class.getClassLoader().getResourceAsStream(path)) {
 			if (in == null) {

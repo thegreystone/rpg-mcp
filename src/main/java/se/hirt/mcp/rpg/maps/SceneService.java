@@ -905,6 +905,7 @@ public final class SceneService {
 			Polygon shape = polygon(room);
 			if (number(room, "level", 0).intValue() == level && shape != null && shape.contains(center)) {
 				out.put("material", string(room, "material", "STONE"));
+				out.put("illumination", string(room, "illumination", string(doc, "illumination", "BRIGHT")));
 				break;
 			}
 		}
@@ -1032,6 +1033,8 @@ public final class SceneService {
 			out = new LinkedHashMap<>();
 			out.put("bounds_ft", doc.getOrDefault("bounds_ft", List.of(0, 0, 100, 100)));
 			out.put("enclose_rooms", false);
+			if (doc.get("illumination") != null)
+				out.put("illumination", doc.get("illumination"));
 			var levelCells = knownCells.entrySet().stream().filter(e -> e.getKey().startsWith(level + ":"))
 					.map(e -> map(e.getValue())).toList();
 			out.put("rooms", levelCells.stream().map(v -> {
@@ -1049,6 +1052,15 @@ public final class SceneService {
 			for (String layer : List.of("features", "roads", "rivers"))
 				out.put(layer, levelCells.stream().flatMap(v -> maps(v.get("observed_" + layer)).stream()).distinct()
 						.toList());
+			Set<String> knownKeys = knownCells.keySet();
+			out.put("decor",
+					maps(doc.get("decor")).stream().filter(d -> number(d, "level", 0).intValue() == level
+							&& !concealedObject(d) && entryKnown(d, level, knownKeys)).map(SceneService::publicObject)
+							.toList());
+			out.put("lights",
+					maps(doc.get("lights")).stream().filter(l -> number(l, "level", 0).intValue() == level
+							&& !concealedObject(l) && entryKnown(l, level, knownKeys)).map(SceneService::publicLight)
+							.toList());
 			var objects = new LinkedHashMap<String, Object>(map(knowledge.get("objects")));
 			refreshObjects(objects, doc, level, visible);
 			out.put("objects", objects.values().stream().map(SceneService::map)
@@ -1183,12 +1195,39 @@ public final class SceneService {
 
 	private static Map<String, Object> publicObject(Map<String, Object> o) {
 		var p = new LinkedHashMap<String, Object>();
-		for (String k : List.of("key", "name", "label", "kind", "rect_ft", "polygon_ft", "x_ft", "y_ft", "width_ft",
-				"height_ft", "position_ft", "level", "state", "material", "blocks_movement", "blocks_sight", "cover",
-				"observed_rects_ft", "extent_known"))
+		for (String k : List.of("key", "name", "label", "kind", "prop", "rect_ft", "polygon_ft", "x_ft", "y_ft",
+				"width_ft", "height_ft", "position_ft", "rotation_deg", "tint", "seats", "seating", "clutter",
+				"decorative", "light_radius_ft", "light_color", "light_preset", "light_intensity", "level", "state",
+				"material", "blocks_movement", "blocks_sight", "cover", "observed_rects_ft", "extent_known"))
 			if (o.containsKey(k))
 				p.put(k, o.get(k));
 		return p;
+	}
+
+	private static Map<String, Object> publicLight(Map<String, Object> l) {
+		var p = new LinkedHashMap<String, Object>();
+		for (String k : List.of("key", "position_ft", "x_ft", "y_ft", "level", "radius_ft", "color", "preset",
+				"intensity"))
+			if (l.containsKey(k))
+				p.put(k, l.get(k));
+		return p;
+	}
+
+	private static boolean entryKnown(Map<String, Object> entry, int level, Set<String> knownCells) {
+		double x, y;
+		if (entry.get("position_ft") instanceof List<?> pos && pos.size() == 2) {
+			x = n(pos, 0);
+			y = n(pos, 1);
+		} else if (entry.get("rect_ft") instanceof List<?> r && r.size() == 4) {
+			x = n(r, 0) + n(r, 2) * 0.5;
+			y = n(r, 1) + n(r, 3) * 0.5;
+		} else if (entry.containsKey("x_ft") && entry.containsKey("y_ft")) {
+			x = number(entry, "x_ft", 0).doubleValue() + number(entry, "width_ft", 0).doubleValue() * 0.5;
+			y = number(entry, "y_ft", 0).doubleValue() + number(entry, "height_ft", 0).doubleValue() * 0.5;
+		} else {
+			return false;
+		}
+		return knownCells.contains(level + ":" + (long) Math.floor(x / 5) + ":" + (long) Math.floor(y / 5));
 	}
 
 	public record Transition(int level, Point origin, long costInches) {

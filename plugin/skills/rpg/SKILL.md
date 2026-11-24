@@ -37,6 +37,9 @@ Argument given: `$ARGUMENTS`
    `suspend_session` when the player stops.
 4. **Use the saved world.** Bootstrap returns atlas/preparation context. Retrieve saved maps with
    `get_map_context`/`find_maps`; author accepted dungeon blueprints before realizing them near approach.
+   Before publishing a tactical map, take a final graphics and mood pass (fitting room materials, catalog
+   props on `objects`/`decor`, and mood `lights` from `rpg://maps/catalog`; preview drafts with
+   `render_map` on `preparation:N`, `audience: GM`).
    Every new combat uses a local grid and established figurine placement. Show only PLAYER views;
    GM authoring and patrol information stay private. Image display is optional: `render_map` also
    returns text. Resolve interrupted travel at its actual position and retain the unfinished journey.

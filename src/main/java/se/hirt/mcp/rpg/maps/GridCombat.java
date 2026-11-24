@@ -198,7 +198,7 @@ public final class GridCombat {
 			if (!SceneService.maps(authored.get("rooms")).isEmpty())
 				document.put("enclose_rooms", authored.getOrDefault("enclose_rooms", true));
 			for (String key : List.of("bounds_ft", "rooms", "walls", "doors", "features", "roads", "rivers", "objects",
-					"illumination", "enclose_rooms"))
+					"decor", "lights", "illumination", "enclose_rooms"))
 				if (authored.containsKey(key))
 					document.put(key, authored.get(key));
 			if (authored.containsKey("bounds_ft") && !authored.containsKey("rooms"))

@@ -1096,8 +1096,137 @@ public final class TravelJourneyService {
 			terrain.add(Map.of("kind", "FOREST", "polygon_ft",
 					List.of(List.of(0, 60), List.of(100, 60), List.of(100, 100), List.of(0, 100))));
 		}
-		document.put("features", se.hirt.mcp.rpg.maps.TacticalGeography.clip(terrain, List.of(0d, 0d, 100d, 100d)));
+		List<Map<String, Object>> clippedTerrain = se.hirt.mcp.rpg.maps.TacticalGeography.clip(terrain,
+				List.of(0d, 0d, 100d, 100d));
+		document.put("features", clippedTerrain);
+		document.put("decor", roadsideDecor(ox, oy, localRoads, width, clippedTerrain));
 		return document;
+	}
+
+	/**
+	 * Deterministic, non-blocking roadside trees/bushes/boulders matching local biome geography.
+	 */
+	private static List<Map<String, Object>> roadsideDecor(
+		double ox, double oy, List<Map<String, Object>> roads, double roadWidth, List<Map<String, Object>> features) {
+		var decor = new ArrayList<Map<String, Object>>();
+		double roadClearance = roadWidth * 0.5 + 7.5;
+		int idx = 0;
+		for (int gx = 0; gx < 6; gx++) {
+			for (int gy = 0; gy < 6; gy++) {
+				int wxCell = (int) Math.floor((ox + gx * 16.0) / 16.0);
+				int wyCell = (int) Math.floor((oy + gy * 16.0) / 16.0);
+				double lx = 8.0 + gx * 16.0 + (hash01(wxCell * 17 + 3, wyCell * 31 + 7) - 0.5) * 9.0;
+				double ly = 8.0 + gy * 16.0 + (hash01(wxCell * 29 + 11, wyCell * 13 + 5) - 0.5) * 9.0;
+				if (lx < 5 || lx > 95 || ly < 5 || ly > 95)
+					continue;
+				if (Math.hypot(lx - 50.0, ly - 50.0) < 12.0)
+					continue;
+				if (nearRoad(lx, ly, roads, roadClearance))
+					continue;
+				String biome = roadsideBiome(lx, ly, features);
+				if ("WATER".equals(biome))
+					continue;
+				double roll = hash01(wxCell * 41 + 19, wyCell * 53 + 23);
+				String prop = null;
+				double size = 0;
+				if ("FOREST".equals(biome)) {
+					if (roll < 0.42) {
+						prop = "tree";
+						size = 8.5 + hash01(wxCell, wyCell + 9) * 3.5;
+					} else if (roll < 0.72) {
+						prop = "pine_tree";
+						size = 7.0 + hash01(wxCell + 5, wyCell) * 3.0;
+					} else if (roll < 0.88) {
+						prop = "bush";
+						size = 3.5 + hash01(wxCell + 2, wyCell + 2) * 2.0;
+					} else if (roll < 0.94) {
+						prop = "stump";
+						size = 2.4;
+					}
+				} else if ("HILL".equals(biome)) {
+					if (roll < 0.34) {
+						prop = "boulder";
+						size = 4.0 + hash01(wxCell, wyCell + 4) * 2.5;
+					} else if (roll < 0.56) {
+						prop = "bush";
+						size = 3.5 + hash01(wxCell + 3, wyCell) * 1.5;
+					} else if (roll < 0.68) {
+						prop = "pine_tree";
+						size = 7.0;
+					}
+				} else {
+					if (roll < 0.18) {
+						prop = "tree";
+						size = 8.0 + hash01(wxCell, wyCell + 7) * 3.0;
+					} else if (roll < 0.34) {
+						prop = "bush";
+						size = 3.4 + hash01(wxCell + 1, wyCell + 3) * 1.6;
+					} else if (roll < 0.44) {
+						prop = "boulder";
+						size = 3.8 + hash01(wxCell + 8, wyCell) * 1.8;
+					}
+				}
+				if (prop != null) {
+					var item = new LinkedHashMap<String, Object>();
+					item.put("key", "roadside-" + (++idx));
+					item.put("prop", prop);
+					item.put("position_ft", List.of(Math.round(lx * 12) / 12.0, Math.round(ly * 12) / 12.0));
+					item.put("width_ft", Math.round(size * 12) / 12.0);
+					item.put("height_ft", Math.round(size * 12) / 12.0);
+					item.put("level", 0);
+					decor.add(item);
+				}
+			}
+		}
+		return decor;
+	}
+
+	private static boolean nearRoad(double x, double y, List<Map<String, Object>> roads, double clearance) {
+		for (Map<String, Object> road : roads) {
+			List<List<Double>> pts = coordinates(road.get("path_ft"));
+			for (int i = 1; i < pts.size(); i++) {
+				double ax = pts.get(i - 1).get(0), ay = pts.get(i - 1).get(1);
+				double bx = pts.get(i).get(0), by = pts.get(i).get(1);
+				double dx = bx - ax, dy = by - ay, lenSq = dx * dx + dy * dy;
+				double t = lenSq < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / lenSq));
+				if (Math.hypot(x - (ax + t * dx), y - (ay + t * dy)) < clearance)
+					return true;
+			}
+		}
+		return false;
+	}
+
+	private static String roadsideBiome(double x, double y, List<Map<String, Object>> features) {
+		for (Map<String, Object> f : features) {
+			List<List<Double>> poly = coordinates(f.get("polygon_ft"));
+			if (poly.size() < 3 || !pointInPolygon(poly, x, y))
+				continue;
+			String kind = String.valueOf(f.getOrDefault("kind", "")).toUpperCase(Locale.ROOT);
+			if (kind.contains("WATER") || kind.contains("LAKE") || kind.contains("RIVER"))
+				return "WATER";
+			if (kind.contains("FOREST"))
+				return "FOREST";
+			if (kind.contains("HILL") || kind.contains("MOUNTAIN"))
+				return "HILL";
+		}
+		return "GRASS";
+	}
+
+	private static boolean pointInPolygon(List<List<Double>> poly, double x, double y) {
+		boolean inside = false;
+		for (int i = 0, j = poly.size() - 1; i < poly.size(); j = i++) {
+			List<Double> a = poly.get(i), b = poly.get(j);
+			if ((a.get(1) > y) != (b.get(1) > y)
+					&& x < (b.get(0) - a.get(0)) * (y - a.get(1)) / (b.get(1) - a.get(1)) + a.get(0))
+				inside = !inside;
+		}
+		return inside;
+	}
+
+	private static double hash01(int x, int y) {
+		int h = x * 374761393 + y * 668265263;
+		h = (h ^ (h >>> 13)) * 1274126177;
+		return ((h ^ (h >>> 16)) & 0x7fffffff) / (double) 0x7fffffff;
 	}
 
 	/**

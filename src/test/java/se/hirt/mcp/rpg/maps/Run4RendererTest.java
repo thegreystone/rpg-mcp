@@ -27,13 +27,17 @@ class Run4RendererTest {
 
 	@Test
 	void incidentalFurnitureUsesTheSameSouthwestOriginAsCollision() {
+		var bare = Map.<String, Object> of("bounds_ft", List.of(0, 0, 40, 40), "rooms",
+				List.of(Map.of("rect_ft", List.of(0, 0, 40, 40))));
 		var scene = Map.<String, Object> of("bounds_ft", List.of(0, 0, 40, 40), "rooms",
 				List.of(Map.of("rect_ft", List.of(0, 0, 40, 40))), "objects",
 				List.of(Map.of("key", "bar", "x_ft", 0, "y_ft", 25, "width_ft", 25, "height_ft", 5)));
-		var image = PngCodec.decode(new MapRenderer()
-				.render(scene, Map.of("max_pixels", 401, "show_grid", false, "show_labels", false)).png());
-		assertEquals(0xff946b42, pixel(image, 200, 130), "The bar covers world (20,27), like its collision shape.");
-		assertNotEquals(0xff946b42, pixel(image, 100, 170), "World (10,23) is south of the bar.");
+		var options = Map.<String, Object> of("max_pixels", 401, "show_grid", false, "show_labels", false);
+		var bareImage = PngCodec.decode(new MapRenderer().render(bare, options).png());
+		var image = PngCodec.decode(new MapRenderer().render(scene, options).png());
+		assertNotEquals(pixel(bareImage, 200, 130), pixel(image, 200, 130),
+				"The bar covers world (20,27), like its collision shape.");
+		assertEquals(pixel(bareImage, 100, 170), pixel(image, 100, 170), "World (10,23) is south of the bar.");
 	}
 
 	private static int pixel(PngCodec.Raster image, int x, int y) {
