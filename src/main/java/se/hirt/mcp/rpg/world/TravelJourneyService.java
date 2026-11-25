@@ -191,7 +191,7 @@ public final class TravelJourneyService {
 		if (journey.lng("to_location_id") != destination.id())
 			throw RpgException.notAllowed("A saved journey toward "
 					+ tx.get("location", journey.lng("to_location_id")).str("name")
-					+ " is still in progress. Resolve any pending travel opportunity, then resume that destination. To leave an incapacitated companion behind, call move_party to the saved destination with characters containing only the saved travelers who will continue; this preserves progress and risk checks. A different destination cannot turn this saved journey around.")
+					+ " is still in progress. Resolve any pending travel opportunity, then resume that destination. To leave an incapacitated companion behind, call world_travel:MOVE_PARTY to the saved destination with characters containing only the saved travelers who will continue; this preserves progress and risk checks. A different destination cannot turn this saved journey around.")
 					.withDetail("saved_destination", Ref.of(Ref.LOCATION, journey.lng("to_location_id")))
 					.withDetail("saved_travelers", roster(tx, journey, null).movers());
 		return progress(tx, campaign, journey, WorldTimeline.MAX_ADVANCE_SECONDS, rules, roller, selected);
@@ -384,8 +384,8 @@ public final class TravelJourneyService {
 						+ ") cannot travel unaided while " + character.str("life_state")
 						+ ", incapacitated or unable to move. "
 						+ (savedJourney
-								? "Resolve healing, recovery or the condition preventing movement, or explicitly select the other saved travelers with move_party characters to leave this traveler behind. "
-								: "Resolve healing, recovery or the condition preventing movement before departure, or use move_party characters to select the travelers who can depart from their shared location. ")
+								? "Resolve healing, recovery or the condition preventing movement, or explicitly select the other saved travelers with world_travel:MOVE_PARTY characters to leave this traveler behind. "
+								: "Resolve healing, recovery or the condition preventing movement before departure, or use world_travel:MOVE_PARTY characters to select the travelers who can depart from their shared location. ")
 						+ "No time or journey progress was spent.")
 						.withDetail("blocked_character", Ref.of(Ref.CHARACTER, character.id()))
 						.withDetail("life_state", character.str("life_state"))

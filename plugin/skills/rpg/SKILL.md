@@ -20,12 +20,14 @@ Argument given: `$ARGUMENTS`
 
 ## Steps
 
-1. **Load the core Game Master guide first.** Call `get_instructions` once (default `CORE`; load topic manuals
-   `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, or `ECONOMY` on demand when entering those workflows).
-   Then call `session` with `action: "STATE"`: every response carries `harness_state` and `allowed_operations`,
-   and the server guides you turn by turn. If the tools are missing, the plugin's bundle has not been downloaded
-   yet; tell the player to start a new session (Claude Code fetches the bundle at the first session start after
-   installation) and check `/plugin` → **Installed** → **rpg-mcp**.
+1. **Load the core Game Master guide first.** Call `get_instructions` once with no arguments (it returns the
+   core guide and lists any on-demand topic manuals such as `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`,
+   and `ECONOMY` if supported by the installed server). Follow the exact tool names advertised by that guide: in
+   protocol 0.2.0 call `session` with `action: "STATE"` (earlier binaries expose `get_server_state`). Every
+   response carries `harness_state` and `allowed_operations`, and the server guides you turn by turn. If the
+   tools are missing, the plugin's bundle has not been downloaded yet; tell the player to start a new session
+   (Claude Code fetches the bundle at the first session start after installation) and check `/plugin` →
+   **Installed** → **rpg-mcp**.
 2. **Decide what the player wants:**
     - `new` (or "start", "new campaign"): call `get_instructions(topic="SETUP")` and run the campaign setup
       interview via `session:CREATE`, `campaign_setup` and `character_draft` — one decision per turn, every

@@ -111,7 +111,7 @@ public final class CharacterService {
 								.map(r -> !"ARCHIVED".equals(r.str("lifecycle"))).orElse(false)) {
 							throw RpgException.notAllowed("The setup already has a player character ("
 									+ Ref.of(Ref.CHARACTER, draft.playerCharacterId())
-									+ "); set player_controlled=false for companions or change player_character via update_campaign_setup.");
+									+ "); set player_controlled=false for companions or change player_character via campaign_setup:UPDATE.");
 						}
 						draft.payload().put("player_character", Ref.of(Ref.CHARACTER, id));
 						tx.update("campaign_setup_draft", draftRow.id(), Map.of("payload_json",
@@ -161,7 +161,7 @@ public final class CharacterService {
 				gen.put("standard_array", Rules.STANDARD_ARRAY);
 				gen.put("point_buy", Map.of("budget", Rules.POINT_BUY_BUDGET, "min", Rules.POINT_BUY_MIN, "max",
 						Rules.POINT_BUY_MAX));
-				gen.put("roll", "4d6 drop lowest, six times, via generate_ability_scores");
+				gen.put("roll", "4d6 drop lowest, six times, via character_draft:GENERATE_ABILITIES");
 				result.put("ability_generation", gen);
 			}
 			if (s.equals("ALL") || s.equals("SPECIES")) {
@@ -257,14 +257,14 @@ public final class CharacterService {
 						creation.put("available_scores", Rules.STANDARD_ARRAY);
 						result.put("available_scores", Rules.STANDARD_ARRAY);
 						result.put("instructions",
-								"Assign these six values to the six abilities via update_character_draft.ability_scores.");
+								"Assign these six values to the six abilities via character_draft:UPDATE (changes.ability_scores).");
 					}
 					case "POINT_BUY" -> {
 						creation.put("method", m);
 						result.put("budget", Rules.POINT_BUY_BUDGET);
 						result.put("range", List.of(Rules.POINT_BUY_MIN, Rules.POINT_BUY_MAX));
 						result.put("instructions",
-								"Propose six scores between 8 and 15 costing at most 27 points via update_character_draft.ability_scores.");
+								"Propose six scores between 8 and 15 costing at most 27 points via character_draft:UPDATE (changes.ability_scores).");
 					}
 					default -> {
 						if (creation.get("available_scores") != null && !draft.allowReroll()) {
@@ -291,7 +291,7 @@ public final class CharacterService {
 						result.put("rolls", rolls);
 						result.put("available_scores", available);
 						result.put("instructions",
-								"Assign the rolled values to the six abilities via update_character_draft.ability_scores.");
+								"Assign the rolled values to the six abilities via character_draft:UPDATE (changes.ability_scores).");
 					}
 					}
 					tx.update("character", c.id(),
@@ -393,13 +393,13 @@ public final class CharacterService {
 			case "species" -> {
 				RulesData.Definition species = rules.resolve("SPECIES", String.valueOf(value))
 						.orElseThrow(() -> RpgException.invalidArgument(
-								"Unknown species '" + value + "'; see get_character_choices SPECIES."));
+								"Unknown species '" + value + "'; see character_draft:CHOICES SPECIES."));
 				cols.put("species_ref", species.id());
 				Origins.onSpeciesSet(tx, rules, species, c, cols);
 			}
 			case "class" -> {
 				RulesData.Definition cls = rules.resolve("CLASS", String.valueOf(value)).orElseThrow(() -> RpgException
-						.invalidArgument("Unknown class '" + value + "'; see get_character_choices CLASS."));
+						.invalidArgument("Unknown class '" + value + "'; see character_draft:CHOICES CLASS."));
 				String previousClass = classOf(tx, c).map(RulesData.Definition::id).orElse(null);
 				if (!cls.id().equals(previousClass)) {
 					creation.remove("starting_equipment");
@@ -778,7 +778,7 @@ public final class CharacterService {
 			Row campaign = Harness.requireMutation(tx, campaignRef, "update_character");
 			Row c = character(tx, campaignId, characterRef);
 			if ("DRAFT".equals(c.str("lifecycle"))) {
-				throw RpgException.notAllowed(characterRef + " is a DRAFT; edit it with update_character_draft.");
+				throw RpgException.notAllowed(characterRef + " is a DRAFT; edit it with character_draft:UPDATE.");
 			}
 			Harness.requireRevision(c, characterRef, expectedRevision);
 			if (changes == null || changes.isEmpty()) {
@@ -1020,7 +1020,7 @@ public final class CharacterService {
 			if (carried.stream().anyMatch(entry -> "ARMOR".equals(entry.get("type"))) && carried.stream().noneMatch(
 					entry -> "ARMOR".equals(entry.get("type")) && Boolean.TRUE.equals(entry.get("equipped"))))
 				m.put("equipment_readiness",
-						"Carried armor is unequipped. Review inventory and use equip_item to choose the armor to wear before combat.");
+						"Carried armor is unequipped. Review inventory and use inventory:EQUIP to choose the armor to wear before combat.");
 			List<Map<String, Object>> magicItems = InventoryService.magicItems(tx, rules, c.id());
 			if (!magicItems.isEmpty()) {
 				m.put("magic_items", magicItems);
@@ -1112,14 +1112,14 @@ public final class CharacterService {
 					.query("SELECT * FROM character_trait WHERE character_id = ? AND kind = 'SPELL_PREPARED'", c.id())
 					.stream().anyMatch(t -> Origins.SOURCE_CLASS.equals(Origins.sourceOf(t)));
 			if (!classCantrips || !classSpells) {
-				steps.add("choose cantrips and prepared spells (get_content_definitions kind SPELL)");
+				steps.add("choose cantrips and prepared spells (rules:DEFINITIONS kind SPELL)");
 			}
 		}
 		if (c.isNull("personality")) {
 			steps.add("personality, backstory, appearance, alignment");
 		}
 		if (steps.isEmpty()) {
-			steps.add("validate_character_draft, then commit_character_draft");
+			steps.add("character_draft:VALIDATE, then character_draft:COMMIT");
 		}
 		return steps;
 	}

@@ -3,7 +3,9 @@
 ## Commerce, Equipment & Magic Treasure (`inventory`)
 
 - Narrate the haggling; let the engine do the accounting. Look up list prices and items with `rules:DEFINITIONS`;
-  define local campaign items or custom backgrounds with `rules:DEFINE`.
+  define local campaign items or custom backgrounds with `rules:DEFINE` (for `kind: BACKGROUND`, pass `properties:
+  {ability_scores: [3 abilities], feat: <Origin feat>, skills: [2 skills], tool: {item}|{choice: ARTISANS_TOOLS|
+  GAMING_SET|MUSICAL_INSTRUMENT|TOOL}, feat_choices?, starting_equipment?}`).
 - `inventory:TRADE` (`BUY` / `SELL`; `negotiated_price` requires `reason`), `inventory:TRANSFER_ITEM`,
   `inventory:GIVE_MONEY` (character-to-character coin — tips, wages, debts — one shared ledger event), and
   `inventory:EQUIP` (enforces slots and SRD 5.2.1 3-item attunement limit; +N bonuses and Ring of Protection apply
@@ -21,22 +23,29 @@
   `economy:TRANSFER_MONEY`, `economy:GET_ACCOUNTS`). Money bags accept `'account:N'`, `'character:N'`, account name
   or `'WORLD'`.
 - Rents, tolls, stipends, tithes, debts and dated happenings are `economy:DEFINE_CASH_FLOW` / `UPDATE_CASH_FLOW` /
-  `LIST_CASH_FLOWS` (fixed, `percent` `of_rule` or `of_inflows`; `ONCE|DAILY|WEEKLY|MONTHLY|YEARLY|SEASONAL`;
-  season multipliers; quest conditions; debt `cap` that closes itself once paid). The engine fires them automatically
-  whenever the clock moves (`rest_time:ADVANCE`, `world_travel:MOVE_PARTY`, `rest_time:REST`) — read `consequences`
-  and narrate paid/unpaid outcomes; never book them by hand.
+  `LIST_CASH_FLOWS`. `spec` shapes: `amount` accepts money (`'3 gp 4 sp'`, `{"gp": 25}`, integer cp),
+  `{"percent": 10, "of_rule": <name|'cash_flow:N'>}`, or `{"percent": 10, "of_inflows": 'account:N'|'character:N'}`;
+  `schedule: {kind: ONCE|DAILY|WEEKLY|MONTHLY|YEARLY|SEASONAL, weekday?, day?, month?, season?, minute_of_day?|
+  time?: 'HH:MM'}`; `season: {SPRING|SUMMER|AUTUMN|WINTER: multiplier}`; `condition: {quest: 'quest:N', status}`;
+  `cap` (total debt that finishes itself once paid); `start` / `end` (`'Day N, HH:MM'` or `{year, month, day,
+  minute_of_day}`). The engine fires them automatically whenever the clock moves (`rest_time:ADVANCE`,
+  `world_travel:MOVE_PARTY`, `rest_time:REST`) — read `consequences` and narrate paid/unpaid outcomes; never book
+  them by hand.
 - `economy:SET_CALENDAR` anchors Day 1 (`year`, `month`, `day`; 365-day year, no leap years, Monday-based weeks,
   four seasons) driving dates and seasonal cash flows.
 
 ## Patrols, Travel Risk & Interruptible Journeys (`patrols`, `world_travel`, `rest_time`)
 
-- **Patrols (`patrols:DEFINE` / `UPDATE` / `STATE`):** Always use a finite roster of existing materialized actors
-  and timed waypoints. Never spawn replacement guards after casualties; reinforcements must exist. Regional timers
-  pause when no party member remains in the region and resume with remaining duration on return without catching up.
-- **Travel risk & journeys:** Author story-aware risk via `world_travel:DEFINE_TRAVEL_RISK` (separate frequency,
-  eligible opposition, severity and `RANDOM|AUTHORED` placement; connection-scoped `authored_at_fraction` is a fixed
-  road point measured from the regional feature's `from_location_ref` or connection's first endpoint — partial and
-  reverse trips retain it and starting at/past it never retriggers).
+- **Patrols (`patrols:DEFINE` / `UPDATE` / `STATE`):** `spec: {name, actors: [character:N] (1–20), route:
+  [{location_ref, travel_seconds, dwell_seconds, map_ref?, x_ft?, y_ft?, level?}] (2–100 waypoints), region_ref?,
+  properties?}`. Always use a finite roster of existing materialized actors — never spawn replacement guards after
+  casualties; reinforcements must exist. Regional timers pause when no party member remains in the region and resume
+  with remaining duration on return without catching up.
+- **Travel risk & journeys:** Author story-aware risk via `world_travel:DEFINE_TRAVEL_RISK` (`scope: location:N|
+  connection:N|DEFAULT`, `policy: {frequency_seconds, chance_percent, placement_method: RANDOM|AUTHORED,
+  authored_at_fraction?, opposition, terrain?, story?, severity?}`). Connection-scoped `authored_at_fraction` is a
+  fixed road point measured from the regional feature's `from_location_ref` or connection's first endpoint — partial
+  and reverse trips retain it and starting at/past it never retriggers.
 - `world_travel:MOVE_PARTY` and `world_travel:CONTINUE_JOURNEY` stop at actual contacts or interrupting events;
   inspect `world_travel:TRAVEL_STATE` (never rolls or creates encounters). During travel, bootstrap's location has
   kind `JOURNEY` (`location: null`, `departure_location` as provenance). Party location and `with_party` follow the

@@ -405,7 +405,7 @@ public final class EncounterService {
 			if (!ties.isEmpty()) {
 				state.put("ties", ties);
 				state.put("ties_note",
-						"Tied Initiative is not broken by the engine (SRD 5.2.1 \"Initiative\"): the GM decides the order among tied monsters and between a monster and a player character, the players among tied characters. The provisional order lists the party's side first; call perform_encounter_action in the agreed order.");
+						"Tied Initiative is not broken by the engine (SRD 5.2.1 \"Initiative\"): the GM decides the order among tied monsters and between a monster and a player character, the players among tied characters. The provisional order lists the party's side first; call encounter:ACTION in the agreed order.");
 			}
 			state.put("meta", Harness.meta(tx.get("campaign", campaignId), null));
 			return state;
@@ -750,13 +750,13 @@ public final class EncounterService {
 		}
 		if (m.containsKey("gm_handoff"))
 			m.put("turn_guidance",
-					"The current actor is outside party sight. The DM can read the full turn using get_encounter_state with audience GM; follow gm_handoff. Player knowledge is unchanged.");
+					"The current actor is outside party sight. The DM can read the full turn using encounter:STATE with audience GM; follow gm_handoff. Player knowledge is unchanged.");
 		m.put("npc_reactions", encounter.str("npc_reactions"));
 		m.put("legal_actions",
 				allPending.isEmpty() ? ACTIONS.stream().filter(action -> !"HIDE".equals(action)).sorted().toList()
-						: List.of("resolve_pending_choice"));
+						: List.of("encounter:RESOLVE_CHOICE"));
 		m.put("unsupported_actions", Map.of("HIDE",
-				"Requires the shared Stealth, concealment and observer discovery lifecycle; resolve_check supports a GM-adjudicated Stealth check."));
+				"Requires the shared Stealth, concealment and observer discovery lifecycle; roll_check:CHECK supports a GM-adjudicated Stealth check."));
 		m.put("revision", encounter.lng("revision"));
 		List<Map<String, Object>> recovery = AmmunitionRecovery.offers(tx, rules, encounter);
 		if (!recovery.isEmpty()) {
@@ -947,7 +947,7 @@ public final class EncounterService {
 		m.put("prompt", payload.get("prompt"));
 		m.put("options", payload.get("options"));
 		m.put("mandatory", true);
-		m.put("resolve_with", "resolve_pending_choice");
+		m.put("resolve_with", "encounter:RESOLVE_CHOICE");
 		return m;
 	}
 
@@ -1037,7 +1037,7 @@ public final class EncounterService {
 					? skipTurnsNobodyCanTake(tx, campaignId, opened) : List.of();
 			Row encounter = turnsSkipped.isEmpty() ? opened : tx.get("encounter", opened.id());
 			if ("WAITING_CHOICE".equals(encounter.str("status"))) {
-				throw RpgException.notAllowed("A pending choice must be resolved first (resolve_pending_choice): "
+				throw RpgException.notAllowed("A pending choice must be resolved first (encounter:RESOLVE_CHOICE): "
 						+ pendingChoices(tx, encounter.id()).stream()
 								.map(c -> c.get("transaction") + " for " + c.get("chooser_name")).toList());
 			}
@@ -1067,8 +1067,8 @@ public final class EncounterService {
 			}
 			if ("HIDE".equals(kind)) {
 				throw RpgException.capabilityUnavailable(
-						"HIDE is not mechanically supported yet: it requires cover or obscurement, enemy sight checks, a Stealth DC and concealment that ends on revealing actions. No Action or roll was spent. The DM can resolve a Dexterity (Stealth) check with resolve_check and adjudicate what observers know; that check alone does not create automatic hidden or Invisible state.")
-						.withDetail("supported_alternative", "resolve_check").withDetail("action_spent", false);
+						"HIDE is not mechanically supported yet: it requires cover or obscurement, enemy sight checks, a Stealth DC and concealment that ends on revealing actions. No Action or roll was spent. The DM can resolve a Dexterity (Stealth) check with roll_check:CHECK and adjudicate what observers know; that check alone does not create automatic hidden or Invisible state.")
+						.withDetail("supported_alternative", "roll_check:CHECK").withDetail("action_spent", false);
 			}
 			if ("END_TURN".equals(kind) && !turnsSkipped.isEmpty()
 					&& Objects.equals(opened.lng("turn_participant_id"), participant.id())) {
@@ -1103,7 +1103,7 @@ public final class EncounterService {
 						.contains(tx.get("encounter_participant", turnId).lng("character_id")))
 					whose = "an unobserved participant";
 				throw RpgException.notAllowed("It is " + whose + "'s turn, not " + actor.str("name")
-						+ "'s (I-31). Reactions are offered by the engine as pending choices. The DM can inspect the full turn with get_encounter_state audience GM.")
+						+ "'s (I-31). Reactions are offered by the engine as pending choices. The DM can inspect the full turn with encounter:STATE audience GM.")
 						.withDetail("gm_handoff", gmHandoff(encounter));
 			}
 			if (!"ACTIVE".equals(participant.str("status")) || !"ALIVE".equals(actor.str("life_state"))) {
@@ -1289,7 +1289,7 @@ public final class EncounterService {
 				}
 				result.put("pending_choices", pending);
 				result.put("turn_advanced", false);
-				result.put("next_step", "Ask the chooser(s) and call resolve_pending_choice; the turn "
+				result.put("next_step", "Ask the chooser(s) and call encounter:RESOLVE_CHOICE; the turn "
 						+ (advance ? "advances afterwards." : "continues afterwards."));
 			} else if (advance) {
 				if (forcedEnd) {
@@ -1990,13 +1990,13 @@ public final class EncounterService {
 				care = Map.of("guidance",
 						"Assess the Unconscious condition and use applicable healing or care; a knocked-out creature recovers when its Short Rest ends.");
 			throw RpgException.notAllowed(target.str("name")
-					+ " is a downed ally on the same encounter side. To help them, use applicable healing, or after successful first aid apply_runtime_change STABILIZE if Dying. An intentional attack requires action.confirm_hostile_ally:true.")
+					+ " is a downed ally on the same encounter side. To help them, use applicable healing, or after successful first aid character:RUNTIME_CHANGE STABILIZE if Dying. An intentional attack requires action.confirm_hostile_ally:true.")
 					.withDetail("target", targetRef).withDetail("life_state", target.str("life_state"))
 					.withDetail("care", care).withDetail("confirmation_required", "confirm_hostile_ally");
 		}
 		if ("DEAD".equals(target.str("life_state")) || !"ACTIVE".equals(targetParticipant.str("status"))) {
 			String guidance = "DYING".equals(target.str("life_state"))
-					? " is at 0 Hit Points and Dying. Healing can restore consciousness; after successful first aid use apply_runtime_change STABILIZE to stop Death Saving Throws."
+					? " is at 0 Hit Points and Dying. Healing can restore consciousness; after successful first aid use character:RUNTIME_CHANGE STABILIZE to stop Death Saving Throws."
 					: "DEAD".equals(target.str("life_state")) ? sameSide
 							? " is Dead; ordinary healing and stabilization cannot revive them. Use an applicable resurrection spell or an explicit audited revival."
 							: " is Dead and is no longer a legal attack target."
@@ -3102,7 +3102,7 @@ public final class EncounterService {
 		}
 		out.put("round", round);
 		out.put("next_turn", null);
-		out.put("note", "Nobody can act; call end_encounter.");
+		out.put("note", "Nobody can act; call encounter:END.");
 		if (!events.isEmpty()) {
 			out.put("death_saves", events);
 		}
@@ -3442,7 +3442,7 @@ public final class EncounterService {
 			trigger.put("urgency", major ? "NORMAL" : "NONE");
 			result.put("director_trigger", trigger);
 			result.put("note",
-					"Loot is not automatic: use grant_loot with source ENCOUNTER for what the fallen carried.");
+					"Loot is not automatic: use inventory:GRANT_LOOT with source ENCOUNTER for what the fallen carried.");
 			if (major) {
 				// A major encounter is where a level-appropriate magic item turns up (RULES_ENGINE.md §10).
 				result.put("treasure",

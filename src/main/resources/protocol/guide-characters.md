@@ -36,8 +36,22 @@ Use `character:RUNTIME_CHANGE` (`character`, `change`) for named, rules-aware ch
 `SET_TEMP_HP {amount}`, `ADD_CONDITION` / `REMOVE_CONDITION` (`condition`, `duration` — minutes, `'3 rounds'`,
 `'1 minute'`, `'1 hour'`, `'long rest'`, `'start of turn'`, or `{rounds|minutes|hours|until}`, optional `source`,
 `EXHAUSTION` accumulates/removes 1 level or `{levels: N}`), `STABILIZE`, `STAND` (outside combat), `USE_RESOURCE` /
-`RESTORE_RESOURCE` (`spell_slot:<level>` or `pact_slot`), `CREATE_SPELL_SLOT` / `CONVERT_SPELL_SLOT`,
-`ADJUST_MAX_HP {amount, until?: LONG_REST|RESTORED, minutes?}`, `RESTORE_MAX_HP`. Always include `reason`.
+`RESTORE_RESOURCE` `{resource, amount?}` (`spell_slot:<level>` or `pact_slot`), `CREATE_SPELL_SLOT {slot_level}` /
+`CONVERT_SPELL_SLOT {slot_level}`, `ADJUST_MAX_HP {amount, until?: LONG_REST|RESTORED, minutes?}`, `RESTORE_MAX_HP`.
+Always include `reason`.
+
+## Audited GM Overrides (`apply_gm_override`)
+
+Permitted only when `gm_override_policy` is `EXPLICIT_AUDITED`. Always supply `reason` and disclose to the player as
+a GM call. `effect` fields by `kind`:
+- `ADJUST_HP` / `SET_MAX_HP`: `{amount}` (delta) or `{set_to}`
+- `SET_ARMOR_CLASS`: `{armor_class}` or `{clear: true}` (fixed AC such as Unarmored Defense / Draconic Resilience)
+- `SET_LIFE_STATE`: `{life_state, hp?}` (e.g. `ALIVE`)
+- `SET_MONEY`: `{money}`; `SET_XP`: `{xp}`; `SET_ABILITY_SCORE`: `{ability, score}`
+- `SET_LOCATION`: `{location, clear_map_position?: bool}`; `SET_CONNECTION_STATE`: `{to, state}` (`target: location:N`)
+- `SET_CAMPAIGN_RULE`: `{rule, value}` (omit `target`; retunes `hp_progression`, `xp_policy`, `companion_level_up`,
+  `progression`, or `gm_override_policy`)
+- `REMOVE_ENCOUNTER_PARTICIPANT`: removes `target` (`character:N`) from the active encounter
 
 ## Party Membership, XP & Level-Up Transactions
 

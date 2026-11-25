@@ -152,10 +152,11 @@ public final class Treasure {
 		m.put("frequency", tier.frequency());
 		m.put("party_magic_items", partyMagicItems(tx, rules, campaignId).size());
 		m.put("suggestions", suggest(tx, rules, roller, campaignId, suggestions));
-		m.put("note", "Suggestions only, from the party's level: grant with grant_loot (source QUEST or ENCOUNTER), "
-				+ "or pick another of that rarity with get_content_definitions {magic: true, rarity}. A weapon, armor, "
-				+ "shield or ammunition entry is a template: give a base ({item, base}) or the +N form (\"+1 Longsword\"). "
-				+ "Ignore it when the fiction has nothing to give.");
+		m.put("note",
+				"Suggestions only, from the party's level: grant with inventory:GRANT_LOOT (source QUEST or ENCOUNTER), "
+						+ "or pick another of that rarity with rules:DEFINITIONS {magic: true, rarity}. A weapon, armor, "
+						+ "shield or ammunition entry is a template: give a base ({item, base}) or the +N form (\"+1 Longsword\"). "
+						+ "Ignore it when the fiction has nothing to give.");
 		return m;
 	}
 
@@ -231,6 +232,6 @@ public final class Treasure {
 		return "The party owns no magic items at level " + level + " after " + quests + " completed quest"
 				+ (quests == 1 ? "" : "s") + ". At " + tier.name() + " the usual rate is " + tier.frequency()
 				+ ". Every completed quest and major encounter now returns `treasure` with level-appropriate "
-				+ "suggestions; grant them with grant_loot.";
+				+ "suggestions; grant them with inventory:GRANT_LOOT.";
 	}
 }

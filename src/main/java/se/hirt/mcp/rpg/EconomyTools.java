@@ -74,7 +74,7 @@ public class EconomyTools {
 				ToolArgs a = ToolArgs.of("economy", act, "ECONOMY", params, "name, owner_kind?, owner?, money?, notes?",
 						"name", "owner_kind", "owner", "money", "notes");
 				yield engine.accounts().create(op, c, a.reqStr("name"), a.optStr("owner_kind"), a.optStr("owner"),
-						a.optStr("money"), a.optStr("notes"));
+						a.optObj("money"), a.optStr("notes"));
 			}
 			case "TRANSFER_MONEY" -> {
 				String op = ToolArgs.reqOp("economy", act, operation_id);

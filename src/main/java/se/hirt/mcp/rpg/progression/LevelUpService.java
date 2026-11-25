@@ -352,7 +352,7 @@ public final class LevelUpService {
 					"Optional, but a companion without them is not a character a player could inherit: "
 							+ "pass choices.species and choices.background, plus whatever they ask for in turn "
 							+ "(species_skill, species_choice, origin_feat, background_tool, feat_choices). "
-							+ "get_character_choices lists the options for each.");
+							+ "character_draft:CHOICES lists the options for each.");
 			origin.put("species", c.isNull("species_ref") ? rules.ofKind("SPECIES").stream().map(d -> {
 				var o = new LinkedHashMap<String, Object>();
 				o.put("value", d.id());
@@ -393,7 +393,7 @@ public final class LevelUpService {
 			}
 			asi.put("current_scores", scores);
 			asi.put("or_a_feat", "Instead of the improvement, take a feat whose prerequisites are met "
-					+ "(get_character_choices scope FEAT lists them): pass choices.feat = {feat, ...its choices}.");
+					+ "(character_draft:CHOICES scope FEAT lists them): pass choices.feat = {feat, ...its choices}.");
 			result.put("ability_score_improvement", asi);
 		}
 		var pendingFeats = new ArrayList<Map<String, Object>>();
@@ -415,7 +415,7 @@ public final class LevelUpService {
 		metamagicChoice(tx, payload, c).ifPresent(choice -> result.put("metamagic_choice", choice));
 		result.put("automatic", Map.of("proficiency_bonus",
 				rules.proficiencyBonus(((Number) payload.get("to_level")).intValue()), "note",
-				"Spell slots resize and ENGINE class features (Sneak Attack, Font of Magic, Metamagic) apply at commit; subclass choices and GM-adjudicated features are narrated from the SRD and recorded with record_memory."));
+				"Spell slots resize and ENGINE class features (Sneak Attack, Font of Magic, Metamagic) apply at commit; subclass choices and GM-adjudicated features are narrated from the SRD and recorded with chronicle:RECORD_MEMORY."));
 		result.put("chosen", payload.get("choices"));
 		result.put("preview", preview(tx, t, c));
 		rules.find((String) payload.get("class_ref")).map(d -> d.payload().get("spellcasting"))
@@ -429,7 +429,7 @@ public final class LevelUpService {
 					List<Object> prepared = (List<Object>) s.get("prepared");
 					result.put("spellcasting_at_new_level", Map.of("cantrips_known", cantrips.get(to - 1),
 							"prepared_spells", prepared.get(to - 1), "note",
-							"Spell slots are resized automatically at commit; adjust the prepared list with prepare_spells afterwards."));
+							"Spell slots are resized automatically at commit; adjust the prepared list with spellcasting:PREPARE afterwards."));
 				});
 		return result;
 	}
@@ -488,7 +488,7 @@ public final class LevelUpService {
 					"SELECT * FROM pending_transaction WHERE campaign_id = ? AND kind = 'LEVEL_UP' AND status = 'OPEN' ORDER BY id DESC LIMIT 1",
 					campaignId)
 					.orElseThrow(() -> new RpgException(ErrorCode.TRANSACTION_REQUIRED,
-							"No level-up transaction is open; call begin_level_up first."));
+							"No level-up transaction is open; call level_up:BEGIN first."));
 		} else {
 			t = tx.find("pending_transaction", Ref.id(transactionRef, Ref.TRANSACTION))
 					.orElseThrow(() -> RpgException.notFound("Transaction " + transactionRef));
@@ -590,7 +590,7 @@ public final class LevelUpService {
 					Object featValue = e.getValue() instanceof Map<?, ?> fm ? fm.get("feat") : e.getValue();
 					RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(featValue))
 							.orElseThrow(() -> RpgException.invalidArgument(
-									"Unknown feat '" + featValue + "'; see get_character_choices FEAT."));
+									"Unknown feat '" + featValue + "'; see character_draft:CHOICES FEAT."));
 					int toLevel = ((Number) payload.get("to_level")).intValue();
 					validateFeatPrerequisites(tx, c, feat, toLevel);
 					var featChoices = new LinkedHashMap<String, Object>();
@@ -770,7 +770,7 @@ public final class LevelUpService {
 			metamagicChoice(tx, payload, c).ifPresent(choice -> v.add(new Violation("metamagic", "REQUIRED",
 					"Level " + payload.get("to_level") + " grants " + choice.get("choose") + " Metamagic option"
 							+ (((Number) choice.get("choose")).intValue() == 1 ? "" : "s")
-							+ "; pass choices.metamagic (get_level_up_choices lists them).")));
+							+ "; pass choices.metamagic (level_up:CHOICES lists them).")));
 		}
 		if (Boolean.TRUE.equals(payload.get("class_required"))) {
 			if (chosen.get("class") == null) {
@@ -1013,7 +1013,7 @@ public final class LevelUpService {
 				m.put("name", c.str("name"));
 				m.put("xp", c.lng("xp"));
 				m.put("reason", "NEEDS_CLASS");
-				m.put("next_step", "begin_level_up for " + Ref.of(Ref.CHARACTER, c.id())
+				m.put("next_step", "level_up:BEGIN for " + Ref.of(Ref.CHARACTER, c.id())
 						+ " offers the class choice; the engine never picks a class.");
 				pending.add(m);
 				continue;
@@ -1033,9 +1033,9 @@ public final class LevelUpService {
 				m.put("xp", c.lng("xp"));
 				m.put("reason", "AWAITING_PLAYER");
 				m.put("proposal", proposal(rules, campaign, c, def, level + 1));
-				m.put("next_step", "Offer the proposal to the player as it stands; begin_level_up for "
+				m.put("next_step", "Offer the proposal to the player as it stands; level_up:BEGIN for "
 						+ Ref.of(Ref.CHARACTER, c.id())
-						+ " then commits it unchanged, or update_level_up records whatever they would rather do.");
+						+ " then commits it unchanged, or level_up:UPDATE records whatever they would rather do.");
 				pending.add(m);
 				continue;
 			}
@@ -1150,14 +1150,15 @@ public final class LevelUpService {
 			hp.put("method", "ROLL");
 			hp.put("gain", null);
 			hp.put("range", "1d" + hitDie + " + " + conMod + (speciesHp == 0 ? "" : " + " + speciesHp)
-					+ ", rolled openly at begin_level_up");
+					+ ", rolled openly at level_up:BEGIN");
 		}
 		var m = new LinkedHashMap<String, Object>();
 		m.put("hit_points", hp);
 		if (asiLevels(def).contains(to)) {
 			Map<String, Object> asi = autoAsi(c, def);
 			m.put("ability_score_improvement", asi);
-			m.put("alternative", "A feat may be taken instead; get_character_choices scope FEAT lists the legal ones.");
+			m.put("alternative",
+					"A feat may be taken instead; character_draft:CHOICES scope FEAT lists the legal ones.");
 		}
 		m.put("note", "Class and subclass features are not data-driven; narrate them from the SRD.");
 		return m;

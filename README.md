@@ -253,10 +253,10 @@ If several campaigns are available, it asks which one you want. Chat transcripts
 - **The tools do not appear** — make sure `-Dquarkus.mcp.server.stdio.enabled=true` is in the arguments,
   and for the jar that it comes *before* `-jar`. Then reconnect (`/mcp` in Claude Code, restart Claude
   Desktop, `codex mcp list` for Codex).
-- **The readiness check fails** — ask the AI to call `get_instructions`, then `get_server_state`.
-  Load the guide once per conversation; later state checks stay compact. A fresh install should report
-  `CAMPAIGN_SELECTION` and no campaigns. If `get_instructions` is missing, upgrade to version 0.1.8
-  or later and reconnect the client.
+- **The readiness check fails** — ask the AI to call `get_instructions`, then `session` (`action: "STATE"`).
+  Load the core guide once per conversation (pull specialized topic manuals via `get_instructions(topic=...)` on
+  demand); later state checks stay compact. A fresh install should report `CAMPAIGN_SELECTION` and no campaigns.
+  If `get_instructions` is missing, upgrade to version 0.1.8 or later and reconnect the client.
 - **No log output** — normal logs go to `logs/rpg-mcp-server-<runtime-id>.log` under the selected data
   directory (`~/.rpg-mcp` by default). Each server instance has its own rotating log, so concurrent
   Windows instances do not contend over one file. `QUARKUS_LOG_FILE_PATH` explicitly overrides the
@@ -268,7 +268,7 @@ If several campaigns are available, it asks which one you want. Chat transcripts
   the guide, using the RPG tools for rolls and canonical state. Every new conversation should load those
   instructions before starting or continuing a campaign.
 - **The AI batches setup questions** — tell it to follow the guide and ask one decision per turn, listing
-  every option. `get_setup_state` returns the ordered `decisions` list it should be walking.
+  every option. `campaign_setup` (`action: "GET"`) returns the ordered `decisions` list it should be walking.
 - **Starting over** — move the data directory (`~/.rpg-mcp` by default) aside for a clean slate.
   Keep its database and campaign assets together if you might want the campaign back.
 

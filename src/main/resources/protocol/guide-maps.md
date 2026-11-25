@@ -45,32 +45,45 @@ only **`PLAYER`** views — GM authoring, challenges, concealed traps and patrol
 - **Placement & movement:** Coordinates (`x_ft`, `y_ft`) are southwest footprint origins on the 5 ft lattice.
   Bootstrap's `current_board` shows the controlled actor's board; unplaced arrivals into published coverage supply
   `placement_hint` (`placement_required: true`, listing alternatives if ambiguous) — inspect before placing with
-  `map_play:PLACE_ACTORS`. Use `map_play:MOVE_ACTOR` and `map_play:USE_TRANSITION` in exploration; use
-  `encounter:ACTION` `MOVE` (including `{portal: key}`) in combat. `map_play:PREVIEW_ACTION` costs nothing and uses
-  only known geometry for `PLAYER`. Corpses stay marked but do not block movement. An audited same-place
-  `apply_gm_override` `SET_LOCATION` with `effect.clear_map_position: true` can release a stale figurine outside
-  active combat.
+  `map_play:PLACE_ACTORS` (`placements: [{character, x_ft, y_ft, level?, footprint_ft?}]`). Use `map_play:MOVE_ACTOR`
+  and `map_play:USE_TRANSITION` in exploration; use `encounter:ACTION` `MOVE` (including `{portal: key}`) in combat.
+  `map_play:PREVIEW_ACTION` costs nothing and uses only known geometry for `PLAYER`. Corpses stay marked but do not
+  block movement. An audited same-place `apply_gm_override` `SET_LOCATION` with `effect.clear_map_position: true` can
+  release a stale figurine outside active combat.
 - **Sight & sound:** `map_play:OBSERVE` saves the union of party sight (remembered out-of-sight objects are marked
   `last_known`). Enemy decisions use their own `map_play:PERCEPTION`; hearing cues use `map_play:EMIT_SOUND`
   (`actor` or explicit coordinates) — an encounter roster never grants omniscience.
 - **Live changes & geometry patches:** Record gameplay damage, locks, broken furniture or trap reveals with
-  `map_play:UPDATE_OBJECT` and a reason (inventory transfers remain authoritative for taking loot). Repair mistaken
-  published geometry or visual dressing outside combat with `map_play:CORRECT_GEOMETRY` (`expected_revision`,
-  `patch`, `reason`). During combat only ambient `illumination` / keyed `rooms:[{key, illumination}]` patches are
-  allowed (writes a `GM_ONLY` `MAP_ILLUMINATION_CHANGED` event without spending an Action).
+  `map_play:UPDATE_OBJECT` (`map`, `key`, `changes: {state?, locked?, sealed?, hit_points?, blocks_movement?,
+  blocks_sight?, material?, label?, secret?, concealed?, known_hazard?}`, `reason`; inventory transfers remain
+  authoritative for taking loot). Repair mistaken published geometry or visual dressing outside combat with
+  `map_play:CORRECT_GEOMETRY` (`expected_revision`, `patch: {illumination?, rooms?: [{key, illumination|material|
+  rect_ft|polygon_ft|holes_ft}], doors?, portals?, bounds_ft?, walls?, terrain?, decor?, lights?}`, `reason`). During
+  combat only ambient `illumination` / keyed `rooms:[{key, illumination}]` patches are allowed (writes a `GM_ONLY`
+  `MAP_ILLUMINATION_CHANGED` event without spending an Action).
 - **Rendering, textures & bundles:** `render_map` returns PNG + text + `markers.move_origin_ft` (use
   `include_image: false` for text-only clients; `options.technical_text` overrides text presentation). Import custom
   PNG textures with `map_preparation:IMPORT_ASSET` (copied once; use `asset:N` as material or `material_overrides`).
   `map_preparation:EXPORT_BUNDLE` / `IMPORT_BUNDLE` package/stage GM snapshots with explicit `source_ref_mappings`
   (never live loot/occupants, never a player handout or campaign checkpoint).
 
-## World Building & Atlas
+## Locations, Connections & World Atlas
 
+- **Semantic places (`world_travel:MATERIALIZE_LOCATION`):** Pass an existing `location` ref and/or `spec`:
+  `{name, kind: REGION|SETTLEMENT|DISTRICT|SITE|BUILDING|AREA, parent?, description?, tags?, extend?: bool,
+  features?: [{name, description, visibility?}], secrets?: [{name, description}] (GM_ONLY),
+  children?: [{name|ref, kind?, description?, tags?, connection?: bool, connection_kind?}],
+  connections?: [{to: 'location:N'|{name|ref, kind?, parent?}, kind?: ROAD|PATH|RIVER|STREET|DOOR|PASSAGE…,
+  travel_minutes?, distance_miles?, state?: OPEN|LOCKED|BLOCKED|SECRET, visibility?}]}`.
+  Nested names reuse a unique same-name sibling under the same parent (pass `ref` to disambiguate). Existing
+  undirected connections update only supplied non-null fields; committed features need `extend: true` to append.
 - Author `adventure.world_map` during setup or review the staged `AUTHORING_REQUIRED` REGION preparation, supply
   creative winding routes/terrain/coastlines and publish. Ordinary latitude defaults near 43.5° N; climate choices
   can set a fitting latitude. Atlas addresses `atlas:N[x,y]` use east-positive X, north-positive Y and a fixed
   origin; neighboring REGION preparations supply atlas ref/sheet coordinates and inherit saved style and neighbor
   constraints. Restyle saved geography rather than regenerating it.
-- Add exact `WORLD_POI` markers or scoped `NOTE`/`REPORT` claims via `map_play:ANNOTATE` (rumors stay approximate).
+- Add exact `WORLD_POI` markers (`{key, kind: 'WORLD_POI', name, point_ft: [x,y], location_ref}` or
+  `create_location: {name, kind}`) or scoped `NOTE`/`REPORT` claims (`{key, kind, text, observer: PARTY|GM|character:N,
+  source}`) via `map_play:ANNOTATE` (rumors stay approximate).
 - On legacy resume, `world_maps` may return a staged preparation: review sourced graph/narrative constraints,
   resolve required gaps, set `review_required: false` and publish without changing party time or knowledge.

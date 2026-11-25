@@ -17,11 +17,13 @@ in `meta.allowed_operations` as `tool:ACTION`.
 
 ## Steps
 
-1. **Load the core Game Master guide first.** Call `get_instructions` once (default `CORE`; load topic manuals
-   `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, or `ECONOMY` on demand when entering those workflows).
-   Then call `session` with `action: "STATE"`: every response carries `harness_state` and `allowed_operations`,
-   and the server guides you turn by turn. If the tools are missing, run the plugin's **setup** skill (it
-   prefetches the native executable) and ask the player to start a new chat.
+1. **Load the core Game Master guide first.** Call `get_instructions` once with no arguments (it returns the
+   core guide and lists any on-demand topic manuals such as `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`,
+   and `ECONOMY` if supported by the installed server). Follow the exact tool names advertised by that guide: in
+   protocol 0.2.0 call `session` with `action: "STATE"` (earlier binaries expose `get_server_state`). Every
+   response carries `harness_state` and `allowed_operations`, and the server guides you turn by turn. If the
+   tools are missing, run the plugin's **setup** skill (it prefetches the native executable) and ask the player
+   to start a new chat.
 2. **Decide what the player wants:**
     - A new campaign ("start", "new campaign"): call `get_instructions(topic="SETUP")` and run the campaign
       setup interview via `session:CREATE`, `campaign_setup` and `character_draft` — one decision per turn,

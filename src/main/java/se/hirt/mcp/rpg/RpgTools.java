@@ -50,7 +50,8 @@ import java.util.Optional;
 public class RpgTools {
 
 	private static final String CAMP = "campaign:N";
-	private static final String CAMP_OPT = "campaign:N (required except STATE/CREATE or global rules lookups)";
+	private static final String CAMP_SESSION = "campaign:N (required except STATE/CREATE)";
+	private static final String CAMP_RULES = "campaign:N (optional for SEARCH/DEFINITIONS; required for DEFINE)";
 	private static final String OP = "Idempotency key (required for mutating actions)";
 	private static final String PARAMS = "Action parameters (see description)";
 
@@ -74,13 +75,15 @@ public class RpgTools {
 		});
 	}
 
+	// Keep destructiveHint = false so routine STATE/OPEN/BOOTSTRAP/SUSPEND calls do not prompt;
+	// COMPLETE is explicitly flagged irreversible in the description and requires outcome + reason.
 	@Tool(name = "session", description = "Campaign discovery and session lifecycle. Actions: "
 			+ "STATE (read; no campaign) {include_campaigns?, campaign_limit?, campaign_cursor?}; "
 			+ "CREATE (mut; no campaign) {title?, ruleset?}; " + "OPEN (read) {}; "
 			+ "BOOTSTRAP (mut) {context_budget?}; " + "SUSPEND (mut) {summary?}; "
 			+ "COMPLETE (mut, irreversible) {outcome: COMPLETED|FAILED|ABANDONED, reason, summary?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse session(@ToolArg(description = "STATE | CREATE | OPEN | BOOTSTRAP | SUSPEND | COMPLETE")
-	String action, @ToolArg(description = CAMP_OPT, required = false)
+	String action, @ToolArg(description = CAMP_SESSION, required = false)
 	String campaign, @ToolArg(description = OP, required = false)
 	String operation_id, @ToolArg(description = PARAMS, required = false)
 	Map<String, Object> params) {
@@ -626,13 +629,13 @@ public class RpgTools {
 						"character, kind, item?, entry?, quantity?, merchant?, negotiated_price?, reason?", "character",
 						"kind", "item", "entry", "quantity", "merchant", "negotiated_price", "reason");
 				yield engine.inventory().trade(op, c, a.reqStr("character"), a.reqStr("kind"), a.optStr("item"),
-						a.optStr("entry"), a.optInt("quantity"), a.optStr("merchant"), a.optStr("negotiated_price"),
+						a.optStr("entry"), a.optInt("quantity"), a.optStr("merchant"), a.optObj("negotiated_price"),
 						a.optStr("reason"));
 			}
 			case "GRANT_LOOT" -> {
 				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params, "to, items?, money?, source?, reason?",
 						"to", "items", "money", "source", "reason");
-				yield engine.inventory().grantLoot(op, c, a.reqStr("to"), a.optMapList("items"), a.optStr("money"),
+				yield engine.inventory().grantLoot(op, c, a.reqStr("to"), a.optMapList("items"), a.optObj("money"),
 						a.optStr("source"), a.optStr("reason"));
 			}
 			default -> throw new IllegalStateException(act);
@@ -816,7 +819,7 @@ public class RpgTools {
 			+ "DEFINITIONS (read; campaign optional) {kind?, item_type?, text?, min_cost?, max_cost?, rarity?, magic?, detail?: SUMMARY|FULL, cursor?, limit?}; "
 			+ "DEFINE (mut; campaign required) {name, kind?: ITEM|BACKGROUND, symbolic_id?, description?, item_type?, cost?, weight_lb?, properties?, tags?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
 	ToolResponse rules(@ToolArg(description = "SEARCH | DEFINITIONS | DEFINE")
-	String action, @ToolArg(description = CAMP_OPT, required = false)
+	String action, @ToolArg(description = CAMP_RULES, required = false)
 	String campaign, @ToolArg(description = OP, required = false)
 	String operation_id, @ToolArg(description = PARAMS, required = false)
 	Map<String, Object> params) {
@@ -834,7 +837,7 @@ public class RpgTools {
 						"kind", "item_type", "text", "min_cost", "max_cost", "rarity", "magic", "detail", "cursor",
 						"limit");
 				yield engine.content().definitions(campaign, a.optStr("kind"), a.optStr("item_type"), a.optStr("text"),
-						a.optStr("min_cost"), a.optStr("max_cost"), a.optStr("rarity"), a.optBool("magic"),
+						a.optObj("min_cost"), a.optObj("max_cost"), a.optStr("rarity"), a.optBool("magic"),
 						a.optStr("cursor"), a.optInt("limit", 25), a.optStr("detail", "SUMMARY"));
 			}
 			case "DEFINE" -> {
@@ -845,7 +848,7 @@ public class RpgTools {
 						"name", "kind", "symbolic_id", "description", "item_type", "cost", "weight_lb", "properties",
 						"tags");
 				yield engine.content().define(op, c, a.optStr("kind", "ITEM"), a.reqStr("name"),
-						a.optStr("symbolic_id"), a.optStr("description"), a.optStr("item_type"), a.optStr("cost"),
+						a.optStr("symbolic_id"), a.optStr("description"), a.optStr("item_type"), a.optObj("cost"),
 						a.optDouble("weight_lb"), a.optMap("properties"), a.optStringList("tags"), "GM");
 			}
 			default -> throw new IllegalStateException(act);

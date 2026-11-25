@@ -33,7 +33,7 @@ class Run9TravelTest {
 					List.of(former))) {
 				var refusal = assertThrows(RpgException.class, () -> e.world().move(op(), campaign, mine, selected,
 						true, 1, "Authorization is not membership."));
-				assertTrue(refusal.getMessage().contains("update_party_membership"));
+				assertTrue(refusal.getMessage().contains("character:MEMBERSHIP"));
 				assertTrue(refusal.details().containsKey("character"));
 				assertEquals(before, e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)));
 			}

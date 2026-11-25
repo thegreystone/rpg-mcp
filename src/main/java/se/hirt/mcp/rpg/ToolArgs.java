@@ -30,6 +30,8 @@ package se.hirt.mcp.rpg;
 
 import se.hirt.mcp.rpg.protocol.RpgException;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -199,8 +201,22 @@ final class ToolArgs {
 			if (n instanceof Byte || n instanceof Short || n instanceof Integer || n instanceof Long) {
 				return n.longValue();
 			}
+			if (n instanceof BigInteger bi) {
+				try {
+					return bi.longValueExact();
+				} catch (ArithmeticException ignored) {
+					throw bad("Parameter '" + key + "' must be an integer");
+				}
+			}
+			if (n instanceof BigDecimal bd) {
+				try {
+					return bd.longValueExact();
+				} catch (ArithmeticException ignored) {
+					throw bad("Parameter '" + key + "' must be an integer");
+				}
+			}
 			double d = n.doubleValue();
-			if (Double.isFinite(d) && d == Math.rint(d)) {
+			if (Double.isFinite(d) && d == Math.rint(d) && d >= -0x1p63 && d < 0x1p63) {
 				return (long) d;
 			}
 		}
@@ -267,7 +283,6 @@ final class ToolArgs {
 		return params.get(key);
 	}
 
-	@SuppressWarnings("unchecked")
 	Map<String, Object> reqMap(String key) {
 		Map<String, Object> v = optMap(key);
 		if (v == null) {
@@ -276,7 +291,6 @@ final class ToolArgs {
 		return v;
 	}
 
-	@SuppressWarnings("unchecked")
 	Map<String, Object> optMap(String key) {
 		Object v = params.get(key);
 		if (v == null) {

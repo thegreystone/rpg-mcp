@@ -37,3 +37,19 @@ jumps, broken plans, or when a `director_trigger` fires) — never every turn.
   the same compact `story_beats` guidance in a fresh conversation (`gm_brief_truncated: true` means the full text
   should be fetched by ref). Play NPCs toward their intentions, offer discoverable hooks, accept unexpected
   approaches or ignored hooks, record what changes (`narrative:UPSERT`), and feed it into the next review.
+
+## Narrative Aggregate Fields (`narrative:UPSERT`)
+
+Pass `ref` (`quest:N`, `story_beat:N`, `seed:N`, `faction:N`, `world_event:N`, `location:N`, `character:N`) to update
+an existing record; omit to create (except `LOCATION_DETAIL` and `NPC_AGENDA`, which require an existing ref):
+- `QUEST`: `{title, objective, status?: OFFERED|ACCEPTED|COMPLETED|FAILED|ABANDONED, issuer?, rewards?, deadline?,
+  hidden_objectives?, visibility?}` (completing returns `treasure` suggestions for `inventory:GRANT_LOOT`)
+- `STORY_BEAT`: `{title, description, gm_brief?, state?: PLANNED|AVAILABLE|BLOCKED|SUPERSEDED|COMPLETED|ABANDONED,
+  superseded_by?, visibility?, location?, actors?, conditions?, clues?, approaches?, consequences?, if_ignored?}`
+- `STORY_SEED`: `{seed_kind?: STORY_SEED|COMPANION_INTRO|PRESSURE|PACING_INTENT, intention, hooks?, conditions?,
+  state?, superseded_by?, materialized_character?}`
+- `FACTION_STATE`: `{name, goals?, standing?, agenda?, members?, secrets?}`
+- `WORLD_EVENT`: `{title, description, channels?: [...], locations?: [location:N], affected?, game_time?,
+  visibility?}` (omitted/null preserves groups; `[]` clears that group)
+- `LOCATION_DETAIL`: `{description?, tags?, features?}` (create new places via `world_travel:MATERIALIZE_LOCATION`)
+- `NPC_AGENDA`: `{goals?, fears?, secrets?, current_plan?}`

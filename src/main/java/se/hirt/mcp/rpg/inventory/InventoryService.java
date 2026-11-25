@@ -728,8 +728,7 @@ public final class InventoryService {
 			m.putAll(magic);
 			m.put("summary", item.payload().get("summary"));
 			if (!"engine".equals(magic.get("adjudication"))) {
-				m.put("note",
-						"GM-adjudicated: play the item's text (get_content_definitions detail FULL for the wording).");
+				m.put("note", "GM-adjudicated: play the item's text (rules:DEFINITIONS detail FULL for the wording).");
 			}
 			out.add(m);
 		}

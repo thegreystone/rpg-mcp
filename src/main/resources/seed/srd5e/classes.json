@@ -1216,7 +1216,7 @@
             "name": "Sorcerer Subclass",
             "level": 3,
             "enforcement": "GM",
-            "summary": "Choose a Sorcerer subclass; its features are narrated from the SRD and recorded with record_memory (subclasses are not yet data-driven).",
+            "summary": "Choose a Sorcerer subclass; its features are narrated from the SRD and recorded with chronicle:RECORD_MEMORY (subclasses are not yet data-driven).",
             "text": "You gain a Sorcerer subclass of your choice. A subclass is a specialization that grants you features at certain Sorcerer levels.",
             "text_is_paraphrase": true
           },

@@ -85,7 +85,7 @@ class ChronicleTest {
 			Map<String, Object> due = m(m(boot.get("chronicle")).get("due"));
 			assertEquals(true, due.get("chapter"));
 			assertEquals(false, due.get("synopsis"));
-			assertTrue(due.get("how").toString().contains("get_chronicle_material"));
+			assertTrue(due.get("how").toString().contains("chronicle:GET_MATERIAL"));
 			assertTrue(((Number) m(m(boot.get("chronicle")).get("since_last_chapter")).get("omitted_for_budget"))
 					.intValue() > 0, "the tail is digested under the budget, never shipped whole");
 

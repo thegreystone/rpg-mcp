@@ -106,7 +106,7 @@ public final class SceneService {
 							else
 								throw RpgException.notAllowed(c.str("name") + " (" + string(p, "character", null)
 										+ ") already has an established position on " + oldMap.str("name") + " (map:"
-										+ oldMap.id() + "). Use move_map_actor for movement on that saved board.");
+										+ oldMap.id() + "). Use map_play:MOVE_ACTOR for movement on that saved board.");
 						}
 						if (previous.isPresent())
 							tx.update("map_actor", previous.get().id(), cols);

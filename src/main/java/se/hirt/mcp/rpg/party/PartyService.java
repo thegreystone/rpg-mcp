@@ -100,7 +100,7 @@ public final class PartyService {
 					campaignId, c.id()) > 0;
 			if (playerControlled && !k.equals("JOIN") && !k.equals("REJOIN")) {
 				throw RpgException
-						.notAllowed("The player character cannot leave the party; transfer_player_control first.");
+						.notAllowed("The player character cannot leave the party; character:TRANSFER_CONTROL first.");
 			}
 			Optional<Row> open = tx.queryOne(
 					"SELECT * FROM party_membership WHERE campaign_id = ? AND character_id = ? AND state IN ('ACTIVE','SEPARATED','GUEST')",

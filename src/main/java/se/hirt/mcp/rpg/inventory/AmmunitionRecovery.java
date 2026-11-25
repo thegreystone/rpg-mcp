@@ -107,7 +107,7 @@ public final class AmmunitionRecovery {
 			offer.put("recoverable", used / 2);
 			offer.put("elapsed_minutes", 1);
 			offer.put("optional", true);
-			offer.put("recover_with", "recover_ammunition");
+			offer.put("recover_with", "encounter:RECOVER_AMMO");
 			offer.put("prompt",
 					"Ask the player whether to spend one minute searching for ammunition, if the battlefield is accessible.");
 			offer.put("selection_required", candidates.stream().anyMatch(c -> "GM".equals(c.recoverAs)));

@@ -616,7 +616,7 @@ class SpellTest {
 			// how to resolve later saves.
 			Map<String, Object> wave = engine.spells().cast(op(), campaign, pc, "Thunderwave", null, List.of(), null);
 			assertTrue(list(wave.get("targets")).isEmpty());
-			assertTrue(String.valueOf(wave.get("note")).contains("resolve_check"));
+			assertTrue(String.valueOf(wave.get("note")).contains("roll_check:CHECK"));
 			// A ranged save spell still needs a target.
 			assertEquals(ErrorCode.INVALID_ARGUMENT,
 					assertThrows(RpgException.class,

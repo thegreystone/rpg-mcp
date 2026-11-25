@@ -810,7 +810,7 @@ public final class EncounterDigest {
 						+ before.getOrDefault("state", "recorded") + " → " + after.getOrDefault("state", "removed");
 			}).toList())).append('.');
 		text.append("\nXP awarded: ").append(SceneService.map(digest.get("xp")).getOrDefault("total", 0)).append('.');
-		text.append("\nLoot is recorded separately through grant_loot with source ENCOUNTER.");
+		text.append("\nLoot is recorded separately through inventory:GRANT_LOOT with source ENCOUNTER.");
 		return clipped(text.toString(), 6000);
 	}
 

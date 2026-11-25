@@ -597,7 +597,7 @@ public final class MagicItems {
 		if (isTemplate(item.payload())) {
 			throw RpgException.invalidArgument("'" + item.name() + "' describes any "
 					+ magic(item.payload()).getOrDefault("applies_to", "item of its kind") + "; " + what
-					+ " needs a concrete item: grant_loot with {\"item\": \"" + item.name()
+					+ " needs a concrete item: inventory:GRANT_LOOT with {\"item\": \"" + item.name()
 					+ "\", \"base\": \"Longsword\"} or \"+1 Longsword\" first.");
 		}
 	}

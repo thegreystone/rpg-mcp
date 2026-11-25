@@ -493,7 +493,7 @@ public final class SessionService {
 		ctx.put("story_beats", beats);
 		if (!beats.isEmpty()) {
 			ctx.put("story_beats_hint",
-					"Use get_context with scope STORY_BEAT and a story_beats ref for full guidance; gm_brief_truncated marks shortened or omitted text.");
+					"Use narrative:CONTEXT with scope STORY_BEAT and a story_beats ref for full guidance; gm_brief_truncated marks shortened or omitted text.");
 		}
 		ctx.put("active_quests", tx.query(
 				"SELECT * FROM quest WHERE campaign_id = ? AND status IN ('OFFERED','ACCEPTED') AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
@@ -521,7 +521,7 @@ public final class SessionService {
 				campaignId).ifPresent(e -> ctx.put("encounter", encounters.state(tx, e, 5)));
 		ctx.put("recent_events", LedgerService.recent(tx, campaignId, eventLimit));
 		ctx.put("recent_events_hint",
-				"Up to eight recent events, with at most two encounter digests sharing a 3000-byte compact UTF-8 JSON budget. Older fights retain summaries and full_gm_record pointers; use query_timeline for more history.");
+				"Up to eight recent events, with at most two encounter digests sharing a 3000-byte compact UTF-8 JSON budget. Older fights retain summaries and full_gm_record pointers; use chronicle:QUERY_TIMELINE for more history.");
 		ctx.put("chronicle", ChronicleService.view(tx, campaignId, chars / 3));
 		ctx.put("pending_transaction", tx
 				.queryOne("SELECT * FROM pending_transaction WHERE campaign_id = ? AND status = 'OPEN'", campaignId)
@@ -605,7 +605,7 @@ public final class SessionService {
 				}
 			}
 			sheet.put("inventory", brief);
-			sheet.put("inventory_note", "Names only; get_character_sheet carries refs, weights and charges.");
+			sheet.put("inventory_note", "Names only; character:SHEET carries refs, weights and charges.");
 		}
 		return sheet;
 	}
@@ -712,7 +712,7 @@ public final class SessionService {
 			if (!gaps.isEmpty()) {
 				sheet.put("sheet_gaps", gaps);
 				sheet.put("sheet_gaps_note",
-						"Not yet a character a player could inherit; begin_level_up offers the class, species and background.");
+						"Not yet a character a player could inherit; level_up:BEGIN offers the class, species and background.");
 			}
 			members.add(sheet);
 		}

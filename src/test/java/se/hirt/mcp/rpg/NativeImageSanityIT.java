@@ -45,8 +45,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Sanity test for the native image binary: starts the executable against a temporary data
- * directory, performs the MCP handshake over STDIO, lists tools, and calls get_server_state (which
- * exercises SQLite, migrations and the seed import inside the native image).
+ * directory, performs the MCP handshake over STDIO, lists tools, loads modular protocol guides, and
+ * calls session:STATE (which exercises SQLite, migrations and the seed import inside the native
+ * image).
  * <p>
  * Skipped unless {@code native.image.path} is set, e.g.
  * {@code mvn test-compile failsafe:integration-test failsafe:verify -Dnative.image.path=target/<binary>.exe}.
@@ -102,6 +103,18 @@ class NativeImageSanityIT {
 			assertNotNull(state, "No session:STATE response");
 			assertTrue(state.contains("CAMPAIGN_SELECTION"), state);
 			assertTrue(state.contains("srd5e:5.2.1"), state);
+
+			// Exercise modular protocol guide resources packaged inside the native image.
+			Map<String, Object> coreGuide = call(stdin, stdout, 20, "get_instructions", Map.of());
+			assertTrue("CORE".equals(coreGuide.get("topic")), coreGuide.toString());
+			assertTrue(String.valueOf(coreGuide.get("guide")).contains("engine owns the truth"), coreGuide.toString());
+			Map<String, Object> mapsGuide = call(stdin, stdout, 21, "get_instructions", Map.of("topic", "MAPS"));
+			assertTrue("MAPS".equals(mapsGuide.get("topic")), mapsGuide.toString());
+			assertTrue(String.valueOf(mapsGuide.get("guide")).contains("Final graphics & mood pass"),
+					mapsGuide.toString());
+			Map<String, Object> allGuide = call(stdin, stdout, 22, "get_instructions", Map.of("topic", "ALL"));
+			assertTrue("ALL".equals(allGuide.get("topic")), allGuide.toString());
+			assertTrue(String.valueOf(allGuide.get("guide")).contains("Audited GM Overrides"), allGuide.toString());
 
 			// Exercise the actual MCP image/text contract and renderer in the native executable.
 			Map<String, Object> created = call(stdin, stdout, 3, "session", Map.of("action", "CREATE", "operation_id",

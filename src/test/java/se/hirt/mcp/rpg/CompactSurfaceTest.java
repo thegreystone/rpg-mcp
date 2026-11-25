@@ -36,21 +36,28 @@ import org.junit.jupiter.api.Test;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.harness.HarnessState;
 import se.hirt.mcp.rpg.harness.ToolOperations;
+import se.hirt.mcp.rpg.protocol.ErrorCode;
 import se.hirt.mcp.rpg.protocol.Json;
+import se.hirt.mcp.rpg.protocol.RpgException;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
 
 /**
- * Verifies the consolidated 22-tool MCP surface (Option 2): exact tool inventory, 112-operation
- * bijection, compact schema budget, topic-split guide, and dispatch across all domain tools.
+ * Verifies the consolidated 22-tool MCP surface: exact tool inventory, 112-operation bijection,
+ * compact schema budget, topic-split guide, and dispatch across all domain tools.
  */
 class CompactSurfaceTest {
 
@@ -60,6 +67,7 @@ class CompactSurfaceTest {
 	@Test
 	void toolSurfaceIsCompactWellDocumentedAndMatchesToolOperations() {
 		Set<String> exposed = new LinkedHashSet<>();
+		Map<String, Method> methodsByTool = new LinkedHashMap<>();
 		int descChars = 0;
 		int argChars = 0;
 		for (Class<?> cls : TOOL_CLASSES) {
@@ -69,6 +77,7 @@ class CompactSurfaceTest {
 					continue;
 				}
 				assertTrue(exposed.add(tool.name()), "Duplicate @Tool name: " + tool.name());
+				methodsByTool.put(tool.name(), m);
 				assertFalse(tool.description().isBlank(), tool.name() + " needs a description");
 				descChars += tool.description().length();
 				for (Parameter p : m.getParameters()) {
@@ -84,14 +93,28 @@ class CompactSurfaceTest {
 		assertTrue(descChars < 16_000, "Tool descriptions grew too large: " + descChars + " chars");
 		assertTrue(argChars < 6_000, "Arg descriptions grew too large: " + argChars + " chars");
 
-		// Every one of the 112 internal operations maps 1-to-1 to a real exposed MCP tool.
+		// Every one of the 112 internal operations maps 1-to-1 to a real exposed MCP tool and action.
 		assertEquals(112, ToolOperations.all().size());
+		Map<String, Set<String>> actionsByTool = new LinkedHashMap<>();
 		for (var entry : ToolOperations.all().entrySet()) {
 			String internal = entry.getKey();
 			String pub = entry.getValue();
 			assertEquals(internal, ToolOperations.internalName(pub), "Round-trip failed for " + internal);
-			String toolName = pub.contains(":") ? pub.substring(0, pub.indexOf(':')) : pub;
+			int colon = pub.indexOf(':');
+			String toolName = colon >= 0 ? pub.substring(0, colon) : pub;
 			assertTrue(exposed.contains(toolName), "Public operation " + pub + " points to missing tool " + toolName);
+			if (colon >= 0) {
+				actionsByTool.computeIfAbsent(toolName, k -> new LinkedHashSet<>()).add(pub.substring(colon + 1));
+			}
+		}
+		for (var entry : actionsByTool.entrySet()) {
+			Method method = methodsByTool.get(entry.getKey());
+			Parameter firstParam = method.getParameters()[0];
+			String actionDesc = firstParam.getAnnotation(ToolArg.class).description();
+			Set<String> documented = Arrays.stream(actionDesc.split("\\|")).map(String::trim)
+					.collect(Collectors.toCollection(LinkedHashSet::new));
+			assertEquals(entry.getValue(), documented,
+					"Documented @ToolArg actions mismatch ToolOperations for " + entry.getKey());
 		}
 		// Every HarnessState advertises only public tool names backed by exposed tools.
 		for (HarnessState state : HarnessState.values()) {
@@ -99,6 +122,147 @@ class CompactSurfaceTest {
 				String toolName = op.contains(":") ? op.substring(0, op.indexOf(':')) : op;
 				assertTrue(exposed.contains(toolName), "HarnessState " + state + " advertises unknown tool " + op);
 			}
+		}
+	}
+
+	@Test
+	void everyToolOperationActionDispatchesThroughItsExposedTool() throws Exception {
+		try (Engine engine = engine(tempDb("compact-surface-actions"))) {
+			RpgTools rpg = new RpgTools();
+			rpg.engine = engine;
+			MapTools maps = new MapTools();
+			maps.engine = engine;
+			EconomyTools econ = new EconomyTools();
+			econ.engine = engine;
+			LivingWorldTools world = new LivingWorldTools();
+			world.engine = engine;
+
+			Map<String, Object> instances = new LinkedHashMap<>();
+			Map<String, Method> methods = new LinkedHashMap<>();
+			for (Object instance : List.of(rpg, maps, econ, world)) {
+				for (Method m : instance.getClass().getDeclaredMethods()) {
+					Tool tool = m.getAnnotation(Tool.class);
+					if (tool != null) {
+						m.setAccessible(true);
+						instances.put(tool.name(), instance);
+						methods.put(tool.name(), m);
+					}
+				}
+			}
+
+			Set<String> multiActionTools = new LinkedHashSet<>();
+			for (String pub : ToolOperations.all().values()) {
+				int colon = pub.indexOf(':');
+				if (colon < 0) {
+					continue;
+				}
+				String toolName = pub.substring(0, colon);
+				String action = pub.substring(colon + 1);
+				multiActionTools.add(toolName);
+				ToolResponse resp = (ToolResponse) methods.get(toolName).invoke(instances.get(toolName), action, null,
+						null, Map.of());
+				if (resp.isError()) {
+					Map<String, Object> error = err(resp);
+					assertFalse(String.valueOf(error.get("message")).contains("Unknown action"),
+							"Tool " + toolName + " rejected advertised action " + action + ": " + error);
+				}
+			}
+			assertEquals(19, multiActionTools.size(), "Expected 19 multi-action tools");
+			for (String toolName : multiActionTools) {
+				ToolResponse bogus = (ToolResponse) methods.get(toolName).invoke(instances.get(toolName),
+						"__BOGUS_ACTION__", null, null, Map.of());
+				assertTrue(bogus.isError(), toolName + " should reject unknown actions");
+				Map<String, Object> error = err(bogus);
+				assertEquals("INVALID_ARGUMENT", error.get("code"));
+				assertTrue(String.valueOf(error.get("message")).contains("Unknown action"),
+						toolName + " error should explain unknown action: " + error);
+			}
+		}
+	}
+
+	@Test
+	void sessionStateAdvertisesPublicToolNamesBeforeAndAfterCampaign() throws Exception {
+		try (Engine engine = engine(tempDb("compact-surface-session-state"))) {
+			RpgTools rpg = new RpgTools();
+			rpg.engine = engine;
+
+			Map<String, Object> before = ok(rpg.session("STATE", null, null, null));
+			String beforeJson = Json.write(before);
+			assertTrue(beforeJson.contains("session:CREATE"), beforeJson);
+			assertFalse(beforeJson.contains("create_campaign"), beforeJson);
+			assertFalse(beforeJson.contains("open_campaign"), beforeJson);
+
+			String campaign = committedCampaign(engine);
+			ok(rpg.session("BOOTSTRAP", campaign, op(), null));
+
+			Map<String, Object> after = ok(rpg.session("STATE", null, null, null));
+			assertNotNull(after.get("active_campaign"), "Expected active campaign after bootstrap");
+			@SuppressWarnings("unchecked")
+			List<String> allowed = (List<String>) after.get("allowed_operations");
+			assertTrue(allowed.contains("session:CREATE"), "Expected session:CREATE in " + allowed);
+			assertTrue(allowed.contains("session:OPEN"), "Expected session:OPEN in " + allowed);
+			assertFalse(allowed.contains("create_campaign"), "Legacy name leaked: " + allowed);
+			assertFalse(allowed.contains("open_campaign"), "Legacy name leaked: " + allowed);
+		}
+	}
+
+	@Test
+	void moneyAndCostParametersAcceptNumbersAndMapsAcrossTools() throws Exception {
+		try (Engine engine = engine(tempDb("compact-surface-money"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+
+			RpgTools rpg = new RpgTools();
+			rpg.engine = engine;
+			EconomyTools econ = new EconomyTools();
+			econ.engine = engine;
+
+			ok(econ.economy("CREATE_ACCOUNT", campaign, op(),
+					Map.of("name", "Copper Chest", "owner_kind", "OTHER", "money", 150)));
+			ok(econ.economy("CREATE_ACCOUNT", campaign, op(),
+					Map.of("name", "Guild Vault", "owner_kind", "OTHER", "money", Map.of("gp", 5, "sp", 2))));
+
+			ok(rpg.inventory("GRANT_LOOT", campaign, op(),
+					Map.of("to", "character:1", "money", 200, "source", "QUEST", "reason", "Copper bounty")));
+			ok(rpg.inventory("GRANT_LOOT", campaign, op(), Map.of("to", "character:1", "money", Map.of("gp", 2),
+					"source", "QUEST", "reason", "Gold coin pouch")));
+
+			ok(rpg.inventory("TRADE", campaign, op(), Map.of("character", "character:1", "kind", "BUY", "item", "Torch",
+					"quantity", 1, "negotiated_price", 2, "reason", "Bulk discount")));
+			ok(rpg.inventory("TRADE", campaign, op(), Map.of("character", "character:1", "kind", "BUY", "item", "Torch",
+					"quantity", 1, "negotiated_price", Map.of("cp", 3), "reason", "Market markup")));
+
+			Map<String, Object> defs = ok(rpg.rules("DEFINITIONS", campaign, null,
+					Map.of("kind", "ITEM", "min_cost", 1, "max_cost", Map.of("gp", 5), "limit", 5)));
+			assertFalse(((List<?>) defs.get("items")).isEmpty());
+
+			ok(rpg.rules("DEFINE", campaign, op(),
+					Map.of("name", "Silver Whistle", "kind", "ITEM", "item_type", "GEAR", "cost", 250)));
+			ok(rpg.rules("DEFINE", campaign, op(),
+					Map.of("name", "Gilded Compass", "kind", "ITEM", "item_type", "GEAR", "cost", Map.of("gp", 15))));
+		}
+	}
+
+	@Test
+	void toolArgsOptLongValidatesExactRangeAndBigNumbers() {
+		ToolArgs valid = ToolArgs.of("test", "ACT", null,
+				Map.of("i", 42, "max", Long.MAX_VALUE, "min", Long.MIN_VALUE, "bi", BigInteger.valueOf(Long.MAX_VALUE),
+						"bd", new BigDecimal("12345.00"), "dbl", 100.0),
+				"i, max, min, bi, bd, dbl", "i", "max", "min", "bi", "bd", "dbl");
+		assertEquals(42L, valid.optLong("i"));
+		assertEquals(Long.MAX_VALUE, valid.optLong("max"));
+		assertEquals(Long.MIN_VALUE, valid.optLong("min"));
+		assertEquals(Long.MAX_VALUE, valid.optLong("bi"));
+		assertEquals(12345L, valid.optLong("bd"));
+		assertEquals(100L, valid.optLong("dbl"));
+
+		for (Object bad : List.of(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
+				BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE), new BigDecimal("1.5"), 1e30,
+				(double) Long.MAX_VALUE, Double.NaN, Double.POSITIVE_INFINITY, "42")) {
+			ToolArgs invalid = ToolArgs.of("test", "ACT", null, Map.of("v", bad), "v", "v");
+			RpgException ex = assertThrows(RpgException.class, () -> invalid.optLong("v"),
+					"Expected rejection for " + bad + " (" + bad.getClass().getSimpleName() + ")");
+			assertEquals(ErrorCode.INVALID_ARGUMENT, ex.code());
 		}
 	}
 

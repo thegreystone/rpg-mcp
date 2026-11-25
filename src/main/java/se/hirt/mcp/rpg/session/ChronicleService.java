@@ -175,9 +175,9 @@ public final class ChronicleService {
 		out.put("synopsis", synopsis);
 		out.put("reasons", reasons);
 		if (chapter || synopsis) {
-			out.put("how", "Delegate: a fresh summarizing agent calls get_chronicle_material (kind "
+			out.put("how", "Delegate: a fresh summarizing agent calls chronicle:GET_MATERIAL (kind "
 					+ (chapter ? "CHAPTER" : "SYNOPSIS")
-					+ "), writes in the campaign's voice at the target length, and calls write_chronicle with the material's `through` marker. Play continues meanwhile.");
+					+ "), writes in the campaign's voice at the target length, and calls chronicle:WRITE with the material's `through` marker. Play continues meanwhile.");
 		}
 		return out;
 	}
@@ -244,7 +244,8 @@ public final class ChronicleService {
 		// the ledger, while a mutation's own entry is the natural upper bound.
 		long through = tx.journalId() < 0 ? Long.MAX_VALUE : tx.journalId();
 		Map<String, Object> tail = LedgerService.digest(tx, campaignId, coveredThrough(tx, campaignId), through, left);
-		tail.put("note", "The ledger since the last chapter, by importance; older detail is one query_memories away.");
+		tail.put("note",
+				"The ledger since the last chapter, by importance; older detail is one chronicle:QUERY_MEMORIES away.");
 		out.put("since_last_chapter", tail);
 		out.put("due", due(tx, campaignId));
 		return out;
@@ -305,7 +306,7 @@ public final class ChronicleService {
 				out.put("nothing_to_cover", events.isEmpty() && nextCursor == null);
 				out.put("through", lastJournal == null ? null : Map.of("journal_id", lastJournal, "game_time", lastTime,
 						"note",
-						"Pass through.journal_id to write_chronicle; events recorded after it stay uncovered."));
+						"Pass through.journal_id to chronicle:WRITE; events recorded after it stay uncovered."));
 				out.put("target", Map.of("chars", CHAPTER_TARGET_CHARS, "max_chars", CHAPTER_MAX_CHARS, "note",
 						"About 300 tokens of prose in the campaign's voice: what happened, what was decided, what changed between people, what is now open. Name people and places; keep the game days. Never invent; omit before you guess."));
 			}
@@ -318,7 +319,7 @@ public final class ChronicleService {
 				out.put("through", chapters.isEmpty() ? null : Map.of("chapter_id",
 						chapters.get(chapters.size() - 1).id(), "game_time",
 						chapters.get(chapters.size() - 1).str("to_time"), "note",
-						"Pass through.chapter_id to write_chronicle; chapters written after it wait for the next rewrite."));
+						"Pass through.chapter_id to chronicle:WRITE; chapters written after it wait for the next rewrite."));
 				out.put("target", Map.of("chars", SYNOPSIS_TARGET_CHARS, "max_chars", SYNOPSIS_MAX_CHARS, "note",
 						"About 1,500 tokens: the story so far. Closed arcs compress to a few sentences; the current arc stays detailed; end with a short list of settled facts (who is wed to whom, who is dead, what the House holds, standing promises) carried forward verbatim from the previous synopsis unless a chapter contradicts one. Never invent."));
 			}
@@ -404,7 +405,7 @@ public final class ChronicleService {
 		long to = through == null ? tx.journalId() : through;
 		if (to <= from || to > tx.journalId()) {
 			throw RpgException.conflict("through must be a journal position after the last chapter (" + from
-					+ ") and not after now (" + tx.journalId() + "); re-read get_chronicle_material.");
+					+ ") and not after now (" + tx.journalId() + "); re-read chronicle:GET_MATERIAL.");
 		}
 		List<Row> events = tx.query(
 				"SELECT * FROM event WHERE campaign_id = ? AND recorded_journal_id > ? AND recorded_journal_id <= ? AND importance <> 'MINOR' AND visibility <> 'DIRECTOR_ONLY' ORDER BY id",
@@ -444,7 +445,7 @@ public final class ChronicleService {
 		List<Row> covered = chapters.stream().filter(c -> c.id() <= last).toList();
 		if (covered.isEmpty()) {
 			throw RpgException.conflict(
-					"through must be the id of a chapter written since the current synopsis; re-read get_chronicle_material.");
+					"through must be the id of a chapter written since the current synopsis; re-read chronicle:GET_MATERIAL.");
 		}
 		Optional<Row> previous = synopsis(tx, campaignId);
 		previous.ifPresent(p -> tx.update("chronicle", p.id(), Map.of("superseded", 1)));

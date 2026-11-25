@@ -281,7 +281,7 @@ public final class CheckpointService {
 			result.put("requires_context_reset", true);
 			result.put("audit", "restoration recorded; discarded events are no longer canonical");
 			result.put("meta", Harness.meta(after, List.of(
-					"Rebuild your context from bootstrap_session; prior narration has no authority over restored state.")));
+					"Rebuild your context from session:BOOTSTRAP; prior narration has no authority over restored state.")));
 			return result;
 		});
 	}

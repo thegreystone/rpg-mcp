@@ -32,7 +32,7 @@ class Run3CombatRulesTest {
 			long rolls = rollCount(e);
 			RpgException refused = assertThrows(RpgException.class, () -> e.runtime().applyRuntimeChange(op(), campaign,
 					"character:1", map("kind", "USE_ITEM", "item", entry)));
-			assertTrue(refused.getMessage().contains("perform_encounter_action"));
+			assertTrue(refused.getMessage().contains("encounter:ACTION"));
 			assertEquals(rolls, rollCount(e));
 			assertEquals(quantity, e.db().read(tx -> tx.get("inventory_entry", itemId).lng("quantity")).longValue());
 			dice(e).queue(2, 2);
@@ -361,7 +361,7 @@ class Run3CombatRulesTest {
 			String encounter = start(e, campaign, "character:1", ogre);
 			RpgException error = assertThrows(RpgException.class,
 					() -> e.runtime().applyRuntimeChange(op(), campaign, "character:1", map("kind", "STAND")));
-			assertTrue(error.getMessage().contains("perform_encounter_action"));
+			assertTrue(error.getMessage().contains("encounter:ACTION"));
 			assertTrue(prone(e));
 			Map<String, Object> combatStand = e.encounters().perform(op(), campaign, encounter, "character:1",
 					map("kind", "STAND"));

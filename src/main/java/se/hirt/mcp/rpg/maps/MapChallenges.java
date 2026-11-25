@@ -159,7 +159,7 @@ public final class MapChallenges {
 			for (String field : spec.keySet())
 				if (!FIELDS.contains(field))
 					errors.add(new Violation(at + "." + field, "CHECK_FIELD_UNKNOWN",
-							"Use difficulty, kind, ability, skill or tool; stored challenges are resolve_check guidance."));
+							"Use difficulty, kind, ability, skill or tool; stored challenges are roll_check:CHECK guidance."));
 			if (!(spec.get("difficulty") instanceof Number number) || !Double.isFinite(number.doubleValue())
 					|| number.doubleValue() < 1 || number.doubleValue() > 40
 					|| number.doubleValue() != Math.rint(number.doubleValue()))

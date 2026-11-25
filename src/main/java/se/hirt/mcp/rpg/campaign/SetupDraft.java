@@ -296,16 +296,16 @@ public final class SetupDraft {
 		}
 		Long pcId = playerCharacterId();
 		if (pcId == null) {
-			out.add("player_character — create_character_draft for the player's character");
+			out.add("player_character — character_draft:CREATE for the player's character");
 		} else {
 			Row pc = tx.find("character", pcId).orElse(null);
 			if (pc != null && "DRAFT".equals(pc.str("lifecycle"))) {
-				out.add("character " + Ref.of(Ref.CHARACTER, pc.id()) + " — complete and commit_character_draft ("
+				out.add("character " + Ref.of(Ref.CHARACTER, pc.id()) + " — complete and character_draft:COMMIT ("
 						+ characterState(tx, pc) + ")");
 			}
 		}
 		if (section("party") == null) {
-			out.add("party — companion preferences via update_party_design (may be delegated)");
+			out.add("party — companion preferences via campaign_setup:PARTY_DESIGN (may be delegated)");
 		}
 		if (section("adventure") == null) {
 			out.add("adventure — premise, opening_location, immediate_goal (the GM authors these)");
@@ -343,7 +343,7 @@ public final class SetupDraft {
 						"The player character draft does not exist in this campaign."));
 			} else if (!"FINALIZED_DRAFT".equals(pc.str("lifecycle"))) {
 				v.add(new Violation("player_character", "NOT_FINALIZED",
-						"The player character must be finalized with commit_character_draft before campaign commit."));
+						"The player character must be finalized with character_draft:COMMIT before campaign commit."));
 			}
 		}
 		for (Row other : tx.query("SELECT id, name FROM character WHERE campaign_id = ? AND lifecycle = 'DRAFT'",
