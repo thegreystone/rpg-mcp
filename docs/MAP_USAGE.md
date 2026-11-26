@@ -4,8 +4,12 @@ Maps are saved campaign state. The model authors the place and its story; tools 
 keep the accepted facts and draw the current view. Travel uses the location/route graph. Every new
 combat has a local grid, including a roadside fight or a confrontation on an inn's steps.
 
-Load `get_instructions` and use the operations advertised by the current server. Reference numbers
-below are illustrative; use the references returned for the actual campaign.
+Load `get_instructions` (and `get_instructions(topic="MAPS")`) and use the operations advertised by the current
+server. In protocol `0.2.0`, map authoring operations are exposed through `map_preparation` (`BEGIN`, `REVISE`,
+`VALIDATE`, `PUBLISH`, `IMPORT_ASSET`, `EXPORT_BUNDLE`, `IMPORT_BUNDLE`), spatial play through `map_play`
+(`CONTEXT`, `FIND`, `PLACE_ACTORS`, `MOVE_ACTOR`, `OBSERVE`, `PREVIEW_ACTION`, `USE_TRANSITION`,
+`UPDATE_OBJECT`, `CORRECT_GEOMETRY`, `PERCEPTION`, `EMIT_SOUND`, `ANNOTATE`), and rendering through `render_map`.
+Reference numbers below are illustrative; use the references returned for the actual campaign.
 
 ## Prepare a dungeon
 

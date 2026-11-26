@@ -137,8 +137,9 @@ class DecisionsTest {
 			assertEquals("player_age", ids(created).get(0));
 			Map<String, Object> profile = decisions(created).get(1);
 			assertEquals("content_profile", profile.get("id"));
-			assertEquals("update_campaign_setup", profile.get("tool"));
-			assertEquals("changes.content_profile", profile.get("path"));
+			assertEquals("campaign_setup", profile.get("tool"));
+			assertEquals("UPDATE", profile.get("action"));
+			assertEquals("params.changes.content_profile", profile.get("path"));
 			assertEquals("LEGAL_VALUES", profile.get("options_are"));
 			assertEquals(5, options(profile).size());
 			assertDescribed(options(profile));
@@ -165,7 +166,7 @@ class DecisionsTest {
 					map("experience", map("authorship", "GUIDED")));
 			Map<String, Object> style = decisions(tone).get(0);
 			assertEquals("experience.fantasy_style", style.get("id"));
-			assertEquals("changes.experience.fantasy_style", style.get("path"));
+			assertEquals("params.changes.experience.fantasy_style", style.get("path"));
 			assertEquals("SUGGESTIONS", style.get("options_are"));
 			assertEquals("EPIC", style.get("recommended"));
 			assertEquals("EPIC", style.get("default"));
@@ -217,7 +218,8 @@ class DecisionsTest {
 			Map<String, Object> pcq = engine.campaigns().updateSetup(op(), campaign, null,
 					map("continuation", "CHECKPOINT"));
 			assertEquals("player_character", ids(pcq).get(0));
-			assertEquals("create_character_draft", decisions(pcq).get(0).get("tool"));
+			assertEquals("character_draft", decisions(pcq).get(0).get("tool"));
+			assertEquals("CREATE", decisions(pcq).get(0).get("action"));
 
 			// The draft's own decisions take over, in creation order: the SRD background comes first.
 			Map<String, Object> draft = engine.characters().createDraft(op(), campaign,
@@ -316,7 +318,8 @@ class DecisionsTest {
 							map("premise", "A quiet river town hides a failing magical boundary.", "opening_location",
 									"Bellhaven", "immediate_goal", "Find Aldren's contact at The Copper Kettle.")));
 			assertEquals(List.of("campaign_review"), ids(review));
-			assertEquals("commit_campaign_setup", decisions(review).get(0).get("tool"));
+			assertEquals("campaign_setup", decisions(review).get(0).get("tool"));
+			assertEquals("COMMIT", decisions(review).get(0).get("action"));
 
 			engine.campaigns().commitSetup(op(), campaign, null);
 			assertEquals(List.of(), engine.campaigns().setupState(campaign).get("decisions"));
@@ -374,16 +377,18 @@ class DecisionsTest {
 	@Test
 	void toolDescriptionsDoNotDoubleBookLegalValues() {
 		var texts = new ArrayList<String>();
-		for (Method method : RpgTools.class.getDeclaredMethods()) {
-			Tool tool = method.getAnnotation(Tool.class);
-			if (tool == null) {
-				continue;
-			}
-			texts.add(tool.name() + ": " + tool.description());
-			for (Parameter p : method.getParameters()) {
-				ToolArg arg = p.getAnnotation(ToolArg.class);
-				if (arg != null) {
-					texts.add(tool.name() + "." + p.getName() + ": " + arg.description());
+		for (Class<?> group : List.of(RpgTools.class, MapTools.class, EconomyTools.class, LivingWorldTools.class)) {
+			for (Method method : group.getDeclaredMethods()) {
+				Tool tool = method.getAnnotation(Tool.class);
+				if (tool == null) {
+					continue;
+				}
+				texts.add(tool.name() + ": " + tool.description());
+				for (Parameter p : method.getParameters()) {
+					ToolArg arg = p.getAnnotation(ToolArg.class);
+					if (arg != null) {
+						texts.add(tool.name() + "." + p.getName() + ": " + arg.description());
+					}
 				}
 			}
 		}

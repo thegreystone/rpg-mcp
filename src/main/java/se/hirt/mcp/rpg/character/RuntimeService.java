@@ -98,8 +98,8 @@ public final class RuntimeService {
 				throw RpgException.capabilityUnavailable(
 						"Materializing Director companion seeds arrives with the Director milestone; use an installed creature definition.");
 			}
-			RulesData.Definition def = rules.resolve("CREATURE", source).orElseThrow(() -> RpgException.invalidArgument(
-					"Unknown creature '" + source + "'; see get_content_definitions with kind CREATURE."));
+			RulesData.Definition def = rules.resolve("CREATURE", source).orElseThrow(() -> RpgException
+					.invalidArgument("Unknown creature '" + source + "'; see rules:DEFINITIONS with kind CREATURE."));
 			Map<String, Object> p = def.payload();
 			Long locationId = campaign.lng("current_location_id");
 			if (locationRef != null && !locationRef.isBlank()) {
@@ -224,7 +224,7 @@ public final class RuntimeService {
 				// A potion drunk outside combat: the same consumable core the encounter USE_ITEM action uses.
 				if ("ENCOUNTER".equals(campaign.str("harness_state")))
 					throw RpgException.notAllowed(
-							"In combat, use perform_encounter_action with kind USE_ITEM on this character's turn; it spends the appropriate Action or Bonus Action.");
+							"In combat, use encounter:ACTION with kind USE_ITEM on this character's turn; it spends the appropriate Action or Bonus Action.");
 				String text = change.get("item") == null ? null : change.get("item").toString();
 				if (text == null || text.isBlank()) {
 					throw RpgException.invalidArgument(
@@ -239,7 +239,7 @@ public final class RuntimeService {
 						campaignId, roller, entry, item, target);
 				if (used == null) {
 					throw RpgException.capabilityUnavailable(item.name()
-							+ " has no encoded effect; narrate it, apply the outcome with HEAL, ADD_CONDITION or the like, and remove it with transfer_item if it was used up.");
+							+ " has no encoded effect; narrate it, apply the outcome with HEAL, ADD_CONDITION or the like, and remove it with inventory:TRANSFER_ITEM if it was used up.");
 				}
 				result.put("item", item.display());
 				result.put("name", item.name());
@@ -361,7 +361,7 @@ public final class RuntimeService {
 			case "STAND" -> {
 				if ("ENCOUNTER".equals(campaign.str("harness_state")))
 					throw RpgException.notAllowed(
-							"In combat, use perform_encounter_action with kind STAND on this character's turn; standing spends half their movement budget.");
+							"In combat, use encounter:ACTION with kind STAND on this character's turn; standing spends half their movement budget.");
 				if (!"ALIVE".equals(c.str("life_state")))
 					throw RpgException.notAllowed(c.str("name") + " cannot stand while " + c.str("life_state") + ".");
 				List<Row> prone = tx.query("SELECT * FROM active_effect WHERE character_id=? AND condition_ref=?",
@@ -970,7 +970,7 @@ public final class RuntimeService {
 		boolean stable = Boolean.TRUE.equals(character.map("death_saves_json").get("stable"));
 		return Map.of("stable", stable, "guidance", stable
 				? "Stable at 0 Hit Points and Unconscious. Healing restores consciousness; otherwise the saved recovery timer applies."
-				: "At 0 Hit Points and Dying: Death Saving Throws continue. Use applicable healing or, after successful first aid is resolved, apply_runtime_change with kind STABILIZE and this target character.",
+				: "At 0 Hit Points and Dying: Death Saving Throws continue. Use applicable healing or, after successful first aid is resolved, character:RUNTIME_CHANGE with kind STABILIZE and this target character.",
 				"healing_targets",
 				"CAST or USE_ITEM with the dying character as target. Dying does not end an existing party membership.");
 	}

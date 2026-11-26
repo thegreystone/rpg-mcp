@@ -9,32 +9,41 @@ The first implementation milestone ([`MCP_PROTOCOL.md`](MCP_PROTOCOL.md) §28: d
 setup, commit, session bootstrap, one deterministic check, persistence, suspension, fresh-context resumption)
 plus the change journal, checkpoints and the semantic ledger, which define the persistence architecture.
 
-## Tool surface
+## Tool surface (protocol 0.2.0 — 22 domain tools)
 
-| Family                 | Tools                                                                                                                                                                                                                                                                  |
-|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Discovery              | `get_instructions`, `get_server_state`                                                                                                                                                                                                                                 |
-| Campaign setup         | `create_campaign`, `open_campaign`, `get_setup_state`, `update_campaign_setup`, `validate_campaign_setup`, `commit_campaign_setup`, `complete_campaign`                                                                                                                 |
-| Character design       | `create_character_draft`, `get_character_choices`, `generate_ability_scores`, `update_character_draft`, `validate_character_draft`, `commit_character_draft`, `update_party_design`                                                                                      |
-| Session                | `bootstrap_session`, `suspend_session`, `get_character_sheet`, `get_party` (the last two always available)                                                                                                                                                             |
-| Rules                  | `resolve_check` (checks and saves with advantage/disadvantage), `roll_dice` (free journaled roll), `advance_time`, `search_rules`                                                                                                                                       |
-| World                  | `materialize_location` (semantic map: containment tree, features with visibility, connections with travel time), `move_party` (route finding, clock advance, travel-encounter suggestions), `find`                                                                       |
-| Narrative & Director   | `upsert_narrative_state` (QUEST, STORY_BEAT, STORY_SEED, FACTION_STATE, WORLD_EVENT, LOCATION_DETAIL, NPC_AGENDA), `get_diegetic_information`, `get_director_context`, `commit_director_changes`, `get_context`, `update_character`, `update_house_rules`                |
-| Reactions              | Opportunity Attacks (Disengage prevents them), Shield when hit; NPC reactions automatic or `ASK`; player reactions are pending choices (`resolve_pending_choice`) that hold the encounter (I-33); `nonlethal` melee                                                       |
-| Spellcasting           | 180-spell SRD 5.2.1 seed; class casting tables; `prepare_spells`, `cast_spell`, encounter `CAST`; slots as rest-restored resources; ritual casting; concentration; timed and round-scoped effects; Metamagic                                                             |
-| Rest & overrides       | `perform_rest`, `apply_gm_override` (policy-gated, audited, labeled)                                                                                                                                                                                                   |
-| Progression            | `begin_level_up`, `get_level_up_choices`, `update_level_up`, `validate_level_up`, `commit_level_up`, `abandon_transaction`                                                                                                                                              |
-| Party & relationships  | `update_party_membership` (membership as history), `get_relationship`, `update_relationship` (dimensions −5..+5, profiles, linked events)                                                                                                                              |
-| Creatures & encounters | `materialize_character` (330 SRD stat blocks from `tools` `build-creatures`), `start_encounter`, `get_encounter_state`, `perform_encounter_action`, `end_encounter` (XP split, level-up eligibility), `apply_runtime_change`, `award_xp`, `transfer_player_control`      |
-| Content & economy      | `get_content_definitions`, `define_content`, `trade`, `transfer_item`, `give_money`, `equip_item`, `grant_loot` (SRD 5.2.1 equipment seed, starting-equipment bundles, AC, carrying capacity; the 260 SRD magic items from `tools` `build-magic-items`: +N weapons/armor/shields/ammunition instantiated on a base, protection items, potions, wearable slots and attunement, level-appropriate `treasure` suggestions on completed quests, major encounters and bootstrap) |
-| Calendar & estate      | `set_calendar`, `create_account`, `transfer_money`, `get_accounts`, `define_cash_flow`, `update_cash_flow`, `list_cash_flows` (scheduled rules fired whenever `advance_time`, `move_party` or `perform_rest` moves the clock)                                             |
-| Memory & chronicle     | `record_memory`, `query_memories`, `query_timeline`, `get_chronicle_material`, `write_chronicle`                                                                                                                                                                        |
-| Continuation           | `create_checkpoint`, `get_continuation_options`, `restore_checkpoint`                                                                                                                                                                                                  |
-| Resources              | `rpg://protocol/guide`, `rpg://protocol/capabilities`, `rpg://rulesets`                                                                                                                                                                                                |
+All 112 semantic engine operations are consolidated into **22 MCP tools** (3 standalone + 19 action-dispatched domain
+tools taking `(action, campaign, operation_id?, params?)`) so the server stays well under multi-MCP host tool limits:
 
-Each new conversation starts with `get_instructions`, which loads the full Game Master guide into context,
-followed by `get_server_state`, which returns compact state and allowed operations. Later state checks do
-not repeat the guide. Startup requires no MCP resource reader or client-specific prompt.
+| Tool | Actions / Role |
+|---|---|
+| `get_instructions` | Standalone read-only GM guide loader (`topic`: `CORE` default, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`, `ALL`) |
+| `session` | `STATE`, `CREATE`, `OPEN`, `BOOTSTRAP`, `SUSPEND`, `COMPLETE` |
+| `campaign_setup` | `GET`, `UPDATE`, `VALIDATE`, `COMMIT`, `PARTY_DESIGN`, `HOUSE_RULES` |
+| `character_draft` | `CREATE`, `CHOICES`, `GENERATE_ABILITIES`, `UPDATE`, `VALIDATE`, `COMMIT` |
+| `level_up` | `BEGIN`, `CHOICES`, `UPDATE`, `VALIDATE`, `COMMIT`, `ABANDON` |
+| `character` | `SHEET`, `PARTY`, `UPDATE`, `MATERIALIZE`, `RUNTIME_CHANGE`, `AWARD_XP`, `MEMBERSHIP`, `TACTICAL_CONTROL`, `TRANSFER_CONTROL` |
+| `roll_check` | `CHECK` (ability/skill/save checks with tool proficiency & advantage), `DICE` (free journaled rolls) |
+| `encounter` | `START`, `STATE`, `ACTION`, `RESOLVE_CHOICE`, `END`, `ANNOTATE`, `ADD_PARTICIPANTS`, `RECOVER_AMMO`, `CONVERT_TO_GRID` |
+| `spellcasting` | `PREPARE`, `CAST` (180-spell SRD 5.2.1 seed, rituals, concentration, metamagic) |
+| `rest_time` | `REST` (`SHORT`/`LONG`), `ADVANCE`, `TIMED_ACTION` (`SEARCH`/`WAIT`/`WORK`) |
+| `inventory` | `TRANSFER_ITEM`, `EQUIP`, `GIVE_MONEY`, `TRADE`, `GRANT_LOOT` (SRD equipment + 260 magic items, attunement, level-appropriate `treasure` suggestions) |
+| `economy` | `SET_CALENDAR`, `CREATE_ACCOUNT`, `TRANSFER_MONEY`, `GET_ACCOUNTS`, `DEFINE_CASH_FLOW`, `UPDATE_CASH_FLOW`, `LIST_CASH_FLOWS` |
+| `world_travel` | `MATERIALIZE_LOCATION`, `MOVE_PARTY`, `TRAVEL_STATE`, `CONTINUE_JOURNEY`, `RESOLVE_OPPORTUNITY`, `DEFINE_TRAVEL_RISK`, `SCHEDULE_EVENT` |
+| `patrols` | `DEFINE`, `UPDATE`, `STATE` (finite authored regional patrols) |
+| `narrative` | `CONTEXT`, `UPSERT`, `DIEGETIC`, `DIRECTOR_CONTEXT`, `COMMIT_DIRECTOR`, `GET_RELATIONSHIP`, `UPDATE_RELATIONSHIP` |
+| `chronicle` | `RECORD_MEMORY`, `QUERY_MEMORIES`, `QUERY_TIMELINE`, `FIND`, `GET_MATERIAL`, `WRITE` |
+| `checkpoints` | `CREATE`, `OPTIONS`, `RESTORE` (full transactional rewind) |
+| `rules` | `SEARCH` (SRD Rules Glossary & content search), `DEFINITIONS`, `DEFINE` (custom `ITEM`/`BACKGROUND`) |
+| `map_preparation` | `BEGIN`, `REVISE`, `VALIDATE`, `PUBLISH`, `IMPORT_ASSET`, `EXPORT_BUNDLE`, `IMPORT_BUNDLE` |
+| `map_play` | `CONTEXT`, `FIND`, `PLACE_ACTORS`, `MOVE_ACTOR`, `OBSERVE`, `PREVIEW_ACTION`, `USE_TRANSITION`, `UPDATE_OBJECT`, `CORRECT_GEOMETRY`, `PERCEPTION`, `EMIT_SOUND`, `ANNOTATE` |
+| `render_map` | Standalone read-only PNG + text + marker renderer for `map:N` or GM draft `preparation:N` |
+| `apply_gm_override` | Standalone audited override boundary (`destructiveHint = true`) |
+| **Resources** | `rpg://protocol/guide`, `rpg://protocol/guide/full`, `rpg://maps/catalog`, `rpg://protocol/capabilities`, `rpg://rulesets` |
+
+Each new conversation starts with `get_instructions` (default topic `CORE`), which loads the lean Game Master guide
+and topic index into context, followed by `session:STATE`, which returns compact state and `allowed_operations`
+(formatted as `tool:ACTION`). Specialized manuals (`SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`)
+are pulled on demand. Startup requires no MCP resource reader or client-specific prompt.
 
 Not yet implemented (`CAPABILITY_UNAVAILABLE`, or `false` in `rpg://protocol/capabilities`): Counterspell, Ready
 and other reactions; travel and rest interruptions (travel encounters are suggested, never forced); subclasses
@@ -110,6 +119,14 @@ native-image reflection and resource regressions.
 
 To point an MCP client at a development build, use the release configuration with the path under `target/`,
 and set `RPG_DATA_DIR` to a scratch directory so you do not play against your real campaign database.
+
+### Local Codex playtests
+
+The opt-in [local Codex playtests](CODEX_PLAYTESTS.md) run fresh model sessions against disposable campaigns,
+capture public MCP calls, and compare independently checked outcomes across revisions. They use your local
+Codex sign-in and are separate from Maven tests and GitHub Actions. Start with
+`node tools/playtest/run.mjs --list` or validate fixtures without a model using
+`node tools/playtest/run.mjs --prepare-only --ref master --ref working`.
 
 ### Native image size budget
 

@@ -162,15 +162,15 @@ public final class CharacterChoices {
 		Optional<RulesData.Definition> backgroundDef = Origins.backgroundOf(tx, rules, c);
 		if (speciesDef.isEmpty()) {
 			out.add(Decision.of("species", "Which species is the character?")
-					.recordedBy("update_character_draft", "changes.species").legal(species()));
+					.recordedBy("character_draft", "UPDATE", "params.changes.species").legal(species()));
 		}
 		if (cls.isEmpty()) {
 			out.add(Decision.of("class", "Which class is the character?")
-					.recordedBy("update_character_draft", "changes.class").legal(classes()));
+					.recordedBy("character_draft", "UPDATE", "params.changes.class").legal(classes()));
 		}
 		if (backgroundDef.isEmpty()) {
 			out.add(Decision.of("background", "Which background shaped the character before adventuring?")
-					.recordedBy("update_character_draft", "changes.background")
+					.recordedBy("character_draft", "UPDATE", "params.changes.background")
 					.legal(backgrounds(tx, c.lng("campaign_id")))
 					.note("A background grants +2/+1 or +1/+1/+1 among its three abilities, an Origin feat, two skills, a tool proficiency and starting equipment (SRD 5.2.1 \"Character Backgrounds\")."));
 		}
@@ -243,35 +243,35 @@ public final class CharacterChoices {
 		});
 		if (c.isNull("name")) {
 			out.add(Decision.of("name", "What is the character's name?")
-					.recordedBy("update_character_draft", "changes.name").custom().surpriseMe());
+					.recordedBy("character_draft", "UPDATE", "params.changes.name").custom().surpriseMe());
 		}
 		if (c.isNull("personality")) {
 			out.add(Decision.of("personality",
 					"Who are they? Personality, backstory, appearance and goals — proposed by the GM, written by the player, or delegated.")
-					.recordedBy("update_character_draft", "changes.personality")
+					.recordedBy("character_draft", "UPDATE", "params.changes.personality")
 					.note("Also record backstory, appearance, goals, age and presentation in the same call when known.")
 					.custom().surpriseMe());
 		}
 		if (c.isNull("age")) {
 			out.add(Decision.of("age", "How old is the character, and how do they present themselves?")
-					.recordedBy("update_character_draft", "changes.age").custom().surpriseMe().optional(null)
+					.recordedBy("character_draft", "UPDATE", "params.changes.age").custom().surpriseMe().optional(null)
 					.note("Record age (a number) and presentation in the same call; both are tracked on the sheet and matter to how NPCs read them."));
 		}
 		if (c.isNull("alignment")) {
 			out.add(Decision.of("alignment", "Which alignment fits them?")
-					.recordedBy("update_character_draft", "changes.alignment").legal(alignments()).optional(null)
-					.note("Suggest one from the personality; the player may pick any."));
+					.recordedBy("character_draft", "UPDATE", "params.changes.alignment").legal(alignments())
+					.optional(null).note("Suggest one from the personality; the player may pick any."));
 		}
 		if (out.isEmpty()) {
 			out.add(Decision
 					.of("character_review",
 							"Read the sheet back in prose. Lock the character in, or change something first?")
-					.recordedBy("commit_character_draft", "character")
+					.recordedBy("character_draft", "COMMIT", "params.character")
 					.legal(List.of(
 							Option.of("COMMIT", "Lock it in",
-									"validate_character_draft, then commit_character_draft " + ref + "."),
+									"character_draft:VALIDATE, then character_draft:COMMIT " + ref + "."),
 							Option.of("REVISE", "Change something",
-									"Apply the change with update_character_draft, then read it back again."))));
+									"Apply the change with character_draft:UPDATE, then read it back again."))));
 		}
 		for (Decision d : out) {
 			d.detail("character", ref);
@@ -289,8 +289,8 @@ public final class CharacterChoices {
 		}
 		List<String> ids = skillOptionIds(cls).stream().filter(id -> !held.contains(id)).toList();
 		Decision d = Decision.of("skills", "Which " + count + " skills is the character proficient in?")
-				.recordedBy("update_character_draft", "changes.skills").legal(skills(ids)).choose(count, count)
-				.detail("class", cls.id());
+				.recordedBy("character_draft", "UPDATE", "params.changes.skills").legal(skills(ids))
+				.choose(count, count).detail("class", cls.id());
 		if (!held.isEmpty()) {
 			d.note("Skills already granted by the background or species are excluded (duplicate proficiencies are re-chosen, SRD 5.2.1).");
 		}
@@ -346,7 +346,7 @@ public final class CharacterChoices {
 				.of("background_ability_scores",
 						"Apply " + bg.name() + "'s ability increase: +2 to one and +1 to another, or +1 to each of "
 								+ abilities + ".")
-				.recordedBy("update_character_draft", "changes.background_ability_scores").custom()
+				.recordedBy("character_draft", "UPDATE", "params.changes.background_ability_scores").custom()
 				.detail("abilities", abilities)
 				.note("E.g. {\"" + abilities.get(0) + "\": 2, \"" + abilities.get(1) + "\": 1} or {\""
 						+ abilities.get(0) + "\": 1, \"" + abilities.get(1) + "\": 1, \"" + abilities.get(2)
@@ -359,7 +359,7 @@ public final class CharacterChoices {
 		var held = Origins.heldSkills(tx, c.id());
 		List<String> ids = Origins.skillGrantOptions(rules, grant).stream().filter(id -> !held.contains(id)).toList();
 		return Decision.of("species_skill", species.name() + " — " + trait.get("name") + ": which bonus skill?")
-				.recordedBy("update_character_draft", "changes.species_skill").legal(skills(ids)).choose(1, 1)
+				.recordedBy("character_draft", "UPDATE", "params.changes.species_skill").legal(skills(ids)).choose(1, 1)
 				.note("Skills already held are excluded (duplicate proficiencies are re-chosen, SRD 5.2.1).");
 	}
 
@@ -373,7 +373,7 @@ public final class CharacterChoices {
 					String.valueOf(o.get("description"))));
 		}
 		Decision d = Decision.of("species_choice", String.valueOf(choice.get("question")))
-				.recordedBy("update_character_draft", "changes.species_choice").legal(options)
+				.recordedBy("character_draft", "UPDATE", "params.changes.species_choice").legal(options)
 				.detail("trait", trait.get("name"));
 		if (Boolean.TRUE.equals(choice.get("spellcasting_ability"))) {
 			d.note("These spells use INT, WIS or CHA (defaults to the class's spellcasting ability): answer a value, or {\"choice\": ..., \"ability\": \"CHA\"}.");
@@ -398,7 +398,7 @@ public final class CharacterChoices {
 				.of("origin_feat",
 						"Which " + ("ORIGIN".equals(category) ? "Origin feat" : category + " feat")
 								+ " does the character gain from their species?")
-				.recordedBy("update_character_draft", "changes.origin_feat").legal(options)
+				.recordedBy("character_draft", "UPDATE", "params.changes.origin_feat").legal(options)
 				.note("Answer a feat, or a feat with its choices in one call, e.g. {\"feat\": \"Skilled\", \"proficiencies\": [three skills or tools]}.");
 	}
 
@@ -413,7 +413,7 @@ public final class CharacterChoices {
 		Decision d = Decision
 				.of("feat_choices",
 						feat.name() + " still needs: " + pending + ". " + feat.payload().getOrDefault("summary", ""))
-				.recordedBy("update_character_draft", "changes.feat_choices").detail("feat", featRef)
+				.recordedBy("character_draft", "UPDATE", "params.changes.feat_choices").detail("feat", featRef)
 				.detail("pending", pending).note("Answer with the feat plus one or more choices, e.g. {\"feat\": \""
 						+ featRef + "\", \"" + pending.get(0) + "\": ...}.");
 		switch (String.valueOf(pending.get(0))) {
@@ -478,15 +478,15 @@ public final class CharacterChoices {
 				.of("background_tool",
 						bg.name() + " grants proficiency with one " + kind.toLowerCase().replace('_', ' ')
 								+ "; which one?")
-				.recordedBy("update_character_draft", "changes.background_tool").legal(options);
+				.recordedBy("character_draft", "UPDATE", "params.changes.background_tool").legal(options);
 	}
 
 	@SuppressWarnings("unchecked")
 	public Decision backgroundEquipmentDecision(RulesData.Definition bg) {
 		Map<String, Object> options = (Map<String, Object>) bg.payload().get("starting_equipment");
 		return Decision.of("background_equipment", "Which background starting equipment option (" + bg.name() + ")?")
-				.recordedBy("update_character_draft", "changes.background_equipment.option").legal(equipment(bg))
-				.optional(options == null ? null : InventoryService.goldOnlyOption(options))
+				.recordedBy("character_draft", "UPDATE", "params.changes.background_equipment.option")
+				.legal(equipment(bg)).optional(options == null ? null : InventoryService.goldOnlyOption(options))
 				.note("Granted in addition to the class equipment (SRD 5.2.1 \"Choose Starting Equipment\").");
 	}
 
@@ -495,8 +495,8 @@ public final class CharacterChoices {
 		int cantrips = casting.cantripsKnown();
 		if (cantrips > 0) {
 			out.add(Decision.of("cantrips", "Which " + cantrips + " cantrips does the character know?")
-					.recordedBy("update_character_draft", "changes.cantrips").legal(spells(casting.classSlug(), 0))
-					.choose(cantrips, cantrips));
+					.recordedBy("character_draft", "UPDATE", "params.changes.cantrips")
+					.legal(spells(casting.classSlug(), 0)).choose(cantrips, cantrips));
 		}
 		int prepared = casting.preparedCount();
 		if (prepared > 0) {
@@ -505,8 +505,8 @@ public final class CharacterChoices {
 				options.addAll(spells(casting.classSlug(), level));
 			}
 			out.add(Decision.of("spells", "Which " + prepared + " spells does the character prepare?")
-					.recordedBy("update_character_draft", "changes.spells").legal(options).choose(prepared, prepared)
-					.detail("max_spell_level", casting.maxSpellLevel()));
+					.recordedBy("character_draft", "UPDATE", "params.changes.spells").legal(options)
+					.choose(prepared, prepared).detail("max_spell_level", casting.maxSpellLevel()));
 		}
 		return out;
 	}
@@ -515,15 +515,16 @@ public final class CharacterChoices {
 	public Decision equipmentDecision(RulesData.Definition cls) {
 		Map<String, Object> options = (Map<String, Object>) cls.payload().get("starting_equipment");
 		return Decision.of("starting_equipment", "Which starting equipment option?")
-				.recordedBy("update_character_draft", "changes.starting_equipment.option").legal(equipment(cls))
-				.optional(options == null ? null : InventoryService.goldOnlyOption(options))
+				.recordedBy("character_draft", "UPDATE", "params.changes.starting_equipment.option")
+				.legal(equipment(cls)).optional(options == null ? null : InventoryService.goldOnlyOption(options))
 				.note("Starting wealth is fixed by the rules: an equipment bundle plus a little gold, or the flat amount. Never top it up.");
 	}
 
 	public Decision abilityScores(Row c, RulesData.Definition cls, String method) {
 		AbilityGeneration gen = AbilityGeneration.valueOf(method);
 		Decision d = Decision.of("ability_scores", "How are the six ability scores placed? (" + gen.label() + ")")
-				.recordedBy("update_character_draft", "changes.ability_scores").custom().detail("method", gen.name())
+				.recordedBy("character_draft", "UPDATE", "params.changes.ability_scores").custom()
+				.detail("method", gen.name())
 				.detail("primary_abilities", cls == null ? null : cls.payload().get("primary_abilities"));
 		switch (gen) {
 		case STANDARD_ARRAY -> d.detail("standard_array", Rules.STANDARD_ARRAY).note(
@@ -541,8 +542,8 @@ public final class CharacterChoices {
 		case ROLL_4D6_DROP_LOWEST -> {
 			Object rolled = c.map("creation_json").get("available_scores");
 			if (rolled == null) {
-				d.recordedBy("generate_ability_scores", "character").note(
-						"Roll first with generate_ability_scores (the server reports every die), then assign the six results.");
+				d.recordedBy("character_draft", "GENERATE_ABILITIES", "params.character").note(
+						"Roll first with character_draft:GENERATE_ABILITIES (the server reports every die), then assign the six results.");
 			} else {
 				d.detail("available_scores", rolled).note("Assign each rolled value to exactly one ability.");
 			}

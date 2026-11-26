@@ -60,8 +60,8 @@ class Run10ChallengeTest {
 			MapTools tools = new MapTools();
 			tools.engine = e;
 			for (String detail : List.of("FULL", "SUMMARY"))
-				assertTrapPrivacy(result(
-						tools.context(campaign, board, Optional.of("PLAYER"), Optional.of(0), Optional.of(detail))));
+				assertTrapPrivacy(result(tools.mapPlay("CONTEXT", campaign, null,
+						Map.of("reference", board, "audience", "PLAYER", "level", 0, "detail", detail))));
 			for (boolean image : List.of(false, true)) {
 				ToolResponse rendered = tools.render(campaign, board, Optional.of("PLAYER"), Optional.of(0),
 						Optional.of(Map.of("max_pixels", 128)), Optional.of(image));

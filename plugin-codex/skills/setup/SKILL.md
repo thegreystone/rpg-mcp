@@ -40,7 +40,8 @@ startup timeout, and to choose another campaign data directory when the player w
    longer than the MCP startup timeout. Report a download, checksum or unsupported-platform error clearly;
    `--install` prepares the binary without starting the server.
 6. Tell the player to start a new Codex chat or restart the client so its plugin MCP server reconnects. In
-   that conversation call the plugin's `get_instructions` tool, then `get_server_state`, and confirm the
+   that conversation call the plugin's `get_instructions` tool, then the state operation advertised by its guide
+   (`session` with `action: "STATE"` in protocol 0.2.0; `get_server_state` in older binaries), and confirm the
    server answers with `CAMPAIGN_SELECTION` (and no campaigns on a fresh data directory). Tool names may
    include a client-assigned namespace: discover the RPG MCP tools instead of assuming an exact prefix. If
    the tools are still absent, check that the plugin is enabled, Node is on the Codex process's PATH, and

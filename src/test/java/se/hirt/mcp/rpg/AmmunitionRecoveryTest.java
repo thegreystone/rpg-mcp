@@ -188,6 +188,7 @@ class AmmunitionRecoveryTest {
 			shots(fixture, "Arrow", false, 3);
 			shots(fixture, "+1 Arrow", false, 1);
 			Map<String, Object> offer = offers(end(fixture)).getFirst();
+			assertEquals("encounter:RECOVER_AMMO", offer.get("recover_with"));
 			assertEquals(Boolean.FALSE, offer.get("selection_required"));
 			assertEquals("RANDOM", offer.get("default_method"));
 			assertEquals(2, ((Number) offer.get("recoverable")).intValue());

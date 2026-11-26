@@ -69,6 +69,10 @@ public final class Harness {
 	}
 
 	public static List<String> allowedOperations(HarnessState state) {
+		return internalAllowedOperations(state).stream().map(ToolOperations::publicName).distinct().toList();
+	}
+
+	private static List<String> internalAllowedOperations(HarnessState state) {
 		var ops = new ArrayList<String>();
 		switch (state) {
 		case CAMPAIGN_SELECTION ->
@@ -153,13 +157,15 @@ public final class Harness {
 	public static Row requireMutation(Tx tx, String campaignRef, String tool) {
 		Row campaign = campaign(tx, campaignRef);
 		HarnessState state = state(campaign);
-		List<String> allowed = allowedOperations(state);
-		if (!allowed.contains(tool)) {
+		String internal = ToolOperations.internalName(tool);
+		List<String> internalAllowed = internalAllowedOperations(state);
+		if (!internalAllowed.contains(internal)) {
+			String label = ToolOperations.publicName(internal);
 			var details = new LinkedHashMap<String, Object>();
 			details.put("harness_state", state.name());
-			details.put("allowed_operations", allowed);
+			details.put("allowed_operations", allowedOperations(state));
 			throw new RpgException(ErrorCode.OPERATION_NOT_ALLOWED,
-					"'" + tool + "' is not allowed while the campaign is in " + state + ".", false, details);
+					"'" + label + "' is not allowed while the campaign is in " + state + ".", false, details);
 		}
 		return campaign;
 	}
@@ -191,6 +197,6 @@ public final class Harness {
 	}
 
 	public static boolean isRead(String tool) {
-		return READ_TOOLS.contains(tool);
+		return READ_TOOLS.contains(ToolOperations.internalName(tool));
 	}
 }

@@ -516,7 +516,7 @@ public final class WorldService {
 					Row c = CharacterService.character(tx, campaignId, ref);
 					if (!travelMember(tx, campaignId, c.id()))
 						throw RpgException.notAllowed(c.str("name") + " (" + ref
-								+ ") is not a current party traveler. Use update_party_membership to JOIN or GUEST_ADD a legitimate companion before move_party; no travel time or route was changed.")
+								+ ") is not a current party traveler. Use character:MEMBERSHIP to JOIN or GUEST_ADD a legitimate companion before world_travel:MOVE_PARTY; no travel time or route was changed.")
 								.withDetail("character", ref)
 								.withDetail("membership_required", List.of("ACTIVE", "GUEST", "SEPARATED"));
 					movers.add(c);
@@ -576,7 +576,7 @@ public final class WorldService {
 				if (!authorizedRoute) {
 					throw RpgException.validation(List.of(new Violation("to", "NO_KNOWN_ROUTE",
 							"No known traversable route from " + from.str("name") + " to " + destination.str("name")
-									+ ". Materialize the connection (materialize_location with connections) or pass authorized_route=true with a reason and travel_minutes (I-40).")));
+									+ ". Materialize the connection (world_travel:MATERIALIZE_LOCATION with connections) or pass authorized_route=true with a reason and travel_minutes (I-40).")));
 				}
 				if (reason == null || reason.isBlank()) {
 					throw RpgException.invalidArgument("An authorized route needs a reason.");
@@ -906,9 +906,9 @@ public final class WorldService {
 							: "")
 					+ ".";
 			if ("CLOSED".equals(state.get("state")) && !Boolean.TRUE.equals(details.get("locked"))) {
-				guidance += " Open this unlocked door with update_map_object {key: '" + key
+				guidance += " Open this unlocked door with map_play:UPDATE_OBJECT {key: '" + key
 						+ "', changes: {state: 'OPEN'}} before moving through it.";
-				details.put("next_tool", "update_map_object");
+				details.put("next_tool", "map_play:UPDATE_OBJECT");
 				details.put("changes", Map.of("state", "OPEN"));
 			} else
 				guidance += " Resolve that authored passage's lock, concealment or obstruction before moving through it.";

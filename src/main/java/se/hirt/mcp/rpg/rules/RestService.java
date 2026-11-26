@@ -181,7 +181,7 @@ public final class RestService {
 								+ String.join(" ",
 										results.stream().map(result -> String.valueOf(result.get("skipped"))).distinct()
 												.toList())
-								+ " Use advance_time or a timed WAIT if the party chooses to wait.");
+								+ " Use rest_time:ADVANCE or a timed WAIT if the party chooses to wait.");
 				refused.put("meta", Harness.meta(campaign, null));
 				return refused;
 			}
@@ -262,7 +262,7 @@ public final class RestService {
 			String care = "DYING".equals(c.str("life_state"))
 					&& !Boolean.TRUE.equals(c.map("death_saves_json").get("stable"))
 							? " They are Dying and unstable: advancing time continues Death Saving Throws and risks death. Resolve healing or successful first aid, then STABILIZE, before leaving them unattended."
-							: " Stabilize first if needed, then use advance_time or a timed WAIT for natural recovery, or use healing.";
+							: " Stabilize first if needed, then use rest_time:ADVANCE or a timed WAIT for natural recovery, or use healing.";
 			return c.str("name") + " has 0 Hit Points and cannot start a " + rest + " (SRD 5.2.1: \"To start a " + rest
 					+ ", you must have at least 1 Hit Point.\")." + care;
 		}

@@ -58,7 +58,7 @@ class VerticalSliceTest {
 			Map<String, Object> state = engine.campaigns().serverState(true, 20, null);
 			assertEquals("CAMPAIGN_SELECTION", state.get("harness_state"));
 			assertEquals(List.of(), state.get("campaigns"));
-			assertTrue(((List<?>) state.get("allowed_operations")).contains("create_campaign"));
+			assertTrue(((List<?>) state.get("allowed_operations")).contains("session:CREATE"));
 			assertEquals(List.of("srd5e:5.2.1"), state.get("rulesets"));
 		}
 	}
@@ -83,7 +83,7 @@ class VerticalSliceTest {
 			RpgException notAllowed = assertThrows(RpgException.class,
 					() -> engine.sessions().bootstrap(op(), campaign, null));
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED, notAllowed.code());
-			assertTrue(((List<?>) notAllowed.details().get("allowed_operations")).contains("update_campaign_setup"));
+			assertTrue(((List<?>) notAllowed.details().get("allowed_operations")).contains("campaign_setup:UPDATE"));
 		}
 	}
 

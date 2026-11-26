@@ -152,8 +152,9 @@ class GridEncounterTest {
 			assertFalse(Json.write(end).contains("hidden sentinel"));
 			assertNull(end.get("next_turn"));
 			Map<String, Object> handoff = m(end.get("gm_handoff"));
-			assertEquals("get_encounter_state", handoff.get("tool"));
-			assertEquals("GM", m(handoff.get("arguments")).get("audience"));
+			assertEquals("encounter", handoff.get("tool"));
+			assertEquals("STATE", m(handoff.get("arguments")).get("action"));
+			assertEquals("GM", m(m(handoff.get("arguments")).get("params")).get("audience"));
 			assertFalse(Json.write(handoff).contains(guard));
 			assertTrue(Json.write(engine.encounters().encounterState(campaign, encounter, 10, "GM"))
 					.contains("hidden sentinel"));

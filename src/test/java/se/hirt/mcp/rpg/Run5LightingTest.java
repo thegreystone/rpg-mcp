@@ -159,7 +159,7 @@ class Run5LightingTest {
 			String first = publish(e, campaign, proposal(site)).get("map_ref").toString();
 			e.scenes().place(op(), campaign, first, List.of(map("character", "character:1", "x_ft", 5, "y_ft", 5)));
 			var secondDraft = e.maps().begin(op(), campaign, "DUNGEON", proposal(site));
-			assertTrue(secondDraft.toString().contains("correct_map_geometry"));
+			assertTrue(secondDraft.toString().contains("map_play:CORRECT_GEOMETRY"));
 			assertEquals(first,
 					SceneService.maps(secondDraft.get("existing_published_realizations")).getFirst().get("map"));
 			var secondPublished = e.maps().publish(op(), campaign, secondDraft.get("preparation").toString(), null);

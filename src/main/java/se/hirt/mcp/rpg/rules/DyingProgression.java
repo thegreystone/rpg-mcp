@@ -181,6 +181,6 @@ public final class DyingProgression {
 		tx.update("campaign", cid,
 				Map.of("harness_state", state, "status", status, "revision", campaign.lng("revision") + 1));
 		return Map.of("player_character_status", "DEAD", "harness_state", state, "next_step",
-				"Read get_continuation_options and choose the campaign's continuation.");
+				"Read checkpoints:OPTIONS and choose the campaign's continuation.");
 	}
 }

@@ -53,6 +53,7 @@ public final class Decision {
 	private final String id;
 	private final String question;
 	private String tool;
+	private String action;
 	private String path;
 	private int min = 1;
 	private int max = 1;
@@ -82,6 +83,17 @@ public final class Decision {
 	/** The tool and the field (a dotted path into its arguments) that record the answer. */
 	public Decision recordedBy(String tool, String path) {
 		this.tool = tool;
+		this.action = null;
+		this.path = path;
+		return this;
+	}
+
+	/**
+	 * The consolidated tool, action discriminator and dotted argument path that record the answer.
+	 */
+	public Decision recordedBy(String tool, String action, String path) {
+		this.tool = tool;
+		this.action = action;
 		this.path = path;
 		return this;
 	}
@@ -149,6 +161,9 @@ public final class Decision {
 		m.put("owner", owner);
 		m.put("question", question);
 		m.put("tool", tool);
+		if (action != null) {
+			m.put("action", action);
+		}
 		m.put("path", path);
 		if (kind != OptionsKind.NONE) {
 			m.put("choose", Map.of("min", min, "max", max));

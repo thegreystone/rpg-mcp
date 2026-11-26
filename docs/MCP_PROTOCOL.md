@@ -62,12 +62,29 @@ diagnostics.
 
 Tools perform parameterized queries, deterministic resolution or canonical mutations. They are the primary interface.
 
+In protocol `0.2.0`, the MCP surface consolidates the engine's 112 semantic operations into **22 domain tools** so the
+server stays compact inside multi-MCP hosts (including clients with a 128-tool global ceiling):
+
+- **Standalone tools (3):** `get_instructions` (optional `topic`: `CORE`, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`,
+  `DIRECTOR`, `ECONOMY`, `ALL`), `render_map` (PNG + text delivery), and `apply_gm_override` (explicit
+  `destructiveHint = true` audit boundary).
+- **Consolidated domain tools (19):** `session`, `campaign_setup`, `character_draft`, `level_up`, `character`,
+  `roll_check`, `encounter`, `spellcasting`, `rest_time`, `inventory`, `economy`, `world_travel`, `patrols`,
+  `narrative`, `chronicle`, `checkpoints`, `rules`, `map_preparation`, `map_play`.
+
+Each consolidated tool takes `(action, campaign, operation_id?, params?)`. `meta.allowed_operations`, error
+details, `decisions`, and follow-up hints advertise operations as `tool:ACTION` (e.g. `campaign_setup:UPDATE`,
+`encounter:ACTION`, `map_play:CONTEXT`). The underlying semantic operations, idempotency keys, validation rules and
+SQLite persistence remain identical to the operation specifications below.
+
 ### 3.2 Resources
 
 Read-only, cacheable protocol guidance and metadata. Required:
 
 ```text
 rpg://protocol/guide
+rpg://protocol/guide/full
+rpg://maps/catalog
 rpg://protocol/capabilities
 rpg://rulesets
 ```
@@ -95,10 +112,10 @@ capabilities increment the minor version.
 ```yaml
 protocol:
   name: rpg-mcp
-  version: 0.1.0
+  version: 0.2.0
 server:
   name: rpg-mcp-server
-  version: 0.1.0
+  version: 0.3.0
 capabilities:
   rulesets: true
   setup: true
@@ -108,10 +125,14 @@ capabilities:
   director: true
   relationship_memory: true
   want_references: true
+  compact_tool_surface: true
 optional_capabilities:
   full_text_memory_search: false
   semantic_memory_search: false
-  tactical_grid: false
+  tactical_grid: true
+  map_images: true
+  map_text_fallback: true
+  portable_map_bundles: true
   remote_transport: false
 limits:
   maximum_page_size: 100
@@ -277,24 +298,26 @@ Production overrides use the audited override protocol only.
 
 ### 8.1 `get_instructions`
 
-The first call in each new conversation, before starting or continuing a campaign. Read-only, with no
-arguments. Returns `guide`, the full Game Master instructions from the embedded `protocol/guide.md`, identical
-to the `rpg://protocol/guide` resource. No resource read is required. After loading these instructions into
-the current conversation, the AI calls `get_server_state` and follows the guide. It does not need to reload
-the guide for later state checks in the same conversation.
+The first call in each new conversation, before starting or continuing a campaign. Read-only, with an optional
+`topic` argument (`CORE` default, or `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`, `ALL`). Returns
+`topic`, `available_topics`, and `guide` — the core Game Master instructions from `protocol/guide.md` (identical to
+`rpg://protocol/guide`) or the requested on-demand manual (`ALL` matches `rpg://protocol/guide/full`). No resource
+read is required. After loading the core instructions into the current conversation, the AI calls `session:STATE`
+(`get_server_state`) and follows the guide. It does not need to reload the core guide for later state checks in the
+same conversation.
 
-### 8.2 `get_server_state`
+### 8.2 `get_server_state` (`session:STATE`)
 
 Returns compact state for discovery and later state checks. A new conversation MUST first load the guide
 with `get_instructions` (or the equivalent guide resource).
 
 ```yaml
-# input
+# input (params)
 include_campaigns: true
 campaign_limit: 20
 campaign_cursor: null
 # output
-protocol_version: 0.1.0
+protocol_version: 0.2.0
 harness_state: CAMPAIGN_SELECTION
 active_campaign: null
 pending_transaction: null
@@ -302,7 +325,7 @@ campaigns:
   - {ref: campaign:1, title: The Ashen Road, status: ACTIVE, player_character: Richard Greystone,
      last_played_at: "2026-08-31T19:14:00Z"}
 next_campaign_cursor: opaque-or-null
-allowed_operations: [create_campaign, open_campaign]
+allowed_operations: [get_instructions, session:STATE, session:CREATE, session:OPEN]
 policy_summary: { ... }
 ```
 

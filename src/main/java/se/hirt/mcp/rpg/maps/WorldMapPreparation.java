@@ -39,7 +39,7 @@ public final class WorldMapPreparation {
 							Json.write(MapAuthoringService.sources(tx, campaignId, proposal))));
 			tx.touched("preparation:" + id, 0);
 			return map("status", "AUTHORING_REQUIRED", "preparation", "preparation:" + id, "next_operation",
-					"revise_map_preparation", "requirements", proposal.get("authoring_requirements"), "note",
+					"map_preparation:REVISE", "requirements", proposal.get("authoring_requirements"), "note",
 					"The campaign's established places and routes are staged. Author its actual geography before publishing the initial atlas.");
 		}
 		Map<String, Object> result = new MapAuthoringService(null, rules).publishRegionInTx(tx, campaignId, proposal);
@@ -122,7 +122,7 @@ public final class WorldMapPreparation {
 			tx.touched("preparation:" + id, 0);
 		}
 		return map("status", "PREPARATION_REQUIRED", "preparation", "preparation:" + preparation.id(), "revision",
-				preparation.lng("revision"), "next_operation", "get_map_context", "brief", brief(), "note",
+				preparation.lng("revision"), "next_operation", "map_play:CONTEXT", "brief", brief(), "note",
 				"Review existing distances, hierarchy and narrative evidence before publishing; no fictional time or discoveries were added.",
 				"requirements", preparation.map("payload_json").getOrDefault("authoring_requirements", List.of()),
 				"audience", "GM");
@@ -286,7 +286,7 @@ public final class WorldMapPreparation {
 					|| prep.map("reference_map_json").values().contains("location:" + locationId))
 				return map("kind", "MAP_PREPARATION_REQUIRED", "preparation", "preparation:" + prep.id(), "revision",
 						prep.lng("revision"), "name", prep.str("name"), "ready_for_entry", false, "next_operation",
-						"revise_map_preparation", "authoring_choices",
+						"map_preparation:REVISE", "authoring_choices",
 						List.of("Supply authored geometry preserving the accepted commitments.",
 								"Optionally request generate_layout for basic fitting assistance."));
 		return Map.of();
@@ -308,7 +308,7 @@ public final class WorldMapPreparation {
 				campaignId)) {
 			Row scene = tx.get("map_scene", actor.lng("scene_id"));
 			maps.putIfAbsent(scene.id(), map("map", "map:" + scene.id(), "name", scene.str("name"), "kind",
-					scene.str("kind"), "next_operation", "get_map_context"));
+					scene.str("kind"), "next_operation", "map_play:CONTEXT"));
 			placements.add(map("character", "character:" + actor.lng("character_id"), "name",
 					actor.str("character_name"), "map", "map:" + scene.id(), "level", actor.intOr("level", 0), "x_ft",
 					actor.get("x_ft"), "y_ft", actor.get("y_ft")));

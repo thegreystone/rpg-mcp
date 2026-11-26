@@ -129,7 +129,8 @@ class Run4CombatTest {
 					() -> e.encounters().perform(op(), campaign, encounter, "character:1", map("kind", "HIDE"), false));
 			assertEquals(ErrorCode.CAPABILITY_UNAVAILABLE, refusal.code());
 			assertEquals(false, refusal.details().get("action_spent"));
-			assertTrue(refusal.getMessage().contains("resolve_check"));
+			assertTrue(refusal.getMessage().contains("roll_check:CHECK"));
+			assertEquals("roll_check:CHECK", refusal.details().get("supported_alternative"));
 			assertEquals(before, e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)));
 			Map<String, Object> attack = e.encounters().perform(op(), campaign, encounter, "character:1",
 					map("kind", "ATTACK", "weapon", "unarmed", "target", foe), false);

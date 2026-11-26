@@ -268,7 +268,7 @@ public final class GridCombat {
 												standingBoards.entrySet().stream().map(entry -> mapLabel(
 														tx.get("map_scene", entry.getKey())) + ": "
 														+ String.join(", ", entry.getValue())).toList())
-										+ ". Use place_map_actors to gather them in the same canonical room, or explicitly select options.map_ref and placements for the resolved scene transition.");
+										+ ". Use map_play:PLACE_ACTORS to gather them in the same canonical room, or explicitly select options.map_ref and placements for the resolved scene transition.");
 		}
 		Map<String, Map<String, Object>> requested = new LinkedHashMap<>();
 		for (Map<String, Object> placement : SceneService.maps(opts.get("placements"))) {
@@ -808,7 +808,7 @@ public final class GridCombat {
 		}
 		// EncounterService pays for the Action before applying its effect in this same transaction.
 		if (!TurnEconomy.markedThisTurn(tx, encounter, character.id(), TurnEconomy.ACTION)) {
-			throw RpgException.notAllowed("Dash movement requires an Action paid through perform_encounter_action.");
+			throw RpgException.notAllowed("Dash movement requires an Action paid through encounter:ACTION.");
 		}
 		movement.put("dash", true);
 		movement.put("dash_inches", speed(tx, rules, character) * 12L);
@@ -1330,7 +1330,7 @@ public final class GridCombat {
 		hint.put("coverage_status", coverage.size() == 1 ? "AVAILABLE" : "AMBIGUOUS");
 		hint.put("coverage", coverage);
 		hint.put("placement_required", true);
-		hint.put("next_operation", "get_map_context");
+		hint.put("next_operation", "map_play:CONTEXT");
 		if (coverage.size() == 1) {
 			hint.put("map_ref", coverage.getFirst().get("map_ref"));
 			hint.put("level", coverage.getFirst().get("level"));

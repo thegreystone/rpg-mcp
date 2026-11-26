@@ -304,7 +304,7 @@ public final class SpellService {
 		m.put("cantrips_known_limit", cast.cantripsKnown());
 		m.put("prepared_limit", cast.preparedCount());
 		m.put("ritual_casting",
-				"any prepared spell with the Ritual tag: cast_spell options.ritual (ten minutes longer, no slot; SRD 5.2.1 \"Rituals\")");
+				"any prepared spell with the Ritual tag: spellcasting:CAST options.ritual (ten minutes longer, no slot; SRD 5.2.1 \"Rituals\")");
 		if (cast.pact()) {
 			tx.queryOne("SELECT * FROM resource_state WHERE character_id = ? AND resource_ref = ?", c.id(), PACT_SLOT)
 					.ifPresent(r -> m.put("pact_slots", Map.of("current", r.intOr("current", 0), "max",
@@ -451,7 +451,7 @@ public final class SpellService {
 			Row c = CharacterService.character(tx, campaignId, characterRef);
 			if (!"ACTIVE".equals(c.str("lifecycle"))) {
 				throw RpgException.notAllowed(
-						characterRef + " is not an active character (edit drafts with update_character_draft).");
+						characterRef + " is not an active character (edit drafts with character_draft:UPDATE).");
 			}
 			Casting cast = castingOf(tx, rules, c)
 					.orElseThrow(() -> RpgException.notAllowed(c.str("name") + " has no spellcasting."));
@@ -542,7 +542,7 @@ public final class SpellService {
 		List<String> targetRefs, Map<String, Object> options, Long encounterId, long round) {
 		requireAbleToCast(tx, caster);
 		RulesData.Definition def = rules.resolve("SPELL", spellText).orElseThrow(() -> RpgException
-				.invalidArgument("Unknown spell '" + spellText + "'; see get_content_definitions with kind SPELL."));
+				.invalidArgument("Unknown spell '" + spellText + "'; see rules:DEFINITIONS with kind SPELL."));
 		// "If you wear Light, Medium, or Heavy armor and lack training with it ... you can't cast spells"
 		// (SRD 5.2.1 "Armor Training").
 		se.hirt.mcp.rpg.rules.Training.untrainedArmor(tx, rules, caster).ifPresent(armor -> {
@@ -823,8 +823,8 @@ public final class SpellService {
 				// the spell is up and its slot spent; creatures that enter or end their turn in the area later save
 				// against save_dc with resolve_check and take the damage with apply_runtime_change {dice}.
 				result.put("note", def.name() + " is centred on " + caster.str("name")
-						+ " with no creature in its area at casting. Resolve later saves with resolve_check (SAVING_THROW vs save_dc "
-						+ dc + ") and damage with apply_runtime_change DAMAGE {dice}.");
+						+ " with no creature in its area at casting. Resolve later saves with roll_check:CHECK (SAVING_THROW vs save_dc "
+						+ dc + ") and damage with character:RUNTIME_CHANGE DAMAGE {dice}.");
 			}
 			if (concentration && effectsCreated.isEmpty()) {
 				// Nothing on a target carries the concentration (damage-only or nobody failed): mark it on the caster
@@ -921,7 +921,7 @@ public final class SpellService {
 			if (!deferred.isEmpty()) {
 				result.put("pending", "SHIELD_SPELL");
 				result.put("next_step",
-						"Shield is offered against Magic Missile: resolve_pending_choice (CAST_SHIELD negates every dart aimed at the chooser; DECLINE applies the rolled damage).");
+						"Shield is offered against Magic Missile: encounter:RESOLVE_CHOICE (CAST_SHIELD negates every dart aimed at the chooser; DECLINE applies the rolled damage).");
 			}
 		}
 		case "TEMP_HP" -> {
@@ -1086,7 +1086,7 @@ public final class SpellService {
 				t.put("hp", Math.min(effectiveMax, hp));
 				t.put("exhaustion", Exhaustion.level(tx, target.id()));
 				t.put("note",
-						"Time-since-death and material components are the GM's to verify; a former party member rejoins via update_party_membership.");
+						"Time-since-death and material components are the GM's to verify; a former party member rejoins via character:MEMBERSHIP.");
 				perTarget.add(t);
 			}
 		}

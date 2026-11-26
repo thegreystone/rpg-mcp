@@ -545,7 +545,7 @@ public final class NarrativeService {
 	private static Map<String, Object> locationDetail(Tx tx, long campaignId, String ref, Map<String, Object> changes) {
 		if (ref == null || ref.isBlank()) {
 			throw RpgException.invalidArgument(
-					"LOCATION_DETAIL needs an existing location reference; use materialize_location to create places.");
+					"LOCATION_DETAIL needs an existing location reference; use world_travel:MATERIALIZE_LOCATION to create places.");
 		}
 		Row l = WorldService.location(tx, campaignId, ref);
 		var cols = new LinkedHashMap<String, Object>();
@@ -772,7 +772,7 @@ public final class NarrativeService {
 						+ "Put location, NPC motivations, conditions, clues and possible consequences in the full beat payload. "
 						+ "Mark a beat AVAILABLE when usable; interpret conditions in context and keep player choices open. "
 						+ "Refresh or supersede existing beats as circumstances change; an empty review preserves valid guidance.",
-				"After committing a review, refresh get_context SCENE and fetch relevant get_context STORY_BEAT details before returning to narration.",
+				"After committing a review, refresh narrative:CONTEXT SCENE and fetch relevant narrative:CONTEXT STORY_BEAT details before returning to narration.",
 				"Prefer diegetic delivery: attach channels and locations to world events so the GM can surface them naturally.",
 				"People are the plot: read companion_wants. A companion whose want closed since the last review should leave "
 						+ "this review with a next want proposed in character, drawn from their personality, abilities, biography "

@@ -34,6 +34,7 @@ import se.hirt.mcp.rpg.choice.Decision;
 import se.hirt.mcp.rpg.content.RulesData;
 import se.hirt.mcp.rpg.harness.Harness;
 import se.hirt.mcp.rpg.harness.HarnessState;
+import se.hirt.mcp.rpg.harness.ToolOperations;
 import se.hirt.mcp.rpg.inventory.InventoryService;
 import se.hirt.mcp.rpg.ledger.LedgerService;
 import se.hirt.mcp.rpg.persistence.Database;
@@ -55,7 +56,7 @@ import java.util.*;
  */
 public final class CampaignService {
 
-	public static final String PROTOCOL_VERSION = "0.1.0";
+	public static final String PROTOCOL_VERSION = "0.2.0";
 
 	private final Database db;
 	private final RulesData rules;
@@ -97,8 +98,8 @@ public final class CampaignService {
 			}
 			var allowed = new ArrayList<>(Harness.allowedOperations(state));
 			if (active != null) {
-				allowed.add(0, "create_campaign");
-				allowed.add(1, "open_campaign");
+				allowed.add(0, ToolOperations.publicName("create_campaign"));
+				allowed.add(1, ToolOperations.publicName("open_campaign"));
 			}
 			result.put("allowed_operations", allowed.stream().distinct().toList());
 			result.put("policy_summary", policySummary(tx, active));
@@ -294,7 +295,7 @@ public final class CampaignService {
 		m.put("constraints", constraints);
 		m.put("interview", "Ask decisions[0] only: put its question to the player with every option and description, "
 				+ "numbered, plus a custom answer where allow_custom is true; record the answer; read the decisions again. "
-				+ "For an optional question recorded by update_campaign_setup, send JSON null at its path to accept the default.");
+				+ "For an optional question recorded by campaign_setup:UPDATE, send JSON null at its path to accept the default.");
 		m.put("meta", Harness.meta(campaign, null));
 		return m;
 	}

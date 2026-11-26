@@ -830,7 +830,7 @@ class MagicItemTest {
 				assertTrue(String.valueOf(s.get("ref")).startsWith("srd5e:item/"), String.valueOf(s));
 				assertNotNull(s.get("summary"));
 			}
-			assertTrue(String.valueOf(treasure.get("note")).contains("grant_loot"));
+			assertTrue(String.valueOf(treasure.get("note")).contains("inventory:GRANT_LOOT"));
 			// Completing it again does not repeat the nudge.
 			assertThrows(RpgException.class,
 					() -> engine.narrative().upsert(op(), campaign, "QUEST", quest, map("status", "ABANDONED"), null));

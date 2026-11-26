@@ -96,12 +96,13 @@ class ReactionTest {
 			List<Map<String, Object>> pending = list(banditMove.get("pending_choices"));
 			assertEquals(1, pending.size());
 			assertEquals("OPPORTUNITY_ATTACK", pending.get(0).get("kind"));
+			assertEquals("encounter:RESOLVE_CHOICE", pending.get(0).get("resolve_with"));
 			assertEquals(pc, pending.get(0).get("chooser"));
 			assertEquals(Boolean.FALSE, banditMove.get("turn_advanced"));
 			String choice = (String) pending.get(0).get("transaction");
 			Map<String, Object> state = engine.encounters().encounterState(campaign, enc, 5);
 			assertEquals("WAITING_CHOICE", state.get("status"));
-			assertEquals(List.of("resolve_pending_choice"), state.get("legal_actions"));
+			assertEquals(List.of("encounter:RESOLVE_CHOICE"), state.get("legal_actions"));
 			// I-33 / I-31: nothing else can happen until it is resolved.
 			assertEquals(ErrorCode.OPERATION_NOT_ALLOWED,
 					assertThrows(RpgException.class,

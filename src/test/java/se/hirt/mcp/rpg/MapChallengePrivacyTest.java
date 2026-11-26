@@ -28,10 +28,11 @@ class MapChallengePrivacyTest {
 			MapTools tools = new MapTools();
 			tools.engine = e;
 			for (String detail : List.of("FULL", "SUMMARY")) {
-				var gm = result(tools.context(campaign, board, Optional.of("GM"), Optional.of(0), Optional.of(detail)));
+				var gm = result(tools.mapPlay("CONTEXT", campaign, null,
+						Map.of("reference", board, "audience", "GM", "level", 0, "detail", detail)));
 				assertGmChallenges(SceneService.map(gm.get("view")));
-				var player = result(
-						tools.context(campaign, board, Optional.of("PLAYER"), Optional.of(0), Optional.of(detail)));
+				var player = result(tools.mapPlay("CONTEXT", campaign, null,
+						Map.of("reference", board, "audience", "PLAYER", "level", 0, "detail", detail)));
 				assertVisiblePlayerFeatures(SceneService.map(player.get("view")));
 				assertPrivateDetailsAbsent(player);
 			}
@@ -73,8 +74,8 @@ class MapChallengePrivacyTest {
 			assertEquals("OPEN", part(gm, "portals", "upper-hatch").get("state"));
 			MapTools tools = new MapTools();
 			tools.engine = e;
-			assertPrivateDetailsAbsent(result(
-					tools.context(campaign, board, Optional.of("PLAYER"), Optional.of(0), Optional.of("SUMMARY"))));
+			assertPrivateDetailsAbsent(result(tools.mapPlay("CONTEXT", campaign, null,
+					Map.of("reference", board, "audience", "PLAYER", "level", 0, "detail", "SUMMARY"))));
 			assertPrivateDetailsAbsent(result(tools.render(campaign, board, Optional.of("PLAYER"), Optional.of(0),
 					Optional.empty(), Optional.of(false))));
 		}

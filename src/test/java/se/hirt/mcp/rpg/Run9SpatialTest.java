@@ -181,7 +181,7 @@ class Run9SpatialTest {
 		assertEquals(room, hint.get("location_ref"));
 		assertEquals(level, ((Number) hint.get("level")).intValue());
 		assertEquals(true, hint.get("placement_required"));
-		assertEquals("get_map_context", hint.get("next_operation"));
+		assertEquals("map_play:CONTEXT", hint.get("next_operation"));
 		assertEquals(List.of(map("map_ref", board, "kind", "DUNGEON", "level", level)), hint.get("coverage"));
 		assertEquals(Set.of("status", "location_ref", "coverage_status", "coverage", "placement_required",
 				"next_operation", "map_ref", "level"), hint.keySet());

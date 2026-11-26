@@ -160,7 +160,7 @@ public final class MapAuthoringService {
 					.withDetail("readiness",
 							map("stage", prep.str("stage"), "ready_for_entry", false, "room_count",
 									payload.get("room_count"), "levels", payload.get("levels")))
-					.withDetail("next_operation", "revise_map_preparation")
+					.withDetail("next_operation", "map_preparation:REVISE")
 					.withDetail("suggested_changes", Map.of("generate_layout", true));
 		}
 	}
@@ -405,7 +405,7 @@ public final class MapAuthoringService {
 						&& Set.of("SCENE", "DUNGEON").contains(r.str("kind"))) {
 					summary.put("other_published_realizations", siblings);
 					summary.put("note",
-							"Multiple published boards cover this site. current_party_board and placed_characters show actual use; use correct_map_geometry for illumination or repairs without creating another realization.");
+							"Multiple published boards cover this site. current_party_board and placed_characters show actual use; use map_play:CORRECT_GEOMETRY for illumination or repairs without creating another realization.");
 				}
 				found.add(summary);
 				if (found.size() >= 100)
@@ -447,7 +447,7 @@ public final class MapAuthoringService {
 			List<Map<String, Object>> lights = maps(p.get("lights"));
 			if (objects.isEmpty() && decor.isEmpty())
 				optional.add(
-						"Visual dressing pass recommended: no furnishings, props or decor are placed yet. Add recognizable props (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, pillar_round, brazier, rug, tree, boulder) via revise_map_preparation and optionally preview with render_map before publishing.");
+						"Visual dressing pass recommended: no furnishings, props or decor are placed yet. Add recognizable props (e.g. table_rect, table_round with seats, chair, bar_counter, hearth, chest, pillar_round, brazier, rug, tree, boulder) via map_preparation:REVISE and optionally preview with render_map before publishing.");
 			if (!rooms.isEmpty() && rooms.stream()
 					.allMatch(room -> "STONE".equalsIgnoreCase(text(room.getOrDefault("material", "STONE")))))
 				optional.add(
@@ -463,7 +463,7 @@ public final class MapAuthoringService {
 				prep.map("reference_map_json"), "ready", issues.isEmpty(), "violations",
 				issues.stream().map(Violation::toMap).toList(), "required_gaps",
 				issues.stream().map(Violation::message).toList(), "optional_gaps", optional, "next_operation",
-				issues.isEmpty() ? "publish_map_preparation" : "revise_map_preparation", "audience", "GM", "meta",
+				issues.isEmpty() ? "map_preparation:PUBLISH" : "map_preparation:REVISE", "audience", "GM", "meta",
 				Harness.meta(campaign, null));
 		if (Set.of("DRAFT", "ACCEPTED").contains(prep.str("status"))) {
 			result.put("authoring_guidance",
@@ -479,7 +479,7 @@ public final class MapAuthoringService {
 			if (!existing.isEmpty()) {
 				result.put("existing_published_realizations", existing);
 				result.put("warnings", List.of(
-						"This site already has published tactical coverage. A separate preparation creates separate rooms and occupants unless explicitly bound to existing references. Use correct_map_geometry with illumination or keyed room illumination to light the existing map without duplicating it."));
+						"This site already has published tactical coverage. A separate preparation creates separate rooms and occupants unless explicitly bound to existing references. Use map_play:CORRECT_GEOMETRY with illumination or keyed room illumination to light the existing map without duplicating it."));
 			}
 			result.put("current_board", GridCombat.currentBoard(tx, campaign.id()));
 		}
@@ -1728,7 +1728,7 @@ public final class MapAuthoringService {
 			Map<String, Object> p = prep.map("payload_json");
 			if ("BLUEPRINT".equals(stage(p)))
 				throw RpgException.invalidArgument(
-						"Blueprint preparations have no geometry yet. Supply room shapes and bounds_ft via revise_map_preparation before previewing.");
+						"Blueprint preparations have no geometry yet. Supply room shapes and bounds_ft via map_preparation:REVISE before previewing.");
 			Map<String, Object> refs = prep.map("reference_map_json");
 			Map<String, Object> view = document(p, refs);
 			if (rectangle(view.get("bounds_ft")) == null)
@@ -1816,7 +1816,7 @@ public final class MapAuthoringService {
 					Row campaign = Harness.requireMutation(tx, campaignRef, "correct_map_geometry");
 					if ("ENCOUNTER".equals(campaign.str("harness_state")) && !illuminationOnly(patch))
 						throw RpgException.notAllowed(
-								"During combat correct_map_geometry accepts only audited illumination or rooms:[{key,illumination}]. Structural geometry must wait until the encounter ends; this adjudication does not spend an Action or simulate a torch or spell.");
+								"During combat map_play:CORRECT_GEOMETRY accepts only audited illumination or rooms:[{key,illumination}]. Structural geometry must wait until the encounter ends; this adjudication does not spend an Action or simulate a torch or spell.");
 					Row scene = scoped(tx, cid, "map_scene", mapRef, Ref.MAP);
 					if (scene.str("kind").equals("REGION"))
 						throw RpgException.invalidArgument("This correction applies to local tactical maps only.");

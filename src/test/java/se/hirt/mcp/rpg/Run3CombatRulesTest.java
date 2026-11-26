@@ -12,7 +12,6 @@ import se.hirt.mcp.rpg.world.WorldTimeline;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
@@ -33,7 +32,7 @@ class Run3CombatRulesTest {
 			long rolls = rollCount(e);
 			RpgException refused = assertThrows(RpgException.class, () -> e.runtime().applyRuntimeChange(op(), campaign,
 					"character:1", map("kind", "USE_ITEM", "item", entry)));
-			assertTrue(refused.getMessage().contains("perform_encounter_action"));
+			assertTrue(refused.getMessage().contains("encounter:ACTION"));
 			assertEquals(rolls, rollCount(e));
 			assertEquals(quantity, e.db().read(tx -> tx.get("inventory_entry", itemId).lng("quantity")).longValue());
 			dice(e).queue(2, 2);
@@ -164,8 +163,8 @@ class Run3CombatRulesTest {
 				if (tool) {
 					RpgTools tools = new RpgTools();
 					tools.engine = e;
-					var response = tools.performEncounterAction(op(), campaign, priest, action, Optional.of(encounter),
-							Optional.empty());
+					var response = tools.encounter("ACTION", campaign, op(),
+							Map.of("actor", priest, "action", action, "encounter", encounter));
 					assertFalse(response.isError(), response.firstContent().asText().text());
 					result = cast(Json.readMap(response.firstContent().asText().text()).get("result"));
 				} else
@@ -362,7 +361,7 @@ class Run3CombatRulesTest {
 			String encounter = start(e, campaign, "character:1", ogre);
 			RpgException error = assertThrows(RpgException.class,
 					() -> e.runtime().applyRuntimeChange(op(), campaign, "character:1", map("kind", "STAND")));
-			assertTrue(error.getMessage().contains("perform_encounter_action"));
+			assertTrue(error.getMessage().contains("encounter:ACTION"));
 			assertTrue(prone(e));
 			Map<String, Object> combatStand = e.encounters().perform(op(), campaign, encounter, "character:1",
 					map("kind", "STAND"));

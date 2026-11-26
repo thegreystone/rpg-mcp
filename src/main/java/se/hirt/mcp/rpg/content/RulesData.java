@@ -90,7 +90,7 @@ public final class RulesData {
 		Definition d = byId.get(contentId);
 		if (d == null || !d.kind().equals(expectedKind)) {
 			throw RpgException.invalidArgument("Unknown " + expectedKind.toLowerCase() + " '" + contentId
-					+ "'. Use get_character_choices to list legal options.");
+					+ "'. Use character_draft:CHOICES to list legal options.");
 		}
 		return d;
 	}

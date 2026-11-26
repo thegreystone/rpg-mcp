@@ -15,7 +15,6 @@ import se.hirt.mcp.rpg.protocol.RpgException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
@@ -124,7 +123,8 @@ class Run6RecallTest {
 			MapTools tools = new MapTools();
 			tools.engine = e;
 			var before = e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN));
-			var summary = result(tools.context(campaign, scene, Optional.of("GM"), Optional.of(0), Optional.empty()));
+			var summary = result(
+					tools.mapPlay("CONTEXT", campaign, null, Map.of("reference", scene, "audience", "GM", "level", 0)));
 			var rooms = SceneService.maps(SceneService.map(summary.get("view")).get("rooms"));
 			assertEquals(2, rooms.size());
 			var entry = rooms.stream().filter(room -> "entry".equals(room.get("key"))).findFirst().orElseThrow();
@@ -134,11 +134,12 @@ class Run6RecallTest {
 			assertEquals("DARK", vault.get("effective_illumination"));
 			assertTrue(rooms.stream().allMatch(room -> room.containsKey("location_ref")));
 			assertTrue(rooms.stream().noneMatch(room -> room.containsKey("rect_ft") || room.containsKey("polygon_ft")));
-			var player = result(
-					tools.context(campaign, scene, Optional.of("PLAYER"), Optional.of(0), Optional.empty()));
+			var player = result(tools.mapPlay("CONTEXT", campaign, null,
+					Map.of("reference", scene, "audience", "PLAYER", "level", 0)));
 			assertFalse(SceneService.map(player.get("view")).containsKey("rooms"));
 			assertFalse(Json.write(player).contains("SECRET_RELIQUARY_ROOM"));
-			var full = result(tools.context(campaign, scene, Optional.of("GM"), Optional.of(0), Optional.of("FULL")));
+			var full = result(tools.mapPlay("CONTEXT", campaign, null,
+					Map.of("reference", scene, "audience", "GM", "level", 0, "detail", "FULL")));
 			assertTrue(SceneService.maps(SceneService.map(full.get("view")).get("rooms")).stream()
 					.allMatch(room -> room.containsKey("rect_ft")));
 			assertEquals(before, e.db().snapshot(Ref.id(campaign, Ref.CAMPAIGN)));
@@ -170,17 +171,18 @@ class Run6RecallTest {
 			tools.engine = e;
 			String ending = op(), summary = "The lengthy brawl ends in a truce.",
 					narrative = "The gathered witnesses remember each exchange. ".repeat(30);
-			var delivered = result(tools.endEncounter(ending, campaign, "OTHER", Optional.of(encounter),
-					Optional.of(summary), Optional.of(narrative)));
+			var delivered = result(tools.encounter("END", campaign, ending,
+					Map.of("outcome", "OTHER", "encounter", encounter, "summary", summary, "narrative", narrative)));
 			assertFalse(delivered.containsKey("record"));
 			var compact = SceneService.map(delivered.get("party_digest"));
 			assertTrue(LedgerService.serializedBytes(compact) <= 2000);
 			assertEquals(LedgerService.serializedBytes(compact),
 					((Number) delivered.get("party_digest_bytes")).intValue());
 			var pointer = SceneService.map(delivered.get("full_gm_record"));
-			assertEquals("get_encounter_state", pointer.get("tool"));
+			assertEquals("encounter", pointer.get("tool"));
 			assertEquals("record", pointer.get("field"));
-			assertEquals(map("campaign", campaign, "encounter", encounter, "audience", "GM"), pointer.get("arguments"));
+			assertEquals(map("action", "STATE", "campaign", campaign, "params",
+					map("encounter", encounter, "audience", "GM")), pointer.get("arguments"));
 			var service = e.encounters().end(ending, campaign, encounter, "OTHER", summary, narrative);
 			assertTrue(service.containsKey("record"));
 			assertTrue(LedgerService.serializedBytes(service) > LedgerService.serializedBytes(delivered));
@@ -192,8 +194,8 @@ class Run6RecallTest {
 			assertFalse(slots.isEmpty());
 			e.encounters().annotate(op(), campaign, encounter,
 					Map.of(slots.getFirst().get("slot").toString(), "A witness remembers that recovery."));
-			var replay = result(tools.endEncounter(ending, campaign, "OTHER", Optional.of(encounter),
-					Optional.of(summary), Optional.of(narrative)));
+			var replay = result(tools.encounter("END", campaign, ending,
+					Map.of("outcome", "OTHER", "encounter", encounter, "summary", summary, "narrative", narrative)));
 			assertEquals(true, replay.get("replayed"));
 			assertEquals(compact, replay.get("party_digest"),
 					"Retry delivers the original frozen end result even after annotation.");

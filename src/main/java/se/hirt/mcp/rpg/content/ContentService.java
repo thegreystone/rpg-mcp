@@ -169,7 +169,7 @@ public final class ContentService {
 		}
 		// Fall back to a custom definition by name.
 		return customItemByName(tx, campaignId, t).orElseThrow(() -> RpgException
-				.notFound("Item '" + t + "' (use get_content_definitions to search, or define_content to create it)"));
+				.notFound("Item '" + t + "' (use rules:DEFINITIONS to search, or rules:DEFINE to create it)"));
 	}
 
 	private static Item requireCustomItem(Row row, String reference) {
@@ -616,7 +616,7 @@ public final class ContentService {
 			result.put("symbolic_id", symbolic);
 			result.put("definition", fromCustomRow(tx.get("custom_content", id)).summary());
 			result.put("note",
-					"Defining content grants it to nobody; use trade, grant_loot or transfer_item to put it into play.");
+					"Defining content grants it to nobody; use inventory:TRADE, inventory:GRANT_LOOT or inventory:TRANSFER_ITEM to put it into play.");
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
@@ -650,7 +650,7 @@ public final class ContentService {
 		payload.put("ability_scores", abilities);
 		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(props.get("feat")))
 				.orElseThrow(() -> RpgException.invalidArgument(
-						"properties.feat must name an Origin feat (get_character_choices scope FEAT lists them)."));
+						"properties.feat must name an Origin feat (character_draft:CHOICES scope FEAT lists them)."));
 		if (!"ORIGIN".equals(String.valueOf(feat.payload().get("category")))) {
 			throw RpgException
 					.invalidArgument(feat.name() + " is not an Origin feat; a background grants an Origin feat.");
@@ -771,7 +771,7 @@ public final class ContentService {
 		result.put("symbolic_id", symbolic);
 		result.put("definition", definition);
 		result.put("note",
-				"Usable by name wherever a background is chosen: create_character_draft / update_character_draft "
+				"Usable by name wherever a background is chosen: character_draft:CREATE / character_draft:UPDATE "
 						+ "(background, background_ability_scores, background_tool) and a companion's promotion.");
 		result.put("meta", Harness.meta(campaign, null));
 		return result;

@@ -32,1179 +32,844 @@ import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolResponse;
 import jakarta.inject.Inject;
+import se.hirt.mcp.rpg.encounter.EncounterDigest;
+import se.hirt.mcp.rpg.ledger.LedgerService;
+import se.hirt.mcp.rpg.maps.SceneService;
+import se.hirt.mcp.rpg.world.WorldTimeline;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.LinkedHashMap;
-import se.hirt.mcp.rpg.ledger.LedgerService;
-import se.hirt.mcp.rpg.encounter.EncounterDigest;
-import se.hirt.mcp.rpg.maps.SceneService;
 
 /**
- * The MCP tool surface (MCP_PROTOCOL.md §23) — the vertical slice: discovery, resumable campaign
- * setup, character drafts, commit, session bootstrap, deterministic checks, the ledger, the clock,
- * checkpoints, suspension. Tool names are the protocol's snake_case operation names.
- * <p>
- * Every response is a JSON envelope {@code {"result": ..., "meta": {...}}}; every failure is a JSON
- * {@code {"error": {code, message, retryable, details}}} tool error.
+ * Core consolidated MCP tool surface (protocol 0.2.0). Domain tools dispatch on {@code action} over
+ * the same server-authoritative engine services, preserving SQLite idempotency keys, revision
+ * checks, harness gating and structured envelopes.
  */
 public class RpgTools {
 
-	private static final String REF = "Campaign reference, e.g. 'campaign:1'";
-	private static final String OP = "Client-generated idempotency key, unique within the campaign (e.g. a ULID). "
-			+ "Repeating a call with the same operation_id and arguments returns the original result without re-applying it.";
+	private static final String CAMP = "campaign:N";
+	private static final String CAMP_SESSION = "campaign:N (required except STATE/CREATE)";
+	private static final String CAMP_RULES = "campaign:N (optional for SEARCH/DEFINITIONS; required for DEFINE)";
+	private static final String OP = "Idempotency key (required for mutating actions)";
+	private static final String PARAMS = "Action parameters (see description)";
 
 	@Inject
 	Engine engine;
 
-	// ── Discovery ──────────────────────────────────────────────────────
+	// ── Guide & session lifecycle ──────────────────────────────────────
 
-	@Tool(name = "get_instructions", description = "Call this FIRST once in every new conversation before starting or continuing a campaign. "
-			+ "Returns the Game Master guide: read and follow it, then call get_server_state to discover campaigns and legal next operations. "
-			+ "No need to read it again while it remains in this conversation's context. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getInstructions() {
-		return ToolSupport.run("get_instructions", () -> Map.of("guide", RpgResources.classpath("protocol/guide.md")));
-	}
-
-	@Tool(name = "get_server_state", description = "In a new conversation, call get_instructions once before this tool. Returns protocol/server version, "
-			+ "the current harness state, the active campaign (if one was opened in this process), pending transactions, "
-			+ "a page of existing campaigns with their player character and last-played time, legal next operations, and the policy summary. "
-			+ "No chat history is ever needed: everything canonical is reconstructed from the server. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getServerState(@ToolArg(description = "Include the campaign list (default true)")
-	Optional<Boolean> include_campaigns, @ToolArg(description = "Max campaigns per page (default 20, max 100)")
-	Optional<Integer> campaign_limit, @ToolArg(description = "Opaque cursor from a previous next_campaign_cursor")
-	Optional<String> campaign_cursor) {
-		return ToolSupport.run("get_server_state", () -> {
-			var result = engine.campaigns().serverState(include_campaigns.orElse(true), campaign_limit.orElse(20),
-					campaign_cursor.orElse(null));
-			result.put("instruction_hint",
-					"If you have not read get_instructions in this conversation, call it before starting or continuing a campaign.");
-			return result;
+	@Tool(name = "get_instructions", description = "READ-ONLY. Call FIRST once per conversation before starting or continuing a campaign. "
+			+ "Returns the core GM guide (default topic CORE) or a focused manual on demand: SETUP, COMBAT, MAPS, CHARACTERS, DIRECTOR, ECONOMY, or ALL.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
+	ToolResponse getInstructions(
+		@ToolArg(description = "CORE (default), SETUP, COMBAT, MAPS, CHARACTERS, DIRECTOR, ECONOMY or ALL", required = false)
+		String topic) {
+		return ToolSupport.run("get_instructions", () -> {
+			String resolved = ProtocolGuide.resolveTopic(topic);
+			var out = new LinkedHashMap<String, Object>();
+			out.put("topic", resolved);
+			out.put("available_topics", ProtocolGuide.TOPICS);
+			out.put("guide", ProtocolGuide.read(resolved));
+			return out;
 		});
 	}
 
-	// ── Campaign setup ─────────────────────────────────────────────────
-
-	@Tool(name = "create_campaign", description = "MUTATING. Creates a new campaign in SETUP with a resumable setup draft — not yet playable. "
-			+ "Returns `decisions`: the outstanding setup decisions in interview order, each with its legal options and their descriptions. "
-			+ "Ask decisions[0] only — one question per turn, every option listed with its description, plus a custom answer where allowed — "
-			+ "record the answer with update_campaign_setup, then read the decisions again. For almost every creative question "
-			+ "'surprise me' (SURPRISE_ME) is a valid answer.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse createCampaign(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = "Optional title; generated at commit from the premise if omitted")
-	Optional<String> title, @ToolArg(description = "Ruleset, e.g. 'srd5e' or 'srd5e:5.2.1' (default: srd5e)")
-	Optional<String> ruleset) {
-		return ToolSupport.run("create_campaign",
-				() -> engine.campaigns().create(operation_id, title.orElse(null), ruleset.orElse(null)));
-	}
-
-	@Tool(name = "open_campaign", description = "Selects an existing campaign and tells you how to resume: RESUME_SETUP, BOOTSTRAP_SESSION, "
-			+ "RESOLVE_CHECKPOINT_DECISION or CAMPAIGN_ENDED. Never discards pending work. Read-only apart from remembering the active campaign.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse openCampaign(@ToolArg(description = REF)
-	String campaign) {
-		return ToolSupport.run("open_campaign", () -> engine.campaigns().open(campaign));
-	}
-
-	@Tool(name = "get_setup_state", description = "Returns the full setup draft, the outstanding `decisions` in interview order (each with every legal "
-			+ "option and its description — ask decisions[0] only), characters, and constraints. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getSetupState(@ToolArg(description = REF)
-	String campaign) {
-		return ToolSupport.run("get_setup_state", () -> engine.campaigns().setupState(campaign));
-	}
-
-	@Tool(name = "update_campaign_setup", description = "MUTATING. Atomically records one or more setup sections. `changes` keys: "
-			+ "title (string); player_age (integer — only the derived content cap is stored, never the age); "
-			+ "content_profile (value or {profile}); "
-			+ "experience (object: authorship, fantasy_style (defaults to EPIC, a Baldur's Gate-style fantasy epic), tone, themes, relationship_focus, excluded_themes … or SURPRISE_ME); "
-			+ "rules ({ability_generation, progression, hp_progression, xp_policy, companion_level_up, gm_override_policy, allow_reroll: bool}); "
-			+ "continuation (value or {policy}); party (object or SURPRISE_ME); "
-			+ "adventure ({premise, background_truth (GM-only), opening_location: name or {name, kind, description}, immediate_goal, start_time 'Day 1, 16:40', gm_notes}); "
-			+ "player_character ('character:N'). The legal values of every choice come from the `decisions` in the response — never hard-code them. "
-			+ "Sections merge, so one call per answer is fine. To skip an optional setup question, send JSON null at its path to accept the default; omitted fields stay unanswered. An empty experience or rules object accepts that section's remaining defaults. "
-			+ "Unknown keys are rejected; sections may be revisited freely before commit.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateCampaignSetup(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Campaign revision you last read (CONFLICT if stale)")
-	Optional<Long> expected_revision, @ToolArg(description = "Object of setup sections to apply")
-	Map<String, Object> changes) {
-		return ToolSupport.run("update_campaign_setup",
-				() -> engine.campaigns().updateSetup(operation_id, campaign, expected_revision.orElse(null), changes));
-	}
-
-	@Tool(name = "validate_campaign_setup", description = "Validates the complete setup graph without committing: violations, warnings, "
-			+ "delegated (SURPRISE_ME) choices and a compact review to present to the player. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse validateCampaignSetup(@ToolArg(description = REF)
-	String campaign) {
-		return ToolSupport.run("validate_campaign_setup", () -> engine.campaigns().validateSetup(campaign));
-	}
-
-	@Tool(name = "commit_campaign_setup", description = "MUTATING, one transaction. Freezes the setup as canonical configuration, promotes the finalized "
-			+ "player character to ACTIVE (starting HP, money, location), creates the party/control assignment, the opening location, the clock, "
-			+ "the immediate-goal story beat, the setup ledger event and (unless IRONMAN) the campaign_start checkpoint. "
-			+ "After this the setup conversation is disposable: call bootstrap_session and play from server state only.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse commitCampaignSetup(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Campaign revision you last read")
-	Optional<Long> expected_revision) {
-		return ToolSupport.run("commit_campaign_setup",
-				() -> engine.campaigns().commitSetup(operation_id, campaign, expected_revision.orElse(null)));
-	}
-
-	@Tool(name = "complete_campaign", description = "MUTATING. Ends a campaign as COMPLETED, FAILED or ABANDONED with an explicit reason. "
-			+ "Abandoning during setup archives its draft characters. Irreversible from the gameplay protocol.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
-	ToolResponse completeCampaign(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "COMPLETED, FAILED or ABANDONED")
-	String outcome, @ToolArg(description = "Why the campaign ends")
-	String reason, @ToolArg(description = "Optional final summary for the ledger")
-	Optional<String> summary) {
-		return ToolSupport.run("complete_campaign",
-				() -> engine.campaigns().complete(operation_id, campaign, outcome, reason, summary.orElse(null)));
-	}
-
-	// ── Character design ───────────────────────────────────────────────
-
-	@Tool(name = "create_character_draft", description = "MUTATING. Reserves a stable character:N reference with lifecycle DRAFT. "
-			+ "The first player-controlled draft becomes the campaign's player character. Optionally applies initial fields "
-			+ "(same keys as update_character_draft). Returns the sheet and `decisions`: what the draft still needs, in order, "
-			+ "each with every legal option and its description — ask decisions[0] only.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse createCharacterDraft(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign,
-		@ToolArg(description = "Initial fields, e.g. {name, species: 'Human', class: 'Sorcerer', presentation: 'male'}", required = false)
-		Map<String, Object> initial,
-		@ToolArg(description = "true (default) for the player's own character; false for authored companions")
-		Optional<Boolean> player_controlled) {
-		return ToolSupport.run("create_character_draft",
-				() -> engine.characters().createDraft(operation_id, campaign, initial, player_controlled.orElse(true)));
-	}
-
-	@Tool(name = "get_character_choices", description = "Legal choices for a decision scope, every option with a description: ALL, ABILITY_GENERATION, "
-			+ "SPECIES, CLASS, BACKGROUND, FEAT, SKILLS, ALIGNMENT, SPELLS and EQUIPMENT (the last two, and the class skill list, need `character`). "
-			+ "With a draft character the response also carries its outstanding `decisions` in order. Use this instead of inventing options. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getCharacterChoices(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Scope (default ALL)")
-	Optional<String> scope, @ToolArg(description = "Character reference for class-dependent scopes")
-	Optional<String> character) {
-		return ToolSupport.run("get_character_choices",
-				() -> engine.characters().choices(campaign, scope.orElse("ALL"), character.orElse(null)));
-	}
-
-	@Tool(name = "generate_ability_scores", description = "MUTATING. Performs the campaign's ability generation method for a draft: "
-			+ "rolled methods roll six scores on the server (every die and dropped value returned; no silent rerolls); array and "
-			+ "point-buy methods return the array/budget. Then assign with update_character_draft.ability_scores.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse generateAbilityScores(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Draft character reference")
-	String character, @ToolArg(description = "Must match rules.ability_generation; defaults to it")
-	Optional<String> method) {
-		return ToolSupport.run("generate_ability_scores", () -> engine.characters().generateAbilityScores(operation_id,
-				campaign, character, method.orElse(null)));
-	}
-
-	@Tool(name = "update_character_draft", description = "MUTATING. Applies draft changes. `changes` keys: name, description, appearance, personality, "
-			+ "backstory, goals (list), alignment (e.g. CHAOTIC_GOOD), age, presentation, species (name or id), class (name or id), "
-			+ "background (name or id — grants the SRD background's two skills, tool and Origin feat), "
-			+ "background_ability_scores (+2/+1 or +1/+1/+1 among the background's three abilities), "
-			+ "ability_scores ({STR, DEX, CON, INT, WIS, CHA} — validated against the generation method immediately), skills (list, exact class count), "
-			+ "species_skill, species_choice (lineage/ancestry, optionally {choice, ability}), origin_feat (feat or {feat, ...choices}), "
-			+ "feat_choices ({feat, ...}), background_tool, starting_equipment, background_equipment, cantrips, spells. "
-			+ "Max HP is derived (hit die + CON modifier + species bonuses). Locally checkable constraints fail immediately; whole-character checks happen in validate.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateCharacterDraft(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Draft character reference")
-	String character, @ToolArg(description = "Character revision you last read")
-	Optional<Long> expected_revision, @ToolArg(description = "Fields to change")
-	Map<String, Object> changes) {
-		return ToolSupport.run("update_character_draft", () -> engine.characters().updateDraft(operation_id, campaign,
-				character, expected_revision.orElse(null), changes));
-	}
-
-	@Tool(name = "validate_character_draft", description = "Complete validation of a draft plus a review sheet to read back to the player. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse validateCharacterDraft(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character) {
-		return ToolSupport.run("validate_character_draft",
-				() -> engine.characters().validateDraft(campaign, character));
-	}
-
-	@Tool(name = "commit_character_draft", description = "MUTATING. Validates and finalizes a draft (DRAFT → FINALIZED_DRAFT). The identity never changes; "
-			+ "the character becomes ACTIVE, with starting money and HP, at commit_campaign_setup.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse commitCharacterDraft(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Draft character reference")
-	String character, @ToolArg(description = "Character revision you last read")
-	Optional<Long> expected_revision) {
-		return ToolSupport.run("commit_character_draft", () -> engine.characters().commitDraft(operation_id, campaign,
-				character, expected_revision.orElse(null)));
-	}
-
-	@Tool(name = "update_party_design", description = "MUTATING. Stores companion preferences and introduction intentions (desired_roles, relationship_seeds, "
-			+ "companion_agency, personality_distinctiveness, notes …) or SURPRISE_ME. Intentions are Director planning state, never guarantees.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updatePartyDesign(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Campaign revision you last read")
-	Optional<Long> expected_revision,
-		@ToolArg(description = "Party preferences object (use {\"authorship\": \"SURPRISE_ME\"} to delegate)")
-		Map<String, Object> preferences) {
-		return ToolSupport.run("update_party_design", () -> engine.campaigns().updateSetup(operation_id, campaign,
-				expected_revision.orElse(null), Map.of("party", preferences)));
-	}
-
-	// ── Session and context ────────────────────────────────────────────
-
-	@Tool(name = "bootstrap_session", description = "MUTATING (opens/resumes a session). Returns the bounded context package to continue play: "
-			+ "campaign config and house rules, game time, location, the player character's sheet (inventory as names), the party with each member's whereabouts and compact open wants {ref, note}, "
-			+ "compact relationships (profiles are fetched with get_context RELATIONSHIP/INTIMACY), story beats with bounded gm_brief guidance and stable refs (get_context STORY_BEAT for full details), quests, adventure premise (+ GM_ONLY truth), "
-			+ "recent events, and `chronicle`: the synopsis (the story so far), the chapters since it, a digest of the ledger since the last chapter, and `due` "
-			+ "(when a chapter or synopsis is owed, delegate it: a summarizing agent calls get_chronicle_material and write_chronicle while play continues). "
-			+ "Honours context_budget (default 16000 tokens; `budget` reports the size). Call after commit and at the start of every new conversation. Trust this over anything you remember.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse bootstrapSession(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Approximate token budget for the context (default 16000, maximum 32000)")
-	Optional<Integer> context_budget) {
-		return ToolSupport.run("bootstrap_session",
-				() -> engine.sessions().bootstrap(operation_id, campaign, context_budget.orElse(null)));
-	}
-
-	@Tool(name = "suspend_session", description = "MUTATING. Closes the session; records game time/location and the number of events written. A summary, when given, "
-			+ "is written as a chronicle CHAPTER covering the ledger since the last one (the same as write_chronicle). Optional: an abandoned session loses nothing. "
-			+ "Commit important consequences (record_memory) first.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse suspendSession(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign,
-		@ToolArg(description = "Compact narrative summary of what happened since the last chapter (becomes a chapter)")
-		Optional<String> summary) {
-		return ToolSupport.run("suspend_session",
-				() -> engine.sessions().suspend(operation_id, campaign, summary.orElse(null)));
-	}
-
-	@Tool(name = "find", description = "Lookup by name: kind CHARACTER or LOCATION, a case-insensitive query matched against the name first (exact, prefix, "
-			+ "substring) and the description second. Each hit is one line: ref, name, and for people their membership, life state and whereabouts; "
-			+ "for places kind, parent and who is there. Kind WANT searches wants by note and returns stable want:N refs; intimate wants require PEGI_18. "
-			+ "Use get_context WANT for full want details. Use find whenever a name or note is known but the ref is not. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse find(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "CHARACTER (default), LOCATION or WANT")
-	Optional<String> kind, @ToolArg(description = "Name or want note, or part of one, e.g. 'Hollin'")
-	String query, @ToolArg(description = "Max hits (default 20)")
-	Optional<Integer> limit) {
-		return ToolSupport.run("find",
-				() -> engine.sessions().find(campaign, kind.orElse(null), query, limit.orElse(null)));
-	}
-
-	@Tool(name = "get_chronicle_material", description = "Read-only. Everything a summarizing agent needs to write one chronicle entry and nothing else. "
-			+ "kind CHAPTER: the previous chapter, the two before it in brief, every non-minor ledger event since the last chapter with its detail "
-			+ "(paged by `cursor` at whole journal entries; a page may exceed the size target to finish an entry), "
-			+ "the campaign's voice, the target length, and `through` (the journal position the chapter will close at; events recorded later stay uncovered). "
-			+ "kind SYNOPSIS: the current synopsis, the chapters written since it, the voice, the target, and `through` (the last chapter id). "
-			+ "Meant for a fresh agent delegated by the GM when bootstrap's chronicle.due says a chapter or synopsis is owed.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getChronicleMaterial(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "CHAPTER (default) or SYNOPSIS")
-	Optional<String> kind, @ToolArg(description = "next_cursor from a previous page of chapter material")
-	Optional<String> cursor) {
-		return ToolSupport.run("get_chronicle_material",
-				() -> engine.chronicle().material(campaign, kind.orElse(null), cursor.orElse(null)));
-	}
-
-	@Tool(name = "write_chronicle", description = "MUTATING. Stores one chronicle entry written from get_chronicle_material. kind CHAPTER: an immutable prose summary "
-			+ "(about 300 tokens, at most 3000 characters) of the ledger since the last chapter, closed at `through` (the material's through.journal_id; now when omitted). "
-			+ "kind SYNOPSIS: the rolling story so far (about 1500 tokens, at most 12000 characters) rewritten from the previous synopsis and the chapters since, "
-			+ "closed at `through` (the material's through.chapter_id); it supersedes the previous synopsis. Both record the game time covered and the game time written. "
-			+ "Never invent: a chapter says only what the ledger says. Prose may cite a stable want:N inline; resolve its details with get_context WANT.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse writeChronicle(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "CHAPTER (default) or SYNOPSIS")
-	Optional<String> kind, @ToolArg(description = "A short title, e.g. 'The seven under one roof'")
-	Optional<String> title, @ToolArg(description = "The prose")
-	String summary,
-		@ToolArg(description = "The material's `through` marker: a journal id for a chapter, a chapter id for a synopsis")
-		Optional<Long> through) {
-		return ToolSupport.run("write_chronicle", () -> engine.chronicle().write(operation_id, campaign,
-				kind.orElse(null), title.orElse(null), summary, through.orElse(null)));
-	}
-
-	@Tool(name = "get_character_sheet", description = "Character sheet at detail SUMMARY, PLAY (default: abilities, proficiencies, HP, money, XP) or FULL "
-			+ "(+ narrative fields). All levels include current death-save counters, stable state and saved deadlines for dying creatures at 0 HP. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getCharacterSheet(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character, @ToolArg(description = "SUMMARY, PLAY or FULL")
-	Optional<String> detail) {
-		return ToolSupport.run("get_character_sheet",
-				() -> engine.characters().characterSheet(campaign, character, detail.orElse("PLAY")));
-	}
-
-	@Tool(name = "update_character", description = "MUTATING. Applies canonical narrative/identity changes to a committed character: name, description, "
-			+ "appearance, personality, backstory, goals (list), age (number), presentation, alignment; plus two merged aggregates: `biography` "
-			+ "{timeline: [{game_time?, note}], voice: [verbatim lines], state: [{note, since?, until?}] (carrying a child, an arm in a sling; give until to end one), "
-			+ "marks: [..], wants: [{ref?, note?, with: [character refs]?, status OPEN|DONE|ABANDONED, resolved_by?: event:N}] (the character's drives; "
-			+ "the server assigns stable want:N refs; new wants need note; patch an existing want by ref without repeating note, preserving omitted fields, or use existing note-based input; open wants are {ref, note} in every "
-			+ "party list so the NPC is played toward the same things every scene)} and, under PEGI_18 only, `intimacy` {body, likes, dislikes, limits, hard_lines, "
-			+ "wants: [the same referenced want entries] (the drives that concern intimacy), household_terms: [{note, with: [refs]}], voice_in_bed}. "
-			+ "Optional resolved_by must name an existing event in the same campaign. Want refs must belong to this character and the matching general/intimate list. "
-			+ "Other lists append without duplicates and maps merge key by key at every depth; an entry with the same note replaces the old one (end a state); "
-			+ "a null map value removes its key; {replace: true} starts over. Biography/intimacy lists reject null entries, including nested ones, with INVALID_ARGUMENT and details.path. Record facts as they "
-			+ "are established in play: an age, a line worth keeping, a pregnancy, a scar, what someone wants. Mechanical state is never changed here. Drafts use update_character_draft.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateCharacter(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character, @ToolArg(description = "Character revision you last read")
-	Optional<Long> expected_revision, @ToolArg(description = "Narrative fields to change")
-	Map<String, Object> changes) {
-		return ToolSupport.run("update_character", () -> engine.characters().updateCharacter(operation_id, campaign,
-				character, expected_revision.orElse(null), changes));
-	}
-
-	// ── Rules ──────────────────────────────────────────────────────────
-
-	@Tool(name = "resolve_check", description = "MUTATING (journaled roll). Resolves an ABILITY_CHECK, SKILL_CHECK or SAVING_THROW with authoritative "
-			+ "modifiers and server dice — in exploration and in the middle of an encounter alike (a parley, a shove, a lock under fire). "
-			+ "You supply the fictional intent and the DC; use the saved challenges specification for an authored map feature rather than choosing a new difficulty on each attempt. Never supply a die result. Name the `tool` when one is used (thieves' tools, a forger's "
-			+ "calligrapher's supplies): a proficient actor adds their proficiency bonus, and proficiency in both the skill and the tool gives advantage. "
-			+ "Returns the full breakdown, success/margin against the DC, and a roll_ref. Narrate failure as new complications, not a dead end.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse resolveCheck(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Acting character reference")
-	String actor, @ToolArg(description = "ABILITY_CHECK, SKILL_CHECK or SAVING_THROW")
-	String kind,
-		@ToolArg(description = "Ability (STR/DEX/CON/INT/WIS/CHA); optional for SKILL_CHECK (defaults to the skill's ability)")
-		Optional<String> ability, @ToolArg(description = "Skill name for SKILL_CHECK, e.g. Deception")
-		Optional<String> skill,
-		@ToolArg(description = "Tool used for the check, e.g. \"Thieves' Tools\" or \"Calligrapher's Supplies\" (SRD 5.2.1: proficiency bonus if proficient; advantage when also proficient in the skill)")
-		Optional<String> tool, @ToolArg(description = "Difficulty class (DC), 1–40")
-		Optional<Integer> difficulty, @ToolArg(description = "NONE (default), ADVANTAGE or DISADVANTAGE")
-		Optional<String> advantage, @ToolArg(description = "Short reason, e.g. 'Bluffing the magistrate'")
-		Optional<String> reason) {
-		return ToolSupport.run("resolve_check",
-				() -> engine.checks().resolveCheck(operation_id, campaign, actor, kind, ability.orElse(null),
-						skill.orElse(null), tool.orElse(null), difficulty.orElse(null), advantage.orElse(null),
-						reason.orElse(null)));
-	}
-
-	@Tool(name = "advance_time", description = "MUTATING. Requests elapsed minutes, resolving effect expiry and world events. Party death saves and other interruptions can stop time early: read elapsed_seconds, interruptions, consequences and current meta. Outside combat, unstable creatures make death saves every six seconds; provide aid or resume deliberately. A Director trigger may recommend review after significant elapsed time.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse advanceTime(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Minutes to advance (positive)")
-	int minutes, @ToolArg(description = "Why, e.g. 'travel to the ruined tower'")
-	Optional<String> reason) {
-		return ToolSupport.run("advance_time",
-				() -> engine.sessions().advanceTime(operation_id, campaign, minutes, reason.orElse(null)));
-	}
-
-	// ── Memory ─────────────────────────────────────────────────────────
-
-	@Tool(name = "record_memory", description = "MUTATING. Records a significant canonical event in the ledger — only what would damage continuity if forgotten "
-			+ "(first meetings, promises, betrayals, proposals, deaths, major discoveries). Mechanical operations write their own events; do not duplicate them. "
-			+ "Give CRITICAL events an episodic `detail` so they can be recalled years later.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse recordMemory(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign,
-		@ToolArg(description = "Event type, e.g. IMPORTANT_FIRST_MEETING, RELATIONSHIP_MILESTONE, PROMISE, SECRET_DISCOVERED")
-		String type, @ToolArg(description = "Concise summary (one or two sentences)")
-		String summary, @ToolArg(description = "Participating character references")
-		Optional<List<String>> participants, @ToolArg(description = "MINOR, NOTABLE (default), MAJOR or CRITICAL")
-		Optional<String> importance,
-		@ToolArg(description = "PLAYER_KNOWN, PARTY_KNOWN (default), CHARACTER_KNOWN, FACTION_KNOWN, GM_ONLY, DIRECTOR_ONLY")
-		Optional<String> visibility,
-		@ToolArg(description = "PLAYER, GM (default), DIRECTOR, MECHANICAL_CONSEQUENCE, ADMINISTRATIVE_OVERRIDE")
-		Optional<String> provenance,
-		@ToolArg(description = "Fictional game time if not now, e.g. 'Day 3, 22:14' (retroactive events are fine)")
-		Optional<String> game_time, @ToolArg(description = "Location reference if known")
-		Optional<String> location, @ToolArg(description = "Richer episodic detail (bounded; for important memories)")
-		Optional<String> detail, @ToolArg(description = "Structured payload", required = false)
-		Map<String, Object> payload) {
-		return ToolSupport.run("record_memory",
-				() -> engine.ledger().record(operation_id, campaign, type, summary, participants.orElse(null),
-						importance.orElse(null), visibility.orElse(null), provenance.orElse(null),
-						game_time.orElse(null), location.orElse(null), detail.orElse(null), payload));
-	}
-
-	@Tool(name = "query_memories", description = "Retrieves relevant ledger events by participants, types, a natural-language focus (keyword match over "
-			+ "summary/detail) and minimum importance — for recalling shared history on demand (\"do you remember when I proposed?\"). Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse queryMemories(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character references that must all participate")
-	Optional<List<String>> participants, @ToolArg(description = "Event types to include")
-	Optional<List<String>> types, @ToolArg(description = "Focus words, e.g. 'proposal ring'")
-	Optional<String> focus, @ToolArg(description = "Minimum importance")
-	Optional<String> min_importance, @ToolArg(description = "Max results (default 10)")
-	Optional<Integer> limit) {
-		return ToolSupport.run("query_memories",
-				() -> engine.ledger().queryMemories(campaign, participants.orElse(null), types.orElse(null),
-						focus.orElse(null), min_importance.orElse(null), limit.orElse(10)));
-	}
-
-	@Tool(name = "query_timeline", description = "Ordered events for a game-time range / entity set / types, newest first by fictional time "
-			+ "(or by insertion id for audit-style views). Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse queryTimeline(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "From game time, e.g. 'Day 1, 00:00'")
-	Optional<String> from_time, @ToolArg(description = "To game time")
-	Optional<String> to_time, @ToolArg(description = "Character references that must all participate")
-	Optional<List<String>> participants, @ToolArg(description = "Event types to include")
-	Optional<List<String>> types, @ToolArg(description = "Minimum importance")
-	Optional<String> min_importance, @ToolArg(description = "Order by insertion id instead of fictional time")
-	Optional<Boolean> by_insertion, @ToolArg(description = "Max results (default 25)")
-	Optional<Integer> limit) {
-		return ToolSupport.run("query_timeline",
-				() -> engine.ledger().queryTimeline(campaign, from_time.orElse(null), to_time.orElse(null),
-						participants.orElse(null), types.orElse(null), min_importance.orElse(null),
-						by_insertion.orElse(false), limit.orElse(25)));
-	}
-
-	// ── Checkpoints and continuation ───────────────────────────────────
-
-	@Tool(name = "create_checkpoint", description = "MUTATING. Creates a restorable checkpoint (a marker in the change journal) when policy permits — "
-			+ "before major encounters and story transitions. Denied under IRONMAN.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse createCheckpoint(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Reason, e.g. MAJOR_ENCOUNTER or 'before entering the crypt'")
-	Optional<String> reason) {
-		return ToolSupport.run("create_checkpoint",
-				() -> engine.checkpoints().create(operation_id, campaign, reason.orElse(null)));
-	}
-
-	@Tool(name = "get_continuation_options", description = "Legal continuation options: restorable checkpoints, survivor transfer (availability), campaign completion. "
-			+ "Usable after player-character death or, under CHECKPOINT policy, whenever the player regrets a decision. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getContinuationOptions(@ToolArg(description = REF)
-	String campaign) {
-		return ToolSupport.run("get_continuation_options", () -> engine.checkpoints().options(campaign));
-	}
-
-	@Tool(name = "restore_checkpoint", description = "MUTATING, DESTRUCTIVE for later history. Rewinds ALL canonical campaign state to the checkpoint in one "
-			+ "transaction (characters, inventory, money, party, relationships, quests, story, encounters, ledger, clock). Later events stop being canonical; "
-			+ "an audit record of the restoration survives. Afterwards call bootstrap_session and trust server state over prior narration.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
-	ToolResponse restoreCheckpoint(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Checkpoint reference, e.g. 'checkpoint:2'")
-	String checkpoint, @ToolArg(description = "Why the player chose to rewind")
-	Optional<String> reason) {
-		return ToolSupport.run("restore_checkpoint",
-				() -> engine.checkpoints().restore(operation_id, campaign, checkpoint, reason.orElse(null)));
-	}
-	// ── Content, inventory and economy ─────────────────────────────────
-
-	@Tool(name = "get_content_definitions", description = "Searches installed rules content (SRD 5.2.1) and, when a campaign is given, its custom "
-			+ "definitions. kind defaults to ITEM (weapons, armor, gear, tools, packs, ammunition, focuses, mounts, and the SRD magic items: "
-			+ "rings, rods, staffs, wands, potions, scrolls, wondrous items, and magic weapon/armor/shield/ammunition templates); other kinds: CLASS, SPECIES, "
-			+ "BACKGROUND, FEAT, SKILL, SPELL, CREATURE, TABLE. "
-			+ "Filter by item_type, free text, price, magic (true/false) and rarity; cursor-paginated. Use this to price purchases, pick level-appropriate "
-			+ "treasure (`magic: true, rarity: UNCOMMON`) and answer equipment questions instead of inventing them. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getContentDefinitions(
-		@ToolArg(description = "Campaign reference (optional; includes that campaign's custom content)")
-		Optional<String> campaign, @ToolArg(description = "Content kind (default ITEM)")
-		Optional<String> kind,
-		@ToolArg(description = "Item type filter: WEAPON, ARMOR, SHIELD, GEAR, TOOL, AMMUNITION, FOCUS, PACK, CONTAINER, MOUNT, TACK, VEHICLE, RING, ROD, STAFF, WAND, WONDROUS, POTION, SCROLL")
-		Optional<String> item_type,
-		@ToolArg(description = "Free-text search over name/id/rules text, e.g. 'sword finesse'")
-		Optional<String> text, @ToolArg(description = "Minimum cost, e.g. '1 gp' or 100 (cp)")
-		Optional<String> min_cost, @ToolArg(description = "Maximum cost, e.g. '50 gp'")
-		Optional<String> max_cost,
-		@ToolArg(description = "Magic item rarity filter: COMMON, UNCOMMON, RARE, VERY_RARE, LEGENDARY, ARTIFACT")
-		Optional<String> rarity, @ToolArg(description = "true: magic items only; false: mundane items only")
-		Optional<Boolean> magic, @ToolArg(description = "SUMMARY (default) or FULL (includes the complete payload)")
-		Optional<String> detail, @ToolArg(description = "Opaque cursor from next_cursor")
-		Optional<String> cursor, @ToolArg(description = "Page size (default 25, max 100)")
-		Optional<Integer> limit) {
-		return ToolSupport.run("get_content_definitions",
-				() -> engine.content().definitions(campaign.orElse(null), kind.orElse(null), item_type.orElse(null),
-						text.orElse(null), min_cost.orElse(null), max_cost.orElse(null), rarity.orElse(null),
-						magic.orElse(null), cursor.orElse(null), limit.orElse(25), detail.orElse("SUMMARY")));
-	}
-
-	@Tool(name = "search_rules", description = "READ-ONLY. Ranked free-text search across every installed rules definition and the campaign's custom content: "
-			+ "the SRD Rules Glossary (kind RULE - conditions, actions, hazards, areas of effect, cover, resting, movement, carrying capacity), "
-			+ "plus spells, items, creatures, classes, species, backgrounds, feats and skills. Returns each hit's `ref`, `kind`, `name`, `tag` and a `snippet` of the actual rules text. "
-			+ "USE THIS BEFORE ANSWERING A RULES QUESTION OR ADJUDICATING AN UNFAMILIAR SITUATION, and cite the returned ref. If nothing matches, say the rule is not in the SRD rather than recalling one.", annotations = @Tool.Annotations(readOnlyHint = true, openWorldHint = false))
-	ToolResponse searchRules(
-		@ToolArg(description = "Campaign reference (optional; include it to search custom content too)", required = false)
-		String campaign,
-		@ToolArg(description = "What to look up, e.g. 'grappled', 'sneak attack', 'half cover', 'long rest'")
-		String query,
-		@ToolArg(description = "Restrict to one kind, e.g. RULE, SPELL, ITEM, CREATURE, FEAT", required = false)
-		String kind, @ToolArg(description = "Maximum hits (default 10, max 50)", required = false)
-		Integer limit) {
-		return ToolSupport.run("search_rules",
-				() -> engine.content().search(campaign, query, kind, limit == null ? 0 : limit));
-	}
-
-	@Tool(name = "define_content", description = "MUTATING. Creates campaign-scoped custom content with a stable content:N reference and an optional 'custom:<kind>/slug' symbolic id. "
-			+ "kind ITEM (default): a local newspaper, a regional delicacy, a quest letter — buyable, carried, transferable; defining it grants it to nobody. "
-			+ "Custom item names are unique within the campaign, ignoring case and surrounding whitespace; a duplicate returns CONFLICT with the existing reference. "
-			+ "kind BACKGROUND: a campaign background (a Noble, a Fen Keeper) built like an SRD one — properties {ability_scores: [3 abilities], feat: an Origin feat, "
-			+ "skills: [2 skills], tool: {item} or {choice: ARTISANS_TOOLS|GAMING_SET|MUSICAL_INSTRUMENT|TOOL}, feat_choices?, starting_equipment?} — "
-			+ "usable by name wherever a background is chosen (drafts and companion promotions). Mechanical WEAPON/ARMOR definitions arrive in a later milestone.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse defineContent(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Display name")
-	String name, @ToolArg(description = "Content kind: ITEM (default) or BACKGROUND")
-	Optional<String> kind,
-		@ToolArg(description = "Symbolic id like 'custom:item/bellhaven-broadsheet' or 'custom:background/noble'")
-		Optional<String> symbolic_id, @ToolArg(description = "Description / rules text (for a BACKGROUND: its summary)")
-		Optional<String> description,
-		@ToolArg(description = "ITEM only: GEAR (default), CONSUMABLE, VALUABLE, DOCUMENT, TOOL, CONTAINER, MOUNT, OTHER…")
-		Optional<String> item_type,
-		@ToolArg(description = "ITEM only: list price, e.g. '2 cp', '15 gp 5 sp' or an integer in cp (default 0)")
-		Optional<String> cost, @ToolArg(description = "ITEM only: weight in pounds (default 0)")
-		Optional<Double> weight_lb,
-		@ToolArg(description = "Extra structured properties; for a BACKGROUND the ability_scores/feat/skills/tool spec", required = false)
-		Map<String, Object> properties, @ToolArg(description = "Tags for search")
-		Optional<List<String>> tags) {
-		return ToolSupport.run("define_content",
-				() -> engine.content().define(operation_id, campaign, kind.orElse("ITEM"), name,
-						symbolic_id.orElse(null), description.orElse(null), item_type.orElse(null), cost.orElse(null),
-						weight_lb.orElse(null), properties, tags.orElse(null), "GM"));
-	}
-
-	@Tool(name = "transfer_item", description = "MUTATING. Moves an inventory stack (or part of it) to another character or to a location (dropping / stashing). "
-			+ "Equipped items are unequipped by the move. Enforces ownership and quantity.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse transferItem(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Inventory entry reference from a character sheet, e.g. 'inventory:12'")
-	String entry, @ToolArg(description = "Destination: 'character:N' or 'location:N'")
-	String to, @ToolArg(description = "Quantity to move (default: the whole stack)")
-	Optional<Integer> quantity, @ToolArg(description = "Why (narrative note)")
-	Optional<String> reason) {
-		return ToolSupport.run("transfer_item", () -> engine.inventory().transfer(operation_id, campaign, entry, to,
-				quantity.orElse(null), reason.orElse(null)));
-	}
-
-	@Tool(name = "give_money", description = "MUTATING, atomic. Moves coin from one character to another (a tip, a wage, a bond bought, a debt paid): both must be "
-			+ "characters of this campaign, the giver must hold the amount, and the transfer is one ledger event both can recall. For coin found or "
-			+ "awarded from the world use grant_loot; for a purchase use trade.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse giveMoney(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Giving character reference, e.g. 'character:4'")
-	String from, @ToolArg(description = "Receiving character reference")
-	String to,
-		@ToolArg(description = "Amount: '1.5 gp', '2 sp 5 cp', {\"gp\": 1.5} or whole copper; non-negative and exact to 1 cp")
-		Object money, @ToolArg(description = "Why (narrative note, recorded on the event)")
-		Optional<String> reason) {
-		return ToolSupport.run("give_money",
-				() -> engine.inventory().giveMoney(operation_id, campaign, from, to, money, reason.orElse(null)));
-	}
-
-	@Tool(name = "equip_item", description = "MUTATING. Equips (wears, wields, attunes to) or unequips a carried weapon, armor, shield, focus, ring, rod, staff, wand "
-			+ "or wearable wondrous item with slot validation: one body armor, one shield, two hands, two rings, one of each worn slot (cloak, boots, head, neck, "
-			+ "belt, hands, wrists, eyes), and at most three attuned items (SRD 5.2.1 Attunement; an equipped item that requires attunement is attuned). "
-			+ "A magic item's +N and its modifiers (a Ring of Protection) apply only while equipped. Returns Armor Class before/after, the equipped set and what is attuned.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse equipItem(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character, @ToolArg(description = "Inventory entry reference, e.g. 'inventory:12'")
-	String entry, @ToolArg(description = "true to equip, false to unequip")
-	boolean equipped) {
-		return ToolSupport.run("equip_item",
-				() -> engine.inventory().equip(operation_id, campaign, character, entry, equipped));
-	}
-
-	@Tool(name = "trade", description = "MUTATING, atomic. BUY an item from the market/merchant at its list price (ammunition is sold in bundles: quantity "
-			+ "counts bundles) or SELL carried pieces at half list price (valuables retain full value). Partial bundles are priced proportionally, "
-			+ "rounded down to whole copper. Money and items move together; insufficient funds fail with "
-			+ "INSUFFICIENT_RESOURCE. A negotiated_price (from a successful Persuasion check, say) requires a reason and is recorded with GM provenance.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse trade(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Buying/selling character reference")
-	String character, @ToolArg(description = "BUY or SELL")
-	String kind,
-		@ToolArg(description = "Item name or id ('Longsword', 'srd5e:item/longsword', 'content:5', 'custom:item/x')")
-		Optional<String> item,
-		@ToolArg(description = "For SELL: a specific inventory entry reference instead of an item name")
-		Optional<String> entry,
-		@ToolArg(description = "BUY: number of items or ammunition bundles (default 1). SELL: individual pieces (default the entire stack).")
-		Optional<Integer> quantity,
-		@ToolArg(description = "Merchant character reference, if the merchant is a persisted NPC")
-		Optional<String> merchant, @ToolArg(description = "Negotiated total price, e.g. '12 gp' (requires reason)")
-		Optional<String> negotiated_price, @ToolArg(description = "Reason for a negotiated price")
-		Optional<String> reason) {
-		return ToolSupport.run("trade",
-				() -> engine.inventory().trade(operation_id, campaign, character, kind, item.orElse(null),
-						entry.orElse(null), quantity.orElse(null), merchant.orElse(null), negotiated_price.orElse(null),
-						reason.orElse(null)));
-	}
-
-	@Tool(name = "grant_loot", description = "MUTATING. Materializes rewards — items and/or money — for a character or a location from an ENCOUNTER, QUEST or WORLD "
-			+ "source, or as an explicit GM_GRANT (requires a reason, is audited, and is refused when the campaign disables GM overrides). "
-			+ "Writes a LOOT_ACQUIRED ledger event. Magic items (get_content_definitions magic: true) are granted by name; a magic weapon, armor, shield or "
-			+ "ammunition entry is a template made on a base: {item: '+1 Longsword'}, {item: 'Weapon, +1, +2, or +3', base: 'Longsword', bonus: 2} or "
-			+ "{item: 'Flame Tongue', base: 'Longsword', name: 'Ember'}; an enchantment of your own (an Arrow of Fire, a frost blade) is {item: 'Arrow', magic: {name, rarity, damage_bonus_dice, damage_type, text}}. "
-			+ "A +N name and explicit bonus must agree. Same-name recipes reuse only matching definitions; a different recipe returns CONFLICT. Use content:N to grant an existing definition. "
-			+ "Completed quests, major encounters and bootstrap report level-appropriate "
-			+ "`treasure` suggestions: a party that finishes a quest or a major fight usually finds something.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse grantLoot(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Recipient: 'character:N' or 'location:N'")
-	String to,
-		@ToolArg(description = "Items: [{\"item\": \"Dagger\", \"quantity\": 2}, {\"item\": \"+1 Longsword\"}, {\"item\": \"Ring of Protection\"}, {\"item\": \"Flame Tongue\", \"base\": \"Longsword\", \"name\"?: ...}]. "
-				+ "An enchantment the SRD lacks is made on a mundane base with magic: {\"item\": \"Arrow\", \"quantity\": 10, \"magic\": {\"name\": \"Arrow of Fire\", \"rarity\": \"UNCOMMON\", \"damage_bonus_dice\": \"1d6\", \"damage_type\": \"fire\", \"text\": \"...\"}} "
-				+ "(also bonus: +N, ac_bonus, save_bonus, attack_bonus, speed_bonus, resistance, attunement, slot, consumable: {heal}); the engine applies those, the text is the GM's.", required = false)
-		List<Map<String, Object>> items, @ToolArg(description = "Money, e.g. '25 gp' (characters only)")
-		Optional<String> money, @ToolArg(description = "ENCOUNTER, QUEST, WORLD or GM_GRANT (default)")
-		Optional<String> source, @ToolArg(description = "Why (required for GM_GRANT)")
-		Optional<String> reason) {
-		return ToolSupport.run("grant_loot", () -> engine.inventory().grantLoot(operation_id, campaign, to, items,
-				money.orElse(null), source.orElse(null), reason.orElse(null)));
-	}
-	// ── Creatures, encounters and runtime ──────────────────────────────
-
-	@Tool(name = "materialize_character", description = "MUTATING. Turns an installed creature definition (e.g. 'Bandit', 'srd5e:creature/wolf', "
-			+ "'Commoner' for any ordinary NPC) into a canonical character with its own stable character:N identity, stat block, HP and location. "
-			+ "Do this before an encounter for every opponent, and for any NPC who must persist. Rename freely; identity never changes. "
-			+ "A materialized creature is a stat block, not a character: give `alignment` to anyone who is a person, and see get_party's "
-			+ "sheet_gaps for what a prospective party member still lacks (begin_level_up grants a class, species and background).", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse materializeCharacter(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Creature definition id or name")
-	String source, @ToolArg(description = "Display name (default: the creature's name)")
-	Optional<String> name, @ToolArg(description = "Description")
-	Optional<String> description, @ToolArg(description = "Personality summary")
-	Optional<String> personality,
-		@ToolArg(description = "Alignment, e.g. CHAOTIC_GOOD — set it for anyone who is a character rather than an opponent")
-		Optional<String> alignment,
-		@ToolArg(description = "Location reference (default: the controlled player's current place/contact). Supply an explicit location for an away companion's encounter or another off-screen NPC.")
-		Optional<String> location,
-		@ToolArg(description = "Roll hit points from the stat block dice instead of using the average")
-		Optional<Boolean> roll_hp) {
-		return ToolSupport.run("materialize_character",
-				() -> engine.runtime().materialize(operation_id, campaign, source, name.orElse(null),
-						description.orElse(null), personality.orElse(null), alignment.orElse(null),
-						location.orElse(null), roll_hp.orElse(false)));
-	}
-
-	@Tool(name = "start_encounter", description = "MUTATING. Creates and starts an encounter: sides map names to character references "
-			+ "({\"party\": [\"character:1\"], \"raiders\": [\"character:5\", \"character:6\"]}), optional stances between sides "
-			+ "({\"party|raiders\": \"HOSTILE\"}; default HOSTILE), optional zones per character ({\"character:5\": \"far\"}). "
-			+ "Rolls initiative (d20 + DEX; one roll per group of identical creatures on a side; Incapacitated rolls with Disadvantage, Invisible with Advantage), creates an ENCOUNTER_RETRY checkpoint under non-IRONMAN policies, and returns the first turn. "
-			+ "Ties are not broken by the engine: `ties` lists them with who decides (GM for monsters and mixed ties, players among characters); the provisional order puts the party's side first. All participants must be materialized characters. "
-			+ "options.npc_reactions: AUTO (default; the engine resolves NPC opportunity attacks and Shield) or ASK (every reaction becomes a pending choice); options.surprised: [side names] roll initiative with Disadvantage (SRD Surprise). Allies never take opportunity attacks on each other.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse startEncounter(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Side name → list of character references")
-	Map<String, Object> sides,
-		@ToolArg(description = "Stances between sides, e.g. {\"party|raiders\": \"HOSTILE\"}", required = false)
-		Map<String, Object> stances,
-		@ToolArg(description = "Starting zone per character reference, e.g. {\"character:5\": \"far\"}", required = false)
-		Map<String, Object> zones,
-		@ToolArg(description = "Environment/terrain authoring brief; prose is retained but does not create walls, furnishings or finished geometry. Supply options.scene for physical details.")
-		Optional<String> environment, @ToolArg(description = "Encounter objectives")
-		Optional<List<String>> objectives, @ToolArg(description = "Location reference (default: current location)")
-		Optional<String> location,
-		@ToolArg(description = "Options: {map_ref: map:N, npc_reactions: AUTO|ASK, surprised: [side names], placements: [{character,x_ft,y_ft}], scene: {bounds_ft,rooms,walls,doors,objects,features,illumination}}. map_ref explicitly selects coverage at the current location, migrating same-location figures. scene authors/refines incidental coverage without discarding historical boards. Published preparations are preferred automatically; correct published geometry with correct_map_geometry. Actor coordinates are southwest footprint origins in feet.", required = false)
-		Map<String, Object> options) {
-		return ToolSupport.run("start_encounter", () -> engine.encounters().start(operation_id, campaign, sides,
-				stances, zones, environment.orElse(null), objectives.orElse(null), location.orElse(null), options));
-	}
-
-	@Tool(name = "resolve_pending_choice", description = "MUTATING. Completes a pending choice the engine created during an encounter (opportunity attack: TAKE {weapon?}|DECLINE; "
-			+ "Shield spell: CAST_SHIELD|DECLINE). The encounter waits (status WAITING_CHOICE) until every open choice is resolved; the interrupted action then "
-			+ "continues and the turn advances if it was ending. Choices and their legal options are listed in get_encounter_state.pending_choices.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse resolvePendingChoice(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Pending choice reference (transaction:N)")
-	String transaction,
-		@ToolArg(description = "The choice: {option: 'TAKE'|'DECLINE'|'CAST_SHIELD', weapon?: 'Longsword'}")
-		Map<String, Object> choice) {
-		return ToolSupport.run("resolve_pending_choice",
-				() -> engine.encounters().resolveChoice(operation_id, campaign, transaction, choice));
-	}
-
-	@Tool(name = "get_encounter_state", description = "Authoritative encounter view. Use audience GM when running the encounter: it includes every participant and the current turn even behind walls or when the party is unconscious. PLAYER is the safe default and filters unseen actors. Round, whose turn, participants with HP (enemy HP labeled GM_ONLY), AC, "
-			+ "conditions, death saves, zones, available attacks, and the recent log ('what happened last turn'). An ended encounter may offer optional ammunition_recovery. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getEncounterState(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Encounter reference (default: the running encounter)")
-	Optional<String> encounter, @ToolArg(description = "Number of recent log entries (default 10)")
-	Optional<Integer> log_limit,
-		@ToolArg(description = "PLAYER (default) filters unseen participants; GM includes the full roster for running enemy turns")
-		Optional<String> audience) {
-		return ToolSupport.run("get_encounter_state", () -> engine.encounters().encounterState(campaign,
-				encounter.orElse(null), log_limit.orElse(10), audience.orElse("PLAYER")));
-	}
-
-	@Tool(name = "perform_encounter_action", description = "MUTATING, atomic. Resolves one action for the participant whose turn it is. action.kind: "
-			+ "ATTACK {target, weapon|attack (item name, inventory:N, or a creature action name; omit for the creature's first attack or an unarmed strike), "
-			+ "ammunition: '+1 Arrow' (which ammunition to fire; default the mundane kind), thrown:true or mode:RANGED selects the ranged option of a stat-block action with an authored range (for example Guard's Spear20/60), two_handed, light_extra_attack: true (after a Light-weapon Attack, use a different Light weapon; spends the Bonus Action; eligible inventory refs are returned as light_extra_attack_available), advantage: ADVANTAGE|DISADVANTAGE, nonlethal: true (melee only; a creature that would drop to 0 HP is left at 1 HP, Unconscious until the end of a Short Rest or until it regains HP, no death saves), confirm_hostile_ally:true (required only for an explicitly intended attack on a downed same-side member; ordinary attacks otherwise return care guidance)}; "
-			+ "weapon proficiency and armor training follow the class tables (no Proficiency Bonus with an unproficient weapon; untrained armor: Disadvantage on STR/DEX rolls, no spellcasting; untrained shield: no AC). CAST {spell, targets|target, slot_level, metamagic: [option names] plus heightened_target / careful: [refs] / damage_type for a sorcerer};"
-			+ "DODGE; DASH/MOVE {x_ft,y_ft,path_ft?} on the saved 5ft physical grid (movement follows traversable cells, spends actual distance and pauses at opportunity reactions; a Prone mover crawls); "
-			+ "STAND (a Prone creature rights itself for half its Speed: movement, not an action, so the turn stays open; refused at Speed 0); DISENGAGE; HELP; HIDE currently returns CAPABILITY_UNAVAILABLE because automatic concealment is not implemented; resolve Stealth checks and exceptional concealment explicitly with the GM; "
-			+ "USE_ITEM {item, target} (drinking or administering a potion spends the Bonus Action, action_cost BONUS_ACTION; a Potion of Healing of any potency heals by its dice; other items are consumed and adjudicated); INTERACT/OTHER_RULES_ACTION {description}; END_TURN. Attacks use server dice, real AC, "
-			+ "crits (natural 20; melee vs unconscious), resistances, temp HP, ammunition, and death rules. Reactions owned by player-controlled characters "
-			+ "(opportunity attacks, Shield) come back as pending_choices: ask the player, then call resolve_pending_choice — the action and turn resume afterwards. "
-			+ "MOVE, STAND and Bonus Action casts keep the turn open by default so movement or a Bonus Action can be followed by an Action. Other actions default end_turn=true; explicit end_turn overrides this. END_TURN always passes. Multiattack or an extra Light attack can keep a turn open. "
-			+ "Optional action.narration preserves the DM's words for a memorable beat (about 300 characters); use a handful per fight, rarely more than eight. Routine actions need none. "
-			+ "While the turn stays open the result's turn_economy lists what remains (action, bonus_action, reaction, movement) and next_step notes an unspent Action; "
-			+ "ask the player about a leftover only when their declaration was incomplete, it matters in the scene (an enemy in reach, somewhere to go) and they may not know the rule (standing up costs no action) - otherwise END_TURN quietly. "
-			+ "Rolls death saves for the dying. Returned state is PLAYER-safe; gm_handoff gives an explicit get_encounter_state audience GM request when an unseen actor must act.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse performEncounterAction(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Acting character reference (must be the current turn)")
-	String actor, @ToolArg(description = "The action object; see description")
-	Map<String, Object> action, @ToolArg(description = "Encounter reference (default: the running encounter)")
-	Optional<String> encounter,
-		@ToolArg(description = "Default false for MOVE/STAND/Bonus Action casts, true for other actions. False keeps a multi-part turn open; END_TURN always passes.")
-		Optional<Boolean> end_turn) {
-		return ToolSupport.run("perform_encounter_action", () -> engine.encounters().perform(operation_id, campaign,
-				encounter.orElse(null), actor, action, end_turn.orElse(null)));
-	}
-
-	@Tool(name = "end_encounter", description = "MUTATING. Ends the encounter with an outcome (PARTY_VICTORY, PARTY_DEFEAT, PARTY_FLED, ENEMIES_FLED, NEGOTIATED, OTHER): "
-			+ "a major encounter's result carries `treasure` (level-appropriate magic item suggestions for grant_loot); "
-			+ "awards the encounter's XP pool (fixed at start from every hostile participant) split among surviving party members whenever the encounter "
-			+ "was overcome — killed, captured, routed or talked down all pay the same; otherwise awards XP for defeated hostiles. Also reports level-up eligibility, advances the clock, writes the ledger event, "
-			+ "and — if the player character died — moves the harness to the continuation decision (CHECKPOINT_DECISION, or PLAYER_CHARACTER_TRANSFER under IRONMAN). "
-			+ "Stores one mechanical encounter digest in the ledger; optional narrative preserves the fight as told to the player. Returns a bounded party_digest and a full_gm_record read pointer instead of repeating the mechanical record. The reply offers up to eight highlight narration slots for one annotate_encounter follow-up. "
-			+ "ammunition_recovery offers an optional one-minute search: use recover_ammunition only if the player asks or agrees; it never blocks play.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse endEncounter(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Outcome")
-	String outcome, @ToolArg(description = "Encounter reference (default: the running encounter)")
-	Optional<String> encounter,
-		@ToolArg(description = "One-line fight summary; saved in the GM record and included in the party-safe digest when appropriate.")
-		Optional<String> summary,
-		@ToolArg(description = "Optional longer account of the fight in the DM's voice; the player ledger receives only party-safe prose.")
-		Optional<String> narrative) {
-		return ToolSupport.run("end_encounter", () -> {
-			var result = new LinkedHashMap<>(engine.encounters().end(operation_id, campaign, encounter.orElse(null),
-					outcome, summary.orElse(null), narrative.orElse(null)));
-			result.remove("record");
-			var digest = LedgerService
-					.boundedRecallDigest(EncounterDigest.compactPublic(SceneService.map(result.get("party_digest"))));
-			result.put("party_digest", digest);
-			result.put("party_digest_bytes", LedgerService.serializedBytes(digest));
-			result.put("party_digest_max_bytes", LedgerService.ENCOUNTER_DIGEST_MAX_BYTES);
-			result.put("full_gm_record",
-					Map.of("tool", "get_encounter_state", "arguments",
-							Map.of("campaign", campaign, "encounter", result.get("encounter"), "audience", "GM"),
-							"field", "record"));
-			return result;
+	// Keep destructiveHint = false so routine STATE/OPEN/BOOTSTRAP/SUSPEND calls do not prompt;
+	// COMPLETE is explicitly flagged irreversible in the description and requires outcome + reason.
+	@Tool(name = "session", description = "Campaign discovery and session lifecycle. Actions: "
+			+ "STATE (read; no campaign) {include_campaigns?, campaign_limit?, campaign_cursor?}; "
+			+ "CREATE (mut; no campaign) {title?, ruleset?}; " + "OPEN (read) {}; "
+			+ "BOOTSTRAP (mut) {context_budget?}; " + "SUSPEND (mut) {summary?}; "
+			+ "COMPLETE (mut, irreversible) {outcome: COMPLETED|FAILED|ABANDONED, reason, summary?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse session(@ToolArg(description = "STATE | CREATE | OPEN | BOOTSTRAP | SUSPEND | COMPLETE")
+	String action, @ToolArg(description = CAMP_SESSION, required = false)
+	String campaign, @ToolArg(description = OP, required = false)
+	String operation_id, @ToolArg(description = PARAMS, required = false)
+	Map<String, Object> params) {
+		return ToolSupport.run("session", () -> {
+			String act = ToolArgs.action("session", action,
+					List.of("STATE", "CREATE", "OPEN", "BOOTSTRAP", "SUSPEND", "COMPLETE"));
+			return switch (act) {
+			case "STATE" -> {
+				ToolArgs a = ToolArgs.of("session", act, "CORE", params,
+						"include_campaigns?, campaign_limit?, campaign_cursor?", "include_campaigns", "campaign_limit",
+						"campaign_cursor");
+				var result = engine.campaigns().serverState(a.optBool("include_campaigns", true),
+						a.optInt("campaign_limit", 20), a.optStr("campaign_cursor"));
+				result.put("instruction_hint",
+						"If you have not read get_instructions in this conversation, call it before starting or continuing a campaign.");
+				yield result;
+			}
+			case "CREATE" -> {
+				String op = ToolArgs.reqOp("session", act, operation_id);
+				ToolArgs a = ToolArgs.of("session", act, "SETUP", params, "title?, ruleset?", "title", "ruleset");
+				yield engine.campaigns().create(op, a.optStr("title"), a.optStr("ruleset"));
+			}
+			case "OPEN" -> {
+				String c = ToolArgs.reqCampaign("session", act, campaign);
+				ToolArgs.of("session", act, "CORE", params, "(none)");
+				yield engine.campaigns().open(c);
+			}
+			case "BOOTSTRAP" -> {
+				String c = ToolArgs.reqCampaign("session", act, campaign);
+				String op = ToolArgs.reqOp("session", act, operation_id);
+				ToolArgs a = ToolArgs.of("session", act, "CORE", params, "context_budget?", "context_budget");
+				yield engine.sessions().bootstrap(op, c, a.optInt("context_budget"));
+			}
+			case "SUSPEND" -> {
+				String c = ToolArgs.reqCampaign("session", act, campaign);
+				String op = ToolArgs.reqOp("session", act, operation_id);
+				ToolArgs a = ToolArgs.of("session", act, "CORE", params, "summary?", "summary");
+				yield engine.sessions().suspend(op, c, a.optStr("summary"));
+			}
+			case "COMPLETE" -> {
+				String c = ToolArgs.reqCampaign("session", act, campaign);
+				String op = ToolArgs.reqOp("session", act, operation_id);
+				ToolArgs a = ToolArgs.of("session", act, "CORE", params, "outcome, reason, summary?", "outcome",
+						"reason", "summary");
+				yield engine.campaigns().complete(op, c, a.reqStr("outcome"), a.reqStr("reason"), a.optStr("summary"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
 		});
 	}
 
-	ToolResponse endEncounter(
-		String operation_id, String campaign, String outcome, Optional<String> encounter, Optional<String> summary) {
-		return endEncounter(operation_id, campaign, outcome, encounter, summary, Optional.empty());
+	// ── Campaign setup & house rules ───────────────────────────────────
+
+	@Tool(name = "campaign_setup", description = "Resumable campaign setup interview and standing house rules (see get_instructions topic SETUP). Actions: "
+			+ "GET (read) {}; "
+			+ "UPDATE (mut) {changes, expected_revision?} (legal choices come from returned decisions); "
+			+ "VALIDATE (read) {}; " + "COMMIT (mut) {expected_revision?}; "
+			+ "PARTY_DESIGN (mut) {preferences, expected_revision?}; "
+			+ "HOUSE_RULES (mut) {rules?, mode?: ADD|REMOVE|REPLACE}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse campaignSetup(@ToolArg(description = "GET | UPDATE | VALIDATE | COMMIT | PARTY_DESIGN | HOUSE_RULES")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP, required = false)
+	String operation_id, @ToolArg(description = PARAMS, required = false)
+	Map<String, Object> params) {
+		return ToolSupport.run("campaign_setup", () -> {
+			String act = ToolArgs.action("campaign_setup", action,
+					List.of("GET", "UPDATE", "VALIDATE", "COMMIT", "PARTY_DESIGN", "HOUSE_RULES"));
+			String c = ToolArgs.reqCampaign("campaign_setup", act, campaign);
+			return switch (act) {
+			case "GET" -> {
+				ToolArgs.of("campaign_setup", act, "SETUP", params, "(none)");
+				yield engine.campaigns().setupState(c);
+			}
+			case "UPDATE" -> {
+				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
+				ToolArgs a = ToolArgs.of("campaign_setup", act, "SETUP", params, "changes, expected_revision?",
+						"changes", "expected_revision");
+				yield engine.campaigns().updateSetup(op, c, a.optLong("expected_revision"), a.reqMap("changes"));
+			}
+			case "VALIDATE" -> {
+				ToolArgs.of("campaign_setup", act, "SETUP", params, "(none)");
+				yield engine.campaigns().validateSetup(c);
+			}
+			case "COMMIT" -> {
+				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
+				ToolArgs a = ToolArgs.of("campaign_setup", act, "SETUP", params, "expected_revision?",
+						"expected_revision");
+				yield engine.campaigns().commitSetup(op, c, a.optLong("expected_revision"));
+			}
+			case "PARTY_DESIGN" -> {
+				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
+				ToolArgs a = ToolArgs.of("campaign_setup", act, "SETUP", params, "preferences, expected_revision?",
+						"preferences", "expected_revision");
+				yield engine.campaigns().updateSetup(op, c, a.optLong("expected_revision"),
+						Map.of("party", a.reqMap("preferences")));
+			}
+			case "HOUSE_RULES" -> {
+				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
+				ToolArgs a = ToolArgs.of("campaign_setup", act, "CORE", params, "rules?, mode?", "rules", "mode");
+				yield engine.sessions().updateHouseRules(op, c, a.optList("rules"), a.optStr("mode"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "annotate_encounter", description = "MUTATING. Fill a handful of the ended fight's engine-selected highlight narration slots (up to eight, about 300 characters each). narrations maps the offered log_id to the DM's words. Updates the existing encounter digest and ledger entry; never repeats XP, loot or combat. GM context may contain unseen facts: narrate only what belongs in the player account.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse annotateEncounter(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Ended encounter reference from end_encounter.")
-	String encounter,
-		@ToolArg(description = "Map of engine-selected highlight log_id strings to narration text. At most eight entries, about 300 characters each.")
-		Map<String, String> narrations) {
-		return ToolSupport.run("annotate_encounter",
-				() -> engine.encounters().annotate(operation_id, campaign, encounter, narrations));
+	// ── Character creation draft ───────────────────────────────────────
+
+	@Tool(name = "character_draft", description = "Character creation draft workflow during setup (see get_instructions topic SETUP). Actions: "
+			+ "CREATE (mut) {initial?, player_controlled?}; " + "CHOICES (read) {scope?, character?}; "
+			+ "GENERATE_ABILITIES (mut) {character, method?}; "
+			+ "UPDATE (mut) {character, changes, expected_revision?}; " + "VALIDATE (read) {character}; "
+			+ "COMMIT (mut) {character, expected_revision?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse characterDraft(
+		@ToolArg(description = "CREATE | CHOICES | GENERATE_ABILITIES | UPDATE | VALIDATE | COMMIT")
+		String action, @ToolArg(description = CAMP)
+		String campaign, @ToolArg(description = OP, required = false)
+		String operation_id, @ToolArg(description = PARAMS, required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("character_draft", () -> {
+			String act = ToolArgs.action("character_draft", action,
+					List.of("CREATE", "CHOICES", "GENERATE_ABILITIES", "UPDATE", "VALIDATE", "COMMIT"));
+			String c = ToolArgs.reqCampaign("character_draft", act, campaign);
+			return switch (act) {
+			case "CREATE" -> {
+				String op = ToolArgs.reqOp("character_draft", act, operation_id);
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params, "initial?, player_controlled?",
+						"initial", "player_controlled");
+				yield engine.characters().createDraft(op, c, a.optMap("initial"), a.optBool("player_controlled", true));
+			}
+			case "CHOICES" -> {
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params, "scope?, character?", "scope",
+						"character");
+				yield engine.characters().choices(c, a.optStr("scope", "ALL"), a.optStr("character"));
+			}
+			case "GENERATE_ABILITIES" -> {
+				String op = ToolArgs.reqOp("character_draft", act, operation_id);
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params, "character, method?", "character",
+						"method");
+				yield engine.characters().generateAbilityScores(op, c, a.reqStr("character"), a.optStr("method"));
+			}
+			case "UPDATE" -> {
+				String op = ToolArgs.reqOp("character_draft", act, operation_id);
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params,
+						"character, changes, expected_revision?", "character", "changes", "expected_revision");
+				yield engine.characters().updateDraft(op, c, a.reqStr("character"), a.optLong("expected_revision"),
+						a.reqMap("changes"));
+			}
+			case "VALIDATE" -> {
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params, "character", "character");
+				yield engine.characters().validateDraft(c, a.reqStr("character"));
+			}
+			case "COMMIT" -> {
+				String op = ToolArgs.reqOp("character_draft", act, operation_id);
+				ToolArgs a = ToolArgs.of("character_draft", act, "SETUP", params, "character, expected_revision?",
+						"character", "expected_revision");
+				yield engine.characters().commitDraft(op, c, a.reqStr("character"), a.optLong("expected_revision"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "recover_ammunition", description = "MUTATING, atomic. Only after the player asks or agrees, spend one minute searching an ended encounter for half the character's recorded fired ammunition, rounded down across all types. "
-			+ "Use an ammunition_recovery offer from end_encounter or get_encounter_state. Requires EXPLORATION, the original party shooter alive and able at the known battle location, and no active encounter. The GM confirms the battlefield is accessible. "
-			+ "Each character may search an encounter once. Omit selection to draw a random half of all fired pieces, weighted by group quantities without replacement. Explicit selection overrides the draw with exactly the recoverable quota of {group, quantity}, using offered group numbers once each. "
-			+ "For candidates marked recover_as: GM, the GM must also choose recover_as: ORIGINAL|MUNDANE|LOST from the item's rules text; LOST counts toward the quota and returns nothing. Standard +N hits return mundane ammunition and misses retain their magic. "
-			+ "Any GM candidate sets selection_required and requires explicit selection; omitted selection is refused before any draw or write. The result reports method RANDOM|EXPLICIT. Retrying the operation replays its result, never rerolls. "
-			+ "Offers are optional and create no pending choice. Never recover automatically or grant replacement ammunition by hand.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse recoverAmmunition(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Ended encounter reference (encounter:N), required")
-	String encounter, @ToolArg(description = "Original party shooter's character reference (character:N), required")
-	String character,
-		@ToolArg(description = "Optional exact-quota override: [{group: offered number, quantity: n, recover_as: ORIGINAL|MUNDANE|LOST only for GM candidates}]. Omit for a random half weighted by piece counts without replacement; explicit selection is required if any candidate has GM policy")
-		Optional<List<Map<String, Object>>> selection) {
-		return ToolSupport.run("recover_ammunition", () -> engine.encounters().recoverAmmunition(operation_id, campaign,
-				encounter, character, selection.orElse(null)));
+	// ── Level-up progression ───────────────────────────────────────────
+
+	@Tool(name = "level_up", description = "Transactional character level-up and companion class promotion (see get_instructions topic CHARACTERS). Actions: "
+			+ "BEGIN (mut) {character}; " + "CHOICES (read) {transaction?}; "
+			+ "UPDATE (mut) {choices, transaction?, expected_revision?}; " + "VALIDATE (read) {transaction?}; "
+			+ "COMMIT (mut) {transaction?, expected_revision?}; "
+			+ "ABANDON (mut) {transaction?, reason?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse levelUp(@ToolArg(description = "BEGIN | CHOICES | UPDATE | VALIDATE | COMMIT | ABANDON")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP, required = false)
+	String operation_id, @ToolArg(description = PARAMS, required = false)
+	Map<String, Object> params) {
+		return ToolSupport.run("level_up", () -> {
+			String act = ToolArgs.action("level_up", action,
+					List.of("BEGIN", "CHOICES", "UPDATE", "VALIDATE", "COMMIT", "ABANDON"));
+			String c = ToolArgs.reqCampaign("level_up", act, campaign);
+			return switch (act) {
+			case "BEGIN" -> {
+				String op = ToolArgs.reqOp("level_up", act, operation_id);
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params, "character", "character");
+				yield engine.levelUps().begin(op, c, a.reqStr("character"));
+			}
+			case "CHOICES" -> {
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params, "transaction?", "transaction");
+				yield engine.levelUps().choices(c, a.optStr("transaction"));
+			}
+			case "UPDATE" -> {
+				String op = ToolArgs.reqOp("level_up", act, operation_id);
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params,
+						"choices, transaction?, expected_revision?", "choices", "transaction", "expected_revision");
+				yield engine.levelUps().update(op, c, a.optStr("transaction"), a.optLong("expected_revision"),
+						a.reqMap("choices"));
+			}
+			case "VALIDATE" -> {
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params, "transaction?", "transaction");
+				yield engine.levelUps().validate(c, a.optStr("transaction"));
+			}
+			case "COMMIT" -> {
+				String op = ToolArgs.reqOp("level_up", act, operation_id);
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params, "transaction?, expected_revision?",
+						"transaction", "expected_revision");
+				yield engine.levelUps().commit(op, c, a.optStr("transaction"), a.optLong("expected_revision"));
+			}
+			case "ABANDON" -> {
+				String op = ToolArgs.reqOp("level_up", act, operation_id);
+				ToolArgs a = ToolArgs.of("level_up", act, "CHARACTERS", params, "transaction?, reason?", "transaction",
+						"reason");
+				yield engine.levelUps().abandon(op, c, a.optStr("transaction"), a.optStr("reason"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "apply_runtime_change", description = "MUTATING. A named, rules-aware change outside the attack loop. change.kind: HEAL {amount}; USE_ITEM {item, target} (drink a potion out of combat: a Potion of Healing of any potency heals by its dice and is consumed); DAMAGE {amount | dice, damage_type} (dice such as \"2d6\" for a fall or \"3d8\" for a creature ending its turn in Spirit Guardians are rolled and journaled by the server); "
-			+ "SET_TEMP_HP {amount}; ADD_CONDITION / REMOVE_CONDITION {condition: BLINDED|CHARMED|…|PRONE|UNCONSCIOUS, duration: minutes, '3 rounds', '1 minute', '1 hour', 'long rest', 'start of turn', or {rounds|minutes|hours|until}}; STABILIZE; STAND (outside combat: timed half-speed movement; in combat use perform_encounter_action STAND); USE_RESOURCE / RESTORE_RESOURCE {resource, amount} (spell slots too: resource 'spell_slot:<level>' or 'pact_slot', for a readied or narrated cast) "
-			+ "'Start of turn' requires an active encounter and expires at the recipient's next turn or encounter end. "
-			+ "ADD_CONDITION also takes source (a character ref): the grappler of a GRAPPLED creature or the source of a FRIGHTENED creature's fear, which the attack rules read; a creature immune to the condition (Petrified to Poisoned, a stat block's immunities) reports immune instead. "
-			+ "EXHAUSTION accumulates one level per ADD_CONDITION and ignores duration; REMOVE_CONDITION removes one level (like a Long Rest or Greater Restoration) unless {levels: N} says how many. "
-			+ "Round durations outlive the encounter: at its end the remaining rounds become game minutes (6 s per round, rounded up). A revived Unconscious creature remains Prone. "
-			+ "(the sheet's resources block lists the refs); CREATE_SPELL_SLOT {slot_level} (a sorcerer's Font of Magic, Bonus Action) / CONVERT_SPELL_SLOT {slot_level} (slot to points, no action); "
-			+ "ADJUST_MAX_HP {amount: signed, until: LONG_REST (default) | RESTORED, or minutes: n} (a Life Drain's -16, Aid's +5: an effect on the hit point maximum; "
-			+ "a reduction clamps current HP and a maximum of 0 kills); RESTORE_MAX_HP (lifts every reduction). Plus reason. "
-			+ "Death rules apply to DAMAGE (dropping to 0, death-save failures, massive damage). Not a free-form mutation.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse applyRuntimeChange(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character, @ToolArg(description = "The change object; see description")
-	Map<String, Object> change) {
-		return ToolSupport.run("apply_runtime_change",
-				() -> engine.runtime().applyRuntimeChange(operation_id, campaign, character, change));
+	// ── Characters, party, runtime changes, tactical control ───────────
+
+	@Tool(name = "character", description = "Party sheets, NPC materialization, narrative updates, out-of-combat runtime changes, XP and control (see get_instructions topic CHARACTERS). Actions: "
+			+ "SHEET (read) {character, detail?: SUMMARY|PLAY|FULL}; "
+			+ "PARTY (read, always available) {detail?: SUMMARY|PLAY|FULL}; "
+			+ "UPDATE (mut, narrative/biography/wants/intimacy) {character, changes, expected_revision?}; "
+			+ "MATERIALIZE (mut, stat block -> character:N) {source, name?, description?, personality?, alignment?, location?, roll_hp?}; "
+			+ "RUNTIME_CHANGE (mut, HEAL|USE_ITEM|DAMAGE|SET_TEMP_HP|ADD_CONDITION|REMOVE_CONDITION|STABILIZE|STAND|USE_RESOURCE|RESTORE_RESOURCE|CREATE_SPELL_SLOT|CONVERT_SPELL_SLOT|ADJUST_MAX_HP|RESTORE_MAX_HP) {character, change}; "
+			+ "AWARD_XP (mut) {amount, reason, characters?, source?}; "
+			+ "MEMBERSHIP (mut) {character, change: JOIN|LEAVE|DISMISS|SEPARATE|REJOIN|GUEST_ADD|GUEST_REMOVE, reason?}; "
+			+ "TACTICAL_CONTROL (mut) {controller: DM|PLAYER, characters?, scope?: ENCOUNTER|UNTIL_RELEASED, encounter?, reason?}; "
+			+ "TRANSFER_CONTROL (mut) {to, reason?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse character(
+		@ToolArg(description = "SHEET | PARTY | UPDATE | MATERIALIZE | RUNTIME_CHANGE | AWARD_XP | MEMBERSHIP | TACTICAL_CONTROL | TRANSFER_CONTROL")
+		String action, @ToolArg(description = CAMP)
+		String campaign, @ToolArg(description = OP, required = false)
+		String operation_id, @ToolArg(description = PARAMS, required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("character", () -> {
+			String act = ToolArgs.action("character", action, List.of("SHEET", "PARTY", "UPDATE", "MATERIALIZE",
+					"RUNTIME_CHANGE", "AWARD_XP", "MEMBERSHIP", "TACTICAL_CONTROL", "TRANSFER_CONTROL"));
+			String c = ToolArgs.reqCampaign("character", act, campaign);
+			return switch (act) {
+			case "SHEET" -> {
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params, "character, detail?", "character",
+						"detail");
+				yield engine.characters().characterSheet(c, a.reqStr("character"), a.optStr("detail", "PLAY"));
+			}
+			case "PARTY" -> {
+				ToolArgs a = ToolArgs.of("character", act, "CORE", params, "detail?", "detail");
+				yield engine.sessions().party(c, a.optStr("detail", "PLAY"));
+			}
+			case "UPDATE" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params,
+						"character, changes, expected_revision?", "character", "changes", "expected_revision");
+				yield engine.characters().updateCharacter(op, c, a.reqStr("character"), a.optLong("expected_revision"),
+						a.reqMap("changes"));
+			}
+			case "MATERIALIZE" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params,
+						"source, name?, description?, personality?, alignment?, location?, roll_hp?", "source", "name",
+						"description", "personality", "alignment", "location", "roll_hp");
+				yield engine.runtime().materialize(op, c, a.reqStr("source"), a.optStr("name"), a.optStr("description"),
+						a.optStr("personality"), a.optStr("alignment"), a.optStr("location"),
+						a.optBool("roll_hp", false));
+			}
+			case "RUNTIME_CHANGE" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params, "character, change", "character",
+						"change");
+				yield engine.runtime().applyRuntimeChange(op, c, a.reqStr("character"), a.reqMap("change"));
+			}
+			case "AWARD_XP" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params, "amount, reason, characters?, source?",
+						"amount", "reason", "characters", "source");
+				yield engine.runtime().awardXp(op, c, a.optStringList("characters"), a.reqInt("amount"),
+						a.optStr("source"), a.reqStr("reason"));
+			}
+			case "MEMBERSHIP" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CHARACTERS", params, "character, change, reason?",
+						"character", "change", "reason");
+				yield engine.party().updateMembership(op, c, a.reqStr("character"), a.reqStr("change"),
+						a.optStr("reason"));
+			}
+			case "TACTICAL_CONTROL" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CORE", params,
+						"controller, characters?, scope?, encounter?, reason?", "controller", "characters", "scope",
+						"encounter", "reason");
+				yield engine.tacticalControl().set(op, c, a.optStringList("characters"), a.reqStr("controller"),
+						a.optStr("scope"), a.optStr("encounter"), a.optStr("reason"));
+			}
+			case "TRANSFER_CONTROL" -> {
+				String op = ToolArgs.reqOp("character", act, operation_id);
+				ToolArgs a = ToolArgs.of("character", act, "CORE", params, "to, reason?", "to", "reason");
+				yield engine.runtime().transferControl(op, c, a.reqStr("to"), a.optStr("reason"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "award_xp", description = "MUTATING. Awards XP from an explicit source (QUEST, MILESTONE, ROLEPLAY, EXPLORATION, CLEVER_SOLUTION, DISCRETIONARY) with a reason. "
-			+ "Leave `characters` out and the award follows the campaign's rules.xp_policy — normally the whole party; that is the right call for quests, discoveries and clever solutions. "
-			+ "Encounter XP is awarded automatically by end_encounter — do not duplicate it. DISCRETIONARY awards are audited and refused when GM overrides are disabled. "
-			+ "Companions that reach a new level are advanced or flagged according to rules.companion_level_up; check companion_level_ups and companions_awaiting_level_up in the response.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse awardXp(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign,
-		@ToolArg(description = "Character references; omit to follow the campaign's xp_policy", required = false)
-		List<String> characters, @ToolArg(description = "XP per character")
-		int amount, @ToolArg(description = "Source")
-		Optional<String> source, @ToolArg(description = "Why")
-		String reason) {
-		return ToolSupport.run("award_xp", () -> engine.runtime().awardXp(operation_id, campaign, characters, amount,
-				source.orElse(null), reason));
+	// ── Server dice & checks ───────────────────────────────────────────
+
+	@Tool(name = "roll_check", description = "Authoritative server dice and checks (mutating/journaled; never supply die results). Actions: "
+			+ "CHECK {actor, kind: ABILITY_CHECK|SKILL_CHECK|SAVING_THROW, ability?, skill?, tool?, difficulty?, advantage?: NONE|ADVANTAGE|DISADVANTAGE, reason?}; "
+			+ "DICE {expression (e.g. '2d6+3', '4d6dl1'), actor?, reason?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse rollCheck(@ToolArg(description = "CHECK | DICE")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP)
+	String operation_id, @ToolArg(description = PARAMS)
+	Map<String, Object> params) {
+		return ToolSupport.run("roll_check", () -> {
+			String act = ToolArgs.action("roll_check", action, List.of("CHECK", "DICE"));
+			String c = ToolArgs.reqCampaign("roll_check", act, campaign);
+			String op = ToolArgs.reqOp("roll_check", act, operation_id);
+			return switch (act) {
+			case "CHECK" -> {
+				ToolArgs a = ToolArgs.of("roll_check", act, "CORE", params,
+						"actor, kind, ability?, skill?, tool?, difficulty?, advantage?, reason?", "actor", "kind",
+						"ability", "skill", "tool", "difficulty", "advantage", "reason");
+				yield engine.checks().resolveCheck(op, c, a.reqStr("actor"), a.reqStr("kind"), a.optStr("ability"),
+						a.optStr("skill"), a.optStr("tool"), a.optInt("difficulty"), a.optStr("advantage"),
+						a.optStr("reason"));
+			}
+			case "DICE" -> {
+				ToolArgs a = ToolArgs.of("roll_check", act, "CORE", params, "expression, actor?, reason?", "expression",
+						"actor", "reason");
+				yield engine.checks().rollDice(op, c, a.reqStr("expression"), a.optStr("actor"), a.optStr("reason"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "set_tactical_control", description = "MUTATING. Save who chooses companions' movements, actions and reactions. DM is the default; PLAYER explicitly requests detailed tactical control. "
-			+ "A broad order such as 'Mira, cover the stairs' does not require this tool. Omit characters for all companions, including future joined companions. "
-			+ "scope ENCOUNTER lasts for the current fight; UNTIL_RELEASED is persistent. Default scope is ENCOUNTER during a fight, otherwise UNTIL_RELEASED. "
-			+ "Use controller DM to hand control back. Existing pending choices remain pending. Never changes the primary player character or companions' narrative agency.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse setTacticalControl(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "DM or PLAYER")
-	String controller, @ToolArg(description = "Selected companion character references; omitted means all companions")
-	Optional<List<String>> characters,
-		@ToolArg(description = "ENCOUNTER or UNTIL_RELEASED; default follows current play state")
-		Optional<String> scope, @ToolArg(description = "Running encounter reference; default is the current encounter")
-		Optional<String> encounter, @ToolArg(description = "Player's request or reason for handing control back")
-		Optional<String> reason) {
-		return ToolSupport.run("set_tactical_control", () -> engine.tacticalControl().set(operation_id, campaign,
-				characters.orElse(null), controller, scope.orElse(null), encounter.orElse(null), reason.orElse(null)));
+	// ── Encounters & combat ────────────────────────────────────────────
+
+	@Tool(name = "encounter", description = "Tactical grid encounters, turn resolution, reactions and post-combat digests (see get_instructions topic COMBAT). Actions: "
+			+ "START (mut) {sides, stances?, zones?, environment?, objectives?, location?, options?}; "
+			+ "STATE (read) {encounter?, log_limit?, audience?: PLAYER|GM}; "
+			+ "ACTION (mut) {actor, action: {kind: ATTACK|CAST|DODGE|DASH|MOVE|STAND|DISENGAGE|HELP|USE_ITEM|INTERACT|OTHER_RULES_ACTION|END_TURN, ...}, encounter?, end_turn?}; "
+			+ "RESOLVE_CHOICE (mut) {transaction, choice: {option: TAKE|DECLINE|CAST_SHIELD, weapon?, nonlethal?}}; "
+			+ "END (mut) {outcome: PARTY_VICTORY|PARTY_DEFEAT|PARTY_FLED|ENEMIES_FLED|NEGOTIATED|OTHER, encounter?, summary?, narrative?}; "
+			+ "ANNOTATE (mut) {encounter, narrations}; " + "ADD_PARTICIPANTS (mut) {encounter, sides}; "
+			+ "RECOVER_AMMO (mut) {encounter, character, selection?}; "
+			+ "CONVERT_TO_GRID (mut) {encounter, options?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse encounter(
+		@ToolArg(description = "START | STATE | ACTION | RESOLVE_CHOICE | END | ANNOTATE | ADD_PARTICIPANTS | RECOVER_AMMO | CONVERT_TO_GRID")
+		String action, @ToolArg(description = CAMP)
+		String campaign, @ToolArg(description = OP, required = false)
+		String operation_id, @ToolArg(description = PARAMS, required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("encounter", () -> {
+			String act = ToolArgs.action("encounter", action, List.of("START", "STATE", "ACTION", "RESOLVE_CHOICE",
+					"END", "ANNOTATE", "ADD_PARTICIPANTS", "RECOVER_AMMO", "CONVERT_TO_GRID"));
+			String c = ToolArgs.reqCampaign("encounter", act, campaign);
+			return switch (act) {
+			case "START" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params,
+						"sides, stances?, zones?, environment?, objectives?, location?, options?", "sides", "stances",
+						"zones", "environment", "objectives", "location", "options");
+				yield engine.encounters().start(op, c, a.reqMap("sides"), a.optMap("stances"), a.optMap("zones"),
+						a.optStr("environment"), a.optStringList("objectives"), a.optStr("location"),
+						a.optMap("options"));
+			}
+			case "STATE" -> {
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "encounter?, log_limit?, audience?",
+						"encounter", "log_limit", "audience");
+				yield engine.encounters().encounterState(c, a.optStr("encounter"), a.optInt("log_limit", 10),
+						a.optStr("audience", "PLAYER"));
+			}
+			case "ACTION" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "actor, action, encounter?, end_turn?",
+						"actor", "action", "encounter", "end_turn");
+				yield engine.encounters().perform(op, c, a.optStr("encounter"), a.reqStr("actor"), a.reqMap("action"),
+						a.optBool("end_turn"));
+			}
+			case "RESOLVE_CHOICE" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "transaction, choice", "transaction",
+						"choice");
+				yield engine.encounters().resolveChoice(op, c, a.reqStr("transaction"), a.reqMap("choice"));
+			}
+			case "END" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params,
+						"outcome, encounter?, summary?, narrative?", "outcome", "encounter", "summary", "narrative");
+				var result = new LinkedHashMap<>(engine.encounters().end(op, c, a.optStr("encounter"),
+						a.reqStr("outcome"), a.optStr("summary"), a.optStr("narrative")));
+				result.remove("record");
+				var digest = LedgerService.boundedRecallDigest(
+						EncounterDigest.compactPublic(SceneService.map(result.get("party_digest"))));
+				result.put("party_digest", digest);
+				result.put("party_digest_bytes", LedgerService.serializedBytes(digest));
+				result.put("party_digest_max_bytes", LedgerService.ENCOUNTER_DIGEST_MAX_BYTES);
+				result.put("full_gm_record",
+						Map.of("tool", "encounter", "arguments",
+								Map.of("action", "STATE", "campaign", c, "params",
+										Map.of("encounter", result.get("encounter"), "audience", "GM")),
+								"field", "record"));
+				yield result;
+			}
+			case "ANNOTATE" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "encounter, narrations", "encounter",
+						"narrations");
+				yield engine.encounters().annotate(op, c, a.reqStr("encounter"), a.reqStringMap("narrations"));
+			}
+			case "ADD_PARTICIPANTS" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "encounter, sides", "encounter", "sides");
+				yield engine.encounters().addParticipants(op, c, a.reqStr("encounter"), a.reqStringListMap("sides"));
+			}
+			case "RECOVER_AMMO" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "encounter, character, selection?",
+						"encounter", "character", "selection");
+				yield engine.encounters().recoverAmmunition(op, c, a.reqStr("encounter"), a.reqStr("character"),
+						a.optMapList("selection"));
+			}
+			case "CONVERT_TO_GRID" -> {
+				String op = ToolArgs.reqOp("encounter", act, operation_id);
+				ToolArgs a = ToolArgs.of("encounter", act, "COMBAT", params, "encounter, options?", "encounter",
+						"options");
+				yield engine.encounters().convertToGrid(op, c, a.reqStr("encounter"), a.optMapOrEmpty("options"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "transfer_player_control", description = "MUTATING. Makes a living party member the player character (IRONMAN death, or a voluntary switch). "
-			+ "The character keeps its identity, relationships, memories and items; only the control assignment changes.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse transferPlayerControl(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference to take control of")
-	String to, @ToolArg(description = "Why")
-	Optional<String> reason) {
-		return ToolSupport.run("transfer_player_control",
-				() -> engine.runtime().transferControl(operation_id, campaign, to, reason.orElse(null)));
-	}
-
-	@Tool(name = "get_party", description = "The party in detail — ALWAYS available, in every state (setup, exploration, mid-encounter, after a death): "
-			+ "every current member's sheet (HP, conditions, death saves, AC, abilities, inventory, money, XP), who the player controls, former/fallen members, "
-			+ "location, game time and any running encounter. When the controlled character travels the party location is JOURNEY; each saved mover has location_context for that journey, location:null and departure_location as provenance. Party location and with_party follow the controlled character, including companion-only trips. "
-			+ "Use it (with get_character_sheet FULL) whenever the player asks how they or their companions are doing. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getParty(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "SUMMARY, PLAY (default) or FULL per member")
-	Optional<String> detail) {
-		return ToolSupport.run("get_party", () -> engine.sessions().party(campaign, detail.orElse("PLAY")));
-	}
-	// ── Progression ────────────────────────────────────────────────────
-
-	@Tool(name = "begin_level_up", description = "MUTATING. Opens a level-up transaction for a character whose XP reaches the next level (one level at a time). "
-			+ "Nothing changes on the live character until commit_level_up. Hit points are fixed at begin by campaign rules.hp_progression "
-			+ "(rolled openly when the policy calls for it; abandoning and restarting retains the original hit die); the remaining choice arrives at ASI levels: "
-			+ "the Ability Score Improvement. A companion recruited as a stat block has no class: their first level-up is the class choice itself (choices.class), "
-			+ "which replaces the stat block's hit points with the class's own and grants its saving throws. "
-			+ "The harness enters LEVEL_UP until commit or abandon_transaction.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse beginLevelUp(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character) {
-		return ToolSupport.run("begin_level_up", () -> engine.levelUps().begin(operation_id, campaign, character));
-	}
-
-	@Tool(name = "get_level_up_choices", description = "Legal remaining level-up choices, what was chosen so far, automatic changes and a before/after preview. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getLevelUpChoices(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Transaction reference (default: the open level-up)")
-	Optional<String> transaction) {
-		return ToolSupport.run("get_level_up_choices",
-				() -> engine.levelUps().choices(campaign, transaction.orElse(null)));
-	}
-
-	@Tool(name = "update_level_up", description = "MUTATING (transaction only). Records choices (hit points are fixed by campaign rules.hp_progression and are not a choice): "
-			+ "{\"ability_score_improvement\": {\"CHA\": 2}} or {\"DEX\": 1, \"CON\": 1}. A companion's promotion also takes class, skills, species, background and their follow-ups; "
-			+ "feat_choices is one object naming the feat or a list of them (a Human Sage owes both Skilled and Magic Initiate their choices), and a feat left with "
-			+ "pending choices can be completed at any later level-up. The live character is untouched.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateLevelUp(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Choices object")
-	Map<String, Object> choices, @ToolArg(description = "Transaction reference (default: the open level-up)")
-	Optional<String> transaction, @ToolArg(description = "Transaction revision you last read")
-	Optional<Long> expected_revision) {
-		return ToolSupport.run("update_level_up", () -> engine.levelUps().update(operation_id, campaign,
-				transaction.orElse(null), expected_revision.orElse(null), choices));
-	}
-
-	@Tool(name = "validate_level_up", description = "Violations and a complete before/after preview of the pending level-up. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse validateLevelUp(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Transaction reference (default: the open level-up)")
-	Optional<String> transaction) {
-		return ToolSupport.run("validate_level_up",
-				() -> engine.levelUps().validate(campaign, transaction.orElse(null)));
-	}
-
-	@Tool(name = "commit_level_up", description = "MUTATING, atomic. Validates and applies the level-up (level, HP maximum and current, ability scores), writes the "
-			+ "LEVEL_UP ledger event and returns the harness to EXPLORATION.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse commitLevelUp(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Transaction reference (default: the open level-up)")
-	Optional<String> transaction, @ToolArg(description = "Transaction revision you last read")
-	Optional<Long> expected_revision) {
-		return ToolSupport.run("commit_level_up", () -> engine.levelUps().commit(operation_id, campaign,
-				transaction.orElse(null), expected_revision.orElse(null)));
-	}
-
-	@Tool(name = "abandon_transaction", description = "MUTATING. Discards an open pending transaction (e.g. a level-up); canonical state is unchanged.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse abandonTransaction(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Transaction reference (default: the open transaction)")
-	Optional<String> transaction, @ToolArg(description = "Why")
-	Optional<String> reason) {
-		return ToolSupport.run("abandon_transaction",
-				() -> engine.levelUps().abandon(operation_id, campaign, transaction.orElse(null), reason.orElse(null)));
-	}
-
-	// ── Party and relationships ────────────────────────────────────────
-
-	@Tool(name = "update_party_membership", description = "MUTATING. One typed membership change for a character: JOIN, LEAVE, DISMISS, SEPARATE (temporary), REJOIN, "
-			+ "GUEST_ADD, GUEST_REMOVE. Validated against the current membership state, recorded as a ledger event the membership row references. "
-			+ "The player character cannot leave (transfer_player_control first). Membership is state, never identity.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updatePartyMembership(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character reference")
-	String character, @ToolArg(description = "JOIN | LEAVE | DISMISS | SEPARATE | REJOIN | GUEST_ADD | GUEST_REMOVE")
-	String change, @ToolArg(description = "Why (goes into the ledger event)")
-	Optional<String> reason) {
-		return ToolSupport.run("update_party_membership",
-				() -> engine.party().updateMembership(operation_id, campaign, character, change, reason.orElse(null)));
-	}
-
-	@Tool(name = "get_relationship", description = "Both directions of a relationship between two characters: compact summary, dimensions (-5..+5 with labels) and the "
-			+ "significant ledger events that shaped it, with their summaries and episodic detail — this is how you recall \"do you remember when I proposed?\". Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getRelationship(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "First character reference")
-	String a, @ToolArg(description = "Second character reference")
-	String b) {
-		return ToolSupport.run("get_relationship", () -> engine.party().relationship(campaign, a, b));
-	}
-
-	@Tool(name = "update_relationship", description = "MUTATING (upsert). Records a meaningful relationship development from `from` towards `to`: dimensions "
-			+ "({\"trust\": \"+1\", \"affection\": 3} — strings with a sign are deltas, numbers are absolute; affection, trust, respect, attraction, fear, resentment, loyalty; -5..+5), "
-			+ "a concise current summary, and a cause: cause_event (event:N whose participants include both — the event is linked as a significant memory) or a reason. "
-			+ "mutual=true applies the same change in both directions. "
-			+ "profile carries what drives a story: {milestones: [{kind: WEDDING|PROPOSAL|FIRST_NIGHT|PREGNANCY|PARTING|OATH|…, game_time (stamped now when omitted), note}], "
-			+ "terms: [standing agreements between the two], preferences: {likes: [], dislikes: [], limits: []} (intimate detail only under PEGI_18), wants: [], hard_lines: []}; "
-			+ "profile_mode MERGE (default: nothing stored is lost; lists append without duplicates and maps merge key by key at every depth, null removes the key it sits under) or REPLACE (starts over). Never converts a Director seed into a predetermined outcome.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateRelationship(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Character whose feelings change")
-	String from, @ToolArg(description = "Character the feelings are about")
-	String to, @ToolArg(description = "Dimension changes", required = false)
-	Map<String, Object> dimensions, @ToolArg(description = "Concise current summary of how `from` relates to `to` now")
-	Optional<String> summary, @ToolArg(description = "Ledger event reference that caused/embodies this development")
-	Optional<String> cause_event, @ToolArg(description = "Reason when no event is linked")
-	Optional<String> reason, @ToolArg(description = "Apply in both directions (default false)")
-	Optional<Boolean> mutual, @ToolArg(description = "GM (default) or DIRECTOR")
-	Optional<String> provenance,
-		@ToolArg(description = "Relationship profile: milestones, terms, preferences, wants, hard_lines; see description", required = false)
-		Map<String, Object> profile, @ToolArg(description = "MERGE (default) or REPLACE the stored profile")
-		Optional<String> profile_mode) {
-		return ToolSupport.run("update_relationship",
-				() -> engine.party().updateRelationship(operation_id, campaign, from, to, dimensions,
-						summary.orElse(null), cause_event.orElse(null), reason.orElse(null), mutual.orElse(false),
-						provenance.orElse(null), profile, profile_mode.orElse(null)));
-	}
-
-	@Tool(name = "update_house_rules", description = "MUTATING. The table's standing rulings, shown to every client at bootstrap (campaign.house_rules): "
-			+ "\"no firearms in this world\", \"the never-kill rule does not cover monsters\", \"probationers are asked daily\". "
-			+ "rules is a list of short strings; mode ADD (default), REMOVE or REPLACE. Audited as a HOUSE_RULE ledger event.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse updateHouseRules(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Rules, short strings", required = false)
-	List<Object> rules, @ToolArg(description = "ADD (default), REMOVE or REPLACE")
-	Optional<String> mode) {
-		return ToolSupport.run("update_house_rules",
-				() -> engine.sessions().updateHouseRules(operation_id, campaign, rules, mode.orElse(null)));
-	}
-	// ── World ──────────────────────────────────────────────────────────
-
-	@Tool(name = "materialize_location", description = "MUTATING. Generates and persists detail for a place, once, so it stays the same next year: pass an existing "
-			+ "location reference (a semantic node) and/or a spec {name, kind: REGION|SETTLEMENT|DISTRICT|SITE|BUILDING|AREA, parent, description, tags, "
-			+ "features: [{name, description, visibility}], secrets: [{name, description}] (GM_ONLY), children: [{name or ref, kind, description, tags, connection, connection_kind}], "
-			+ "connections: [{to: 'location:N' or {name or ref, kind, parent}, kind: ROAD|PATH|RIVER|STREET|DOOR|PASSAGE…, travel_minutes, distance_miles, state: OPEN|LOCKED|BLOCKED|SECRET, visibility}]}. "
-			+ "Committed features cannot be redefined (extend=true adds more). Dungeons are AREA children joined by DOOR/PASSAGE connections. "
-			+ "Nested places reuse a unique same-name location in the same campaign and parent (ignoring case and surrounding whitespace); supplied details must agree. "
-			+ "Use a ref to select among duplicate sibling names, and materialize a child by its ref to add detail. new_children lists only newly created children. "
-			+ "Child connections default to PASSAGE and 5 travel minutes; re-declaration preserves known edge details, and connection=false never removes an edge. "
-			+ "For an existing undirected connection, only supplied non-null kind/state/visibility/travel_minutes/distance_miles fields update; omitted or null fields retain committed values. "
-			+ "New connections default to PATH, OPEN, PARTY_KNOWN visibility and 60 travel minutes.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse materializeLocation(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign,
-		@ToolArg(description = "Existing location reference to materialize (omit to create a new place from spec)")
-		Optional<String> location, @ToolArg(description = "Location spec; see description", required = false)
-		Map<String, Object> spec) {
-		return ToolSupport.run("materialize_location",
-				() -> engine.world().materialize(operation_id, campaign, location.orElse(null), spec, "GM"));
-	}
-
-	@Tool(name = "move_party", description = "MUTATING. Moves the party (or named characters) to a location over known traversable connections, advancing the clock by "
-			+ "the route's travel time; with no known route, pass authorized_route=true with a reason and travel_minutes (the route is then remembered). "
-			+ "Without `characters`, whoever stands where the party stands travels (active members and guests); members and guests elsewhere stay and are listed in "
-			+ "`left_behind`; separated members do not join a default departure. Explicit characters must be current party members/guests or actively player-controlled; unrelated NPCs cannot create a party journey. A new trip starts from the selected travellers' shared actual location, allowing an elsewhere companion to rejoin the player; mixed origins are refused. "
-			+ "Interrupted journeys retain progress and risk checks. Dead or departed travellers are removed with reasons. "
-			+ "Resume the saved destination with explicit characters to narrow its saved roster and deliberately leave someone behind; this cannot add new travellers. Alive incapacitated movers still require healing/recovery or explicit omission. "
-			+ "Returns the arrival/contact view, elapsed time, roster changes and a Director trigger for long journeys.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse moveParty(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Destination location reference")
-	String to,
-		@ToolArg(description = "Optional current party member/guest or active player-controlled references sharing one actual departure location for a new trip. Unrelated NPCs are refused before travel. On an interrupted journey, may only narrow the saved movers; omitted characters are explicitly left behind at their current contact/anchor.")
-		Optional<List<String>> characters,
-		@ToolArg(description = "Allow a route with no known connection (requires reason)")
-		Optional<Boolean> authorized_route, @ToolArg(description = "Override the travel time in minutes")
-		Optional<Integer> travel_minutes, @ToolArg(description = "Why / how they travel")
-		Optional<String> reason) {
-		return ToolSupport.run("move_party",
-				() -> engine.world().move(operation_id, campaign, to, characters.orElse(null),
-						authorized_route.orElse(false), travel_minutes.orElse(null), reason.orElse(null)));
-	}
-
-	// ── Narrative state and the Director ───────────────────────────────
-
-	@Tool(name = "upsert_narrative_state", description = "MUTATING. Creates or updates one bounded narrative aggregate. Completing a QUEST returns `treasure`: level-appropriate magic item suggestions to grant with grant_loot (a completed quest usually yields one). kind: QUEST {title, objective, status: OFFERED|ACCEPTED|COMPLETED|FAILED|ABANDONED, "
-			+ "issuer, rewards, deadline, hidden_objectives, visibility}; STORY_BEAT {title, description, gm_brief: optional string (null clears), state: PLANNED|AVAILABLE|BLOCKED|SUPERSEDED|COMPLETED|ABANDONED, superseded_by, visibility, "
-			+ "location, actors/intentions, conditions, clues, approaches, consequences, if_ignored}; publish actionable GM_ONLY opportunities, mark AVAILABLE only when usable, interpret conditions manually and leave player approaches open; "
-			+ "STORY_SEED {seed_kind: STORY_SEED|COMPANION_INTRO|PRESSURE|PACING_INTENT, intention, hooks, conditions, state, superseded_by, materialized_character}; "
-			+ "FACTION_STATE {name, goals, standing, agenda, members, secrets}; WORLD_EVENT {title, description, channels: [NEWSPAPER, RUMOR, TAVERN, TOWN_CRIER, REFUGEES, MERCHANT, PRICES, SOLDIERS, LETTER, WITNESS, ENVIRONMENT…], "
-			+ "locations: [location:N], affected, game_time, visibility}; LOCATION_DETAIL {description, tags, features} (existing location ref); NPC_AGENDA {goals, fears, secrets, current_plan} (character ref). "
-			+ "WORLD_EVENT updates preserve omitted/null locations and affected groups; [] clears that group. Location refs in affected add to the location scope. "
-			+ "Pass ref to update. Status/state transitions write ledger events. Fields that would force a player choice or relationship outcome are rejected.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse upsertNarrativeState(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Aggregate kind")
-	String kind, @ToolArg(description = "Fields; see description")
-	Map<String, Object> changes,
-		@ToolArg(description = "Existing reference to update (quest:N, story_beat:N, seed:N, faction:N, world_event:N, location:N, character:N)")
-		Optional<String> ref, @ToolArg(description = "GM (default), DIRECTOR or MECHANICAL_CONSEQUENCE")
-		Optional<String> provenance) {
-		return ToolSupport.run("upsert_narrative_state", () -> engine.narrative().upsert(operation_id, campaign, kind,
-				ref.orElse(null), changes, provenance.orElse(null)));
-	}
-
-	@Tool(name = "get_diegetic_information", description = "What the world can tell the player right now through a fictional channel (NEWSPAPER, RUMOR, TAVERN, TOWN_CRIER, "
-			+ "REFUGEES, MERCHANT, PRICES, SOLDIERS, LETTER, WITNESS, ENVIRONMENT, or ANY) at a location: committed world events that have already happened and touch this place "
-			+ "(or the whole world). Asking never creates a fact. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getDiegeticInformation(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Channel (default ANY)")
-	Optional<String> channel, @ToolArg(description = "Location reference (default: current location)")
-	Optional<String> location, @ToolArg(description = "Max items (default 10)")
-	Optional<Integer> limit) {
-		return ToolSupport.run("get_diegetic_information", () -> engine.narrative().diegetic(campaign,
-				channel.orElse(null), location.orElse(null), limit.orElse(10)));
-	}
-
-	@Tool(name = "get_director_context", description = "DIRECTOR-ONLY view for the slow narrative loop (invoke at meaningful boundaries, not every turn): premise and background truth, "
-			+ "open seeds and companion intentions, story beats (incl. blocked/invalidated plans), quests, factions, world events, party, relationships, NPC agendas, recent major events, "
-			+ "companion_wants (each present member's personality, INT/WIS/CHA, open wants with stable refs, open intimate wants under PEGI_18, and the wants closed since the last review: a settled want should get a next one proposed in character), "
-			+ "pacing composition and when the last review happened. Publish needed GM_ONLY STORY_BEAT guidance with gm_brief and full opportunity details; keep long-term seeds DIRECTOR_ONLY. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getDirectorContext(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "INITIAL_CAMPAIGN, SESSION_START or CAMPAIGN_REVIEW (default)")
-	Optional<String> scope) {
-		return ToolSupport.run("get_director_context",
-				() -> engine.narrative().directorContext(campaign, scope.orElse(null)));
-	}
-
-	@Tool(name = "commit_director_changes", description = "MUTATING, atomic. Commits a list of typed Director proposals: [{kind: STORY_SEED|PRESSURE|PACING_INTENT|COMPANION_INTRO|STORY_BEAT|QUEST|FACTION_STATE|WORLD_EVENT|LOCATION_DETAIL|NPC_AGENDA, ref?, …fields}]. "
-			+ "Seeds and pressures create possibilities, world events create facts with diegetic channels; nothing may prescribe a player choice or a relationship outcome. "
-			+ "When the GM needs direction, publish GM_ONLY STORY_BEAT proposals with a concise string gm_brief (hook and plausible approaches), location, actors/intentions, conditions, clues, consequences and if_ignored developments. "
-			+ "Mark AVAILABLE only when usable; conditions are interpreted manually. Update or supersede changed opportunities; keep private seeds DIRECTOR_ONLY. "
-			+ "An empty list preserves valid guidance and still records a review. Afterwards refresh get_context SCENE, then relevant STORY_BEAT refs before narrating.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse commitDirectorChanges(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Proposals; may be empty", required = false)
-	List<Map<String, Object>> changes, @ToolArg(description = "One-line note on the review's conclusion")
-	Optional<String> review_note) {
-		return ToolSupport.run("commit_director_changes", () -> engine.narrative().commitDirectorChanges(operation_id,
-				campaign, changes, review_note.orElse(null)));
-	}
-
-	@Tool(name = "get_context", description = "Purpose-built context for one scope: SCENE (like bootstrap, read-only), CHARACTER {ref} (full sheet, biography, "
-			+ "relationships with profiles, membership history), RELATIONSHIP {ref, second_ref}, INTIMACY {ref, second_ref optional} (everything needed to play one "
-			+ "person believably in a bed: biography, voice, state, open wants, their own intimate profile and intimate wants, every partner with both directions of the pairwise "
-			+ "profile, the household terms, the intimate ledger events with detail, and the PEGI 18 guidance; below PEGI_18 the romance layer only), "
-			+ "WANT {ref: want:N} returns {want: {full want fields, character: character:N, kind: general|intimate}}, including optional resolved_by, "
-			+ "with private closure-order markers omitted; intimate wants require PEGI_18. STORY_BEAT {ref: story_beat:N} returns {story_beat: full beat fields}, including original gm_brief and opportunity details; "
-			+ "bootstrap/SCENE provide compact gm_brief guidance, with gm_brief_truncated for shortened or omitted text. LOCATION {ref, default current}, QUEST {ref optional}, ENCOUNTER, DIRECTOR {ref: optional location:N for its full Director detail}. "
-			+ "GM scopes exclude DIRECTOR_ONLY material; explicit DIRECTOR retains it. A missing or DIRECTOR_ONLY STORY_BEAT ref returns NOT_FOUND. Other visibility labels apply. Read-only.", annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
-	ToolResponse getContext(@ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Scope")
-	String scope, @ToolArg(description = "Primary reference for the scope")
-	Optional<String> ref, @ToolArg(description = "Second reference (RELATIONSHIP)")
-	Optional<String> second_ref,
-		@ToolArg(description = "Natural-language focus (includes episodic detail for RELATIONSHIP)")
-		Optional<String> focus, @ToolArg(description = "Approximate token budget")
-		Optional<Integer> context_budget) {
-		return ToolSupport.run("get_context", () -> engine.narrative().context(campaign, scope, ref.orElse(null),
-				second_ref.orElse(null), focus.orElse(null), context_budget.orElse(null)));
-	}
-
-	// ── Rest and overrides ─────────────────────────────────────────────
-
-	@Tool(name = "perform_rest", description = "MUTATING. SHORT rest (1 hour; characters may spend Hit Point Dice: hit_dice {\"character:1\": 2} — rolled by the server) or LONG rest "
-			+ "(8 hours; HP to maximum, temporary HP cleared, all spent Hit Point Dice regained, exhaustion −1, other resources recharged). A character needs at least 1 HP to start either rest, "
-			+ "and a LONG rest within 16 hours of finishing the previous one is refused (named characters) or reported skipped (party-wide rest). Each spent Hit Point Die on a SHORT rest regains at least 1 HP. Death saves can interrupt after six seconds; read consequences and remaining_seconds before resuming. The original eligible roster persists, so skipped characters gain no retroactive rest benefits. Advances the clock and records the rest. Not legal mid-encounter.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse performRest(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "SHORT or LONG")
-	String kind, @ToolArg(description = "Hit Point Dice to spend per character on a short rest", required = false)
-	Map<String, Object> hit_dice, @ToolArg(description = "Resting characters (default: the party)")
-	Optional<List<String>> characters) {
-		return ToolSupport.run("perform_rest",
-				() -> engine.rest().rest(operation_id, campaign, kind, hit_dice, characters.orElse(null)));
-	}
-
-	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. The only general exceptional mutation, permitted only when the campaign's gm_override_policy is EXPLICIT_AUDITED. "
-			+ "kind: ADJUST_HP {amount|set_to}, SET_MAX_HP {amount|set_to} (the only way to record a maximum granted outside a level-up: a subclass feature, a boon, a permanent injury), "
-			+ "SET_ARMOR_CLASS {armor_class} or {clear: true} (a fixed AC outside the equipment path — Draconic Resilience, Unarmored Defense; effect bonuses still apply on top), "
-			+ "SET_LIFE_STATE {life_state, hp} (ALIVE ends recovery-linked Unconscious but preserves Prone and independent conditions), SET_MONEY {money}, SET_XP {xp}, SET_ABILITY_SCORE {ability, score}, SET_LOCATION {location, clear_map_position?} (explicit true can release a stale same-place figure outside active participation), "
-			+ "SET_CAMPAIGN_RULE {rule, value} (retunes a committed house rule: hp_progression, xp_policy, companion_level_up, progression, gm_override_policy; no target), "
-			+ "REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE {to, state}. Requires a reason; writes an immutable audit record and a GM_ONLY ledger event; "
-			+ "the result is labeled as an override and must never be narrated as a normal roll.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
-	ToolResponse applyGmOverride(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Override kind")
-	String kind,
-		@ToolArg(description = "Target reference (character:N or location:N); omit for SET_CAMPAIGN_RULE", required = false)
-		String target, @ToolArg(description = "Effect object; see description", required = false)
-		Map<String, Object> effect, @ToolArg(description = "Human-readable reason")
-		String reason, @ToolArg(description = "Target revision you last read")
-		Optional<Long> expected_revision) {
-		return ToolSupport.run("apply_gm_override", () -> engine.rest().override(operation_id, campaign, kind, target,
-				effect, reason, expected_revision.orElse(null)));
-	}
 	// ── Spellcasting ───────────────────────────────────────────────────
 
-	@Tool(name = "prepare_spells", description = "MUTATING. Sets an active caster's known cantrips and/or prepared spells (names or ids), validated against the class "
-			+ "spell list, the level's cantrip and prepared-spell limits and the highest slot level. Class rules govern *when* the list may change (typically after a Long Rest). "
-			+ "During setup use update_character_draft with cantrips/spells instead.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse prepareSpells(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Caster reference")
-	String character, @ToolArg(description = "Cantrips (replaces the current list)")
-	Optional<List<String>> cantrips, @ToolArg(description = "Prepared spells (replaces the current list)")
-	Optional<List<String>> spells) {
-		return ToolSupport.run("prepare_spells",
-				() -> engine.spells().prepare(operation_id, campaign, character,
-						cantrips.map(l -> (List<Object>) (List<?>) l).orElse(null),
-						spells.map(l -> (List<Object>) (List<?>) l).orElse(null)));
+	@Tool(name = "spellcasting", description = "Out-of-combat spell preparation and casting (in combat use encounter:ACTION CAST; see get_instructions topic COMBAT). Actions: "
+			+ "PREPARE (mut) {character, cantrips?, spells?}; "
+			+ "CAST (mut) {caster, spell, slot_level?, targets?, options?: {ritual?, damage_type?, against?, condition?, weapon?, metamagic?}}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse spellcasting(@ToolArg(description = "PREPARE | CAST")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP)
+	String operation_id, @ToolArg(description = PARAMS)
+	Map<String, Object> params) {
+		return ToolSupport.run("spellcasting", () -> {
+			String act = ToolArgs.action("spellcasting", action, List.of("PREPARE", "CAST"));
+			String c = ToolArgs.reqCampaign("spellcasting", act, campaign);
+			String op = ToolArgs.reqOp("spellcasting", act, operation_id);
+			return switch (act) {
+			case "PREPARE" -> {
+				ToolArgs a = ToolArgs.of("spellcasting", act, "COMBAT", params, "character, cantrips?, spells?",
+						"character", "cantrips", "spells");
+				List<String> cantrips = a.optStringList("cantrips");
+				List<String> spells = a.optStringList("spells");
+				yield engine.spells().prepare(op, c, a.reqStr("character"),
+						cantrips == null ? null : List.copyOf(cantrips), spells == null ? null : List.copyOf(spells));
+			}
+			case "CAST" -> {
+				ToolArgs a = ToolArgs.of("spellcasting", act, "COMBAT", params,
+						"caster, spell, slot_level?, targets?, options?", "caster", "spell", "slot_level", "targets",
+						"options");
+				yield engine.spells().cast(op, c, a.reqStr("caster"), a.reqStr("spell"), a.optInt("slot_level"),
+						a.optStringList("targets"), a.optMap("options"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
 	}
 
-	@Tool(name = "cast_spell", description = "MUTATING, atomic (outside encounters; in a fight use perform_encounter_action with kind CAST). Validates that the spell is known/prepared, "
-			+ "spends the slot (slot_level to upcast; cantrips are free; warlocks use pact slots), and resolves structured mechanics against the targets: spell attacks vs AC, "
-			+ "saving throws vs your DC (half/no damage, conditions with durations), healing, Magic Missile, temporary HP, buffs (Mage Armor, Bless, Shield of Faith…), cures, "
-			+ "resurrection. Concentration is enforced (a new concentration spell ends the previous one; damage forces a CON save). Utility spells return their rules text for you to adjudicate. "
-			+ "options: {against: 'character:N'} for Hex/Hunter's Mark, {damage_type} for Chromatic Orb (and Force for Shillelagh), {condition} for cures, "
-			+ "{ritual: true} to cast a prepared spell with the Ritual tag as a ritual (any caster; ten minutes longer, no slot spent), "
-			+ "{weapon: 'Longsword' | 'inventory:N'} for a spell that enchants one carried weapon (Magic Weapon, Shillelagh; default the wielder's equipped weapon): "
-			+ "its bonus, die and damage ride only on attacks with that weapon, stack with the weapon's own enchantment, and the slot raises Magic Weapon to +2 (level 3-5) or +3 (6+). "
-			+ "Flame Blade conjures a weapon: attack with it by name.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse castSpell(@ToolArg(description = OP)
-	String operation_id, @ToolArg(description = REF)
-	String campaign, @ToolArg(description = "Caster reference")
-	String caster, @ToolArg(description = "Spell name or id")
-	String spell, @ToolArg(description = "Slot level to use (default: the spell's level)")
-	Optional<Integer> slot_level,
-		@ToolArg(description = "Target character references (repeat a target for multi-dart/ray spells; omit for self-only)")
-		Optional<List<String>> targets,
-		@ToolArg(description = "Spell-specific options: ritual: true; damage_type (Chromatic Orb, Transmuted); against (Hunter's Mark style buffs); condition (a cure); "
-				+ "metamagic: [\"Empowered Spell\", \"Quickened Spell\"] with heightened_target / careful: [refs] as the option needs (sorcerers; the sheet's spellcasting.metamagic lists what is known)", required = false)
-		Map<String, Object> options) {
-		return ToolSupport.run("cast_spell", () -> engine.spells().cast(operation_id, campaign, caster, spell,
-				slot_level.orElse(null), targets.orElse(null), options));
+	// ── Rests & campaign clock ─────────────────────────────────────────
+
+	@Tool(name = "rest_time", description = "Rests, advancing the campaign clock and resumable timed activities (all mutating; interruptions stop time early). Actions: "
+			+ "REST {kind: SHORT|LONG, hit_dice?, characters?}; " + "ADVANCE {minutes, reason?}; "
+			+ "TIMED_ACTION {kind: SEARCH|WAIT|WORK, duration_seconds, action_key, parameters?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse restTime(@ToolArg(description = "REST | ADVANCE | TIMED_ACTION")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP)
+	String operation_id, @ToolArg(description = PARAMS)
+	Map<String, Object> params) {
+		return ToolSupport.run("rest_time", () -> {
+			String act = ToolArgs.action("rest_time", action, List.of("REST", "ADVANCE", "TIMED_ACTION"));
+			String c = ToolArgs.reqCampaign("rest_time", act, campaign);
+			String op = ToolArgs.reqOp("rest_time", act, operation_id);
+			return switch (act) {
+			case "REST" -> {
+				ToolArgs a = ToolArgs.of("rest_time", act, "CORE", params, "kind, hit_dice?, characters?", "kind",
+						"hit_dice", "characters");
+				yield engine.rest().rest(op, c, a.reqStr("kind"), a.optMap("hit_dice"), a.optStringList("characters"));
+			}
+			case "ADVANCE" -> {
+				ToolArgs a = ToolArgs.of("rest_time", act, "CORE", params, "minutes, reason?", "minutes", "reason");
+				yield engine.sessions().advanceTime(op, c, a.reqInt("minutes"), a.optStr("reason"));
+			}
+			case "TIMED_ACTION" -> {
+				ToolArgs a = ToolArgs.of("rest_time", act, "ECONOMY", params,
+						"kind, duration_seconds, action_key, parameters?", "kind", "duration_seconds", "action_key",
+						"parameters");
+				yield new WorldTimeline(engine.db()).perform(op, c, a.reqStr("kind"), a.reqLong("duration_seconds"),
+						a.reqStr("action_key"), a.optMapOrEmpty("parameters"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Inventory, commerce & loot ─────────────────────────────────────
+
+	@Tool(name = "inventory", description = "Equipment, item/coin transfers, market trades and audited loot (all mutating; see get_instructions topic ECONOMY). Actions: "
+			+ "TRANSFER_ITEM {entry, to, quantity?, reason?}; " + "EQUIP {character, entry, equipped}; "
+			+ "GIVE_MONEY {from, to, money, reason?}; "
+			+ "TRADE {character, kind: BUY|SELL, item?, entry?, quantity?, merchant?, negotiated_price?, reason?}; "
+			+ "GRANT_LOOT {to, items?, money?, source?: ENCOUNTER|QUEST|WORLD|GM_GRANT, reason?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse inventory(@ToolArg(description = "TRANSFER_ITEM | EQUIP | GIVE_MONEY | TRADE | GRANT_LOOT")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP)
+	String operation_id, @ToolArg(description = PARAMS)
+	Map<String, Object> params) {
+		return ToolSupport.run("inventory", () -> {
+			String act = ToolArgs.action("inventory", action,
+					List.of("TRANSFER_ITEM", "EQUIP", "GIVE_MONEY", "TRADE", "GRANT_LOOT"));
+			String c = ToolArgs.reqCampaign("inventory", act, campaign);
+			String op = ToolArgs.reqOp("inventory", act, operation_id);
+			return switch (act) {
+			case "TRANSFER_ITEM" -> {
+				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params, "entry, to, quantity?, reason?", "entry",
+						"to", "quantity", "reason");
+				yield engine.inventory().transfer(op, c, a.reqStr("entry"), a.reqStr("to"), a.optInt("quantity"),
+						a.optStr("reason"));
+			}
+			case "EQUIP" -> {
+				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params, "character, entry, equipped", "character",
+						"entry", "equipped");
+				yield engine.inventory().equip(op, c, a.reqStr("character"), a.reqStr("entry"), a.reqBool("equipped"));
+			}
+			case "GIVE_MONEY" -> {
+				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params, "from, to, money, reason?", "from", "to",
+						"money", "reason");
+				yield engine.inventory().giveMoney(op, c, a.reqStr("from"), a.reqStr("to"), a.reqObj("money"),
+						a.optStr("reason"));
+			}
+			case "TRADE" -> {
+				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params,
+						"character, kind, item?, entry?, quantity?, merchant?, negotiated_price?, reason?", "character",
+						"kind", "item", "entry", "quantity", "merchant", "negotiated_price", "reason");
+				yield engine.inventory().trade(op, c, a.reqStr("character"), a.reqStr("kind"), a.optStr("item"),
+						a.optStr("entry"), a.optInt("quantity"), a.optStr("merchant"), a.optObj("negotiated_price"),
+						a.optStr("reason"));
+			}
+			case "GRANT_LOOT" -> {
+				ToolArgs a = ToolArgs.of("inventory", act, "ECONOMY", params, "to, items?, money?, source?, reason?",
+						"to", "items", "money", "source", "reason");
+				yield engine.inventory().grantLoot(op, c, a.reqStr("to"), a.optMapList("items"), a.optObj("money"),
+						a.optStr("source"), a.optStr("reason"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Narrative, Director & relationships ────────────────────────────
+
+	@Tool(name = "narrative", description = "Scoped context retrieval, quests/beats/factions/events, diegetic info, Director reviews and relationships (see get_instructions topic DIRECTOR). Actions: "
+			+ "CONTEXT (read) {scope: SCENE|CHARACTER|RELATIONSHIP|INTIMACY|WANT|STORY_BEAT|LOCATION|QUEST|ENCOUNTER|DIRECTOR, ref?, second_ref?, focus?, context_budget?}; "
+			+ "UPSERT (mut) {kind: QUEST|STORY_BEAT|STORY_SEED|FACTION_STATE|WORLD_EVENT|LOCATION_DETAIL|NPC_AGENDA, changes, ref?, provenance?}; "
+			+ "DIEGETIC (read) {channel?, location?, limit?}; "
+			+ "DIRECTOR_CONTEXT (read, DIRECTOR_ONLY) {scope?: INITIAL_CAMPAIGN|SESSION_START|CAMPAIGN_REVIEW}; "
+			+ "COMMIT_DIRECTOR (mut) {changes?, review_note?}; " + "GET_RELATIONSHIP (read) {a, b}; "
+			+ "UPDATE_RELATIONSHIP (mut) {from, to, dimensions?, summary?, cause_event?, reason?, mutual?, provenance?, profile?, profile_mode?: MERGE|REPLACE}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse narrative(
+		@ToolArg(description = "CONTEXT | UPSERT | DIEGETIC | DIRECTOR_CONTEXT | COMMIT_DIRECTOR | GET_RELATIONSHIP | UPDATE_RELATIONSHIP")
+		String action, @ToolArg(description = CAMP)
+		String campaign, @ToolArg(description = OP, required = false)
+		String operation_id, @ToolArg(description = PARAMS, required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("narrative", () -> {
+			String act = ToolArgs.action("narrative", action, List.of("CONTEXT", "UPSERT", "DIEGETIC",
+					"DIRECTOR_CONTEXT", "COMMIT_DIRECTOR", "GET_RELATIONSHIP", "UPDATE_RELATIONSHIP"));
+			String c = ToolArgs.reqCampaign("narrative", act, campaign);
+			return switch (act) {
+			case "CONTEXT" -> {
+				ToolArgs a = ToolArgs.of("narrative", act, "DIRECTOR", params,
+						"scope, ref?, second_ref?, focus?, context_budget?", "scope", "ref", "second_ref", "focus",
+						"context_budget");
+				yield engine.narrative().context(c, a.reqStr("scope"), a.optStr("ref"), a.optStr("second_ref"),
+						a.optStr("focus"), a.optInt("context_budget"));
+			}
+			case "UPSERT" -> {
+				String op = ToolArgs.reqOp("narrative", act, operation_id);
+				ToolArgs a = ToolArgs.of("narrative", act, "DIRECTOR", params, "kind, changes, ref?, provenance?",
+						"kind", "changes", "ref", "provenance");
+				yield engine.narrative().upsert(op, c, a.reqStr("kind"), a.optStr("ref"), a.reqMap("changes"),
+						a.optStr("provenance"));
+			}
+			case "DIEGETIC" -> {
+				ToolArgs a = ToolArgs.of("narrative", act, "DIRECTOR", params, "channel?, location?, limit?", "channel",
+						"location", "limit");
+				yield engine.narrative().diegetic(c, a.optStr("channel"), a.optStr("location"), a.optInt("limit", 10));
+			}
+			case "DIRECTOR_CONTEXT" -> {
+				ToolArgs a = ToolArgs.of("narrative", act, "DIRECTOR", params, "scope?", "scope");
+				yield engine.narrative().directorContext(c, a.optStr("scope"));
+			}
+			case "COMMIT_DIRECTOR" -> {
+				String op = ToolArgs.reqOp("narrative", act, operation_id);
+				ToolArgs a = ToolArgs.of("narrative", act, "DIRECTOR", params, "changes?, review_note?", "changes",
+						"review_note");
+				yield engine.narrative().commitDirectorChanges(op, c, a.optMapList("changes"), a.optStr("review_note"));
+			}
+			case "GET_RELATIONSHIP" -> {
+				ToolArgs a = ToolArgs.of("narrative", act, "CHARACTERS", params, "a, b", "a", "b");
+				yield engine.party().relationship(c, a.reqStr("a"), a.reqStr("b"));
+			}
+			case "UPDATE_RELATIONSHIP" -> {
+				String op = ToolArgs.reqOp("narrative", act, operation_id);
+				ToolArgs a = ToolArgs.of("narrative", act, "CHARACTERS", params,
+						"from, to, dimensions?, summary?, cause_event?, reason?, mutual?, provenance?, profile?, profile_mode?",
+						"from", "to", "dimensions", "summary", "cause_event", "reason", "mutual", "provenance",
+						"profile", "profile_mode");
+				yield engine.party().updateRelationship(op, c, a.reqStr("from"), a.reqStr("to"), a.optMap("dimensions"),
+						a.optStr("summary"), a.optStr("cause_event"), a.optStr("reason"), a.optBool("mutual", false),
+						a.optStr("provenance"), a.optMap("profile"), a.optStr("profile_mode"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Ledger memory, lookup & chronicle ──────────────────────────────
+
+	@Tool(name = "chronicle", description = "Episodic ledger memory, timeline queries, entity lookup and chapter/synopsis summaries (see get_instructions topic CHARACTERS). Actions: "
+			+ "RECORD_MEMORY (mut) {type, summary, participants?, importance?, visibility?, provenance?, game_time?, location?, detail?, payload?}; "
+			+ "QUERY_MEMORIES (read) {participants?, types?, focus?, min_importance?, limit?}; "
+			+ "QUERY_TIMELINE (read) {from_time?, to_time?, participants?, types?, min_importance?, by_insertion?, limit?}; "
+			+ "FIND (read) {query, kind?: CHARACTER|LOCATION|WANT, limit?}; "
+			+ "GET_MATERIAL (read) {kind?: CHAPTER|SYNOPSIS, cursor?}; "
+			+ "WRITE (mut) {summary, kind?: CHAPTER|SYNOPSIS, title?, through?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse chronicle(
+		@ToolArg(description = "RECORD_MEMORY | QUERY_MEMORIES | QUERY_TIMELINE | FIND | GET_MATERIAL | WRITE")
+		String action, @ToolArg(description = CAMP)
+		String campaign, @ToolArg(description = OP, required = false)
+		String operation_id, @ToolArg(description = PARAMS, required = false)
+		Map<String, Object> params) {
+		return ToolSupport.run("chronicle", () -> {
+			String act = ToolArgs.action("chronicle", action,
+					List.of("RECORD_MEMORY", "QUERY_MEMORIES", "QUERY_TIMELINE", "FIND", "GET_MATERIAL", "WRITE"));
+			String c = ToolArgs.reqCampaign("chronicle", act, campaign);
+			return switch (act) {
+			case "RECORD_MEMORY" -> {
+				String op = ToolArgs.reqOp("chronicle", act, operation_id);
+				ToolArgs a = ToolArgs.of("chronicle", act, "CORE", params,
+						"type, summary, participants?, importance?, visibility?, provenance?, game_time?, location?, detail?, payload?",
+						"type", "summary", "participants", "importance", "visibility", "provenance", "game_time",
+						"location", "detail", "payload");
+				yield engine.ledger().record(op, c, a.reqStr("type"), a.reqStr("summary"),
+						a.optStringList("participants"), a.optStr("importance"), a.optStr("visibility"),
+						a.optStr("provenance"), a.optStr("game_time"), a.optStr("location"), a.optStr("detail"),
+						a.optMap("payload"));
+			}
+			case "QUERY_MEMORIES" -> {
+				ToolArgs a = ToolArgs.of("chronicle", act, "CORE", params,
+						"participants?, types?, focus?, min_importance?, limit?", "participants", "types", "focus",
+						"min_importance", "limit");
+				yield engine.ledger().queryMemories(c, a.optStringList("participants"), a.optStringList("types"),
+						a.optStr("focus"), a.optStr("min_importance"), a.optInt("limit", 10));
+			}
+			case "QUERY_TIMELINE" -> {
+				ToolArgs a = ToolArgs.of("chronicle", act, "CORE", params,
+						"from_time?, to_time?, participants?, types?, min_importance?, by_insertion?, limit?",
+						"from_time", "to_time", "participants", "types", "min_importance", "by_insertion", "limit");
+				yield engine.ledger().queryTimeline(c, a.optStr("from_time"), a.optStr("to_time"),
+						a.optStringList("participants"), a.optStringList("types"), a.optStr("min_importance"),
+						a.optBool("by_insertion", false), a.optInt("limit", 25));
+			}
+			case "FIND" -> {
+				ToolArgs a = ToolArgs.of("chronicle", act, "CHARACTERS", params, "query, kind?, limit?", "query",
+						"kind", "limit");
+				yield engine.sessions().find(c, a.optStr("kind"), a.reqStr("query"), a.optInt("limit"));
+			}
+			case "GET_MATERIAL" -> {
+				ToolArgs a = ToolArgs.of("chronicle", act, "CHARACTERS", params, "kind?, cursor?", "kind", "cursor");
+				yield engine.chronicle().material(c, a.optStr("kind"), a.optStr("cursor"));
+			}
+			case "WRITE" -> {
+				String op = ToolArgs.reqOp("chronicle", act, operation_id);
+				ToolArgs a = ToolArgs.of("chronicle", act, "CHARACTERS", params, "summary, kind?, title?, through?",
+						"summary", "kind", "title", "through");
+				yield engine.chronicle().write(op, c, a.optStr("kind"), a.optStr("title"), a.reqStr("summary"),
+						a.optLong("through"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Checkpoints & continuation ─────────────────────────────────────
+
+	@Tool(name = "checkpoints", description = "Policy-gated checkpoints and full transactional rewind. Actions: "
+			+ "CREATE (mut) {reason?}; " + "OPTIONS (read) {}; "
+			+ "RESTORE (mut, DESTRUCTIVE to later history — call session:BOOTSTRAP afterwards) {checkpoint, reason?}.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
+	ToolResponse checkpoints(@ToolArg(description = "CREATE | OPTIONS | RESTORE")
+	String action, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = OP, required = false)
+	String operation_id, @ToolArg(description = PARAMS, required = false)
+	Map<String, Object> params) {
+		return ToolSupport.run("checkpoints", () -> {
+			String act = ToolArgs.action("checkpoints", action, List.of("CREATE", "OPTIONS", "RESTORE"));
+			String c = ToolArgs.reqCampaign("checkpoints", act, campaign);
+			return switch (act) {
+			case "CREATE" -> {
+				String op = ToolArgs.reqOp("checkpoints", act, operation_id);
+				ToolArgs a = ToolArgs.of("checkpoints", act, "CORE", params, "reason?", "reason");
+				yield engine.checkpoints().create(op, c, a.optStr("reason"));
+			}
+			case "OPTIONS" -> {
+				ToolArgs.of("checkpoints", act, "CORE", params, "(none)");
+				yield engine.checkpoints().options(c);
+			}
+			case "RESTORE" -> {
+				String op = ToolArgs.reqOp("checkpoints", act, operation_id);
+				ToolArgs a = ToolArgs.of("checkpoints", act, "CORE", params, "checkpoint, reason?", "checkpoint",
+						"reason");
+				yield engine.checkpoints().restore(op, c, a.reqStr("checkpoint"), a.optStr("reason"));
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Rules lookup & custom content ──────────────────────────────────
+
+	@Tool(name = "rules", description = "SRD 5.2.1 rules search, content catalog lookup and campaign custom content. Actions: "
+			+ "SEARCH (read; campaign optional) {query, kind?: RULE|SPELL|ITEM|CREATURE|CLASS|SPECIES|BACKGROUND|FEAT|SKILL, limit?}; "
+			+ "DEFINITIONS (read; campaign optional) {kind?, item_type?, text?, min_cost?, max_cost?, rarity?, magic?, detail?: SUMMARY|FULL, cursor?, limit?}; "
+			+ "DEFINE (mut; campaign required) {name, kind?: ITEM|BACKGROUND, symbolic_id?, description?, item_type?, cost?, weight_lb?, properties?, tags?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse rules(@ToolArg(description = "SEARCH | DEFINITIONS | DEFINE")
+	String action, @ToolArg(description = CAMP_RULES, required = false)
+	String campaign, @ToolArg(description = OP, required = false)
+	String operation_id, @ToolArg(description = PARAMS, required = false)
+	Map<String, Object> params) {
+		return ToolSupport.run("rules", () -> {
+			String act = ToolArgs.action("rules", action, List.of("SEARCH", "DEFINITIONS", "DEFINE"));
+			return switch (act) {
+			case "SEARCH" -> {
+				ToolArgs a = ToolArgs.of("rules", act, "CORE", params, "query, kind?, limit?", "query", "kind",
+						"limit");
+				yield engine.content().search(campaign, a.reqStr("query"), a.optStr("kind"), a.optInt("limit", 0));
+			}
+			case "DEFINITIONS" -> {
+				ToolArgs a = ToolArgs.of("rules", act, "ECONOMY", params,
+						"kind?, item_type?, text?, min_cost?, max_cost?, rarity?, magic?, detail?, cursor?, limit?",
+						"kind", "item_type", "text", "min_cost", "max_cost", "rarity", "magic", "detail", "cursor",
+						"limit");
+				yield engine.content().definitions(campaign, a.optStr("kind"), a.optStr("item_type"), a.optStr("text"),
+						a.optObj("min_cost"), a.optObj("max_cost"), a.optStr("rarity"), a.optBool("magic"),
+						a.optStr("cursor"), a.optInt("limit", 25), a.optStr("detail", "SUMMARY"));
+			}
+			case "DEFINE" -> {
+				String c = ToolArgs.reqCampaign("rules", act, campaign);
+				String op = ToolArgs.reqOp("rules", act, operation_id);
+				ToolArgs a = ToolArgs.of("rules", act, "ECONOMY", params,
+						"name, kind?, symbolic_id?, description?, item_type?, cost?, weight_lb?, properties?, tags?",
+						"name", "kind", "symbolic_id", "description", "item_type", "cost", "weight_lb", "properties",
+						"tags");
+				yield engine.content().define(op, c, a.optStr("kind", "ITEM"), a.reqStr("name"),
+						a.optStr("symbolic_id"), a.optStr("description"), a.optStr("item_type"), a.optObj("cost"),
+						a.optDouble("weight_lb"), a.optMap("properties"), a.optStringList("tags"), "GM");
+			}
+			default -> throw new IllegalStateException(act);
+			};
+		});
+	}
+
+	// ── Audited GM override (standalone destructive boundary) ──────────
+
+	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. Exceptional rule override permitted only under explicit-audited override policy. "
+			+ "kind: ADJUST_HP, SET_MAX_HP, SET_ARMOR_CLASS, SET_LIFE_STATE, SET_MONEY, SET_XP, SET_ABILITY_SCORE, SET_LOCATION, SET_CAMPAIGN_RULE (no target), REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE. "
+			+ "Requires reason; writes an immutable audit record and must be disclosed as a GM call, never a roll.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
+	ToolResponse applyGmOverride(@ToolArg(description = "Idempotency key")
+	String operation_id, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = "Override kind")
+	String kind, @ToolArg(description = "character:N or location:N (omit for SET_CAMPAIGN_RULE)", required = false)
+	String target, @ToolArg(description = "Override effect fields", required = false)
+	Map<String, Object> effect, @ToolArg(description = "Human-readable reason")
+	String reason, @ToolArg(description = "Target revision last read", required = false)
+	Optional<Long> expected_revision) {
+		return ToolSupport.run("apply_gm_override", () -> engine.rest().override(operation_id, campaign, kind, target,
+				effect, reason, expected_revision.orElse(null)));
 	}
 }

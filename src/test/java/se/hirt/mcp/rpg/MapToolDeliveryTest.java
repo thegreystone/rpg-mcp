@@ -12,17 +12,20 @@ import static se.hirt.mcp.rpg.TestCampaigns.*;
 
 class MapToolDeliveryTest {
 	@Test
-	void mapAndLivingWorldParametersExplainTheirContracts() {
-		for (Class<?> group : List.of(MapTools.class, LivingWorldTools.class))
+	void allExposedToolParametersExplainTheirContracts() {
+		int toolCount = 0;
+		for (Class<?> group : List.of(RpgTools.class, MapTools.class, EconomyTools.class, LivingWorldTools.class))
 			for (var method : group.getDeclaredMethods()) {
 				if (!method.isAnnotationPresent(io.quarkiverse.mcp.server.Tool.class))
 					continue;
+				toolCount++;
 				for (var parameter : method.getParameters()) {
 					var argument = parameter.getAnnotation(io.quarkiverse.mcp.server.ToolArg.class);
 					assertNotNull(argument, method.getName() + ": " + parameter.getName());
 					assertFalse(argument.description().isBlank(), method.getName() + ": " + parameter.getName());
 				}
 			}
+		assertEquals(22, toolCount);
 	}
 
 	@Test
@@ -37,13 +40,16 @@ class MapToolDeliveryTest {
 			Files.write(source, PngCodec
 					.encode(new PngCodec.Raster(2, 2, new int[] {0xff111111, 0xffeeeeee, 0xffeeeeee, 0xff111111})));
 			String importOp = op();
-			var five = result(tools.asset(importOp, c, source.toString(), Optional.of(5.0)));
+			var five = result(tools.mapPreparation("IMPORT_ASSET", c, importOp,
+					Map.of("source_path", source.toString(), "repeat_ft", 5.0)));
 			String first = (String) object(five.get("asset")).get("ref");
-			var ten = result(tools.asset(op(), c, source.toString(), Optional.of(10.0)));
+			var ten = result(tools.mapPreparation("IMPORT_ASSET", c, op(),
+					Map.of("source_path", source.toString(), "repeat_ft", 10.0)));
 			String second = (String) object(ten.get("asset")).get("ref");
 			assertNotEquals(first, second);
 			Files.delete(source);
-			assertEquals(true, result(tools.asset(importOp, c, source.toString(), Optional.of(5.0))).get("replayed"));
+			assertEquals(true, result(tools.mapPreparation("IMPORT_ASSET", c, importOp,
+					Map.of("source_path", source.toString(), "repeat_ft", 5.0))).get("replayed"));
 			var draft = e.maps().begin(op(), c, "SCENE", map("name", "Texture delivery fixture", "room_count", 1,
 					"geometry", map("bounds_ft", List.of(0, 0, 20, 20)), "rooms",
 					List.of(map("key", "floor", "rect_ft", List.of(0, 0, 20, 20), "material", first)), "actors",

@@ -201,8 +201,8 @@ final class TravelEncounters {
 		m.put("difficulty", "MODERATE");
 		m.put("xp_budget", budget);
 		m.put("hooks", hooks);
-		m.put("note", "A suggestion only, from the ground crossed and the party's level: start_encounter to play it "
-				+ "(materialize_character for the creatures), reshape it to an open pressure, or ignore it. Nothing "
+		m.put("note", "A suggestion only, from the ground crossed and the party's level: encounter:START to play it "
+				+ "(character:MATERIALIZE for the creatures), reshape it to an open pressure, or ignore it. Nothing "
 				+ "has been written.");
 		return m;
 	}

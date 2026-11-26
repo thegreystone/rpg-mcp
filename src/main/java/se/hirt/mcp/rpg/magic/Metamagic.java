@@ -287,7 +287,7 @@ public final class Metamagic {
 			});
 			points.put("slot_costs", font.spec().getOrDefault("slot_costs", defaultSlotCosts()));
 			points.put("note",
-					"Font of Magic: apply_runtime_change CREATE_SPELL_SLOT {slot_level} spends a Bonus Action; CONVERT_SPELL_SLOT {slot_level} turns a slot into points with no action required.");
+					"Font of Magic: character:RUNTIME_CHANGE CREATE_SPELL_SLOT {slot_level} spends a Bonus Action; CONVERT_SPELL_SLOT {slot_level} turns a slot into points with no action required.");
 			m.put("sorcery_points", points);
 		});
 		feature(tx, rules, c).ifPresent(mm -> {
@@ -303,7 +303,7 @@ public final class Metamagic {
 						"Options still to choose: at the next level-up (choices.metamagic) or with apply_gm_override SET_METAMAGIC.");
 			}
 			block.put("rule",
-					"Pass options.metamagic (cast_spell) or action.metamagic (CAST) with option names; one option per spell, plus Empowered and/or Seeking.");
+					"Pass options.metamagic (spellcasting:CAST) or action.metamagic (encounter:ACTION CAST) with option names; one option per spell, plus Empowered and/or Seeking.");
 			m.put("metamagic", block);
 		});
 	}

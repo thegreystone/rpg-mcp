@@ -55,11 +55,11 @@ class Run12DeathReportingTest {
 			assertEquals("DEAD", died.get("player_character_status"));
 			assertEquals(true, died.get("encounter_end_required"));
 			assertTrue(died.get("next_step").toString().contains("has died"));
-			assertTrue(died.get("next_step").toString().contains("end_encounter"));
-			assertTrue(died.get("next_step").toString().contains("get_continuation_options"));
+			assertTrue(died.get("next_step").toString().contains("encounter:END"));
+			assertTrue(died.get("next_step").toString().contains("checkpoints:OPTIONS"));
 			assertEquals("ENCOUNTER", SceneService.map(died.get("meta")).get("harness_state"));
 			assertNull(died.get("next_turn"), "An unconscious party never observed the guard's identity or turn.");
-			assertEquals("get_encounter_state", SceneService.map(died.get("gm_handoff")).get("tool"));
+			assertEquals("encounter", SceneService.map(died.get("gm_handoff")).get("tool"));
 			assertEquals(guard, SceneService
 					.map(e.encounters().encounterState(campaign, encounter, 10, "GM").get("turn")).get("character"),
 					"Only the explicit GM read supplies the unobserved next actor.");
@@ -198,7 +198,7 @@ class Run12DeathReportingTest {
 				assertPrivate(passed, hidden);
 				assertFalse(passed.containsKey("death_saves"));
 				assertFalse(passed.containsKey("deaths"));
-				assertEquals("get_encounter_state", SceneService.map(passed.get("gm_handoff")).get("tool"));
+				assertEquals("encounter", SceneService.map(passed.get("gm_handoff")).get("tool"));
 				if (natural != 1)
 					e.encounters().perform(op(), campaign, encounter, visible, map("kind", "END_TURN"));
 			}

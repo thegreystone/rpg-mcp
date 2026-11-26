@@ -131,7 +131,7 @@ public final class Rules {
 		case "ROLL_4D6_DROP_LOWEST" -> {
 			if (rolledScores == null || rolledScores.isEmpty()) {
 				violations.add(new Violation("ability_scores", "ROLL_REQUIRED",
-						"Generate ability scores with generate_ability_scores before assigning them."));
+						"Generate ability scores with character_draft:GENERATE_ABILITIES before assigning them."));
 			} else if (!sameMultiset(values, rolledScores)) {
 				violations.add(new Violation("ability_scores", "ROLLED_ASSIGNMENT",
 						"Scores must be exactly the rolled values " + rolledScores + " in some order."));

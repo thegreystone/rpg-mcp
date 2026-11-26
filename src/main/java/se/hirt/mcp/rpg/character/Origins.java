@@ -501,8 +501,8 @@ public final class Origins {
 	public static void applyBackground(
 		Tx tx, RulesData rules, Row c, Object value, Map<String, Object> cols, Map<String, Object> creation) {
 		RulesData.Definition bg = resolveBackground(tx, rules, c.lng("campaign_id"), String.valueOf(value))
-				.orElseThrow(() -> RpgException
-						.invalidArgument("Unknown background '" + value + "'; see get_character_choices BACKGROUND."));
+				.orElseThrow(() -> RpgException.invalidArgument(
+						"Unknown background '" + value + "'; see character_draft:CHOICES BACKGROUND."));
 		clearBackgroundGrants(tx, c, creation);
 		cols.put("background_ref", bg.id());
 		// Fixed background skills release conflicting flexible choices for re-selection.
@@ -661,8 +661,8 @@ public final class Origins {
 			featValue = value;
 		}
 		final Object featRef = featValue;
-		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(featRef)).orElseThrow(
-				() -> RpgException.invalidArgument("Unknown feat '" + featRef + "'; see get_character_choices FEAT."));
+		RulesData.Definition feat = rules.resolve("FEAT", String.valueOf(featRef)).orElseThrow(() -> RpgException
+				.invalidArgument("Unknown feat '" + featRef + "'; see character_draft:CHOICES FEAT."));
 		String category = String.valueOf(grant.getOrDefault("category", "ORIGIN"));
 		if (!category.equals(String.valueOf(feat.payload().get("category")))) {
 			throw RpgException.validation(List.of(new Violation("origin_feat", "WRONG_CATEGORY", feat.name()

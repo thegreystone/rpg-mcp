@@ -134,7 +134,7 @@ public final class CheckService {
 				tool = rules.resolve("ITEM", toolText)
 						.filter(d -> "TOOL".equals(String.valueOf(d.payload().get("type"))))
 						.orElseThrow(() -> RpgException.invalidArgument(
-								"Unknown tool '" + toolText + "'; see get_content_definitions item_type TOOL."));
+								"Unknown tool '" + toolText + "'; see rules:DEFINITIONS item_type TOOL."));
 				toolProficient = tx.count(
 						"SELECT COUNT(*) FROM character_trait WHERE character_id = ? AND kind = 'PROFICIENCY' AND content_ref = ?",
 						actor.id(), tool.id()) > 0;
