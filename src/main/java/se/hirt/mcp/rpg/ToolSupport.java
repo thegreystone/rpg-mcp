@@ -56,7 +56,7 @@ final class ToolSupport {
 			return ToolResponse.success(envelope(body.get()));
 		} catch (RpgException e) {
 			LOG.debugf("%s failed: %s %s", tool, e.code(), e.getMessage());
-			return ToolResponse.error(Json.write(e.toErrorMap()));
+			return ToolResponse.error(Json.write(ProtocolHints.publicView(e.toErrorMap())));
 		} catch (RuntimeException e) {
 			LOG.errorf(e, "%s failed unexpectedly", tool);
 			return ToolResponse.error(Json.write(RpgException
@@ -67,7 +67,7 @@ final class ToolSupport {
 	}
 
 	static String envelope(Map<String, Object> serviceResult) {
-		var result = new LinkedHashMap<>(serviceResult);
+		var result = new LinkedHashMap<>(ProtocolHints.publicView(serviceResult));
 		Object meta = result.remove("meta");
 		var out = new LinkedHashMap<String, Object>();
 		out.put("result", result);
@@ -83,7 +83,7 @@ final class ToolSupport {
 			return ToolResponse.success(java.util.List.of(new TextContent(text),
 					new ImageContent(java.util.Base64.getEncoder().encodeToString(png.get()), "image/png")));
 		} catch (RpgException e) {
-			return ToolResponse.error(Json.write(e.toErrorMap()));
+			return ToolResponse.error(Json.write(ProtocolHints.publicView(e.toErrorMap())));
 		} catch (RuntimeException e) {
 			LOG.errorf(e, "%s failed unexpectedly", tool);
 			return ToolResponse.error(

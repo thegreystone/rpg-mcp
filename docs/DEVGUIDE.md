@@ -120,6 +120,14 @@ native-image reflection and resource regressions.
 To point an MCP client at a development build, use the release configuration with the path under `target/`,
 and set `RPG_DATA_DIR` to a scratch directory so you do not play against your real campaign database.
 
+### Local Codex playtests
+
+The opt-in [local Codex playtests](CODEX_PLAYTESTS.md) run fresh model sessions against disposable campaigns,
+capture public MCP calls, and compare independently checked outcomes across revisions. They use your local
+Codex sign-in and are separate from Maven tests and GitHub Actions. Start with
+`node tools/playtest/run.mjs --list` or validate fixtures without a model using
+`node tools/playtest/run.mjs --prepare-only --ref master --ref working`.
+
 ### Native image size budget
 
 The universal bundle (see *Cutting a release*) carries three native binaries and must stay under 50 MB, so each
