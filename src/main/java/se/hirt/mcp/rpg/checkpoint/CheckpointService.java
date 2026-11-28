@@ -138,7 +138,7 @@ public final class CheckpointService {
 								+ "ORDER BY id DESC", campaignId);
 				var restore = new LinkedHashMap<String, Object>();
 				restore.put("action", "RESTORE_CHECKPOINT");
-				restore.put("operation", "checkpoints:RESTORE");
+				restore.put("operation", "restore_checkpoint");
 				restore.put("checkpoints", checkpoints.stream().map(CheckpointService::checkpointSummary).toList());
 				options.add(restore);
 			}
@@ -153,7 +153,7 @@ public final class CheckpointService {
 			options.add(transfer);
 			var end = new LinkedHashMap<String, Object>();
 			end.put("action", "COMPLETE_CAMPAIGN");
-			end.put("operation", "session:COMPLETE");
+			end.put("operation", "complete_campaign");
 			options.add(end);
 			result.put("options", options);
 			result.put("meta", Harness.meta(campaign, null));

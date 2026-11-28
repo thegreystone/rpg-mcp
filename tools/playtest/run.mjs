@@ -228,7 +228,7 @@ export function auditTrace(lines) {
   const entries = lines.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   const names = new Set(entries.flatMap(e => e.direction === 'response' ? (e.message.result?.tools || []).map(t => t.name) : []));
   const violations = new Set();
-  const legacy = /^(?:get_|update_|perform_|apply_|create_|commit_|begin_|grant_|cast_|prepare_|record_|resolve_|end_|transfer_|roll_|move_|find_|write_|define_|validate_|restore_|recover_|annotate_|materialize_|suspend_|open_|bootstrap_|complete_|advance_|set_|import_|export_|place_|observe_|preview_|use_|emit_|correct_|add_)/;
+  const legacy = /^(?:abandon_|add_|advance_|annotate_|apply_|award_|begin_|bootstrap_|cast_|commit_|complete_|continue_|convert_|correct_|create_|define_|emit_|end_|equip_|export_|find_|generate_|get_|give_|grant_|import_|list_|materialize_|move_|observe_|open_|perform_|place_|prepare_|preview_|publish_|query_|record_|recover_|resolve_|restore_|revise_|roll_|schedule_|search_|set_|start_|suspend_|transfer_|update_|upsert_|use_|validate_|write_)/;
   const checkLabel = value => {
     if (typeof value === 'string' && (legacy.test(value) || value === 'trade' || value === 'find') && !names.has(value.split(':')[0])) violations.add(`Unavailable tool hint: ${value}`);
   };
@@ -236,8 +236,8 @@ export function auditTrace(lines) {
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) { value.forEach(visit); return; }
     for (const [key, child] of Object.entries(value)) {
-      if (['tool', 'resolve_with', 'annotation_tool', 'supported_alternative'].includes(key)) checkLabel(child);
-      if (key === 'allowed_operations' && Array.isArray(child)) child.forEach(checkLabel);
+      if (['tool', 'resolve_with', 'recover_with', 'annotation_tool', 'supported_alternative', 'next_operation', 'next_tool'].includes(key)) checkLabel(child);
+      if (['allowed_operations', 'legal_actions', 'legal_operations'].includes(key) && Array.isArray(child)) child.forEach(checkLabel);
       visit(child);
     }
   };

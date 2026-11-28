@@ -171,9 +171,40 @@ final class ToolArgs {
 			return null;
 		}
 		if (v instanceof Number n) {
+			if (n instanceof Byte || n instanceof Short || n instanceof Integer) {
+				return n.intValue();
+			}
+			if (n instanceof Long l) {
+				if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
+					return l.intValue();
+				}
+				throw bad("Parameter '" + key + "' must be an integer");
+			}
+			if (n instanceof BigInteger bi) {
+				try {
+					return bi.intValueExact();
+				} catch (ArithmeticException ignored) {
+					throw bad("Parameter '" + key + "' must be an integer");
+				}
+			}
+			if (n instanceof BigDecimal bd) {
+				try {
+					return bd.intValueExact();
+				} catch (ArithmeticException ignored) {
+					throw bad("Parameter '" + key + "' must be an integer");
+				}
+			}
 			double d = n.doubleValue();
 			if (Double.isFinite(d) && d == Math.rint(d) && d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
-				return n.intValue();
+				return (int) d;
+			}
+		} else if (v instanceof String s) {
+			String trimmed = s.trim();
+			if (!trimmed.isEmpty()) {
+				try {
+					return Integer.parseInt(trimmed);
+				} catch (NumberFormatException ignored) {
+				}
 			}
 		}
 		throw bad("Parameter '" + key + "' must be an integer");
@@ -219,6 +250,14 @@ final class ToolArgs {
 			if (Double.isFinite(d) && d == Math.rint(d) && d >= -0x1p63 && d < 0x1p63) {
 				return (long) d;
 			}
+		} else if (v instanceof String s) {
+			String trimmed = s.trim();
+			if (!trimmed.isEmpty()) {
+				try {
+					return Long.parseLong(trimmed);
+				} catch (NumberFormatException ignored) {
+				}
+			}
 		}
 		throw bad("Parameter '" + key + "' must be an integer");
 	}
@@ -238,6 +277,18 @@ final class ToolArgs {
 		}
 		if (v instanceof Number n && Double.isFinite(n.doubleValue())) {
 			return n.doubleValue();
+		}
+		if (v instanceof String s) {
+			String trimmed = s.trim();
+			if (!trimmed.isEmpty()) {
+				try {
+					double d = Double.parseDouble(trimmed);
+					if (Double.isFinite(d)) {
+						return d;
+					}
+				} catch (NumberFormatException ignored) {
+				}
+			}
 		}
 		throw bad("Parameter '" + key + "' must be a number");
 	}
@@ -262,6 +313,15 @@ final class ToolArgs {
 		}
 		if (v instanceof Boolean b) {
 			return b;
+		}
+		if (v instanceof String s) {
+			String trimmed = s.trim();
+			if ("true".equalsIgnoreCase(trimmed)) {
+				return Boolean.TRUE;
+			}
+			if ("false".equalsIgnoreCase(trimmed)) {
+				return Boolean.FALSE;
+			}
 		}
 		throw bad("Parameter '" + key + "' must be a boolean");
 	}

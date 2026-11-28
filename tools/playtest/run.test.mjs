@@ -29,10 +29,18 @@ test('old hints are checked against the actual selected server catalog, without 
     { direction: 'response', message: { result: { tools: tools.map(name => ({ name })) } } },
     { direction: 'response', message: { result: { content: [{ type: 'text', text: JSON.stringify({ result: {
       record: { loot: { tool: 'grant_loot' } }, summary: 'grant_loot', operation: 'grant_loot', tool: "Thieves' Tools",
+      legal_operations: ['get_level_up_choices'], recover_with: 'recover_ammunition',
+      next_operation: 'revise_map_preparation', next_tool: 'update_map_object',
     } }) }] } } },
   ].map(e => JSON.stringify(e)).join('\n');
-  assert.deepEqual(auditTrace(trace(['get_instructions', 'inventory'])), ['Unavailable tool hint: grant_loot']);
-  assert.deepEqual(auditTrace(trace(['get_instructions', 'grant_loot'])), []);
+  assert.deepEqual(auditTrace(trace(['get_instructions', 'inventory'])), [
+    'Unavailable tool hint: grant_loot',
+    'Unavailable tool hint: get_level_up_choices',
+    'Unavailable tool hint: recover_ammunition',
+    'Unavailable tool hint: revise_map_preparation',
+    'Unavailable tool hint: update_map_object',
+  ]);
+  assert.deepEqual(auditTrace(trace(['get_instructions', 'grant_loot', 'get_level_up_choices', 'recover_ammunition', 'revise_map_preparation', 'update_map_object'])), []);
 });
 
 test('separate sessions cannot accidentally resolve each other\'s reused JSON-RPC request IDs', () => {

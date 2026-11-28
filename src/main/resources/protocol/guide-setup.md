@@ -39,7 +39,8 @@ session:STATE → session:CREATE
 
 ## Party Design, Adventure & World Map
 
-- Record companion preferences with `campaign_setup:PARTY_DESIGN` (`preferences` or `{"authorship": "SURPRISE_ME"}`).
+- Record companion preferences with `campaign_setup:PARTY_DESIGN` (`params.preferences`, e.g.
+  `{"authorship": "SURPRISE_ME"}` or `{"authorship": "COLLABORATIVE", "desired_roles": [...]}`).
 - Author `adventure` via `campaign_setup:UPDATE` (`premise`, `background_truth` (GM_ONLY), `opening_location`,
   `immediate_goal`, optional `start_time`, `gm_notes`, and `world_map` from the premise, opening settlements,
   key roads and geography). If `adventure.world_map` is omitted, commit stages a sourced REGION preparation with

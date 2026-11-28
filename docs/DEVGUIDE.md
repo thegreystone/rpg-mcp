@@ -9,15 +9,15 @@ The first implementation milestone ([`MCP_PROTOCOL.md`](MCP_PROTOCOL.md) §28: d
 setup, commit, session bootstrap, one deterministic check, persistence, suspension, fresh-context resumption)
 plus the change journal, checkpoints and the semantic ledger, which define the persistence architecture.
 
-## Tool surface (protocol 0.2.0 — 22 domain tools)
+## Tool surface (protocol 0.2.0 — 24 domain tools)
 
-All 112 semantic engine operations are consolidated into **22 MCP tools** (3 standalone + 19 action-dispatched domain
+All 112 semantic engine operations are consolidated into **24 MCP tools** (5 standalone + 19 action-dispatched domain
 tools taking `(action, campaign, operation_id?, params?)`) so the server stays well under multi-MCP host tool limits:
 
 | Tool | Actions / Role |
 |---|---|
-| `get_instructions` | Standalone read-only GM guide loader (`topic`: `CORE` default, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`, `ALL`) |
-| `session` | `STATE`, `CREATE`, `OPEN`, `BOOTSTRAP`, `SUSPEND`, `COMPLETE` |
+| `get_instructions` | Standalone read-only GM guide loader (`readOnlyHint = true`; `topic`: `CORE` default, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`, `ALL`) |
+| `session` | `STATE`, `CREATE`, `OPEN`, `BOOTSTRAP`, `SUSPEND` |
 | `campaign_setup` | `GET`, `UPDATE`, `VALIDATE`, `COMMIT`, `PARTY_DESIGN`, `HOUSE_RULES` |
 | `character_draft` | `CREATE`, `CHOICES`, `GENERATE_ABILITIES`, `UPDATE`, `VALIDATE`, `COMMIT` |
 | `level_up` | `BEGIN`, `CHOICES`, `UPDATE`, `VALIDATE`, `COMMIT`, `ABANDON` |
@@ -32,24 +32,31 @@ tools taking `(action, campaign, operation_id?, params?)`) so the server stays w
 | `patrols` | `DEFINE`, `UPDATE`, `STATE` (finite authored regional patrols) |
 | `narrative` | `CONTEXT`, `UPSERT`, `DIEGETIC`, `DIRECTOR_CONTEXT`, `COMMIT_DIRECTOR`, `GET_RELATIONSHIP`, `UPDATE_RELATIONSHIP` |
 | `chronicle` | `RECORD_MEMORY`, `QUERY_MEMORIES`, `QUERY_TIMELINE`, `FIND`, `GET_MATERIAL`, `WRITE` |
-| `checkpoints` | `CREATE`, `OPTIONS`, `RESTORE` (full transactional rewind) |
+| `checkpoints` | `CREATE`, `OPTIONS` (policy-gated checkpoint creation and continuation choices) |
 | `rules` | `SEARCH` (SRD Rules Glossary & content search), `DEFINITIONS`, `DEFINE` (custom `ITEM`/`BACKGROUND`) |
 | `map_preparation` | `BEGIN`, `REVISE`, `VALIDATE`, `PUBLISH`, `IMPORT_ASSET`, `EXPORT_BUNDLE`, `IMPORT_BUNDLE` |
 | `map_play` | `CONTEXT`, `FIND`, `PLACE_ACTORS`, `MOVE_ACTOR`, `OBSERVE`, `PREVIEW_ACTION`, `USE_TRANSITION`, `UPDATE_OBJECT`, `CORRECT_GEOMETRY`, `PERCEPTION`, `EMIT_SOUND`, `ANNOTATE` |
-| `render_map` | Standalone read-only PNG + text + marker renderer for `map:N` or GM draft `preparation:N` |
+| `render_map` | Standalone read-only PNG + text + marker renderer (`readOnlyHint = true`) for `map:N` or GM draft `preparation:N` |
+| `restore_checkpoint` | Standalone transactional rewind boundary (`destructiveHint = true`) |
+| `complete_campaign` | Standalone irreversible campaign termination boundary (`destructiveHint = true`) |
 | `apply_gm_override` | Standalone audited override boundary (`destructiveHint = true`) |
 | **Resources** | `rpg://protocol/guide`, `rpg://protocol/guide/full`, `rpg://maps/catalog`, `rpg://protocol/capabilities`, `rpg://rulesets` |
 
 Each new conversation starts with `get_instructions` (default topic `CORE`), which loads the lean Game Master guide
 and topic index into context, followed by `session:STATE`, which returns compact state and `allowed_operations`
 (formatted as `tool:ACTION`). Specialized manuals (`SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`, `DIRECTOR`, `ECONOMY`)
-are pulled on demand. Startup requires no MCP resource reader or client-specific prompt.
+are pulled on demand. Startup requires no MCP resource reader or client-specific prompt. Only `get_instructions` and
+`render_map` carry `readOnlyHint = true` (consolidated domain tools mix reads and mutations); all destructive
+operations live on standalone `destructiveHint = true` tools (`restore_checkpoint`, `complete_campaign`,
+`apply_gm_override`) so clients can safely allow-list the 21 non-destructive tools (see the
+[README](../README.md#tool-approvals-allow-listing)).
 
 Not yet implemented (`CAPABILITY_UNAVAILABLE`, or `false` in `rpg://protocol/capabilities`): Counterspell, Ready
-and other reactions; travel and rest interruptions (travel encounters are suggested, never forced); subclasses
-and most class features (Sneak Attack, Font of Magic, Metamagic and Sorcerous Restoration are data-driven, the
-rest are GM-adjudicated from the sheet); creature spellcasting; area-of-effect geometry (the GM names the
-creatures in the area). The design documents describe the target surface.
+and other reactions beyond opportunity attacks and Shield; automatic `HIDE` concealment; rest interruptions
+(travel interruptions are implemented via `world_travel`); subclasses and most class features (Sneak Attack,
+Font of Magic, Metamagic and Sorcerous Restoration are data-driven, the rest are GM-adjudicated from the sheet);
+and unsupported area-of-effect shapes outside the canonical grid templates (for those, the GM names the creatures
+in the area). The design documents describe the target surface.
 
 ## Architecture in one paragraph
 

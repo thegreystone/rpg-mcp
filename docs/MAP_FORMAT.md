@@ -2,9 +2,8 @@
 
 Status: shared design and broader format targets. Dungeon/scene authoring and regional atlas support
 are implemented; this document also describes extensions beyond that baseline. See
-[MAP_USAGE.md](MAP_USAGE.md) for the accepted tool payloads, the
-[implementation checklist](MAP_IMPLEMENTATION_PLAN.md) for delivered limits and the
-[playtest report](MAP_PLAYTEST_REPORT.md) for final verification evidence. Regional publication integrates
+[MAP_USAGE.md](MAP_USAGE.md) for the accepted tool payloads and [BACKLOG.md](BACKLOG.md) for remaining
+extensions. Regional publication integrates
 with campaign setup and sourced legacy completion. Detailed settlement helpers remain a later extension.
 See the [player experience review](DESIGN.md#204-player-experience-priorities) for proposed priorities
 around discovery, journey pacing, readable interaction and the party's remembered places.

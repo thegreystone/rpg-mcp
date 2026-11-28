@@ -25,7 +25,7 @@ class MapToolDeliveryTest {
 					assertFalse(argument.description().isBlank(), method.getName() + ": " + parameter.getName());
 				}
 			}
-		assertEquals(22, toolCount);
+		assertEquals(24, toolCount);
 	}
 
 	@Test

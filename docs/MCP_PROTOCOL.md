@@ -62,12 +62,13 @@ diagnostics.
 
 Tools perform parameterized queries, deterministic resolution or canonical mutations. They are the primary interface.
 
-In protocol `0.2.0`, the MCP surface consolidates the engine's 112 semantic operations into **22 domain tools** so the
+In protocol `0.2.0`, the MCP surface consolidates the engine's 112 semantic operations into **24 domain tools** so the
 server stays compact inside multi-MCP hosts (including clients with a 128-tool global ceiling):
 
-- **Standalone tools (3):** `get_instructions` (optional `topic`: `CORE`, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`,
-  `DIRECTOR`, `ECONOMY`, `ALL`), `render_map` (PNG + text delivery), and `apply_gm_override` (explicit
-  `destructiveHint = true` audit boundary).
+- **Standalone tools (5):** `get_instructions` (optional `topic`: `CORE`, `SETUP`, `COMBAT`, `MAPS`, `CHARACTERS`,
+  `DIRECTOR`, `ECONOMY`, `ALL`; `readOnlyHint = true`), `render_map` (PNG + text delivery; `readOnlyHint = true`),
+  and the three destructive boundaries (`destructiveHint = true`): `restore_checkpoint`, `complete_campaign`, and
+  `apply_gm_override`.
 - **Consolidated domain tools (19):** `session`, `campaign_setup`, `character_draft`, `level_up`, `character`,
   `roll_check`, `encounter`, `spellcasting`, `rest_time`, `inventory`, `economy`, `world_travel`, `patrols`,
   `narrative`, `chronicle`, `checkpoints`, `rules`, `map_preparation`, `map_play`.

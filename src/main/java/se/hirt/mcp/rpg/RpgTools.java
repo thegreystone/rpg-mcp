@@ -75,21 +75,18 @@ public class RpgTools {
 		});
 	}
 
-	// Keep destructiveHint = false so routine STATE/OPEN/BOOTSTRAP/SUSPEND calls do not prompt;
-	// COMPLETE is explicitly flagged irreversible in the description and requires outcome + reason.
 	@Tool(name = "session", description = "Campaign discovery and session lifecycle. Actions: "
 			+ "STATE (read; no campaign) {include_campaigns?, campaign_limit?, campaign_cursor?}; "
 			+ "CREATE (mut; no campaign) {title?, ruleset?}; " + "OPEN (read) {}; "
-			+ "BOOTSTRAP (mut) {context_budget?}; " + "SUSPEND (mut) {summary?}; "
-			+ "COMPLETE (mut, irreversible) {outcome: COMPLETED|FAILED|ABANDONED, reason, summary?}.", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
-	ToolResponse session(@ToolArg(description = "STATE | CREATE | OPEN | BOOTSTRAP | SUSPEND | COMPLETE")
+			+ "BOOTSTRAP (mut) {context_budget?}; "
+			+ "SUSPEND (mut) {summary?}. (To end a campaign permanently, use standalone complete_campaign.)", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse session(@ToolArg(description = "STATE | CREATE | OPEN | BOOTSTRAP | SUSPEND")
 	String action, @ToolArg(description = CAMP_SESSION, required = false)
 	String campaign, @ToolArg(description = OP, required = false)
 	String operation_id, @ToolArg(description = PARAMS, required = false)
 	Map<String, Object> params) {
 		return ToolSupport.run("session", () -> {
-			String act = ToolArgs.action("session", action,
-					List.of("STATE", "CREATE", "OPEN", "BOOTSTRAP", "SUSPEND", "COMPLETE"));
+			String act = ToolArgs.action("session", action, List.of("STATE", "CREATE", "OPEN", "BOOTSTRAP", "SUSPEND"));
 			return switch (act) {
 			case "STATE" -> {
 				ToolArgs a = ToolArgs.of("session", act, "CORE", params,
@@ -122,13 +119,6 @@ public class RpgTools {
 				String op = ToolArgs.reqOp("session", act, operation_id);
 				ToolArgs a = ToolArgs.of("session", act, "CORE", params, "summary?", "summary");
 				yield engine.sessions().suspend(op, c, a.optStr("summary"));
-			}
-			case "COMPLETE" -> {
-				String c = ToolArgs.reqCampaign("session", act, campaign);
-				String op = ToolArgs.reqOp("session", act, operation_id);
-				ToolArgs a = ToolArgs.of("session", act, "CORE", params, "outcome, reason, summary?", "outcome",
-						"reason", "summary");
-				yield engine.campaigns().complete(op, c, a.reqStr("outcome"), a.reqStr("reason"), a.optStr("summary"));
 			}
 			default -> throw new IllegalStateException(act);
 			};
@@ -177,8 +167,11 @@ public class RpgTools {
 				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
 				ToolArgs a = ToolArgs.of("campaign_setup", act, "SETUP", params, "preferences, expected_revision?",
 						"preferences", "expected_revision");
+				Object raw = a.reqObj("preferences");
+				Map<String, Object> preferences = raw instanceof String s && !s.isBlank()
+						? Map.of("authorship", s.trim()) : a.reqMap("preferences");
 				yield engine.campaigns().updateSetup(op, c, a.optLong("expected_revision"),
-						Map.of("party", a.reqMap("preferences")));
+						Map.of("party", preferences));
 			}
 			case "HOUSE_RULES" -> {
 				String op = ToolArgs.reqOp("campaign_setup", act, operation_id);
@@ -780,16 +773,16 @@ public class RpgTools {
 
 	// ── Checkpoints & continuation ─────────────────────────────────────
 
-	@Tool(name = "checkpoints", description = "Policy-gated checkpoints and full transactional rewind. Actions: "
-			+ "CREATE (mut) {reason?}; " + "OPTIONS (read) {}; "
-			+ "RESTORE (mut, DESTRUCTIVE to later history — call session:BOOTSTRAP afterwards) {checkpoint, reason?}.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
-	ToolResponse checkpoints(@ToolArg(description = "CREATE | OPTIONS | RESTORE")
+	@Tool(name = "checkpoints", description = "Policy-gated checkpoint creation and continuation options. Actions: "
+			+ "CREATE (mut) {reason?}; "
+			+ "OPTIONS (read) {}. (To rewind to a checkpoint, use standalone restore_checkpoint.)", annotations = @Tool.Annotations(destructiveHint = false, openWorldHint = false))
+	ToolResponse checkpoints(@ToolArg(description = "CREATE | OPTIONS")
 	String action, @ToolArg(description = CAMP)
 	String campaign, @ToolArg(description = OP, required = false)
 	String operation_id, @ToolArg(description = PARAMS, required = false)
 	Map<String, Object> params) {
 		return ToolSupport.run("checkpoints", () -> {
-			String act = ToolArgs.action("checkpoints", action, List.of("CREATE", "OPTIONS", "RESTORE"));
+			String act = ToolArgs.action("checkpoints", action, List.of("CREATE", "OPTIONS"));
 			String c = ToolArgs.reqCampaign("checkpoints", act, campaign);
 			return switch (act) {
 			case "CREATE" -> {
@@ -800,12 +793,6 @@ public class RpgTools {
 			case "OPTIONS" -> {
 				ToolArgs.of("checkpoints", act, "CORE", params, "(none)");
 				yield engine.checkpoints().options(c);
-			}
-			case "RESTORE" -> {
-				String op = ToolArgs.reqOp("checkpoints", act, operation_id);
-				ToolArgs a = ToolArgs.of("checkpoints", act, "CORE", params, "checkpoint, reason?", "checkpoint",
-						"reason");
-				yield engine.checkpoints().restore(op, c, a.reqStr("checkpoint"), a.optStr("reason"));
 			}
 			default -> throw new IllegalStateException(act);
 			};
@@ -856,7 +843,30 @@ public class RpgTools {
 		});
 	}
 
-	// ── Audited GM override (standalone destructive boundary) ──────────
+	// ── Standalone destructive boundaries ──────────────────────────────
+
+	@Tool(name = "restore_checkpoint", description = "MUTATING, DESTRUCTIVE to later history. Policy-gated transactional rewind to a saved checkpoint. "
+			+ "Call session:BOOTSTRAP afterwards and trust server state over prior narration.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
+	ToolResponse restoreCheckpoint(@ToolArg(description = "Idempotency key")
+	String operation_id, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = "checkpoint:N")
+	String checkpoint, @ToolArg(description = "Reason for rewinding", required = false)
+	String reason) {
+		return ToolSupport.run("restore_checkpoint",
+				() -> engine.checkpoints().restore(operation_id, campaign, checkpoint, reason));
+	}
+
+	@Tool(name = "complete_campaign", description = "MUTATING, IRREVERSIBLE. Permanently ends a campaign with outcome COMPLETED, FAILED or ABANDONED. "
+			+ "Requires an explicit reason; optional summary is stored as the closing chronicle entry.", annotations = @Tool.Annotations(destructiveHint = true, openWorldHint = false))
+	ToolResponse completeCampaign(@ToolArg(description = "Idempotency key")
+	String operation_id, @ToolArg(description = CAMP)
+	String campaign, @ToolArg(description = "COMPLETED | FAILED | ABANDONED")
+	String outcome, @ToolArg(description = "Reason for ending the campaign")
+	String reason, @ToolArg(description = "Optional closing summary", required = false)
+	String summary) {
+		return ToolSupport.run("complete_campaign",
+				() -> engine.campaigns().complete(operation_id, campaign, outcome, reason, summary));
+	}
 
 	@Tool(name = "apply_gm_override", description = "MUTATING, AUDITED. Exceptional rule override permitted only under explicit-audited override policy. "
 			+ "kind: ADJUST_HP, SET_MAX_HP, SET_ARMOR_CLASS, SET_LIFE_STATE, SET_MONEY, SET_XP, SET_ABILITY_SCORE, SET_LOCATION, SET_CAMPAIGN_RULE (no target), REMOVE_ENCOUNTER_PARTICIPANT, SET_CONNECTION_STATE. "

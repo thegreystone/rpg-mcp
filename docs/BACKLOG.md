@@ -1,9 +1,9 @@
 # Backlog
 
 The persistent map, grid combat, regional atlas, finite patrol and interruptible travel baseline is
-implemented in this worktree. See the [delivery plan](MAP_IMPLEMENTATION_PLAN.md),
-[tool workflow](MAP_USAGE.md) and [verification report](MAP_PLAYTEST_REPORT.md). The broad items below
-retain longer-term experience targets; their unchecked state refers to remaining extensions.
+implemented. See the [tool workflow](MAP_USAGE.md), [dungeon map plan](DUNGEON_MAPS.md) and
+[map format](MAP_FORMAT.md). The broad items below retain longer-term experience targets; their unchecked
+state refers to remaining extensions.
 
 ## Dungeon maps
 

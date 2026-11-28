@@ -78,7 +78,10 @@ in [`plugin/.claude-plugin/plugin.json`](../plugin/.claude-plugin/plugin.json) i
 also be updated for a release intended for both clients.
 
 The `rpg` skill is a short entry point; the Game Master guide itself comes from the server through
-`get_instructions`, so the skill rarely needs to change when the protocol does.
+`get_instructions`, so the skill rarely needs to change when the protocol does. See
+[Tool approvals (allow-listing)](../README.md#tool-approvals-allow-listing) for configuring auto-approval on
+the routine gameplay tools while keeping confirmation prompts on `restore_checkpoint`, `complete_campaign` and
+`apply_gm_override`.
 
 To check the package and launcher without downloading a release or touching a campaign, run the Node
 test suites from the repository root:

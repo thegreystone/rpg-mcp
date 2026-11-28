@@ -170,9 +170,9 @@ final class SetupDecisions {
 		}
 		if (draft.section("party") == null) {
 			out.add(Decision.of("party", "Should the player shape the companions who may join them?")
-					.recordedBy(SETUP_TOOL, "PARTY_DESIGN", "params.preferences")
+					.recordedBy(SETUP_TOOL, "PARTY_DESIGN", "params.preferences.authorship")
 					.suggestions(Described.options(Authorship.class)).surpriseMe()
-					.note("Record desired_roles, relationship_seeds, companion_agency and personality_distinctiveness from the answer; intentions are never guarantees."));
+					.note("Record desired_roles, relationship_seeds, companion_agency and personality_distinctiveness alongside authorship under params.preferences; intentions are never guarantees."));
 		}
 		if (draft.section("adventure") == null) {
 			out.add(Decision.of("adventure",

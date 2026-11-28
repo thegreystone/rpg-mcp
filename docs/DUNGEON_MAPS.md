@@ -1,9 +1,8 @@
 # Dungeon maps
 
 Status: design and implementation targets. The core dungeon/scene authoring, PNG/text rendering,
-incremental reveal and tactical grid support are implemented, with final verification tracked separately.
-See [supported map workflows](MAP_USAGE.md), the [delivery checklist](MAP_IMPLEMENTATION_PLAN.md) and
-the [playtest report](MAP_PLAYTEST_REPORT.md) for the delivered surface, limits and verification evidence.
+incremental reveal and tactical grid support are implemented. See [supported map workflows](MAP_USAGE.md)
+and the [backlog](BACKLOG.md) for the delivered surface and remaining extensions.
 The shared tactical scene model also covers incidental street, inn-entrance and roadside combat without
 requiring a complete settlement map. Detailed settlement authoring helpers remain a later extension.
 The [shared map format and outdoor cartography design](MAP_FORMAT.md) covers regional support and broader

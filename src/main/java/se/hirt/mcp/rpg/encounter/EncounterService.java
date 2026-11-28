@@ -3329,7 +3329,7 @@ public final class EncounterService {
 				if ("IRONMAN".equals(policy)) {
 					if (survivors) {
 						next = HarnessState.PLAYER_CHARACTER_TRANSFER;
-						continuation.put("options", List.of("character:TRANSFER_CONTROL", "session:COMPLETE"));
+						continuation.put("options", List.of("character:TRANSFER_CONTROL", "complete_campaign"));
 					} else {
 						next = HarnessState.CAMPAIGN_FAILED;
 						campaignStatus = "FAILED";
@@ -3343,8 +3343,8 @@ public final class EncounterService {
 				} else {
 					next = HarnessState.CHECKPOINT_DECISION;
 					continuation.put("options",
-							survivors ? List.of("checkpoints:RESTORE", "character:TRANSFER_CONTROL", "session:COMPLETE")
-									: List.of("checkpoints:RESTORE", "session:COMPLETE"));
+							survivors ? List.of("restore_checkpoint", "character:TRANSFER_CONTROL", "complete_campaign")
+									: List.of("restore_checkpoint", "complete_campaign"));
 				}
 				continuation.put("player_character_status", "DEAD");
 				continuation.put("continuation_policy", policy);

@@ -35,7 +35,7 @@ import java.util.Map;
 
 /**
  * Single source of truth mapping the engine's internal operation identifiers (persisted in SQLite
- * idempotency and audit rows) to the consolidated 22-tool MCP surface ({@code tool:ACTION}, or
+ * idempotency and audit rows) to the consolidated 24-tool MCP surface ({@code tool:ACTION}, or
  * {@code tool} for single-action tools).
  */
 public final class ToolOperations {
@@ -44,16 +44,19 @@ public final class ToolOperations {
 	public static final List<String> IMPLEMENTED_TOOLS = List.of("get_instructions", "session", "campaign_setup",
 			"character_draft", "level_up", "character", "roll_check", "encounter", "spellcasting", "rest_time",
 			"inventory", "economy", "world_travel", "patrols", "narrative", "chronicle", "checkpoints", "rules",
-			"map_preparation", "map_play", "render_map", "apply_gm_override");
+			"map_preparation", "map_play", "render_map", "restore_checkpoint", "complete_campaign",
+			"apply_gm_override");
 
 	private static final Map<String, String> INTERNAL_TO_PUBLIC;
 	private static final Map<String, String> PUBLIC_TO_INTERNAL;
 
 	static {
 		var m = new LinkedHashMap<String, String>();
-		// Standalone
+		// Standalone (read-only & destructive boundaries)
 		m.put("get_instructions", "get_instructions");
 		m.put("render_map", "render_map");
+		m.put("restore_checkpoint", "restore_checkpoint");
+		m.put("complete_campaign", "complete_campaign");
 		m.put("apply_gm_override", "apply_gm_override");
 		// session
 		m.put("get_server_state", "session:STATE");
@@ -61,7 +64,6 @@ public final class ToolOperations {
 		m.put("open_campaign", "session:OPEN");
 		m.put("bootstrap_session", "session:BOOTSTRAP");
 		m.put("suspend_session", "session:SUSPEND");
-		m.put("complete_campaign", "session:COMPLETE");
 		// campaign_setup
 		m.put("get_setup_state", "campaign_setup:GET");
 		m.put("update_campaign_setup", "campaign_setup:UPDATE");
@@ -157,7 +159,6 @@ public final class ToolOperations {
 		// checkpoints
 		m.put("create_checkpoint", "checkpoints:CREATE");
 		m.put("get_continuation_options", "checkpoints:OPTIONS");
-		m.put("restore_checkpoint", "checkpoints:RESTORE");
 		// rules
 		m.put("search_rules", "rules:SEARCH");
 		m.put("get_content_definitions", "rules:DEFINITIONS");

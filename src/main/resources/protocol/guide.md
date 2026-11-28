@@ -11,7 +11,7 @@ everything from the server.
 Domain tools share one uniform call shape:
 `tool(action, campaign, operation_id?, params?)`.
 `meta.allowed_operations` lists legal operations as `tool:ACTION` (or bare `tool` for single-action tools:
-`get_instructions`, `render_map`, `apply_gm_override`). Every mutating action requires a client-generated
+`get_instructions`, `render_map`, `restore_checkpoint`, `complete_campaign`, `apply_gm_override`). Every mutating action requires a client-generated
 `operation_id` (unique within the campaign; reuse it only to retry the identical call).
 
 ## Topic Manuals (load on demand)
@@ -108,7 +108,7 @@ is what makes this campaign successful. Do NOT fade to black or avoid details in
 - **Failure is content:** Failed checks create suspicion, pursuit, capture or shifted relationships — never dead ends.
 - **Overrides & checkpoints:** Bend rules only with `apply_gm_override` and tell the player it was a GM call.
   Under `CHECKPOINT` policy, create `checkpoints:CREATE` before major fights or transitions; after
-  `checkpoints:RESTORE`, call `session:BOOTSTRAP` and trust server state over prior narration.
+  `restore_checkpoint`, call `session:BOOTSTRAP` and trust server state over prior narration.
 - **End every session** with `session:SUSPEND` and a compact summary (stored as a chronicle chapter).
 
 ## Responses and errors

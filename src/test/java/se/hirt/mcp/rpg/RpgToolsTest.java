@@ -214,10 +214,12 @@ class RpgToolsTest {
 		assertTrue(text(resources.capabilities()).contains("\"checkpoints\":true"));
 		Map<String, Object> caps = Json.readMap(text(resources.capabilities()));
 		List<?> implemented = (List<?>) caps.get("implemented_tools");
-		assertEquals(22, implemented.size(), "Compact consolidated surface should stay small for multi-MCP hosts");
+		assertEquals(24, implemented.size(), "Compact consolidated surface should stay small for multi-MCP hosts");
 		assertTrue(implemented.contains("get_instructions"));
 		assertTrue(implemented.contains("character"));
 		assertTrue(implemented.contains("render_map"));
+		assertTrue(implemented.contains("restore_checkpoint"));
+		assertTrue(implemented.contains("complete_campaign"));
 		assertEquals(Boolean.TRUE, ((Map<?, ?>) caps.get("capabilities")).get("want_references"));
 		assertEquals(Boolean.TRUE, ((Map<?, ?>) caps.get("capabilities")).get("compact_tool_surface"));
 	}

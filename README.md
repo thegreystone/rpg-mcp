@@ -182,6 +182,15 @@ Ask your AI: **"Is RPG MCP ready to play?"**
 
 It should check the connection and tell you whether you have saved campaigns or are ready to create your first.
 
+### Tool approvals (allow-listing)
+
+Because the 19 domain tools bundle read and mutating actions under one name (for example `character:PARTY` and `rules:SEARCH`), clients that only auto-approve `readOnlyHint = true` tools (`get_instructions`, `render_map`) will prompt on routine lookups unless you allow-list the gameplay tools.
+
+Every destructive operation is isolated on its own `destructiveHint = true` standalone tool — `restore_checkpoint`, `complete_campaign` and `apply_gm_override` — while all other mutations are journaled and rewindable. You can safely allow-list the 21 non-destructive tools and keep confirmation prompts on those three destructive boundaries:
+
+- **Claude Code:** approve the routine RPG tools in `/permissions` (or add `mcp__rpg__<tool>` / `mcp__plugin_rpg-mcp_rpg-mcp__<tool>` entries in `~/.claude/settings.json` for `get_instructions`, `render_map`, `session`, `campaign_setup`, `character_draft`, `level_up`, `character`, `roll_check`, `encounter`, `spellcasting`, `rest_time`, `inventory`, `economy`, `world_travel`, `patrols`, `narrative`, `chronicle`, `checkpoints`, `rules`, `map_preparation`, `map_play`), leaving `restore_checkpoint`, `complete_campaign` and `apply_gm_override` unapproved so they always ask.
+- **Claude Desktop / Codex:** choose *"Always allow"* for the non-destructive tools as they appear (or configure per-tool approval rules in Codex) while keeping confirmation on the three destructive tools.
+
 ---
 
 ## 2. Get a campaign started
@@ -275,11 +284,8 @@ If several campaigns are available, it asks which one you want. Chat transcripts
 ## Documentation
 
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — planned improvements and their acceptance criteria.
-- [`docs/MAP_IMPLEMENTATION_PLAN.md`](docs/MAP_IMPLEMENTATION_PLAN.md) — implemented map capabilities, service boundaries,
-  deferred limits and final verification gates.
 - [`docs/MAP_USAGE.md`](docs/MAP_USAGE.md) — dungeon blueprints, grid play, PNG/text views, custom textures,
   regional authoring, atlas references, living notes, patrols and interrupted journeys.
-- [`docs/MAP_PLAYTEST_REPORT.md`](docs/MAP_PLAYTEST_REPORT.md) — map validation evidence and platform-specific results.
 - [`docs/DUNGEON_MAPS.md`](docs/DUNGEON_MAPS.md) — dungeon design targets, incremental reveal, default materials
   and custom materials, tool-rendered images, custom geometry, multi-room encounters and party markers.
 - [`docs/MAP_FORMAT.md`](docs/MAP_FORMAT.md) — shared map design and broader outdoor cartography targets,

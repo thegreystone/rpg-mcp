@@ -386,7 +386,9 @@ public final class CampaignService {
 			}
 			draft.sectionOrCreate("content_profile").put("profile", profile);
 		}
-		case "experience", "party" -> mergeSection(draft, key, value);
+		case "experience" -> mergeSection(draft, key, value);
+		case "party" -> mergeSection(draft, key,
+				value instanceof String s && !s.isBlank() ? Map.of("authorship", s.trim()) : value);
 		case "rules" -> {
 			Map<String, Object> incoming = draft.normalizeAnswers(key, asMap(key, value));
 			for (var e : incoming.entrySet()) {

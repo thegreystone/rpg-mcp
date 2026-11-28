@@ -37,4 +37,6 @@ version in that URL and push. Marketplace users pick the change up with
 
 The skill is a short entry point; the Game Master guide itself comes from the server through
 `get_instructions` ([protocol/guide.md](../src/main/resources/protocol/guide.md)), so the skill rarely
-needs to change when the protocol does.
+needs to change when the protocol does. See [Tool approvals (allow-listing)](../README.md#tool-approvals-allow-listing)
+if you want Claude Code to auto-approve routine gameplay tools while keeping confirmation prompts on the three
+standalone destructive tools (`restore_checkpoint`, `complete_campaign`, `apply_gm_override`).

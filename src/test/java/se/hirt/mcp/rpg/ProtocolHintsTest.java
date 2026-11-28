@@ -39,12 +39,13 @@ class ProtocolHintsTest {
 								map("kind", "ATTACK", "target", "character:2"))),
 				"allowed_operations", List.of("get_character_sheet", "perform_encounter_action"), "resolve_with",
 				"resolve_pending_choice", "continuation",
-				map("options", List.of("restore_checkpoint", "complete_campaign")))));
+				map("options", List.of("restore_checkpoint", "transfer_player_control", "complete_campaign")))));
 		assertEquals(map("tool", "character_draft", "action", "UPDATE", "path", "params.changes.skills"),
 				delivered.get("decision"));
 		assertEquals(List.of("character:SHEET", "encounter:ACTION"), delivered.get("allowed_operations"));
 		assertEquals("encounter:RESOLVE_CHOICE", delivered.get("resolve_with"));
-		assertEquals(map("options", List.of("checkpoints:RESTORE", "session:COMPLETE")), delivered.get("continuation"));
+		assertEquals(map("options", List.of("restore_checkpoint", "character:TRANSFER_CONTROL", "complete_campaign")),
+				delivered.get("continuation"));
 		assertEquals(
 				map("tool", "encounter", "arguments",
 						map("action", "ACTION", "campaign", "campaign:1", "operation_id", "retry-1", "params",
@@ -58,6 +59,35 @@ class ProtocolHintsTest {
 		Map<String, Object> payload = map("summary", "grant_loot", "options", List.of("trade", "find"), "tool",
 				"Thieves' Tools", "path", "changes.some_story_field", "operation", "trade", "action", "ATTACK");
 		assertEquals(payload, result(ToolSupport.envelope(payload)));
+	}
+
+	@Test
+	void leavesGmAuthoredMapsWithToolKeysUntouched() {
+		Map<String, Object> payload = map("memory",
+				map("payload", map("tool", "trade", "note", "Guild contract"), "details",
+						map("tool", "find", "path", "north road")),
+				"properties", map("tool", "grant_loot", "category", "story"), "story_beat",
+				map("gm_brief", "Meet at dock", "clues", List.of(map("tool", "trade"))));
+		assertEquals(payload, result(ToolSupport.envelope(payload)));
+	}
+
+	@Test
+	void translatesAdditionalLegacyHintFieldsAndDecisionLists() {
+		Map<String, Object> legacy = map("legal_operations", List.of("get_level_up_choices", "commit_level_up"),
+				"recover_with", "recover_ammunition", "next_operation", "revise_map_preparation", "next_tool",
+				"update_map_object", "decisions",
+				List.of(map("id", "rules.xp", "tool", "update_campaign_setup", "path", "changes.rules.xp_policy")),
+				"reward_hint", map("tool", "grant_loot", "source_ref", "encounter:3"));
+		Map<String, Object> delivered = result(ToolSupport.envelope(legacy));
+		assertEquals(List.of("level_up:CHOICES", "level_up:COMMIT"), delivered.get("legal_operations"));
+		assertEquals("encounter:RECOVER_AMMO", delivered.get("recover_with"));
+		assertEquals("map_preparation:REVISE", delivered.get("next_operation"));
+		assertEquals("map_play:UPDATE_OBJECT", delivered.get("next_tool"));
+		assertEquals(List.of(map("id", "rules.xp", "tool", "campaign_setup", "action", "UPDATE", "path",
+				"params.changes.rules.xp_policy")), delivered.get("decisions"));
+		assertEquals(map("tool", "inventory", "action", "GRANT_LOOT", "source_ref", "encounter:3"),
+				delivered.get("reward_hint"));
+		assertEquals(delivered, result(ToolSupport.envelope(delivered)), "Already upgraded hints must be stable");
 	}
 
 	@Test

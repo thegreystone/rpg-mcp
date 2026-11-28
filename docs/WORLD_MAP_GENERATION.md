@@ -1,9 +1,8 @@
 # Creative world-map authoring brief
 
 Status: creative guidance for the implemented Campaign/World Engine authoring workflow and its broader
-generation targets. See [supported tool usage](MAP_USAGE.md), the
-[delivery checklist](MAP_IMPLEMENTATION_PLAN.md),
-[`DESIGN.md` §20](DESIGN.md#20-semantic-maps) and the [map format](MAP_FORMAT.md) for persistence,
+generation targets. See [supported tool usage](MAP_USAGE.md), [`DESIGN.md` §20](DESIGN.md#20-semantic-maps)
+and the [map format](MAP_FORMAT.md) for persistence,
 spatial structure and atlas continuity. Generation tools should supply a concise version of this brief
 to the authoring LLM together with the particular campaign and neighboring-map constraints.
 

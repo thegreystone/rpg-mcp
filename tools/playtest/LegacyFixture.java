@@ -45,7 +45,8 @@ public final class LegacyFixture {
 	private static Map<String, Object> snapshot(Engine e) {
 			return e.db().read(tx -> {
 				var result = new LinkedHashMap<String, Object>();
-				result.put("clock", GameTime.currentSeq(tx, 1) * 60);
+				Row clock = GameTime.clock(tx, 1);
+				result.put("clock", clock.lng("seq") * 60 + clock.intOr("second_offset", 0));
 				result.put("characters", tx.query("SELECT * FROM character ORDER BY id").stream().map(r -> fields(r, "id", "name", "current_hp", "max_hp", "temp_hp", "life_state", "xp", "money_cp", "location_id")).toList());
 				result.put("inventory", tx.query("SELECT * FROM inventory_entry ORDER BY id").stream().map(r -> fields(r, "id", "character_id", "location_id", "content_ref", "custom_content_id", "quantity", "equipped")).toList());
 				result.put("resources", tx.query("SELECT * FROM resource_state ORDER BY character_id, resource_ref").stream().map(r -> fields(r, "character_id", "resource_ref", "current", "max")).toList());

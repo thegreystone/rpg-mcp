@@ -56,8 +56,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static se.hirt.mcp.rpg.TestCampaigns.*;
 
 /**
- * Verifies the consolidated 22-tool MCP surface: exact tool inventory, 112-operation bijection,
- * compact schema budget, topic-split guide, and dispatch across all domain tools.
+ * Verifies the consolidated 24-tool MCP surface: exact tool inventory, 112-operation bijection,
+ * compact schema budget, accurate read-only/destructive annotations, topic-split guide, and
+ * dispatch across all domain tools.
  */
 class CompactSurfaceTest {
 
@@ -67,6 +68,8 @@ class CompactSurfaceTest {
 	@Test
 	void toolSurfaceIsCompactWellDocumentedAndMatchesToolOperations() {
 		Set<String> exposed = new LinkedHashSet<>();
+		Set<String> readOnly = new LinkedHashSet<>();
+		Set<String> destructive = new LinkedHashSet<>();
 		Map<String, Method> methodsByTool = new LinkedHashMap<>();
 		int descChars = 0;
 		int argChars = 0;
@@ -77,6 +80,12 @@ class CompactSurfaceTest {
 					continue;
 				}
 				assertTrue(exposed.add(tool.name()), "Duplicate @Tool name: " + tool.name());
+				if (tool.annotations().readOnlyHint()) {
+					readOnly.add(tool.name());
+				}
+				if (tool.annotations().destructiveHint()) {
+					destructive.add(tool.name());
+				}
 				methodsByTool.put(tool.name(), m);
 				assertFalse(tool.description().isBlank(), tool.name() + " needs a description");
 				descChars += tool.description().length();
@@ -88,8 +97,10 @@ class CompactSurfaceTest {
 				}
 			}
 		}
-		assertEquals(22, exposed.size(), "Expected 22 consolidated tools, got: " + exposed);
+		assertEquals(24, exposed.size(), "Expected 24 consolidated tools, got: " + exposed);
 		assertEquals(Set.copyOf(ToolOperations.IMPLEMENTED_TOOLS), exposed);
+		assertEquals(Set.of("get_instructions", "render_map"), readOnly);
+		assertEquals(Set.of("restore_checkpoint", "complete_campaign", "apply_gm_override"), destructive);
 		assertTrue(descChars < 16_000, "Tool descriptions grew too large: " + descChars + " chars");
 		assertTrue(argChars < 6_000, "Arg descriptions grew too large: " + argChars + " chars");
 
@@ -244,25 +255,107 @@ class CompactSurfaceTest {
 	}
 
 	@Test
-	void toolArgsOptLongValidatesExactRangeAndBigNumbers() {
+	void toolArgsAcceptsQuotedNumbersAndBooleansAndValidatesRanges() {
 		ToolArgs valid = ToolArgs.of("test", "ACT", null,
-				Map.of("i", 42, "max", Long.MAX_VALUE, "min", Long.MIN_VALUE, "bi", BigInteger.valueOf(Long.MAX_VALUE),
-						"bd", new BigDecimal("12345.00"), "dbl", 100.0),
-				"i, max, min, bi, bd, dbl", "i", "max", "min", "bi", "bd", "dbl");
+				map("i", 42, "sInt", " 60 ", "sNeg", "-5", "max", Long.MAX_VALUE, "min", Long.MIN_VALUE, "sLong",
+						String.valueOf(Long.MAX_VALUE), "bi", BigInteger.valueOf(Long.MAX_VALUE), "bd",
+						new BigDecimal("12345.00"), "dbl", 100.0, "sDbl", " 2.5 ", "bTrue", "true", "bFalse",
+						" FALSE "),
+				"i, sInt, sNeg, max, min, sLong, bi, bd, dbl, sDbl, bTrue, bFalse", "i", "sInt", "sNeg", "max", "min",
+				"sLong", "bi", "bd", "dbl", "sDbl", "bTrue", "bFalse");
+		assertEquals(42, valid.optInt("i"));
+		assertEquals(60, valid.optInt("sInt"));
+		assertEquals(-5, valid.optInt("sNeg"));
 		assertEquals(42L, valid.optLong("i"));
+		assertEquals(60L, valid.optLong("sInt"));
 		assertEquals(Long.MAX_VALUE, valid.optLong("max"));
 		assertEquals(Long.MIN_VALUE, valid.optLong("min"));
+		assertEquals(Long.MAX_VALUE, valid.optLong("sLong"));
 		assertEquals(Long.MAX_VALUE, valid.optLong("bi"));
 		assertEquals(12345L, valid.optLong("bd"));
 		assertEquals(100L, valid.optLong("dbl"));
+		assertEquals(2.5, valid.optDouble("sDbl"));
+		assertEquals(Boolean.TRUE, valid.optBool("bTrue"));
+		assertEquals(Boolean.FALSE, valid.optBool("bFalse"));
 
 		for (Object bad : List.of(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
 				BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE), new BigDecimal("1.5"), 1e30,
-				(double) Long.MAX_VALUE, Double.NaN, Double.POSITIVE_INFINITY, "42")) {
+				(double) Long.MAX_VALUE, Double.NaN, Double.POSITIVE_INFINITY, "1.5", "abc", "",
+				"9223372036854775808")) {
 			ToolArgs invalid = ToolArgs.of("test", "ACT", null, Map.of("v", bad), "v", "v");
 			RpgException ex = assertThrows(RpgException.class, () -> invalid.optLong("v"),
 					"Expected rejection for " + bad + " (" + bad.getClass().getSimpleName() + ")");
 			assertEquals(ErrorCode.INVALID_ARGUMENT, ex.code());
+		}
+		for (Object badInt : List.of(Long.MAX_VALUE, "2147483648", "1.5", "abc", "")) {
+			ToolArgs invalid = ToolArgs.of("test", "ACT", null, Map.of("v", badInt), "v", "v");
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class, () -> invalid.optInt("v")).code());
+		}
+		for (Object badDbl : List.of(Double.NaN, Double.POSITIVE_INFINITY, "NaN", "Infinity", "abc", "")) {
+			ToolArgs invalid = ToolArgs.of("test", "ACT", null, Map.of("v", badDbl), "v", "v");
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class, () -> invalid.optDouble("v")).code());
+		}
+		for (Object badBool : List.of("yes", "1", "", 1)) {
+			ToolArgs invalid = ToolArgs.of("test", "ACT", null, Map.of("v", badBool), "v", "v");
+			assertEquals(ErrorCode.INVALID_ARGUMENT,
+					assertThrows(RpgException.class, () -> invalid.optBool("v")).code());
+		}
+	}
+
+	@Test
+	void partyDesignDecisionMatchesToolAndAcceptsObjectOrScalarChoice() throws Exception {
+		try (Engine engine = engine(tempDb("compact-surface-party-design"))) {
+			RpgTools rpg = new RpgTools();
+			rpg.engine = engine;
+			String campaign = (String) ok(rpg.session("CREATE", null, op(), Map.of("title", "Party Setup")))
+					.get("campaign");
+			Map<String, Object> setup = ok(rpg.campaignSetup("GET", campaign, null, null));
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> decisions = (List<Map<String, Object>>) setup.get("decisions");
+			Map<String, Object> partyDecision = decisions.stream().filter(d -> "party".equals(d.get("id"))).findFirst()
+					.orElseThrow();
+			assertEquals("campaign_setup", partyDecision.get("tool"));
+			assertEquals("PARTY_DESIGN", partyDecision.get("action"));
+			assertEquals("params.preferences.authorship", partyDecision.get("path"));
+
+			Map<String, Object> afterScalar = ok(
+					rpg.campaignSetup("PARTY_DESIGN", campaign, op(), Map.of("preferences", "SURPRISE_ME")));
+			@SuppressWarnings("unchecked")
+			Map<String, Object> setupMap = (Map<String, Object>) afterScalar.get("setup");
+			assertEquals(Map.of("authorship", "SURPRISE_ME"), setupMap.get("party"));
+
+			Map<String, Object> afterObject = ok(rpg.campaignSetup("PARTY_DESIGN", campaign, op(),
+					Map.of("preferences", Map.of("authorship", "COLLABORATIVE", "desired_roles", List.of("healer")))));
+			@SuppressWarnings("unchecked")
+			Map<String, Object> setupMap2 = (Map<String, Object>) afterObject.get("setup");
+			assertEquals(Map.of("authorship", "COLLABORATIVE", "desired_roles", List.of("healer")),
+					setupMap2.get("party"));
+		}
+	}
+
+	@Test
+	void standaloneDestructiveToolsRestoreCheckpointAndCompleteCampaign() throws Exception {
+		try (Engine engine = engine(tempDb("compact-surface-destructive"))) {
+			String campaign = committedCampaign(engine);
+			engine.sessions().bootstrap(op(), campaign, null);
+			RpgTools rpg = new RpgTools();
+			rpg.engine = engine;
+
+			Map<String, Object> created = ok(
+					rpg.checkpoints("CREATE", campaign, op(), Map.of("reason", "Before detour")));
+			String checkpoint = (String) created.get("checkpoint");
+			Map<String, Object> options = ok(rpg.checkpoints("OPTIONS", campaign, null, null));
+			String optionsJson = Json.write(options);
+			assertTrue(optionsJson.contains("\"restore_checkpoint\""), optionsJson);
+			assertTrue(optionsJson.contains("\"complete_campaign\""), optionsJson);
+
+			ok(rpg.restoreCheckpoint(op(), campaign, checkpoint, "Rewind test"));
+			ok(rpg.session("BOOTSTRAP", campaign, op(), null));
+			Map<String, Object> ended = ok(
+					rpg.completeCampaign(op(), campaign, "COMPLETED", "Story finished", "Heroes retired."));
+			assertEquals("COMPLETED", ended.get("status"));
 		}
 	}
 

@@ -14,8 +14,8 @@ import java.util.Set;
  */
 final class ProtocolHints {
 
-	private static final Set<String> LABEL_FIELDS = Set.of("allowed_operations", "legal_actions", "resolve_with",
-			"annotation_tool", "supported_alternative");
+	private static final Set<String> LABEL_FIELDS = Set.of("allowed_operations", "legal_actions", "legal_operations",
+			"resolve_with", "recover_with", "annotation_tool", "supported_alternative", "next_operation", "next_tool");
 
 	private ProtocolHints() {
 	}
@@ -43,7 +43,7 @@ final class ProtocolHints {
 					&& ("continuation".equals(context) || map.containsKey("continuation_policy"));
 			copy.put(key, visit(entry.getValue(), key, operationLabels));
 		}
-		if (map.get("tool") instanceof String legacy) {
+		if (map.get("tool") instanceof String legacy && isToolHintMap(map, context)) {
 			String operation = ToolOperations.publicName(legacy);
 			int colon = operation.indexOf(':');
 			if (!operation.equals(legacy) && colon > 0) {
@@ -77,5 +77,16 @@ final class ProtocolHints {
 				&& map.get("operation") instanceof String operation)
 			copy.put("operation", ToolOperations.publicName(operation));
 		return copy;
+	}
+
+	private static boolean isToolHintMap(Map<?, ?> map, String context) {
+		if (map.get("arguments") instanceof Map<?, ?>)
+			return true;
+		if (map.get("source_ref") instanceof String)
+			return true;
+		if ("loot".equals(context) && map.get("source") instanceof String)
+			return true;
+		return map.get("path") instanceof String
+				&& ("decisions".equals(context) || "decision".equals(context) || map.containsKey("question"));
 	}
 }

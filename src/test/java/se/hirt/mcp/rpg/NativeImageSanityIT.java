@@ -85,11 +85,13 @@ class NativeImageSanityIT {
 			assertTrue(tools.contains("\"render_map\""), tools);
 			assertTrue(tools.contains("\"patrols\""), tools);
 			assertTrue(tools.contains("\"character\""), tools);
+			assertTrue(tools.contains("\"restore_checkpoint\""), tools);
+			assertTrue(tools.contains("\"complete_campaign\""), tools);
 			Map<String, Object> toolsResult = cast(Json.readMap(tools).get("result"));
 			assertTrue(!toolsResult.containsKey("nextCursor"),
 					"Desktop hosts must discover the complete tool surface on the first page");
 			List<?> toolDefs = (List<?>) toolsResult.get("tools");
-			assertTrue(toolDefs.size() == 22, "Expected 22 consolidated tools, got " + toolDefs.size());
+			assertTrue(toolDefs.size() == 24, "Expected 24 consolidated tools, got " + toolDefs.size());
 			for (Object definition : toolDefs) {
 				var tool = cast(definition);
 				for (var parameter : cast(cast(tool.get("inputSchema")).get("properties")).entrySet())
