@@ -12,7 +12,7 @@ import { PassThrough, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 
-export const RELEASE_VERSION = '0.2.0';
+export const RELEASE_VERSION = '0.3.0';
 export const RELEASE_ARTIFACT_PREFIX = 'rpg-mcp-server';
 const REPOSITORY = 'thegreystone/rpg-mcp';
 const MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024;

@@ -1,6 +1,6 @@
 {
   "name": "rpg-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A persistent, rules-aware RPG engine (SRD 5.2.1) that turns your AI into a game master for campaigns that last for years.",
   "author": { "name": "Marcus Hirt", "url": "https://www.hirt.se" },
   "homepage": "https://github.com/thegreystone/rpg-mcp",

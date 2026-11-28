@@ -16,7 +16,7 @@ startup timeout, and to choose another campaign data directory when the player w
 
 1. Locate the plugin root from this skill's installed path: two directories above this skill's directory.
    The launcher is `scripts/rpg-mcp.mjs` inside that root. Use its actual absolute path in shell commands;
-   `${PLUGIN_ROOT}` in `mcp.json` is expanded by the plugin loader, not by the shell.
+   `${PLUGIN_ROOT}` in `.mcp.json` is expanded by the plugin loader, not by the shell.
 2. Check that `node` is available and version 18 or newer. The launcher uses only built-in Node modules;
    there is no npm package to install. If Node is absent, explain that it must be installed and made
    available to the Codex process, then continue setup after that prerequisite is met.
