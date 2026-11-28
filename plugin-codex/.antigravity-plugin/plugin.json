@@ -1,0 +1,21 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "rpg-mcp",
+  "displayName": "RPG MCP",
+  "version": "0.3.0",
+  "description": "A persistent, rules-aware RPG engine (SRD 5.2.1) that turns your AI into a game master for campaigns that last for years.",
+  "logo": "assets/icon.png",
+  "suggestedPrompts": [
+    "Is RPG MCP ready to play?",
+    "Start a new campaign using RPG MCP.",
+    "Please continue my campaign using RPG MCP."
+  ],
+  "author": {
+    "name": "Marcus Hirt",
+    "url": "https://www.hirt.se"
+  },
+  "homepage": "https://github.com/thegreystone/rpg-mcp",
+  "repository": "https://github.com/thegreystone/rpg-mcp",
+  "license": "BSD-3-Clause",
+  "keywords": ["rpg", "dungeon-master", "srd", "5e", "campaign", "game", "dice"]
+}

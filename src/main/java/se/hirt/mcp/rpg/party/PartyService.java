@@ -227,7 +227,7 @@ public final class PartyService {
 			if (joined != null) {
 				result.put("joined_at_party_experience", joined);
 			}
-			result.put("party", sessions.partyMembers(tx, campaignId, "SUMMARY"));
+			result.put("party", sessions.partyRoster(tx, campaignId));
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});

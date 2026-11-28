@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rpg-mcp": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/scripts/rpg-mcp.mjs"]
+    }
+  }
+}

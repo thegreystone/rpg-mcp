@@ -149,7 +149,8 @@ public final class SessionService {
 				}
 			}
 			Row current = tx.get("campaign", campaignId);
-			Map<String, Object> context = context(tx, current, contextBudget == null ? DEFAULT_BUDGET : contextBudget);
+			int effectiveBudget = contextBudget == null ? DEFAULT_BUDGET : contextBudget;
+			Map<String, Object> context = context(tx, current, effectiveBudget);
 			var worldMaps = new LinkedHashMap<>(se.hirt.mcp.rpg.maps.WorldMapPreparation.resume(tx, campaignId));
 			worldMaps.put("current_board", se.hirt.mcp.rpg.maps.GridCombat.currentBoard(tx, campaignId));
 			context.put("world_maps", worldMaps);
@@ -161,6 +162,7 @@ public final class SessionService {
 				warnings.add(treasure);
 			}
 			context.put("meta", Harness.meta(current, warnings.isEmpty() ? null : warnings));
+			enforceBudget(context, effectiveBudget, Math.max(6_000, effectiveBudget * CHARS_PER_TOKEN));
 			return context;
 		});
 	}
@@ -530,12 +532,330 @@ public final class SessionService {
 		ctx.put("director_seeds", tx
 				.query("SELECT id, kind, state FROM director_seed WHERE campaign_id = ? AND state = 'OPEN'", campaignId)
 				.stream().map(s -> Ref.of(Ref.SEED, s.id()) + " (" + s.str("kind") + ")").toList());
-		var b = new LinkedHashMap<String, Object>();
-		b.put("tokens", budget);
-		b.put("chars_target", chars);
-		b.put("chars_used", se.hirt.mcp.rpg.protocol.Json.write(ctx).length());
-		ctx.put("budget", b);
+		enforceBudget(ctx, budget, chars);
 		return ctx;
+	}
+
+	/**
+	 * Enforces {@code charsTarget} across the whole context map (including fields added after
+	 * {@link #context}, such as {@code world_maps} and {@code meta}) and records the final
+	 * serialized character count in {@code budget}.
+	 */
+	@SuppressWarnings("unchecked")
+	private static void enforceBudget(Map<String, Object> ctx, int tokens, int charsTarget) {
+		ctx.remove("budget");
+		// Reserve room for the budget block and JSON envelope wrapper ("{\"result\":...}").
+		int limit = Math.max(4_000, charsTarget - 256);
+		var trimmed = new ArrayList<String>();
+		if (jsonLength(ctx) > limit) {
+			trimChronicleTail(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimChronicleChapters(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimRecentEvents(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimStoryBeats(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimRelationships(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimAdventureNotes(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimPartyDetails(ctx, limit, trimmed);
+		}
+		if (jsonLength(ctx) > limit) {
+			trimChronicleSynopsis(ctx, limit, trimmed);
+		}
+		var b = new LinkedHashMap<String, Object>();
+		b.put("tokens", tokens);
+		b.put("chars_target", charsTarget);
+		if (!trimmed.isEmpty()) {
+			b.put("trimmed_sections", trimmed);
+		}
+		b.put("chars_used", 0);
+		ctx.put("budget", b);
+		int used = jsonLength(ctx);
+		b.put("chars_used", used);
+		// Recompute once in case the digit width of chars_used grew.
+		b.put("chars_used", jsonLength(ctx));
+	}
+
+	private static int jsonLength(Map<String, Object> map) {
+		return se.hirt.mcp.rpg.protocol.Json.write(map).length();
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimChronicleTail(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("chronicle") instanceof Map<?, ?> chronRaw)) {
+			return;
+		}
+		Map<String, Object> chron = (Map<String, Object>) chronRaw;
+		if (!(chron.get("since_last_chapter") instanceof Map<?, ?> tailRaw)) {
+			return;
+		}
+		Map<String, Object> tail = (Map<String, Object>) tailRaw;
+		List<Object> notable = tail.get("notable") instanceof List<?> l ? new ArrayList<>(l) : new ArrayList<>();
+		List<Object> major = tail.get("major") instanceof List<?> l ? new ArrayList<>(l) : new ArrayList<>();
+		List<Object> critical = tail.get("critical") instanceof List<?> l ? new ArrayList<>(l) : new ArrayList<>();
+		int omitted = tail.get("omitted_for_budget") instanceof Number n ? n.intValue() : 0;
+		boolean changed = false;
+		while (jsonLength(ctx) > limit) {
+			if (!notable.isEmpty()) {
+				notable.remove(0);
+				tail.put("notable", notable);
+				omitted++;
+				changed = true;
+			} else if (!major.isEmpty()) {
+				major.remove(0);
+				tail.put("major", major);
+				omitted++;
+				changed = true;
+			} else if (stripOneCriticalDetail(critical)) {
+				tail.put("critical", critical);
+				changed = true;
+			} else if (!critical.isEmpty()) {
+				critical.remove(0);
+				tail.put("critical", critical);
+				omitted++;
+				changed = true;
+			} else {
+				break;
+			}
+		}
+		if (omitted > 0) {
+			tail.put("omitted_for_budget", omitted);
+		}
+		if (changed) {
+			trimmed.add("chronicle.since_last_chapter");
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static boolean stripOneCriticalDetail(List<Object> critical) {
+		for (int i = 0; i < critical.size(); i++) {
+			if (critical.get(i) instanceof Map<?, ?> raw && raw.containsKey("detail")) {
+				var copy = new LinkedHashMap<String, Object>((Map<String, Object>) raw);
+				copy.remove("detail");
+				critical.set(i, copy);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimChronicleChapters(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("chronicle") instanceof Map<?, ?> chronRaw)) {
+			return;
+		}
+		Map<String, Object> chron = (Map<String, Object>) chronRaw;
+		if (!(chron.get("chapters_since_synopsis") instanceof List<?> raw) || raw.isEmpty()) {
+			return;
+		}
+		var chapters = new ArrayList<Object>(raw);
+		int omitted = chron.get("chapters_omitted_for_budget") instanceof Number n ? n.intValue() : 0;
+		boolean changed = false;
+		while (jsonLength(ctx) > limit && chapters.size() > 1) {
+			chapters.remove(0);
+			chron.put("chapters_since_synopsis", chapters);
+			omitted++;
+			changed = true;
+		}
+		if (jsonLength(ctx) > limit && chapters.size() == 1 && chapters.get(0) instanceof Map<?, ?> lastRaw) {
+			var last = new LinkedHashMap<String, Object>((Map<String, Object>) lastRaw);
+			if (last.get("summary") instanceof String s && s.length() > 300) {
+				last.remove("summary");
+				last.put("summary_head", clipText(s, 200) + "...");
+				chapters.set(0, last);
+				chron.put("chapters_since_synopsis", chapters);
+				changed = true;
+			}
+		}
+		if (omitted > 0) {
+			chron.put("chapters_omitted_for_budget", omitted);
+		}
+		if (changed) {
+			trimmed.add("chronicle.chapters_since_synopsis");
+		}
+	}
+
+	private static void trimRecentEvents(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("recent_events") instanceof List<?> raw) || raw.isEmpty()) {
+			return;
+		}
+		var events = new ArrayList<Object>(raw);
+		int omitted = 0;
+		while (jsonLength(ctx) > limit && !events.isEmpty()) {
+			events.remove(events.size() - 1);
+			ctx.put("recent_events", events);
+			omitted++;
+		}
+		if (omitted > 0) {
+			ctx.put("recent_events_omitted", omitted);
+			trimmed.add("recent_events");
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimStoryBeats(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("story_beats") instanceof List<?> raw) || raw.isEmpty()) {
+			return;
+		}
+		var beats = new ArrayList<Map<String, Object>>();
+		for (Object item : raw) {
+			if (item instanceof Map<?, ?> m) {
+				beats.add(new LinkedHashMap<>((Map<String, Object>) m));
+			}
+		}
+		boolean changed = false;
+		// Keep at least the first beat's brief (clipped if necessary) so the handoff always carries guidance.
+		int firstWithBrief = -1;
+		for (int i = 0; i < beats.size(); i++) {
+			if (beats.get(i).get("gm_brief") instanceof String) {
+				firstWithBrief = i;
+				break;
+			}
+		}
+		for (int i = beats.size() - 1; i >= 0; i--) {
+			if (jsonLength(ctx) <= limit) {
+				break;
+			}
+			if (i == firstWithBrief) {
+				if (beats.get(i).get("gm_brief") instanceof String text && text.length() > 160) {
+					beats.get(i).put("gm_brief", clipText(text, 160));
+					beats.get(i).put("gm_brief_truncated", true);
+					ctx.put("story_beats", beats);
+					changed = true;
+				}
+				continue;
+			}
+			if (beats.get(i).remove("gm_brief") != null) {
+				beats.get(i).put("gm_brief_truncated", true);
+				ctx.put("story_beats", beats);
+				changed = true;
+			}
+		}
+		if (changed) {
+			trimmed.add("story_beats");
+		}
+	}
+
+	private static void trimRelationships(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("relationships") instanceof List<?> raw) || raw.isEmpty()) {
+			return;
+		}
+		var rels = new ArrayList<Object>(raw);
+		int omitted = 0;
+		while (jsonLength(ctx) > limit && !rels.isEmpty()) {
+			rels.remove(rels.size() - 1);
+			ctx.put("relationships", rels);
+			omitted++;
+		}
+		if (omitted > 0) {
+			ctx.put("relationships_omitted", omitted);
+			trimmed.add("relationships");
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimAdventureNotes(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("adventure") instanceof Map<?, ?> advRaw)) {
+			return;
+		}
+		var adv = new LinkedHashMap<String, Object>((Map<String, Object>) advRaw);
+		if (!(adv.get("gm_only") instanceof Map<?, ?> gmRaw)) {
+			return;
+		}
+		var gm = new LinkedHashMap<String, Object>((Map<String, Object>) gmRaw);
+		boolean changed = false;
+		for (String field : List.of("gm_notes", "background_truth")) {
+			if (jsonLength(ctx) > limit && gm.get(field) instanceof String text && text.length() > 400) {
+				gm.put(field, clipText(text, 400) + "...");
+				gm.put("truncated", true);
+				adv.put("gm_only", gm);
+				ctx.put("adventure", adv);
+				changed = true;
+			}
+		}
+		if (changed) {
+			trimmed.add("adventure.gm_only");
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimPartyDetails(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("party") instanceof List<?> raw) || raw.isEmpty()) {
+			return;
+		}
+		var members = new ArrayList<Map<String, Object>>();
+		for (Object item : raw) {
+			if (item instanceof Map<?, ?> m) {
+				members.add(new LinkedHashMap<>((Map<String, Object>) m));
+			}
+		}
+		boolean changed = false;
+		for (Map<String, Object> member : members) {
+			if (jsonLength(ctx) <= limit) {
+				break;
+			}
+			if (member.get("wants") instanceof List<?> wants && !wants.isEmpty()) {
+				member.remove("wants");
+				member.put("wants_count", wants.size());
+				member.put("wants_omitted_for_budget", true);
+				ctx.put("party", members);
+				changed = true;
+			}
+		}
+		for (Map<String, Object> member : members) {
+			if (jsonLength(ctx) <= limit) {
+				break;
+			}
+			boolean stripped = member.remove("appearance_brief") != null;
+			stripped |= member.remove("state") != null;
+			if (stripped) {
+				ctx.put("party", members);
+				changed = true;
+			}
+		}
+		if (changed) {
+			trimmed.add("party");
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void trimChronicleSynopsis(Map<String, Object> ctx, int limit, List<String> trimmed) {
+		if (!(ctx.get("chronicle") instanceof Map<?, ?> chronRaw)) {
+			return;
+		}
+		Map<String, Object> chron = (Map<String, Object>) chronRaw;
+		if (!(chron.get("synopsis") instanceof Map<?, ?> synRaw)) {
+			return;
+		}
+		var syn = new LinkedHashMap<String, Object>((Map<String, Object>) synRaw);
+		if (!(syn.get("summary") instanceof String text) || text.length() <= 600) {
+			return;
+		}
+		int over = jsonLength(ctx) - limit;
+		int keep = Math.max(600, text.length() - over - 64);
+		if (keep < text.length()) {
+			syn.put("summary", clipText(text, keep) + "...");
+			syn.put("summary_truncated", true);
+			chron.put("synopsis", syn);
+			trimmed.add("chronicle.synopsis");
+		}
+	}
+
+	private static String clipText(String text, int maxChars) {
+		int end = Math.min(text.length(), Math.max(0, maxChars));
+		if (end > 0 && end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) {
+			end--;
+		}
+		return text.substring(0, end);
 	}
 
 	private static Map<String, Object> journeyLocation(Tx tx, Map<String, Object> journey) {
@@ -680,6 +1000,34 @@ public final class SessionService {
 	/** Encounter view delegate for context builders. */
 	public Map<String, Object> encounterState(Tx tx, Row encounter, int logLimit) {
 		return encounters.state(tx, encounter, logLimit);
+	}
+
+	/** Compact party roster (refs, membership and locations only) for membership mutations. */
+	public List<Map<String, Object>> partyRoster(Tx tx, long campaignId) {
+		Optional<Row> pc = tx.queryOne(
+				"SELECT character_id AS id FROM player_control_assignment WHERE campaign_id = ? AND active = 1",
+				campaignId);
+		Long here = tx.queryOne("SELECT current_location_id AS id FROM campaign WHERE id = ?", campaignId)
+				.filter(r -> !r.isNull("id")).map(Row::id).orElse(null);
+		var members = new ArrayList<Map<String, Object>>();
+		for (Row m : tx.query(
+				"SELECT m.state AS membership_state, c.* FROM party_membership m JOIN character c ON c.id = m.character_id "
+						+ "WHERE m.campaign_id = ? AND m.state IN ('ACTIVE','SEPARATED','GUEST') ORDER BY m.id",
+				campaignId)) {
+			var entry = new LinkedHashMap<String, Object>();
+			entry.put("ref", Ref.of(Ref.CHARACTER, m.id()));
+			entry.put("name", m.str("name"));
+			entry.put("membership", m.str("membership_state"));
+			entry.put("life_state", m.str("life_state"));
+			entry.put("location", Ref.ofNullable(Ref.LOCATION, m.lng("location_id")));
+			if (!m.isNull("location_id")) {
+				tx.find("location", m.lng("location_id")).ifPresent(l -> entry.put("location_name", l.str("name")));
+			}
+			entry.put("with_party", se.hirt.mcp.rpg.world.WorldService.partyCoLocated(tx, campaignId, m, here));
+			entry.put("player_controlled", pc.isPresent() && pc.get().id() == m.id());
+			members.add(entry);
+		}
+		return members;
 	}
 
 	/** Current party members (active, separated, guests) with sheets at the given detail. */

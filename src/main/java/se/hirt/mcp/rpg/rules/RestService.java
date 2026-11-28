@@ -28,6 +28,7 @@
  */
 package se.hirt.mcp.rpg.rules;
 
+import org.jboss.logging.Logger;
 import se.hirt.mcp.rpg.character.CharacterService;
 import se.hirt.mcp.rpg.character.RuntimeService;
 import se.hirt.mcp.rpg.content.RulesData;
@@ -54,6 +55,8 @@ import java.util.*;
  * always labeled.
  */
 public final class RestService {
+
+	private static final Logger LOG = Logger.getLogger(RestService.class);
 
 	/**
 	 * "After you finish a Long Rest, you must wait at least 16 hours before starting another one."
@@ -725,6 +728,7 @@ public final class RestService {
 									"NOTABLE", "GM_ONLY", "ADMINISTRATIVE_OVERRIDE", null,
 									campaign.lng("current_location_id"), null,
 									Map.of("kind", k, "before", before, "after", after)));
+					LOG.warnf("GM override on %s: kind=%s target=%s reason=%s", campaignRef, k, targetRef, reason);
 					var result = new LinkedHashMap<String, Object>();
 					result.put("override", true);
 					result.put("kind", k);

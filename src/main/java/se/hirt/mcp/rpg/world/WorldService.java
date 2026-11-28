@@ -490,7 +490,7 @@ public final class WorldService {
 					: tx.get("location", campaign.lng("current_location_id"));
 			var movers = new ArrayList<Row>();
 			var leftBehind = new ArrayList<Map<String, Object>>();
-			Row departurePlace = from == null ? null : travelAnchor(tx, campaignId, from.id());
+			Row departurePlace = from == null ? null : enclosingSite(tx, campaignId, from.id());
 			if (characterRefs == null) {
 				// The party is whoever is with it: active members and guests standing where the party stands. A guest
 				// left at the manor, or a member who stayed behind without being separated, does not teleport.
@@ -498,8 +498,12 @@ public final class WorldService {
 						"SELECT c.* FROM party_membership m JOIN character c ON c.id = m.character_id WHERE m.campaign_id = ? "
 								+ "AND m.state IN ('ACTIVE','GUEST') AND c.lifecycle = 'ACTIVE' AND c.life_state <> 'DEAD' ORDER BY m.id",
 						campaignId)) {
-					boolean here = from == null || m.isNull("location_id") || m.lng("location_id") == from.id()
-							|| travelAnchor(tx, campaignId, m.lng("location_id")).id() == departurePlace.id();
+					Long actual = m.isNull("location_id") ? null : actualTravelLocation(tx, campaignId, m);
+					boolean here = from == null || actual == null || actual == from.id();
+					if (!here && enclosingSite(tx, campaignId, actual).id() == departurePlace.id()) {
+						Row memberRoom = tx.get("location", actual);
+						here = actual == departurePlace.id() || hasOpenExit(tx, campaignId, memberRoom, departurePlace);
+					}
 					if (here) {
 						movers.add(m);
 					} else {
@@ -522,6 +526,7 @@ public final class WorldService {
 					movers.add(c);
 				}
 				var origins = new ArrayList<Map<String, Object>>();
+				var actuals = new ArrayList<Long>();
 				Long shared = null;
 				for (Row character : movers) {
 					Long actual = actualTravelLocation(tx, campaignId, character);
@@ -535,14 +540,43 @@ public final class WorldService {
 								.notAllowed("The actual travel origin of " + character.str("name")
 										+ " is unknown. Establish its location before travel.")
 								.withDetail("origins", origins);
+					actuals.add(actual);
 					if (shared == null)
 						shared = actual;
 				}
-				if (origins.stream().map(origin -> origin.get("location")).distinct().count() > 1)
-					throw RpgException.notAllowed(
-							"The named travelers occupy different locations. Move each group from its own shared origin; no traveler was moved and no travel time was spent.")
-							.withDetail("origins", origins);
-				from = shared == null ? null : tx.get("location", shared);
+				if (actuals.stream().distinct().count() > 1) {
+					var anchors = new LinkedHashSet<Long>();
+					for (Long locId : actuals) {
+						anchors.add(enclosingSite(tx, campaignId, locId).id());
+					}
+					if (anchors.size() > 1) {
+						throw RpgException.notAllowed(
+								"The named travelers occupy different locations. Move each group from its own shared origin; no traveler was moved and no travel time was spent.")
+								.withDetail("origins", origins);
+					}
+					Row sharedPlace = tx.get("location", anchors.iterator().next());
+					// Verify no traveler is trapped behind a locked/blocked interior exit inside the shared site.
+					for (Long locId : new LinkedHashSet<>(actuals)) {
+						if (locId != sharedPlace.id()) {
+							Row room = tx.get("location", locId);
+							if (!hasOpenExit(tx, campaignId, room, sharedPlace)) {
+								var blocked = entryRoutes(tx, campaignId, room, true, sharedPlace).stream().map(e -> {
+									var reverse = new ArrayList<>(e.path());
+									Collections.reverse(reverse);
+									return new EntryRoute(room.id(), reverse);
+								}).toList();
+								throw interiorPassageRefusal(tx, campaignId, room, blocked, true);
+							}
+						}
+					}
+					// If gathering at the enclosing site itself, keep a child room as origin so we do not reject as
+					// already there; otherwise depart from the shared enclosing site.
+					from = sharedPlace.id() == destination.id() ? tx.get("location",
+							actuals.stream().filter(id -> id != destination.id()).findFirst().orElse(sharedPlace.id()))
+							: sharedPlace;
+				} else {
+					from = shared == null ? null : tx.get("location", shared);
+				}
 			}
 			if (movers.isEmpty()) {
 				throw RpgException.notAllowed("Nobody can travel.");
@@ -729,6 +763,44 @@ public final class WorldService {
 			current = tx.get("location", parent);
 		}
 		return current;
+	}
+
+	/**
+	 * Resolves interior rooms ({@code AREA}) to their enclosing {@code BUILDING}, {@code SITE},
+	 * {@code DISTRICT} or {@code SETTLEMENT} (never a {@code REGION}) when no non-traversable
+	 * direct connection blocks leaving the room, so party members in different rooms of one
+	 * building or site share a departure origin.
+	 */
+	static Row enclosingSite(Tx tx, long campaignId, long locationId) {
+		Row current = travelAnchor(tx, campaignId, locationId);
+		Set<Long> seen = new HashSet<>();
+		seen.add(current.id());
+		while ("AREA".equals(current.str("kind")) && !current.isNull("parent_id")) {
+			long parentId = current.lng("parent_id");
+			if (!seen.add(parentId)) {
+				break;
+			}
+			Row parent = tx.get("location", parentId);
+			if (!Set.of("BUILDING", "SITE", "DISTRICT", "SETTLEMENT", "AREA").contains(parent.str("kind"))) {
+				break;
+			}
+			List<Row> direct = tx.query(
+					"SELECT * FROM location_connection WHERE campaign_id=? AND location_a_id=? AND location_b_id=?",
+					campaignId, Math.min(current.id(), parentId), Math.max(current.id(), parentId));
+			if (!direct.isEmpty() && direct.stream().noneMatch(WorldService::traversable)) {
+				break;
+			}
+			current = parent;
+			if (Set.of("BUILDING", "SITE", "DISTRICT", "SETTLEMENT").contains(current.str("kind"))) {
+				break;
+			}
+		}
+		return current;
+	}
+
+	private static boolean hasOpenExit(Tx tx, long campaignId, Row room, Row enclosing) {
+		return entryRoutes(tx, campaignId, room, false, enclosing).stream()
+				.anyMatch(entry -> entry.entrance() == room.id() || !entry.path().isEmpty());
 	}
 
 	static RoutePlan travelRoute(Tx tx, long campaignId, Row from, Row destination) {

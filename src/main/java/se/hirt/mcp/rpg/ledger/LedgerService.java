@@ -216,36 +216,147 @@ public final class LedgerService {
 					params.add(t.toUpperCase());
 				}
 			}
-			if (focus != null && !focus.isBlank()) {
+			List<String> focusTerms = focusTokens(focus);
+			String normalizedFocus = focus == null ? "" : focus.trim().toLowerCase(Locale.ROOT);
+			if (!focusTerms.isEmpty()) {
 				var terms = new ArrayList<String>();
-				for (String word : focus.toLowerCase().split("\\s+")) {
-					if (word.length() < 3) {
-						continue;
-					}
+				for (String word : focusTerms) {
 					terms.add(
-							"(LOWER(e.summary) LIKE ? OR LOWER(IFNULL(e.episodic_detail,'')) LIKE ? OR LOWER(e.type) LIKE ?)");
-					String like = "%" + word + "%";
+							"(LOWER(e.summary) LIKE ? ESCAPE '\\' OR LOWER(IFNULL(e.episodic_detail,'')) LIKE ? ESCAPE '\\' OR LOWER(e.type) LIKE ? ESCAPE '\\')");
+					String like = "%" + escapeLike(word) + "%";
 					params.add(like);
 					params.add(like);
 					params.add(like);
 				}
-				if (!terms.isEmpty()) {
-					where.add("(" + String.join(" OR ", terms) + ")");
-				}
+				where.add("(" + String.join(" OR ", terms) + ")");
 			}
 			if (minImportance != null && !minImportance.isBlank()) {
 				where.add("e.importance IN (" + importanceAtLeast(minImportance.toUpperCase()) + ")");
 			}
 			sql.append(" WHERE ").append(String.join(" AND ", where));
-			sql.append(
-					" ORDER BY CASE e.importance WHEN 'CRITICAL' THEN 0 WHEN 'MAJOR' THEN 1 WHEN 'NOTABLE' THEN 2 ELSE 3 END, e.fictional_seq DESC LIMIT ?");
-			params.add(max);
-			List<Row> rows = tx.query(sql.toString(), params.toArray());
+			List<Row> rows;
+			if (!focusTerms.isEmpty()) {
+				// Rank candidates by focus relevance first, then importance, then recency.
+				sql.append(" ORDER BY e.fictional_seq DESC, e.id DESC");
+				List<Row> candidates = tx.query(sql.toString(), params.toArray());
+				record Scored(Row row, int relevance, int importanceRank, long seq, long id) {
+				}
+				rows = candidates.stream()
+						.map(r -> new Scored(r, focusRelevance(r, focusTerms, normalizedFocus),
+								importanceOrder(r.str("importance")), r.lng("fictional_seq"), r.id()))
+						.sorted(Comparator.comparingInt(Scored::relevance).reversed()
+								.thenComparingInt(Scored::importanceRank)
+								.thenComparing(Comparator.comparingLong(Scored::seq).reversed())
+								.thenComparing(Comparator.comparingLong(Scored::id).reversed()))
+						.limit(max).map(Scored::row).toList();
+			} else {
+				sql.append(
+						" ORDER BY CASE e.importance WHEN 'CRITICAL' THEN 0 WHEN 'MAJOR' THEN 1 WHEN 'NOTABLE' THEN 2 ELSE 3 END, e.fictional_seq DESC, e.id DESC LIMIT ?");
+				params.add(max);
+				rows = tx.query(sql.toString(), params.toArray());
+			}
 			var result = new LinkedHashMap<String, Object>();
 			result.put("events", rows.stream().map(r -> eventSummary(tx, r, true)).toList());
 			result.put("meta", Harness.meta(campaign, null));
 			return result;
 		});
+	}
+
+	private static final Set<String> FOCUS_STOP_WORDS = Set.of("the", "and", "for", "with", "from", "that", "this",
+			"into", "onto", "about", "were", "was", "are", "has", "had", "have", "been", "being", "his", "her", "its",
+			"our", "their", "your", "not", "but", "out", "all", "any", "can", "did", "does", "who", "what", "when",
+			"where", "which", "how", "why", "over", "under", "near", "off", "per", "via", "yet", "too", "very", "just",
+			"also", "then", "than", "some", "such", "only", "more", "most", "other", "there", "here", "she", "him",
+			"they", "them", "you", "will", "would", "could", "should");
+
+	private static List<String> focusTokens(String focus) {
+		if (focus == null || focus.isBlank()) {
+			return List.of();
+		}
+		var significant = new LinkedHashSet<String>();
+		var fallback = new LinkedHashSet<String>();
+		for (String raw : focus.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+")) {
+			if (raw.length() < 2) {
+				continue;
+			}
+			fallback.add(raw);
+			if (raw.length() >= 3 && !FOCUS_STOP_WORDS.contains(raw)) {
+				significant.add(raw);
+			}
+		}
+		return significant.isEmpty() ? List.copyOf(fallback) : List.copyOf(significant);
+	}
+
+	private static String escapeLike(String term) {
+		return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+	}
+
+	private static int focusRelevance(Row row, List<String> terms, String normalizedFocus) {
+		String summary = row.isNull("summary") ? "" : row.str("summary").toLowerCase(Locale.ROOT);
+		String detail = row.isNull("episodic_detail") ? "" : row.str("episodic_detail").toLowerCase(Locale.ROOT);
+		String type = row.isNull("type") ? "" : row.str("type").toLowerCase(Locale.ROOT);
+		Set<String> summaryWords = wordSet(summary);
+		Set<String> detailWords = wordSet(detail);
+		Set<String> typeWords = wordSet(type);
+		int matchedTerms = 0;
+		int weight = 0;
+		for (String term : terms) {
+			boolean hit = false;
+			if (summaryWords.contains(term)) {
+				weight += 8;
+				hit = true;
+			} else if (summary.contains(term)) {
+				weight += 5;
+				hit = true;
+			}
+			if (typeWords.contains(term) || type.contains(term)) {
+				weight += 4;
+				hit = true;
+			}
+			if (detailWords.contains(term)) {
+				weight += 5;
+				hit = true;
+			} else if (detail.contains(term)) {
+				weight += 2;
+				hit = true;
+			}
+			if (hit) {
+				matchedTerms++;
+			}
+		}
+		if (terms.size() > 1 && normalizedFocus.length() >= 4) {
+			if (summary.contains(normalizedFocus)) {
+				weight += 20;
+			} else if (detail.contains(normalizedFocus)) {
+				weight += 12;
+			}
+		}
+		return matchedTerms * 100 + weight;
+	}
+
+	private static Set<String> wordSet(String text) {
+		if (text.isEmpty()) {
+			return Set.of();
+		}
+		var words = new HashSet<String>();
+		for (String token : text.split("[^\\p{L}\\p{N}]+")) {
+			if (!token.isEmpty()) {
+				words.add(token);
+			}
+		}
+		return words;
+	}
+
+	private static int importanceOrder(String importance) {
+		if (importance == null) {
+			return 3;
+		}
+		return switch (importance) {
+		case "CRITICAL" -> 0;
+		case "MAJOR" -> 1;
+		case "NOTABLE" -> 2;
+		default -> 3;
+		};
 	}
 
 	public Map<String, Object> queryTimeline(

@@ -77,8 +77,8 @@ public class MapTools {
 				String op = ToolArgs.reqOp("map_preparation", act, operation_id);
 				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params,
 						"preparation, changes, expected_revision?", "preparation", "changes", "expected_revision");
-				yield engine.maps().revise(op, c, a.reqStr("preparation"), a.optLong("expected_revision"),
-						a.reqMap("changes"));
+				yield compactPreparation(engine.maps().revise(op, c, a.reqStr("preparation"),
+						a.optLong("expected_revision"), a.reqMap("changes")));
 			}
 			case "VALIDATE" -> {
 				ToolArgs a = ToolArgs.of("map_preparation", act, "MAPS", params, "preparation", "preparation");
@@ -147,7 +147,9 @@ public class MapTools {
 				}
 				if (!"GM".equalsIgnoreCase(audience))
 					throw RpgException.invalidArgument("Preparations and atlas authoring context require audience GM.");
-				yield engine.maps().get(c, reference);
+				var got = engine.maps().get(c, reference);
+				yield reference.startsWith("preparation:") && !"FULL".equalsIgnoreCase(a.optStr("detail", "SUMMARY"))
+						? compactPreparation(got) : got;
 			}
 			case "FIND" -> {
 				ToolArgs a = ToolArgs.of("map_play", act, "MAPS", params, "query?", "query");
@@ -312,6 +314,39 @@ public class MapTools {
 			result.add(marker);
 		}
 		return result;
+	}
+
+	private static Map<String, Object> compactPreparation(Map<String, Object> report) {
+		if (!(report.get("proposal") instanceof Map<?, ?>)) {
+			return report;
+		}
+		var out = new LinkedHashMap<>(report);
+		Map<String, Object> proposal = SceneService.map(out.remove("proposal"));
+		var summary = new LinkedHashMap<String, Object>();
+		for (String field : List.of("name", "kind", "stage", "illumination", "review_required")) {
+			if (proposal.containsKey(field)) {
+				summary.put(field, proposal.get(field));
+			}
+		}
+		Map<String, Object> geometry = SceneService.map(proposal.get("geometry"));
+		if (geometry.containsKey("bounds_ft")) {
+			summary.put("bounds_ft", geometry.get("bounds_ft"));
+		}
+		var counts = new LinkedHashMap<String, Integer>();
+		for (String listKey : List.of("rooms", "connections", "features", "objects", "decor", "lights", "actors",
+				"rewards", "patrols")) {
+			if (proposal.get(listKey) instanceof List<?> items) {
+				counts.put(listKey, items.size());
+			}
+		}
+		if (!counts.isEmpty()) {
+			summary.put("counts", counts);
+		}
+		out.put("proposal_summary", summary);
+		out.put("detail", "SUMMARY");
+		out.put("detail_hint",
+				"Proposal omitted to keep responses bounded; pass detail: FULL to map_play:CONTEXT with audience GM to inspect the full draft proposal.");
+		return out;
 	}
 
 	private static Map<String, Object> compact(Map<String, Object> context) {

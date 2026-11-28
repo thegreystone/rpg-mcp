@@ -47,15 +47,20 @@ import java.util.function.Supplier;
 final class ToolSupport {
 
 	private static final Logger LOG = Logger.getLogger(ToolSupport.class);
+	static final int OVERSIZED_RESPONSE_CHARS = 50_000;
 
 	private ToolSupport() {
 	}
 
 	static ToolResponse run(String tool, Supplier<Map<String, Object>> body) {
 		try {
-			return ToolResponse.success(envelope(body.get()));
+			String payload = envelope(body.get());
+			if (payload.length() > OVERSIZED_RESPONSE_CHARS) {
+				LOG.warnf("%s response oversized (%d chars)", tool, payload.length());
+			}
+			return ToolResponse.success(payload);
 		} catch (RpgException e) {
-			LOG.debugf("%s failed: %s %s", tool, e.code(), e.getMessage());
+			LOG.warnf("%s refused (%s): %s", tool, e.code(), e.getMessage());
 			return ToolResponse.error(Json.write(ProtocolHints.publicView(e.toErrorMap())));
 		} catch (RuntimeException e) {
 			LOG.errorf(e, "%s failed unexpectedly", tool);
@@ -80,9 +85,13 @@ final class ToolSupport {
 	static ToolResponse image(String tool, Supplier<Map<String, Object>> body, Supplier<byte[]> png) {
 		try {
 			String text = envelope(body.get());
+			if (text.length() > OVERSIZED_RESPONSE_CHARS) {
+				LOG.warnf("%s text response oversized (%d chars)", tool, text.length());
+			}
 			return ToolResponse.success(java.util.List.of(new TextContent(text),
 					new ImageContent(java.util.Base64.getEncoder().encodeToString(png.get()), "image/png")));
 		} catch (RpgException e) {
+			LOG.warnf("%s refused (%s): %s", tool, e.code(), e.getMessage());
 			return ToolResponse.error(Json.write(ProtocolHints.publicView(e.toErrorMap())));
 		} catch (RuntimeException e) {
 			LOG.errorf(e, "%s failed unexpectedly", tool);

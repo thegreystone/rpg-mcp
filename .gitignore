@@ -36,3 +36,4 @@ Thumbs.db
 *.db-shm
 /srd_report.txt
 portraits/
+reference-fixtures/

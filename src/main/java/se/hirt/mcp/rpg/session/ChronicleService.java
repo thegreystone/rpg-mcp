@@ -220,26 +220,41 @@ public final class ChronicleService {
 		if (synopsis.isPresent()) {
 			Map<String, Object> s = entry(synopsis.get(), true);
 			out.put("synopsis", s);
-			left -= synopsis.get().str("summary").length();
+			left -= Json.write(s).length();
 		} else {
 			out.put("synopsis", null);
 		}
 		List<Row> chapters = chaptersSinceSynopsis(tx, campaignId);
 		var shown = new ArrayList<Map<String, Object>>();
-		int tailShare = Math.max(2_000, charBudget / 3);
+		int tailShare = Math.min(Math.max(1_000, charBudget / 3), Math.max(0, left));
 		int chapterBudget = Math.max(0, left - tailShare);
 		int used = 0;
-		// Newest first so the most recent chapter is always whole.
+		int chaptersOmitted = 0;
+		// Newest first so the most recent chapter is always whole when space permits.
 		var newestFirst = new ArrayList<>(chapters);
 		java.util.Collections.reverse(newestFirst);
 		for (Row c : newestFirst) {
-			int len = c.str("summary").length();
-			boolean full = used + len <= chapterBudget;
-			shown.add(0, entry(c, full));
-			used += full ? len : 200;
+			Map<String, Object> fullEntry = entry(c, true);
+			int fullLen = Json.write(fullEntry).length();
+			if (used + fullLen <= chapterBudget || shown.isEmpty() && fullLen <= Math.max(chapterBudget, 1_500)) {
+				shown.add(0, fullEntry);
+				used += fullLen;
+			} else {
+				Map<String, Object> headEntry = entry(c, false);
+				int headLen = Json.write(headEntry).length();
+				if (used + headLen <= chapterBudget) {
+					shown.add(0, headEntry);
+					used += headLen;
+				} else {
+					chaptersOmitted++;
+				}
+			}
 		}
 		out.put("chapters_since_synopsis", shown);
-		left = Math.max(2_000, left - used);
+		if (chaptersOmitted > 0) {
+			out.put("chapters_omitted_for_budget", chaptersOmitted);
+		}
+		left = Math.max(0, left - used);
 		// A read transaction reserves no journal entry (its id is -1): the digest then runs to the end of
 		// the ledger, while a mutation's own entry is the natural upper bound.
 		long through = tx.journalId() < 0 ? Long.MAX_VALUE : tx.journalId();

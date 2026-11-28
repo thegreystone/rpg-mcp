@@ -29,11 +29,14 @@ import java.util.regex.Pattern;
 @ApplicationScoped
 public class RuntimeLogRetention {
 
-	static final int MAX_HISTORY = 32;
+	static final int MAX_HISTORY = 16;
 	static final long MAX_HISTORY_BYTES = 32L * 1024 * 1024;
 	static final String DEFAULT_PATH = "${rpg.data-dir}/logs/rpg-mcp-server-${quarkus.uuid:build}.log";
 	private static final Pattern GENERATED = Pattern.compile(
 			"^(rpg-mcp-server-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.log)(?:\\.[0-9]+)?$",
+			Pattern.CASE_INSENSITIVE);
+	private static final Pattern GENERATED_OWNER = Pattern.compile(
+			"^(rpg-mcp-server-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.log)\\.owner$",
 			Pattern.CASE_INSENSITIVE);
 	private FileChannel leaseChannel;
 	private FileLock lease;
@@ -46,8 +49,7 @@ public class RuntimeLogRetention {
 			String explicitEnvironment = System.getenv("QUARKUS_LOG_FILE_PATH");
 			if (!config.getValue("quarkus.log.file.enabled", Boolean.class)
 					|| explicitProperty != null && !explicitProperty.isBlank()
-					|| explicitEnvironment != null && !explicitEnvironment.isBlank()
-					|| !DEFAULT_PATH.equals(config.getConfigValue("quarkus.log.file.path").getRawValue()))
+					|| explicitEnvironment != null && !explicitEnvironment.isBlank())
 				return; // An explicit path, including a shared log, remains entirely user-managed.
 			Path directory = settings.dataPath().toAbsolutePath().normalize().resolve("logs");
 			Path log = Path.of(config.getValue("quarkus.log.file.path", String.class)).toAbsolutePath().normalize();
@@ -110,12 +112,27 @@ public class RuntimeLogRetention {
 				return;
 			try (lock) {
 				Map<String, List<Path>> groups = new LinkedHashMap<>();
+				var orphanedOwners = new ArrayList<Path>();
 				try (var entries = Files.list(directory)) {
 					for (Path file : entries.toList()) {
-						var match = GENERATED.matcher(file.getFileName().toString());
+						String name = file.getFileName().toString();
+						var match = GENERATED.matcher(name);
 						if (match.matches() && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
 								&& !match.group(1).equals(currentLog))
 							groups.computeIfAbsent(match.group(1), key -> new ArrayList<>()).add(file);
+						else {
+							var ownerMatch = GENERATED_OWNER.matcher(name);
+							if (ownerMatch.matches() && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+									&& !ownerMatch.group(1).equals(currentLog))
+								orphanedOwners.add(file);
+						}
+					}
+				}
+				for (Path marker : orphanedOwners) {
+					String logName = marker.getFileName().toString();
+					logName = logName.substring(0, logName.length() - ".owner".length());
+					if (!groups.containsKey(logName) && !ownerAlive(marker)) {
+						removeOrphanOwner(marker);
 					}
 				}
 				var history = new ArrayList<LogGroup>();
@@ -204,6 +221,28 @@ public class RuntimeLogRetention {
 				Files.deleteIfExists(group.marker());
 		} catch (IOException | RuntimeException ignored) {
 			// In-use legacy files and unavailable filesystem locks are left for a later launch.
+		}
+	}
+
+	private static void removeOrphanOwner(Path marker) {
+		try {
+			try (var channel = FileChannel.open(marker, StandardOpenOption.READ, StandardOpenOption.WRITE,
+					LinkOption.NOFOLLOW_LINKS)) {
+				FileLock lock;
+				try {
+					lock = channel.tryLock();
+				} catch (OverlappingFileLockException busy) {
+					return;
+				}
+				if (lock == null)
+					return;
+				try (lock) {
+					if (ownerAlive(channel))
+						return;
+				}
+			}
+			Files.deleteIfExists(marker);
+		} catch (IOException | RuntimeException ignored) {
 		}
 	}
 
